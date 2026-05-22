@@ -8,15 +8,17 @@ For severity, "Critical" = blocks mainnet launch on a chain that holds real user
 
 ## Critical
 
-### 1. V4 position NFT → ERC-20 wrapper missing
-**Found:** 2026-05-22, after Base Sepolia deploy.
+### 1. V4 position NFT → ERC-20 wrapper missing (only blocks Main + Share pools)
+**Found:** 2026-05-22, after Base Sepolia deploy. **Scope clarified:** 2026-05-22 (same day).
 
-The reward pools (`GenesisRewardPool`, `MainRewardPool`, `ShareRewardPool`) expect ERC-20 LP tokens. V4 issues ERC-721 position NFTs via `PositionManager`. The pools sit empty until a wrapper exists.
+`MainRewardPool` and `ShareRewardPool` expect ERC-20 LP tokens for the MONEY/cbETH pair (or other Old-Money-paired LP tokens). V4 issues ERC-721 position NFTs via `PositionManager`. Those two pools sit empty until a wrapper exists.
 
-**Status:** Sprint 16 (in progress). Building a V4 position wrapper — owns one position NFT, issues ERC-20 receipts. Multi-turn focused effort per the production quality bar.
+**Important: GenesisRewardPool is NOT blocked on the wrapper.** The genesis pool is a "mini-ICO" — it accepts outside ERC-20 tokens (cbETH, USDC, etc.) directly as the stake token. Users stake cbETH, earn MONEY over the 24-hour window. No MONEY/cbETH LP needed at genesis time. This matches Tomb's actual mechanism.
+
+**Status:** Sprint 16 (designing). Building a V4 position wrapper — owns one position NFT, issues ERC-20 receipts. Multi-turn focused effort per the production quality bar. Wrapper is needed before Main + Share pools open (Day 1+ in the launch sequence), not before Genesis pool opens (Day 0).
 
 ### 2. Initial V4 pool liquidity is zero
-The V4 MONEY/cbETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team must seed initial LP from the airdrop wallet's MONEY allocation + team-owned cbETH before genesis pool opens.
+The V4 MONEY/cbETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k MONEY allocation + team-owned cbETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn MONEY have a place to swap it.
 
 **Status:** Manual step documented in `DEPLOY.md`. Should be automated as `script/SeedLiquidity.s.sol` before mainnet. Sprint 16b or 17.
 
@@ -49,8 +51,13 @@ Pre-deploy gate (1) from `feedback_pre_deploy_gates.md`. Easy: `FOUNDRY_PROFILE=
 ### 7. Audit invariant sweep (10k runs × 200 depth) never run
 Pre-deploy gate (1). Should run once via `FOUNDRY_PROFILE=audit forge test --match-path "test/invariant/*"` before audit handoff.
 
-### 8. Reward pools deployed empty of LP-token entries
-After the wrapper deploys, operator must call `pool.add(allocPoint, lpToken, false, 0)` on each. Tracked in `DEPLOYED.md` pending-steps section.
+### 8. Reward pools deployed empty of pool entries
+Operator must call `pool.add(allocPoint, stakeToken, false, 0)` to make each pool functional. Breakdown:
+- `GenesisRewardPool.add(allocPoint, cbETH, false, 0)` — **CAN BE DONE NOW** on Sepolia. cbETH is the outside-asset stake token. No wrapper dependency.
+- `MainRewardPool.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
+- `ShareRewardPool.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
+
+Should be automated as `script/OpenPools.s.sol` (one script that does all three calls once the wrapper exists, or run in phases as each gets unblocked).
 
 ### 9. MainRewardPool / ShareRewardPool thin test coverage vs GenesisRewardPool
 `GenesisRewardPool` has 20 dedicated unit tests; the other two have ~8 and ~3 respectively. Same MasterChef shape, but new code paths in `MainRewardPool` (epoch boundary math) deserve their own coverage. Sprint 15.
