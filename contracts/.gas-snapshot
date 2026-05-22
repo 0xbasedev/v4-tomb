@@ -1,3 +1,8 @@
+BaseForkHookTaxTest:test_BurnPath_SellBelowThreshold_ReducesSupply() (gas: 229832)
+BaseForkHookTaxTest:test_BuyDirection_NoTaxApplied() (gas: 194010)
+BaseForkHookTaxTest:test_ExcludedSender_NoTaxApplied() (gas: 203060)
+BaseForkHookTaxTest:test_RoutePath_SellAboveThreshold_RoutesToTreasury() (gas: 256501)
+BaseForkHookTaxTest:test_TaxOff_BehavesLikeSprint4() (gas: 156531)
 BaseForkHookTest:test_AllocateSeigniorageRunsAtParity() (gas: 428589)
 BaseForkHookTest:test_FullStackInitializedAgainstRealHook() (gas: 46086)
 BaseForkHookTest:test_HookAddressHasCorrectPermissionBits() (gas: 2481)
