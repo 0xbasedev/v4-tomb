@@ -37,7 +37,16 @@ verbosity = 3
 
 
 [profile.deep]
-# Pre-release invariant sweep. Run before audit handoff.
+# Sensible "I want more confidence than the default" sweep. ~10× the default
+# call volume per invariant; finishes in 1-3 minutes locally.
+fuzz = { runs = 2500, max_test_rejects = 65536 }
+invariant = { runs = 2500, depth = 100, fail_on_revert = false }
+verbosity = 3
+
+
+[profile.audit]
+# Pre-audit-handoff invariant sweep. Run once before submitting code to the
+# auditor. Takes 20-60 minutes; do not use as part of the normal dev loop.
 fuzz = { runs = 10000, max_test_rejects = 65536 }
 invariant = { runs = 10000, depth = 200, fail_on_revert = false }
 verbosity = 3
