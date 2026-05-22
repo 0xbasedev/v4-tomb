@@ -62,6 +62,15 @@ Should be automated as `script/OpenPools.s.sol` (one script that does all three 
 ### 9. MainRewardPool / ShareRewardPool thin test coverage vs GenesisRewardPool
 `GenesisRewardPool` has 20 dedicated unit tests; the other two have ~8 and ~3 respectively. Same MasterChef shape, but new code paths in `MainRewardPool` (epoch boundary math) deserve their own coverage. Sprint 15.
 
+### 16. Boardroom-empty bricks expansion
+**Found:** 2026-05-22 during the post-launch user-flow re-walk.
+
+When `Treasury.allocateSeigniorage()` enters the expansion branch (price > ceiling), it calls `_sendToBoardroom` → `Boardroom.allocateSeigniorage(amount)`. Boardroom requires `totalSupply() > 0` (matches Tomb). **If no ESTATE has been staked yet, this reverts — and since `checkEpoch`'s postfix runs AFTER the body, the epoch never advances.** Treasury is bricked until someone stakes.
+
+At launch the only ESTATE in circulation is 1 unit on the deployer (constructor seed) + slow vesting drips to community/dev funds. The 59.5k ESTATE in `ShareRewardPool` is locked and only emits to stakers of that pool's stake tokens, which require the LP wrapper. So the brick window is real.
+
+**Status:** Operational fix — the launch ceremony must include staking at least 1 wei of ESTATE into the Boardroom from the deployer. Tomb handled this the same way (not a contract change, a ceremony step). Closed by `script/OpenLaunch.s.sol`.
+
 ## Polish (tracked in `SECURITY.md`)
 
 ### 10-12. Slither LOW / INFO findings
