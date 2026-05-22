@@ -85,6 +85,23 @@ All 11 contracts verified during the deploy via `--verify`. Compile profile: sol
 
 ---
 
+## Base Sepolia (chainId 84532) — WETH peg (pending redeploy)
+
+After the Tomb audit (commits `9719ed1` + `c1fd029`), the next Sepolia deploy uses:
+- WETH at `0x4200000000000000000000000000000000000006` as the paired asset
+- `bootstrapEpochs = 28`, `maxDebtRatioPercent = 3500` (Tomb-faithful)
+- No MockCbeth contract — real WETH on testnet
+
+Deploy command unchanged:
+
+```bash
+forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --verify
+```
+
+Once redeployed, addresses + transaction hashes go in a new section above (the previous MockCbeth-based deploy remains as historical record).
+
+---
+
 ## Base mainnet (chainId 8453) — NOT YET DEPLOYED
 
 When ready, deploy with:
@@ -97,7 +114,7 @@ Pre-mainnet checklist:
 - [ ] All 5 pre-deploy gates green ([SECURITY.md](SECURITY.md))
 - [ ] Real multisigs set for AIRDROP_WALLET / COMMUNITY_FUND / DEV_FUND
 - [ ] LP wrapper contracts deployed (the V4-position-to-ERC20 piece)
-- [ ] Initial liquidity sourced (~$10k-$100k of cbETH + MONEY for the V4 pool)
+- [ ] Initial liquidity sourced (~$10k-$100k of WETH + MONEY for the V4 pool)
 - [ ] Genesis pool open time scheduled and communicated
 - [ ] Professional audit complete
 
