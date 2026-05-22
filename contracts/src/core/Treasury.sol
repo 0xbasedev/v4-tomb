@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {ContractGuard} from "../libs/ContractGuard.sol";
 import {IBasisAsset} from "../interfaces/IBasisAsset.sol";
@@ -32,7 +33,7 @@ import {IOracle} from "../interfaces/IOracle.sol";
  *           (10,000 BOMB = 1 BTC). All `1e14` literals in Tomb's math are replaced with
  *           `moneyPriceOne` here — same algebra, different scale.
  */
-contract Treasury is ContractGuard {
+contract Treasury is ContractGuard, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /* =================== CONSTANTS =================== */
@@ -252,8 +253,9 @@ contract Treasury is ContractGuard {
     function getMoneyCirculatingSupply() public view returns (uint256) {
         IERC20 moneyErc20 = IERC20(money);
         uint256 ts = moneyErc20.totalSupply();
-        uint256 excluded;
-        for (uint256 i = 0; i < excludedFromTotalSupply.length; ++i) {
+        uint256 excluded = 0;
+        uint256 len = excludedFromTotalSupply.length;
+        for (uint256 i = 0; i < len; ++i) {
             excluded += moneyErc20.balanceOf(excludedFromTotalSupply[i]);
         }
         return ts - excluded;
@@ -476,7 +478,7 @@ contract Treasury is ContractGuard {
     function buyBonds(
         uint256 moneyAmount,
         uint256 targetPrice
-    ) external onlyOneBlock checkCondition checkOperator {
+    ) external nonReentrant onlyOneBlock checkCondition checkOperator {
         if (moneyAmount == 0) revert CannotPurchaseWithZero();
 
         uint256 price = getMoneyPrice();
@@ -492,10 +494,13 @@ contract Treasury is ContractGuard {
         uint256 newBondSupply = IERC20(trustnote).totalSupply() + bondAmount;
         if (newBondSupply > supply * maxDebtRatioPercent / 10_000) revert OverMaxDebtRatio();
 
-        IBasisAsset(money).burnFrom(msg.sender, moneyAmount);
-        IBasisAsset(trustnote).mint(msg.sender, bondAmount);
-
+        // Effects before interactions (CEI). The state write moves before the external
+        // burnFrom/mint calls. Combined with `nonReentrant`, this is belt-and-suspenders.
         epochSupplyContractionLeft -= moneyAmount;
+
+        IBasisAsset(money).burnFrom(msg.sender, moneyAmount);
+        require(IBasisAsset(trustnote).mint(msg.sender, bondAmount), "Treasury: trustnote mint failed");
+
         _updateMoneyPrice();
 
         emit BoughtBonds(msg.sender, moneyAmount, bondAmount);
@@ -504,7 +509,7 @@ contract Treasury is ContractGuard {
     function redeemBonds(
         uint256 bondAmount,
         uint256 targetPrice
-    ) external onlyOneBlock checkCondition checkOperator {
+    ) external nonReentrant onlyOneBlock checkCondition checkOperator {
         if (bondAmount == 0) revert CannotRedeemZero();
 
         uint256 price = getMoneyPrice();
@@ -530,16 +535,16 @@ contract Treasury is ContractGuard {
     function _sendToBoardroom(
         uint256 amount
     ) internal {
-        IBasisAsset(money).mint(address(this), amount);
+        require(IBasisAsset(money).mint(address(this), amount), "Treasury: money mint failed");
 
-        uint256 daoShare;
+        uint256 daoShare = 0;
         if (daoFundSharedPercent > 0) {
             daoShare = amount * daoFundSharedPercent / 10_000;
             IERC20(money).safeTransfer(daoFund, daoShare);
             emit DaoFundFunded(block.timestamp, daoShare);
         }
 
-        uint256 devShare;
+        uint256 devShare = 0;
         if (devFundSharedPercent > 0) {
             devShare = amount * devFundSharedPercent / 10_000;
             IERC20(money).safeTransfer(devFund, devShare);
@@ -566,7 +571,8 @@ contract Treasury is ContractGuard {
         return maxSupplyExpansionPercent;
     }
 
-    function allocateSeigniorage() external onlyOneBlock checkCondition checkEpoch checkOperator {
+    // slither-disable-next-line reentrancy-no-eth
+    function allocateSeigniorage() external nonReentrant onlyOneBlock checkCondition checkEpoch checkOperator {
         _updateMoneyPrice();
         previousEpochMoneyPrice = getMoneyPrice();
         uint256 supply = getMoneyCirculatingSupply() - seigniorageSaved;
@@ -577,8 +583,8 @@ contract Treasury is ContractGuard {
             // Expansion.
             uint256 bondSupply = IERC20(trustnote).totalSupply();
             uint256 percentage = previousEpochMoneyPrice - moneyPriceOne;
-            uint256 savedForBond;
-            uint256 savedForBoardroom;
+            uint256 savedForBond = 0;
+            uint256 savedForBoardroom = 0;
             uint256 mse = _calculateMaxSupplyExpansionPercent(supply) * moneyPriceOne / 10_000;
 
             if (percentage > mse) percentage = mse;
@@ -586,17 +592,22 @@ contract Treasury is ContractGuard {
             if (seigniorageSaved >= bondSupply * bondDepletionFloorPercent / 10_000) {
                 savedForBoardroom = supply * percentage / moneyPriceOne;
             } else {
-                uint256 seigniorage = supply * percentage / moneyPriceOne;
-                savedForBoardroom = seigniorage * seigniorageExpansionFloorPercent / 10_000;
-                savedForBond = seigniorage - savedForBoardroom;
+                // Compute boardroom share with mul-before-div to avoid the
+                // divide-before-multiply pattern (Slither). Algebraically equivalent to
+                // Tomb's two-step (supply*pct/priceOne then *floorPct/10000) at sub-wei
+                // precision, which is meaningless at our 1e23+ wei scale.
+                savedForBoardroom = supply * percentage * seigniorageExpansionFloorPercent / moneyPriceOne / 10_000;
+                uint256 totalSeigniorage = supply * percentage / moneyPriceOne;
+                savedForBond = totalSeigniorage - savedForBoardroom;
                 if (mintingFactorForPayingDebt > 0) {
                     savedForBond = savedForBond * mintingFactorForPayingDebt / 10_000;
                 }
             }
             if (savedForBoardroom > 0) _sendToBoardroom(savedForBoardroom);
             if (savedForBond > 0) {
+                // Effects-before-interactions: bump seigniorageSaved first, then mint.
                 seigniorageSaved += savedForBond;
-                IBasisAsset(money).mint(address(this), savedForBond);
+                require(IBasisAsset(money).mint(address(this), savedForBond), "Treasury: money mint failed");
                 emit TreasuryFunded(block.timestamp, savedForBond);
             }
         }

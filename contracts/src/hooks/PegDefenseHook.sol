@@ -157,6 +157,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(poolId)) revert UnknownPool();
 
         // Read live tick from the pool, then fold it into the cumulative.
+        // slither-disable-next-line unused-return — only the tick is needed from slot0.
         (, int24 currentTick,,) = poolManager.getSlot0(poolId);
         _accumulate(currentTick);
 
