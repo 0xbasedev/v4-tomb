@@ -1,6 +1,8 @@
 name: contracts
 
-on:
+# "on" is quoted because it is a YAML 1.1 reserved boolean — quoting prevents
+# editor language-server warnings while GitHub Actions still parses it correctly.
+"on":
   push:
     branches: [main]
     paths:
