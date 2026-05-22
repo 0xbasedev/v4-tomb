@@ -82,6 +82,7 @@ ignore = ["lib/**", "test/**/snapshots/**"]
 base = "${BASE_RPC_URL}"
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
 mainnet = "${MAINNET_RPC_URL}"
+eth_sepolia = "${ETH_SEPOLIA_RPC_URL}"
 
 
 # Block explorer verification

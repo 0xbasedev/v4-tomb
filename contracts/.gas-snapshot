@@ -1,3 +1,8 @@
+BaseForkTest:test_CbethDeployedAndIsErc20() (gas: 17186)
+BaseForkTest:test_EpochCycleRunsAgainstFork() (gas: 643154)
+BaseForkTest:test_FullStackInitializesAgainstFork() (gas: 73110)
+BaseForkTest:test_TreasuryHoldsMoneyAfterContractionRecovery() (gas: 1461611)
+BaseForkTest:test_V4PoolManagerDeployed() (gas: 2921)
 BoardroomInvariants:invariant_NoEstateLost() (runs: 256, calls: 12800, reverts: 0)
 BoardroomInvariants:invariant_NoStakeExceedsTotal() (runs: 256, calls: 12800, reverts: 0)
 BoardroomInvariants:invariant_SumOfMemberBalancesEqualsTotalSupply() (runs: 256, calls: 12800, reverts: 0)
