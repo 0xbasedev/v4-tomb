@@ -1,0 +1,37 @@
+# Claude Code local config
+.claude/
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+contracts/.gas-snapshot
+contracts/coverage/
+contracts/lcov.info
+
+# Frontend (added later)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Environment
+.env
+.env.*
+!.env.example
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build artifacts
+*.log

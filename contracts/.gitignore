@@ -1,0 +1,18 @@
+# Foundry build artifacts
+out/
+cache/
+broadcast/
+coverage/
+lcov.info
+.gas-snapshot
+
+# Foundry deps (re-install with `forge install`)
+lib/
+
+# Local environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
