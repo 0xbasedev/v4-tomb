@@ -18,10 +18,21 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /// @notice Minimal pool manager stub: implements only `extsload(bytes32)` so the hook can
-///         read Slot0 via V4's StateLibrary. `setTick` packs the tick into the slot0 layout.
+///         read Slot0 via V4's StateLibrary, plus a `take` stub for Sprint 4b tax tests.
+///         `setTick` packs the tick into the slot0 layout.
 contract MockPoolManager {
     bytes32 public slot0Data;
+
+    // Sprint 4b — when the hook calls poolManager.take(currency, to, amount) in beforeSwap
+    // to pull a tax slice into its balance, we simulate it by transferring from the mock's
+    // own balance. Tests must pre-fund the mock with MONEY before exercising tax paths.
+    address public lastTakeRecipient;
+    uint256 public lastTakeAmount;
+    address public lastTakeCurrency;
+    uint256 public takeCallCount;
 
     function setTick(
         int24 tick
@@ -34,6 +45,20 @@ contract MockPoolManager {
         bytes32
     ) external view returns (bytes32) {
         return slot0Data;
+    }
+
+    /// @notice IPoolManager.take stub. The mock holds the currency balance; calling this
+    ///         transfers `amount` out to `to`. Reverts if mock isn't pre-funded.
+    function take(
+        Currency currency,
+        address to,
+        uint256 amount
+    ) external {
+        lastTakeCurrency = Currency.unwrap(currency);
+        lastTakeRecipient = to;
+        lastTakeAmount = amount;
+        takeCallCount += 1;
+        IERC20(Currency.unwrap(currency)).transfer(to, amount);
     }
 }
 
@@ -187,7 +212,7 @@ contract PegDefenseHookTest is BaseTest {
     }
 
     function test_BeforeSwap_RequiresBoundPool() public {
-        // Not bound yet → revert.
+        // Not bound yet -> revert.
         vm.prank(address(pm));
         vm.expectRevert(PegDefenseHook.UnknownPool.selector);
         hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
@@ -213,7 +238,7 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(hook.tickCumulative(), 0);
         assertEq(hook.lastTick(), 100);
 
-        // Advance another 500 at tick 100 → cumulative gains 100*500 = 50_000.
+        // Advance another 500 at tick 100 -> cumulative gains 100*500 = 50_000.
         vm.warp(block.timestamp + 500);
         pm.setTick(100);
         vm.prank(address(pm));
@@ -234,7 +259,7 @@ contract PegDefenseHookTest is BaseTest {
     function test_BeforeSwap_ReturnsExpansionFeeAbovePeg() public {
         _bind(0);
         // 200 ticks above peg, MONEY is whichever side is currency0/1.
-        // If money is currency0, currentTick > pegTick == "MONEY appreciating" → expansion.
+        // If money is currency0, currentTick > pegTick == "MONEY appreciating" -> expansion.
         // If money is currency1, we need currentTick LESS than peg to be expansion. Flip sign.
         int24 t = hook.moneyIsCurrency0() ? int24(200) : int24(-200);
         pm.setTick(t);
@@ -329,6 +354,328 @@ contract PegDefenseHookTest is BaseTest {
     }
 
     // ---------------------------------------------------------------------
+    // Sprint 4b — tax surface defaults + tier table
+    // ---------------------------------------------------------------------
+
+    function test_Tax_Defaults() public view {
+        assertFalse(hook.autoCalculateTax(), "tax off at deploy (Tomb default)");
+        assertEq(hook.burnThreshold(), 1.1e18, "burnThreshold default 1.10e18 (Tomb)");
+        assertEq(hook.treasury(), address(0), "treasury unset at deploy");
+        assertEq(hook.getTaxTiersTwapsCount(), 14, "14 tiers (Tomb)");
+        assertEq(hook.getTaxTiersRatesCount(), 14, "14 rates (Tomb)");
+    }
+
+    function test_Tax_TierTable_MatchesTomb() public view {
+        // Exact values from Bomb.sol's taxTiersTwaps + taxTiersRates arrays.
+        uint256[14] memory expectedTwaps = [
+            uint256(0),
+            0.5e18,
+            0.6e18,
+            0.7e18,
+            0.8e18,
+            0.9e18,
+            0.95e18,
+            1.0e18,
+            1.05e18,
+            1.1e18,
+            1.2e18,
+            1.3e18,
+            1.4e18,
+            1.5e18
+        ];
+        uint256[14] memory expectedRates =
+            [uint256(2000), 1900, 1800, 1700, 1600, 1500, 1500, 1500, 1500, 1400, 900, 400, 200, 100];
+
+        for (uint256 i = 0; i < 14; ++i) {
+            assertEq(hook.taxTiersTwaps(i), expectedTwaps[i], "twap mismatch");
+            assertEq(hook.taxTiersRates(i), expectedRates[i], "rate mismatch");
+        }
+    }
+
+    function test_Tax_RateLookup_TierBoundaries() public view {
+        // Walk every tier boundary; verify the rate returned matches Tomb's lookup semantic
+        // (first tier the price >= is the rate; walk high -> low).
+        assertEq(hook.taxRateForPrice(0), 2000, "price 0 -> tier 0 -> 2000");
+        assertEq(hook.taxRateForPrice(0.5e18 - 1), 2000, "just below 0.5 -> tier 0");
+        assertEq(hook.taxRateForPrice(0.5e18), 1900, "exactly 0.5 -> tier 1");
+        assertEq(hook.taxRateForPrice(0.99e18), 1500, "0.99 -> tier 6 (0.95)");
+        assertEq(hook.taxRateForPrice(1.0e18), 1500, "at peg -> tier 7");
+        assertEq(hook.taxRateForPrice(1.05e18), 1500, "1.05 -> tier 8");
+        assertEq(hook.taxRateForPrice(1.1e18), 1400, "at burnThreshold -> tier 9");
+        assertEq(hook.taxRateForPrice(1.1e18 - 1), 1500, "just below 1.10 -> tier 8");
+        assertEq(hook.taxRateForPrice(1.5e18), 100, "at highest tier");
+        assertEq(hook.taxRateForPrice(2.0e18), 100, "above highest -> highest rate");
+    }
+
+    function test_Tax_PriceFromTick_AtParity() public {
+        _bind(0);
+        uint256 p = hook.priceFromTick(0);
+        // 1e18 ± 1 wei is acceptable due to sqrtP discretization at tick 0.
+        assertApproxEqAbs(p, 1e18, 1, "price ~= 1e18 at tick 0");
+    }
+
+    // ---------------------------------------------------------------------
+    // Sprint 4b — setter access control + validation
+    // ---------------------------------------------------------------------
+
+    function test_SetAutoCalculateTax_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setAutoCalculateTax(true);
+    }
+
+    function test_SetAutoCalculateTax_Updates() public {
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+        assertTrue(hook.autoCalculateTax());
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(false);
+        assertFalse(hook.autoCalculateTax());
+    }
+
+    function test_SetBurnThreshold_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setBurnThreshold(1.2e18);
+    }
+
+    function test_SetBurnThreshold_RejectsZero() public {
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.BurnThresholdZero.selector);
+        hook.setBurnThreshold(0);
+    }
+
+    function test_SetBurnThreshold_Updates() public {
+        vm.prank(trustees);
+        hook.setBurnThreshold(1.2e18);
+        assertEq(hook.burnThreshold(), 1.2e18);
+    }
+
+    function test_SetTreasury_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setTreasury(makeAddr("t"));
+    }
+
+    function test_SetTreasury_Updates() public {
+        address t = makeAddr("treasury");
+        vm.prank(trustees);
+        hook.setTreasury(t);
+        assertEq(hook.treasury(), t);
+    }
+
+    function test_SetTaxTiersTwap_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setTaxTiersTwap(5, 0.91e18);
+    }
+
+    function test_SetTaxTiersTwap_RejectsOutOfRange() public {
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
+        hook.setTaxTiersTwap(14, 2e18);
+    }
+
+    function test_SetTaxTiersTwap_RejectsNonMonotonicDown() public {
+        // Setting tier 5 (currently 0.90) to a value <= tier 4 (0.80) breaks monotonicity.
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
+        hook.setTaxTiersTwap(5, 0.8e18);
+    }
+
+    function test_SetTaxTiersTwap_RejectsNonMonotonicUp() public {
+        // Setting tier 5 to a value >= tier 6 (0.95) breaks monotonicity.
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
+        hook.setTaxTiersTwap(5, 0.95e18);
+    }
+
+    function test_SetTaxTiersTwap_Updates() public {
+        vm.prank(trustees);
+        hook.setTaxTiersTwap(5, 0.91e18);
+        assertEq(hook.taxTiersTwaps(5), 0.91e18);
+    }
+
+    function test_SetTaxTiersRate_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setTaxTiersRate(0, 100);
+    }
+
+    function test_SetTaxTiersRate_RejectsOutOfRange() public {
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
+        hook.setTaxTiersRate(14, 100);
+    }
+
+    function test_SetTaxTiersRate_RejectsTooHigh() public {
+        vm.prank(trustees);
+        vm.expectRevert(PegDefenseHook.TaxRateTooHigh.selector);
+        hook.setTaxTiersRate(0, 10_001);
+    }
+
+    function test_SetTaxTiersRate_Updates() public {
+        vm.prank(trustees);
+        hook.setTaxTiersRate(0, 1000);
+        assertEq(hook.taxTiersRates(0), 1000);
+    }
+
+    function test_SetExcludedAddress_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setExcludedAddress(stranger, true);
+    }
+
+    function test_SetExcludedAddress_Updates() public {
+        address account = makeAddr("excluded");
+        vm.prank(trustees);
+        hook.setExcludedAddress(account, true);
+        assertTrue(hook.excludedAddresses(account));
+        vm.prank(trustees);
+        hook.setExcludedAddress(account, false);
+        assertFalse(hook.excludedAddresses(account));
+    }
+
+    // ---------------------------------------------------------------------
+    // Sprint 4b — beforeSwap tax path early returns (no take)
+    // ---------------------------------------------------------------------
+
+    function test_BeforeSwap_NoTax_WhenAutoCalculateTaxFalse() public {
+        _bind(0);
+        pm.setTick(0);
+        // autoCalculateTax = false (default). Even on a sell direction, no delta.
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "no tax delta when autoCalculateTax=false");
+        assertEq(pm.takeCallCount(), 0, "no take called");
+    }
+
+    function test_BeforeSwap_NoTax_OnBuyDirection() public {
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        // BUY: zeroForOne != moneyIsCurrency0 (the opposite-direction swap).
+        SwapParams memory params =
+            SwapParams({zeroForOne: !hook.moneyIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "no tax on buy direction");
+        assertEq(pm.takeCallCount(), 0, "no take on buy");
+    }
+
+    function test_BeforeSwap_NoTax_ForExcludedSender() public {
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        address excludedSender = makeAddr("router");
+        vm.prank(trustees);
+        hook.setExcludedAddress(excludedSender, true);
+
+        // Sell direction, but the swap's sender is excluded.
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(excludedSender, poolKey, params, "");
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "no tax for excluded sender");
+        assertEq(pm.takeCallCount(), 0, "no take for excluded sender");
+    }
+
+    // ---------------------------------------------------------------------
+    // Sprint 4b — beforeSwap tax path WITH take + burn/route
+    // ---------------------------------------------------------------------
+
+    function test_BeforeSwap_BurnsBelowThreshold() public {
+        _bind(0); // tick=0, price ~= 1.0 — below default 1.10e18 burnThreshold
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        // Pre-fund the mock with MONEY so its take() can transfer to the hook.
+        // At tick 0, rate is tier 7 = 1500 bps. For amountSpecified = -100, tax = 15.
+        uint256 amount = 100 ether;
+        uint256 expectedTax = amount * 1500 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        uint256 totalBefore = money.totalSupply();
+
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+
+        // take was called once for expectedTax MONEY -> hook -> burned.
+        assertEq(pm.takeCallCount(), 1, "take called once");
+        assertEq(pm.lastTakeAmount(), expectedTax, "take amount = tax");
+        assertEq(pm.lastTakeRecipient(), address(hook), "take recipient = hook");
+        assertEq(money.totalSupply(), totalBefore - expectedTax, "totalSupply decreased by tax");
+        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
+        // Delta encodes the tax in the specified slot (exact-input).
+        int128 deltaSpecified = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
+        assertEq(int256(deltaSpecified), int256(expectedTax), "deltaSpecified = +taxAmount");
+    }
+
+    function test_BeforeSwap_RoutesAboveThreshold() public {
+        _bind(0);
+        pm.setTick(0); // tick 0 -> price ~= 1.0
+        // Set burnThreshold below the current price so the route path is exercised.
+        vm.prank(trustees);
+        hook.setBurnThreshold(0.5e18);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        address treasuryAddr = makeAddr("treasury");
+        vm.prank(trustees);
+        hook.setTreasury(treasuryAddr);
+
+        uint256 amount = 100 ether;
+        // At tick 0 price ~= 1.0, that's tier 7 -> 1500 bps.
+        uint256 expectedTax = amount * 1500 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        uint256 totalBefore = money.totalSupply();
+
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+
+        // Total supply unchanged (no burn); treasury holds the tax.
+        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged when routed");
+        assertEq(money.balanceOf(treasuryAddr), expectedTax, "treasury received tax");
+        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after transfer");
+    }
+
+    function test_BeforeSwap_FallsBackToBurn_WhenTreasuryUnset() public {
+        _bind(0);
+        pm.setTick(0);
+        // Lower burnThreshold to flip into the would-be-route branch, but leave treasury unset.
+        vm.prank(trustees);
+        hook.setBurnThreshold(0.5e18);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+        assertEq(hook.treasury(), address(0), "precondition: treasury unset");
+
+        uint256 amount = 100 ether;
+        uint256 expectedTax = amount * 1500 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        uint256 totalBefore = money.totalSupply();
+
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+
+        // Treasury is zero, fall through to burn even above threshold.
+        assertEq(money.totalSupply(), totalBefore - expectedTax, "burn fallback fires");
+        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
+    }
+
+    // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 
@@ -341,6 +688,12 @@ contract PegDefenseHookTest is BaseTest {
 
     function _emptySwap() internal pure returns (SwapParams memory) {
         return SwapParams({zeroForOne: true, amountSpecified: 0, sqrtPriceLimitX96: 0});
+    }
+
+    /// @dev Exact-input MONEY sell. zeroForOne == moneyIsCurrency0 means MONEY -> other.
+    ///      amountSpecified < 0 = exact-input. 100e18 MONEY in.
+    function _sellSwap() internal view returns (SwapParams memory) {
+        return SwapParams({zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
     }
 
     function _beforeSwapCall() internal returns (bytes4 sel, BeforeSwapDelta delta, uint24 fee) {
