@@ -46,6 +46,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract Deploy is Script {
     using PoolIdLibrary for PoolKey;
 
+    /// @notice Canonical deterministic CREATE2 deployer. When `vm.startBroadcast` is
+    ///         active, Foundry routes `create2` calls (including the `new Contract{salt:}`
+    ///         syntax and inline-assembly create2) through this address. So when mining a
+    ///         hook address, we MUST mine against this deployer, not the EOA.
+    address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+
     struct Genesis {
         address airdropWallet;
         address communityFund;
@@ -140,14 +146,13 @@ contract Deploy is Script {
         IPoolManager pm = IPoolManager(Addresses.poolManager());
         bytes memory creationCode = abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money)));
         uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        (address mined, bytes32 salt) = HookMiner.find(deployer, flags, creationCode);
+        // Mine against the canonical CREATE2 deployer — Foundry routes broadcast
+        // create2 calls through it, so the deployed address is derived from this
+        // address, not the deployer EOA. (deployer param kept for ABI compat.)
+        deployer; // silence unused-var warning
+        (address mined, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode);
 
-        PegDefenseHook deployedHook;
-        bytes memory codeLocal = creationCode;
-        bytes32 saltLocal = salt;
-        assembly {
-            deployedHook := create2(0, add(codeLocal, 0x20), mload(codeLocal), saltLocal)
-        }
+        PegDefenseHook deployedHook = new PegDefenseHook{salt: salt}(pm, address(money));
         require(address(deployedHook) == mined, "Deploy: hook addr mismatch");
         hook = deployedHook;
         console2.log("PegDefenseHook:", address(hook));
@@ -227,7 +232,9 @@ contract Deploy is Script {
 
         require(money.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");
         require(money.balanceOf(address(mainRewardPool)) == 140_000 ether, "Deploy: main funding mismatch");
-        require(money.balanceOf(g.airdropWallet) == 9000 ether, "Deploy: airdrop funding mismatch");
+        // Airdrop wallet may already hold MONEY (e.g., the 1-unit constructor seed if the
+        // wallet happens to equal the deployer in a dry-run). Assert at least the 9k landed.
+        require(money.balanceOf(g.airdropWallet) >= 9000 ether, "Deploy: airdrop funding mismatch");
         require(estate.balanceOf(address(shareRewardPool)) == 59_500 ether, "Deploy: share funding mismatch");
 
         console2.log("\n=== POST-DEPLOY SANITY ===");
