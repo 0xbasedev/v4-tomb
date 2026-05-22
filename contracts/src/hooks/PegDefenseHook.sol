@@ -18,7 +18,7 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title PegDefenseHook
- * @notice V4 hook attached to the OLDM/cbETH pool. Does two jobs:
+ * @notice V4 hook attached to the MONEY/cbETH pool. Does two jobs:
  *
  *           1. **Observation recording** — accumulates tick * time on every swap, exposing
  *              `getCurrentTickCumulative()` via the IPriceSource interface so our Oracle
@@ -31,7 +31,7 @@ import {Trustees} from "../governance/Trustees.sol";
  *
  * @dev    This is the single approved hook-driven deviation from Tomb's design. Tomb's
  *         TaxOffice + tax tiers + transferFrom override are entirely replaced by this hook.
- *         Tomb taxed all transfers; we tax only pool swaps. Wallet-to-wallet OLDM transfers
+ *         Tomb taxed all transfers; we tax only pool swaps. Wallet-to-wallet MONEY transfers
  *         see no friction.
  *
  *         Sprint 4 scope: observation recording + dynamic fee override.
@@ -46,12 +46,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     using StateLibrary for IPoolManager;
     using LPFeeLibrary for uint24;
 
-    /// @notice The OLDM token. The hook expects to be installed on a pool where one side
-    ///         is OLDM and the other is the paired peg asset (cbETH on Base).
-    address public immutable oldm;
+    /// @notice The MONEY token. The hook expects to be installed on a pool where one side
+    ///         is MONEY and the other is the paired peg asset (cbETH on Base).
+    address public immutable money;
 
-    /// @notice True if OLDM sorts as currency0 in the pool key. Derived in afterInitialize.
-    bool public oldmIsCurrency0;
+    /// @notice True if MONEY sorts as currency0 in the pool key. Derived in afterInitialize.
+    bool public moneyIsCurrency0;
 
     /// @notice Set in afterInitialize. Used to read the live pool state and to validate
     ///         subsequent hook calls.
@@ -83,7 +83,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     int24 public lastTick;
 
     // --- Events ---
-    event Bound(PoolId indexed poolId, bool oldmIsCurrency0, int24 initialTick);
+    event Bound(PoolId indexed poolId, bool moneyIsCurrency0, int24 initialTick);
     event Observed(int56 tickCumulative, int24 lastTick, uint32 timestamp);
     event PegTickSet(int24 previous, int24 next);
     event BandTicksSet(int24 previous, int24 next);
@@ -92,15 +92,15 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     // --- Errors ---
     error AlreadyBound();
     error UnknownPool();
-    error PoolMissingOldm();
+    error PoolMissingMoney();
     error FeeTooHigh();
     error BandTicksMustBePositive();
 
     constructor(
         IPoolManager _poolManager,
-        address _oldm
+        address _money
     ) BaseV4Hook(_poolManager) {
-        oldm = _oldm;
+        money = _money;
     }
 
     // ------------------------------------------------------------------
@@ -133,17 +133,17 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         int24 tick
     ) external override onlyPoolManager returns (bytes4) {
         if (bound) revert AlreadyBound();
-        if (Currency.unwrap(key.currency0) != oldm && Currency.unwrap(key.currency1) != oldm) {
-            revert PoolMissingOldm();
+        if (Currency.unwrap(key.currency0) != money && Currency.unwrap(key.currency1) != money) {
+            revert PoolMissingMoney();
         }
 
-        oldmIsCurrency0 = Currency.unwrap(key.currency0) == oldm;
+        moneyIsCurrency0 = Currency.unwrap(key.currency0) == money;
         poolId = key.toId();
         lastTick = tick;
         lastObservationTimestamp = uint32(block.timestamp);
         bound = true;
 
-        emit Bound(poolId, oldmIsCurrency0, tick);
+        emit Bound(poolId, moneyIsCurrency0, tick);
         return IHooks.afterInitialize.selector;
     }
 
@@ -233,14 +233,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     }
 
     /// @dev Map current tick to a fee tier based on signed deviation from `pegTick`.
-    ///      "Below peg" is direction-aware: when OLDM is currency0, below peg means
-    ///      currentTick < pegTick (price of OLDM in cbETH dropped). When OLDM is
+    ///      "Below peg" is direction-aware: when MONEY is currency0, below peg means
+    ///      currentTick < pegTick (price of MONEY in cbETH dropped). When MONEY is
     ///      currency1, the sign flips.
     function _feeForTick(
         int24 currentTick
     ) internal view returns (uint24) {
-        // Signed delta in the direction that makes "negative = OLDM below peg".
-        int24 delta = oldmIsCurrency0 ? currentTick - pegTick : pegTick - currentTick;
+        // Signed delta in the direction that makes "negative = MONEY below peg".
+        int24 delta = moneyIsCurrency0 ? currentTick - pegTick : pegTick - currentTick;
 
         if (delta >= bandTicks) {
             return expansionFee;

@@ -23,7 +23,7 @@ interface IBoardroom {
 
     function epoch() external view returns (uint256);
     function nextEpochPoint() external view returns (uint256);
-    function getOldmPrice() external view returns (uint256);
+    function getMoneyPrice() external view returns (uint256);
 
     /// @notice Auto-generated getter for the Boardroom's `operator` storage field.
     function operator() external view returns (address);

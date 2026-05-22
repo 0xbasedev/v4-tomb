@@ -27,7 +27,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *         each contract lives in test/unit/.
  */
 contract EpochCycleTest is BaseTest {
-    OldMoney internal oldm;
+    OldMoney internal money;
     Estate internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
@@ -57,12 +57,12 @@ contract EpochCycleTest is BaseTest {
 
         // 1. Deploy tokens — owner becomes initial trustees on each.
         vm.startPrank(owner);
-        oldm = new OldMoney();
+        money = new OldMoney();
         estate = new Estate(startTime, communityFund, devFund);
         trustnote = new TrustNote();
         vm.stopPrank();
 
-        // 2. Mock oracle at parity (1 OLDM = 1 cbETH).
+        // 2. Mock oracle at parity (1 MONEY = 1 cbETH).
         oracle = new MockOracle(1e18);
 
         // 3. Deploy core contracts.
@@ -71,22 +71,28 @@ contract EpochCycleTest is BaseTest {
         boardroom = new Boardroom();
 
         // 4. Initialize boardroom + treasury. owner becomes operator on both.
-        boardroom.initialize(IERC20(address(oldm)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(oldm), address(trustnote), address(estate), address(oracle), address(boardroom), startTime, excluded
+            address(money),
+            address(trustnote),
+            address(estate),
+            address(oracle),
+            address(boardroom),
+            startTime,
+            excluded
         );
 
         // 5. One-shot genesis distributions BEFORE the operator handoff (owner is still trustees).
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet); // 11k + 140k + 9k
+        money.distributeReward(genesisPool, mainPool, airdropWallet); // 11k + 140k + 9k
         estate.distributeReward(farmingPool); // 59.5k
 
         // 6. Hand off mint/burn authority on every token + boardroom to Treasury.
-        oldm.transferTrustees(address(treasury));
+        money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));
         trustnote.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
@@ -99,16 +105,16 @@ contract EpochCycleTest is BaseTest {
         estate.transfer(carol, 6000 ether);
         vm.stopPrank();
 
-        // 8. Drip OLDM out of mainPool into circulation. In production this happens via
-        //    the LP reward pool emitting OLDM over time; we shortcut it so the
+        // 8. Drip MONEY out of mainPool into circulation. In production this happens via
+        //    the LP reward pool emitting MONEY over time; we shortcut it so the
         //    circulating supply is non-trivial. Excluded addresses (genesisPool,
         //    mainPool, airdropWallet) are subtracted from circulating in the contraction
         //    headroom calculation; without this step circulating == 0 and bonds can't
         //    be sold.
         vm.startPrank(mainPool);
-        oldm.transfer(alice, 10_000 ether);
-        oldm.transfer(bob, 10_000 ether);
-        oldm.transfer(carol, 10_000 ether);
+        money.transfer(alice, 10_000 ether);
+        money.transfer(bob, 10_000 ether);
+        money.transfer(carol, 10_000 ether);
         vm.stopPrank();
 
         // 9. Warp past startTime so checkCondition modifiers pass.
@@ -130,12 +136,12 @@ contract EpochCycleTest is BaseTest {
         vm.roll(block.number + 1);
         treasury.allocateSeigniorage();
 
-        // Treasury minted OLDM and routed it to boardroom (no daoFund/devFund set yet).
+        // Treasury minted MONEY and routed it to boardroom (no daoFund/devFund set yet).
         // At 1.05e18 with supply ~160k (genesis), the mse cap (4%) bites:
         //   percentage = min(0.05, 0.04) * 1e18 = 0.04e18
-        //   savedForBoardroom = supply * 0.04 ≈ 160k * 0.04 = 6.4k OLDM
-        // Pre-distribution OLDM in boardroom was 0; after, it's the seigniorage.
-        assertGt(oldm.balanceOf(address(boardroom)), 0);
+        //   savedForBoardroom = supply * 0.04 ≈ 160k * 0.04 = 6.4k MONEY
+        // Pre-distribution MONEY in boardroom was 0; after, it's the seigniorage.
+        assertGt(money.balanceOf(address(boardroom)), 0);
         assertEq(treasury.epoch(), 1);
 
         // Each staker has accrued reward proportional to their stake.
@@ -168,11 +174,11 @@ contract EpochCycleTest is BaseTest {
             treasury.allocateSeigniorage();
         }
 
-        uint256 oldmBefore = oldm.balanceOf(alice);
+        uint256 moneyBefore = money.balanceOf(alice);
         vm.prank(alice);
         boardroom.claimReward();
-        uint256 oldmAfter = oldm.balanceOf(alice);
-        assertGt(oldmAfter, oldmBefore);
+        uint256 moneyAfter = money.balanceOf(alice);
+        assertGt(moneyAfter, moneyBefore);
     }
 
     // =================================================================
@@ -193,18 +199,18 @@ contract EpochCycleTest is BaseTest {
         uint256 contractionLeft = treasury.epochSupplyContractionLeft();
         assertGt(contractionLeft, 0);
 
-        // Alice already has 10k OLDM from setUp; approve treasury for the bond burn.
+        // Alice already has 10k MONEY from setUp; approve treasury for the bond burn.
         vm.prank(alice);
-        oldm.approve(address(treasury), 100 ether);
+        money.approve(address(treasury), 100 ether);
 
-        uint256 priceNow = treasury.getOldmPrice();
-        uint256 oldmBefore = oldm.balanceOf(alice);
+        uint256 priceNow = treasury.getMoneyPrice();
+        uint256 moneyBefore = money.balanceOf(alice);
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(100 ether, priceNow);
 
-        // Default discountPercent is 0 → rate == oldmPriceOne → 1:1 swap.
-        assertEq(oldm.balanceOf(alice), oldmBefore - 100 ether);
+        // Default discountPercent is 0 → rate == moneyPriceOne → 1:1 swap.
+        assertEq(money.balanceOf(alice), moneyBefore - 100 ether);
         assertEq(trustnote.balanceOf(alice), 100 ether);
         // Contraction headroom decreased.
         assertEq(treasury.epochSupplyContractionLeft(), contractionLeft - 100 ether);
@@ -217,9 +223,9 @@ contract EpochCycleTest is BaseTest {
         // Still above peg.
         oracle.setPrice(1.05e18);
         vm.prank(mainPool);
-        oldm.transfer(alice, 100 ether);
+        money.transfer(alice, 100 ether);
         vm.prank(alice);
-        oldm.approve(address(treasury), 100 ether);
+        money.approve(address(treasury), 100 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);
@@ -238,9 +244,9 @@ contract EpochCycleTest is BaseTest {
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
 
-        uint256 price = treasury.getOldmPrice();
+        uint256 price = treasury.getMoneyPrice();
         uint256 rate = treasury.getBondDiscountRate();
-        // Tomb math: rate = oldmPriceOne + (oldmPriceOne * 1e18 / price - oldmPriceOne)
+        // Tomb math: rate = moneyPriceOne + (moneyPriceOne * 1e18 / price - moneyPriceOne)
         //                   * discountPercent / 10000
         // At price 0.9e18, discountPercent 5000:
         //   bondAmount = 1.111e18; discountAmount = 0.111e18 * 0.5 = 0.0555e18
@@ -248,9 +254,9 @@ contract EpochCycleTest is BaseTest {
         assertApproxEqRel(rate, 1.0555e18, 0.001e18);
 
         vm.prank(mainPool);
-        oldm.transfer(alice, 100 ether);
+        money.transfer(alice, 100 ether);
         vm.prank(alice);
-        oldm.approve(address(treasury), 100 ether);
+        money.approve(address(treasury), 100 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);
@@ -267,16 +273,16 @@ contract EpochCycleTest is BaseTest {
     function test_Recovery_BondholderRedeemsAtPremium() public {
         _stakeAll();
 
-        // 1. Initial expansion to seed Treasury OLDM reserves via seigniorageSaved.
+        // 1. Initial expansion to seed Treasury MONEY reserves via seigniorageSaved.
         _allocateAtPrice(1.05e18);
 
         // 2. Contraction: alice buys bonds.
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
-        // Alice already has 10k OLDM from setUp.
+        // Alice already has 10k MONEY from setUp.
         vm.prank(alice);
-        oldm.approve(address(treasury), 50 ether);
-        uint256 contractionPrice = treasury.getOldmPrice();
+        money.approve(address(treasury), 50 ether);
+        uint256 contractionPrice = treasury.getMoneyPrice();
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(50 ether, contractionPrice);
@@ -284,30 +290,30 @@ contract EpochCycleTest is BaseTest {
 
         // 3. Force a few more contraction epochs so seigniorageSaved < bondSupply
         //    (depletes the bond depletion floor), then snap above ceiling for
-        //    a "recovery expansion" where the treasury saves OLDM to pay debt.
+        //    a "recovery expansion" where the treasury saves MONEY to pay debt.
         oracle.setPrice(1.15e18); // above premium threshold (1.10e18)
         _allocateAtPrice(1.15e18);
         _allocateAtPrice(1.15e18);
         _allocateAtPrice(1.15e18);
 
-        // At this point Treasury OLDM > 0 and price > ceiling. Alice can redeem.
-        uint256 reserve = oldm.balanceOf(address(treasury));
+        // At this point Treasury MONEY > 0 and price > ceiling. Alice can redeem.
+        uint256 reserve = money.balanceOf(address(treasury));
         assertGt(reserve, 0);
 
-        uint256 priceNow = treasury.getOldmPrice();
+        uint256 priceNow = treasury.getMoneyPrice();
         uint256 premiumRate = treasury.getBondPremiumRate();
         assertGt(premiumRate, 1e18); // premium kicks in above 1.10e18
 
         vm.prank(alice);
         trustnote.approve(address(treasury), 50 ether);
-        uint256 oldmBefore = oldm.balanceOf(alice);
+        uint256 moneyBefore = money.balanceOf(alice);
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.redeemBonds(50 ether, priceNow);
 
-        // Alice burned all 50 TRUSTNOTE; got OLDM = 50 * premiumRate / 1e18.
+        // Alice burned all 50 TRUSTNOTE; got MONEY = 50 * premiumRate / 1e18.
         assertEq(trustnote.balanceOf(alice), 0);
-        assertApproxEqRel(oldm.balanceOf(alice) - oldmBefore, 50 ether * premiumRate / 1e18, 0.001e18);
+        assertApproxEqRel(money.balanceOf(alice) - moneyBefore, 50 ether * premiumRate / 1e18, 0.001e18);
     }
 
     function test_Recovery_RedeemBondsRejectsBelowCeiling() public {
@@ -316,10 +322,10 @@ contract EpochCycleTest is BaseTest {
 
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
-        // Alice already has OLDM from setUp.
+        // Alice already has MONEY from setUp.
         vm.prank(alice);
-        oldm.approve(address(treasury), 10 ether);
-        uint256 contractionPrice = treasury.getOldmPrice();
+        money.approve(address(treasury), 10 ether);
+        uint256 contractionPrice = treasury.getMoneyPrice();
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(10 ether, contractionPrice);
@@ -369,9 +375,9 @@ contract EpochCycleTest is BaseTest {
         _allocateAtPrice(0.9e18);
 
         vm.prank(mainPool);
-        oldm.transfer(alice, 10 ether);
+        money.transfer(alice, 10 ether);
         vm.prank(alice);
-        oldm.approve(address(treasury), 10 ether);
+        money.approve(address(treasury), 10 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);

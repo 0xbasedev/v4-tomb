@@ -7,8 +7,8 @@ import {IDistributor} from "../interfaces/IDistributor.sol";
  * @title Distributor
  * @notice Tiny aggregator. Holds a list of contracts implementing [[IDistributor]] and a
  *         single public `distribute()` that calls each in order. Used in the deploy
- *         sequence to bundle the various one-shot mints (OLDM genesis pool, OLDM main pool,
- *         OLDM airdrop, ESTATE farming pool) into a single transaction.
+ *         sequence to bundle the various one-shot mints (MONEY genesis pool, MONEY main pool,
+ *         MONEY airdrop, ESTATE farming pool) into a single transaction.
  * @dev    Verbatim port of Tomb Finance's Distributor.sol (bombmoney/bomb-contracts). The
  *         only deltas from Tomb are non-logic-changing: 0.6.12 → 0.8.26 and ++i over i++
  *         for the loop counter.

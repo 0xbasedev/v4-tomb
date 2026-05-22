@@ -11,7 +11,7 @@ pragma solidity 0.8.26;
  *         V4's TickMath.
  *
  *         In production, the PegDefenseHook (Sprint 4) implements this interface by
- *         recording observations on each swap through the OLDM/cbETH pool. For Sprint 2
+ *         recording observations on each swap through the MONEY/cbETH pool. For Sprint 2
  *         unit testing, a MockPriceSource lets us poke values in directly.
  */
 interface IPriceSource {

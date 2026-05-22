@@ -42,7 +42,7 @@ contract PegDefenseHookTest is BaseTest {
 
     PegDefenseHook internal hook;
     MockPoolManager internal pm;
-    OldMoney internal oldm;
+    OldMoney internal money;
     address internal cbeth = makeAddr("cbeth");
     PoolKey internal poolKey;
 
@@ -57,21 +57,21 @@ contract PegDefenseHookTest is BaseTest {
         pm = new MockPoolManager();
 
         vm.prank(owner);
-        oldm = new OldMoney();
+        money = new OldMoney();
 
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
         hookAddr = address(uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG));
 
         deployCodeTo(
-            "PegDefenseHook.sol:PegDefenseHook", abi.encode(IPoolManager(address(pm)), address(oldm)), hookAddr
+            "PegDefenseHook.sol:PegDefenseHook", abi.encode(IPoolManager(address(pm)), address(money)), hookAddr
         );
         hook = PegDefenseHook(hookAddr);
 
         // Sort the two tokens into V4 currency order.
-        (Currency c0, Currency c1) = address(oldm) < cbeth
-            ? (Currency.wrap(address(oldm)), Currency.wrap(cbeth))
-            : (Currency.wrap(cbeth), Currency.wrap(address(oldm)));
+        (Currency c0, Currency c1) = address(money) < cbeth
+            ? (Currency.wrap(address(money)), Currency.wrap(cbeth))
+            : (Currency.wrap(cbeth), Currency.wrap(address(money)));
 
         poolKey = PoolKey({
             currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hookAddr)
@@ -88,7 +88,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_Constructor_StoresImmutables() public view {
         assertEq(address(hook.poolManager()), address(pm));
-        assertEq(hook.oldm(), address(oldm));
+        assertEq(hook.money(), address(money));
     }
 
     function test_HookPermissions_OnlyAfterInitAndBeforeSwap() public view {
@@ -141,12 +141,12 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(PoolId.unwrap(hook.poolId()), expectedId);
     }
 
-    function test_AfterInitialize_DetectsOldmOrientation() public {
+    function test_AfterInitialize_DetectsMoneyOrientation() public {
         vm.prank(address(pm));
         hook.afterInitialize(address(0), poolKey, 0, 0);
-        // OLDM is currency0 iff its address is the lower of the two.
-        bool expectedIsCurrency0 = address(oldm) < cbeth;
-        assertEq(hook.oldmIsCurrency0(), expectedIsCurrency0);
+        // MONEY is currency0 iff its address is the lower of the two.
+        bool expectedIsCurrency0 = address(money) < cbeth;
+        assertEq(hook.moneyIsCurrency0(), expectedIsCurrency0);
     }
 
     function test_AfterInitialize_OneShot() public {
@@ -158,7 +158,7 @@ contract PegDefenseHookTest is BaseTest {
         hook.afterInitialize(address(0), poolKey, 0, 0);
     }
 
-    function test_AfterInitialize_RejectsPoolMissingOldm() public {
+    function test_AfterInitialize_RejectsPoolMissingMoney() public {
         address otherA = makeAddr("otherA");
         address otherB = makeAddr("otherB");
         (Currency c0, Currency c1) = otherA < otherB
@@ -169,7 +169,7 @@ contract PegDefenseHookTest is BaseTest {
         });
 
         vm.prank(address(pm));
-        vm.expectRevert(PegDefenseHook.PoolMissingOldm.selector);
+        vm.expectRevert(PegDefenseHook.PoolMissingMoney.selector);
         hook.afterInitialize(address(0), badKey, 0, 0);
     }
 
@@ -231,10 +231,10 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsExpansionFeeAbovePeg() public {
         _bind(0);
-        // 200 ticks above peg, OLDM is whichever side is currency0/1.
-        // If oldm is currency0, currentTick > pegTick == "OLDM appreciating" → expansion.
-        // If oldm is currency1, we need currentTick LESS than peg to be expansion. Flip sign.
-        int24 t = hook.oldmIsCurrency0() ? int24(200) : int24(-200);
+        // 200 ticks above peg, MONEY is whichever side is currency0/1.
+        // If money is currency0, currentTick > pegTick == "MONEY appreciating" → expansion.
+        // If money is currency1, we need currentTick LESS than peg to be expansion. Flip sign.
+        int24 t = hook.moneyIsCurrency0() ? int24(200) : int24(-200);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();
@@ -243,7 +243,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsContractionFeeBelowPeg() public {
         _bind(0);
-        int24 t = hook.oldmIsCurrency0() ? int24(-150) : int24(150);
+        int24 t = hook.moneyIsCurrency0() ? int24(-150) : int24(150);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();
@@ -252,7 +252,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsDeepContractionFeeFarBelowPeg() public {
         _bind(0);
-        int24 t = hook.oldmIsCurrency0() ? int24(-500) : int24(500);
+        int24 t = hook.moneyIsCurrency0() ? int24(-500) : int24(500);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();

@@ -52,7 +52,7 @@ abstract contract ShareWrapper {
 
 /**
  * @title Boardroom
- * @notice $ESTATE-staking pool. Stakers earn $OLDM seigniorage minted by the Treasury during
+ * @notice $ESTATE-staking pool. Stakers earn $MONEY seigniorage minted by the Treasury during
  *         expansion epochs. Snapshot-based reward accounting matches the masterchef-derived
  *         pattern Tomb uses.
  * @dev    Direct port of Tomb Finance's Boardroom.sol (bombmoney/bomb-contracts).
@@ -94,8 +94,8 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
     bool public initialized;
 
-    /// @notice $OLDM — the reward token paid out from snapshots.
-    IERC20 public oldm;
+    /// @notice $MONEY — the reward token paid out from snapshots.
+    IERC20 public money;
 
     /// @notice Treasury that supplies seigniorage and epoch info.
     ITreasury public treasury;
@@ -159,11 +159,11 @@ contract Boardroom is ShareWrapper, ContractGuard {
     /* ========== GOVERNANCE ========== */
 
     function initialize(
-        IERC20 _oldm,
+        IERC20 _money,
         IERC20 _share,
         ITreasury _treasury
     ) public notInitialized {
-        oldm = _oldm;
+        money = _money;
         share = _share;
         treasury = _treasury;
 
@@ -236,8 +236,8 @@ contract Boardroom is ShareWrapper, ContractGuard {
         return treasury.nextEpochPoint();
     }
 
-    function getOldmPrice() external view returns (uint256) {
-        return treasury.getOldmPrice();
+    function getMoneyPrice() external view returns (uint256) {
+        return treasury.getMoneyPrice();
     }
 
     function rewardPerShare() public view returns (uint256) {
@@ -280,7 +280,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         withdraw(balanceOf(msg.sender));
     }
 
-    /// @notice Claim accumulated $OLDM reward if past the reward lockup. Tomb-faithful:
+    /// @notice Claim accumulated $MONEY reward if past the reward lockup. Tomb-faithful:
     ///         silent no-op if reward is 0; reverts only if reward > 0 AND still in lockup.
     function claimReward() public updateReward(msg.sender) {
         uint256 reward = members[msg.sender].rewardEarned;
@@ -291,14 +291,14 @@ contract Boardroom is ShareWrapper, ContractGuard {
             );
             members[msg.sender].epochTimerStart = treasury.epoch();
             members[msg.sender].rewardEarned = 0;
-            oldm.safeTransfer(msg.sender, reward);
+            money.safeTransfer(msg.sender, reward);
             emit RewardPaid(msg.sender, reward);
         }
     }
 
     /// @notice Called by Treasury once per expansion epoch to deposit seigniorage and
     ///         snapshot a new reward-per-share.
-    /// @dev Caller must have approved this amount of $OLDM to be pulled.
+    /// @dev Caller must have approved this amount of $MONEY to be pulled.
     function allocateSeigniorage(
         uint256 amount
     ) external onlyOneBlock onlyOperator {
@@ -310,18 +310,18 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
         boardroomHistory.push(BoardroomSnapshot({time: block.number, rewardReceived: amount, rewardPerShare: nextRPS}));
 
-        oldm.safeTransferFrom(msg.sender, address(this), amount);
+        money.safeTransferFrom(msg.sender, address(this), amount);
         emit RewardAdded(msg.sender, amount);
     }
 
-    /// @notice Rescue tokens mistakenly sent to this contract. Core tokens (oldm, share=estate)
+    /// @notice Rescue tokens mistakenly sent to this contract. Core tokens (money, share=estate)
     ///         are protected.
     function governanceRecoverUnsupported(
         IERC20 token,
         uint256 amount,
         address to
     ) external onlyOperator {
-        if (address(token) == address(oldm)) revert ProtectedToken();
+        if (address(token) == address(money)) revert ProtectedToken();
         if (address(token) == address(share)) revert ProtectedToken();
         token.safeTransfer(to, amount);
     }

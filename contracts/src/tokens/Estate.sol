@@ -12,7 +12,7 @@ import {Trustees} from "../governance/Trustees.sol";
 /**
  * @title Estate
  * @notice $ESTATE — the share / governance side of the Old Money trust. Holders stake $ESTATE
- *         in TheClub (the Boardroom) to earn $OLDM seigniorage during expansion epochs.
+ *         in TheClub (the Boardroom) to earn $MONEY seigniorage during expansion epochs.
  * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
  *
  *         Supply (Tomb-exact):

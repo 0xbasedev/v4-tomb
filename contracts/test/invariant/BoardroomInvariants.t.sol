@@ -29,7 +29,7 @@ contract MockTreasury is ITreasury {
         return type(uint256).max;
     }
 
-    function getOldmPrice() external pure returns (uint256) {
+    function getMoneyPrice() external pure returns (uint256) {
         return 1e18;
     }
 
@@ -139,7 +139,7 @@ contract BoardroomHandler is Test {
 }
 
 contract BoardroomInvariants is StdInvariant, Test {
-    OldMoney public oldm;
+    OldMoney public money;
     Estate public estate;
     Boardroom public boardroom;
     MockTreasury public treasury;
@@ -153,7 +153,7 @@ contract BoardroomInvariants is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         // 1. Deploy tokens (deployer = trustees of each).
-        oldm = new OldMoney();
+        money = new OldMoney();
         estate = new Estate(block.timestamp + 1 hours, communityFund, devFund);
 
         // 2. Mock treasury.
@@ -161,7 +161,7 @@ contract BoardroomInvariants is StdInvariant, Test {
 
         // 3. Boardroom (deployer is the initial operator).
         boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(oldm)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         // 4. Mint ESTATE supply via distributeReward, then push to test actors.
         estate.distributeReward(farmingPool);

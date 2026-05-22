@@ -1,4 +1,4 @@
-# Old Money — $OLDM
+# Old Money — $MONEY
 
 An algorithmic stable on Base, pegged to cbETH. Fork of Tomb Finance, modernized for Solidity 0.8.26, OpenZeppelin v5, and Uniswap V4 hooks.
 
@@ -41,7 +41,7 @@ forge test
 
 | Brand name | Tomb analog | Role |
 |---|---|---|
-| `$OLDM` (OldMoney) | TOMB | Algorithmic stable, pegged to 1 cbETH |
+| `$MONEY` (OldMoney) | TOMB | Algorithmic stable, pegged to 1 cbETH |
 | `$ESTATE` (Estate) | TSHARE | Share / governance / fee accrual |
 | `$TRUSTNOTE` (TrustNote) | TBOND | Contraction bond, redeemed during expansion |
 

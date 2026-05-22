@@ -9,7 +9,7 @@ pragma solidity 0.8.26;
 interface ITreasury {
     function epoch() external view returns (uint256);
     function nextEpochPoint() external view returns (uint256);
-    function getOldmPrice() external view returns (uint256);
+    function getMoneyPrice() external view returns (uint256);
 
     function buyBonds(
         uint256 amount,

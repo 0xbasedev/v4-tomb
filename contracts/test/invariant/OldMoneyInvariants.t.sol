@@ -17,7 +17,7 @@ import {OldMoney} from "../../src/tokens/OldMoney.sol";
  *         contract is that actor.
  */
 contract OldMoneyHandler is Test {
-    OldMoney public oldm;
+    OldMoney public money;
 
     address[] public actors;
 
@@ -26,9 +26,9 @@ contract OldMoneyHandler is Test {
     uint256 public ghost_burned;
 
     constructor(
-        OldMoney _oldm
+        OldMoney _money
     ) {
-        oldm = _oldm;
+        money = _money;
         actors.push(makeAddr("alice"));
         actors.push(makeAddr("bob"));
         actors.push(makeAddr("carol"));
@@ -43,7 +43,7 @@ contract OldMoneyHandler is Test {
         uint96 amount
     ) external {
         address to = actors[actorSeed % actors.length];
-        oldm.mint(to, amount);
+        money.mint(to, amount);
         ghost_minted += amount;
     }
 
@@ -52,11 +52,11 @@ contract OldMoneyHandler is Test {
         uint256 amount
     ) external {
         address from = actors[actorSeed % actors.length];
-        uint256 balance = oldm.balanceOf(from);
+        uint256 balance = money.balanceOf(from);
         if (balance == 0) return;
         amount = bound(amount, 0, balance);
         vm.prank(from);
-        oldm.burn(amount);
+        money.burn(amount);
         ghost_burned += amount;
     }
 
@@ -67,28 +67,28 @@ contract OldMoneyHandler is Test {
     ) external {
         address from = actors[fromSeed % actors.length];
         address to = actors[toSeed % actors.length];
-        uint256 balance = oldm.balanceOf(from);
+        uint256 balance = money.balanceOf(from);
         if (balance == 0) return;
         amount = bound(amount, 0, balance);
         vm.prank(from);
-        oldm.transfer(to, amount);
+        money.transfer(to, amount);
     }
 }
 
 /**
  * @title OldMoneyInvariants
  * @notice Properties that must hold across any sequence of mints, burns, and transfers on
- *         the $OLDM token. The constructor mints 1 ether to the deployer (this test
+ *         the $MONEY token. The constructor mints 1 ether to the deployer (this test
  *         contract), then we hand off trustees to the handler so it can mint freely.
  */
 contract OldMoneyInvariants is StdInvariant, Test {
-    OldMoney public oldm;
+    OldMoney public money;
     OldMoneyHandler public handler;
 
     function setUp() public {
-        oldm = new OldMoney();
-        handler = new OldMoneyHandler(oldm);
-        oldm.transferTrustees(address(handler));
+        money = new OldMoney();
+        handler = new OldMoneyHandler(money);
+        money.transferTrustees(address(handler));
 
         targetContract(address(handler));
     }
@@ -99,24 +99,24 @@ contract OldMoneyInvariants is StdInvariant, Test {
         // Test contract is the deployer → holds the 1 ether construction mint.
         // No actor or handler ever burns that 1 ether (handler only burns from its
         // three actor addresses), so it sits constant in totalSupply.
-        uint256 expected = oldm.balanceOf(address(this)) + handler.ghost_minted() - handler.ghost_burned();
-        assertEq(oldm.totalSupply(), expected);
+        uint256 expected = money.balanceOf(address(this)) + handler.ghost_minted() - handler.ghost_burned();
+        assertEq(money.totalSupply(), expected);
     }
 
     /// @notice No individual balance can exceed the total supply.
     function invariant_NoBalanceExceedsTotalSupply() public view {
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            assertLe(oldm.balanceOf(handler.actors(i)), oldm.totalSupply());
+            assertLe(money.balanceOf(handler.actors(i)), money.totalSupply());
         }
     }
 
     /// @notice The sum of tracked balances (deployer + actors) equals totalSupply.
     ///         Stronger than the "no balance exceeds" invariant.
     function invariant_SumOfBalancesEqualsTotalSupply() public view {
-        uint256 sum = oldm.balanceOf(address(this));
+        uint256 sum = money.balanceOf(address(this));
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            sum += oldm.balanceOf(handler.actors(i));
+            sum += money.balanceOf(handler.actors(i));
         }
-        assertEq(sum, oldm.totalSupply());
+        assertEq(sum, money.totalSupply());
     }
 }

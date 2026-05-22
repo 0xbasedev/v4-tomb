@@ -39,7 +39,7 @@ contract MockTreasury is ITreasury {
         return startTime + epoch_ * period;
     }
 
-    function getOldmPrice() external view returns (uint256) {
+    function getMoneyPrice() external view returns (uint256) {
         return price;
     }
 
@@ -55,7 +55,7 @@ contract MockTreasury is ITreasury {
 
 contract BoardroomTest is BaseTest {
     Boardroom internal boardroom;
-    OldMoney internal oldm;
+    OldMoney internal money;
     Estate internal estate;
     MockTreasury internal treasuryMock;
 
@@ -77,7 +77,7 @@ contract BoardroomTest is BaseTest {
 
         // Deploy tokens with owner as initial trustees.
         vm.prank(owner);
-        oldm = new OldMoney();
+        money = new OldMoney();
         vm.prank(owner);
         estate = new Estate(block.timestamp, communityFund, devFund);
 
@@ -87,12 +87,12 @@ contract BoardroomTest is BaseTest {
         vm.prank(owner);
         boardroom = new Boardroom();
         vm.prank(owner);
-        boardroom.initialize(IERC20(address(oldm)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
+        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
 
-        // Hand off mint authority on OLDM to a controllable address so this test can
-        // mint OLDM directly for testing reward flows.
+        // Hand off mint authority on MONEY to a controllable address so this test can
+        // mint MONEY directly for testing reward flows.
         vm.prank(owner);
-        oldm.transferTrustees(address(this)); // test contract becomes trustees
+        money.transferTrustees(address(this)); // test contract becomes trustees
 
         // Materialize Estate supply via distributeReward, then fund alice and bob.
         vm.prank(owner);
@@ -108,7 +108,7 @@ contract BoardroomTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Initialize_StoresParams() public view {
-        assertEq(address(boardroom.oldm()), address(oldm));
+        assertEq(address(boardroom.money()), address(money));
         assertEq(address(boardroom.share()), address(estate));
         assertEq(address(boardroom.treasury()), address(treasuryMock));
         assertEq(boardroom.operator(), owner);
@@ -120,7 +120,7 @@ contract BoardroomTest is BaseTest {
     function test_Initialize_OneShot() public {
         vm.prank(owner);
         vm.expectRevert(Boardroom.AlreadyInitialized.selector);
-        boardroom.initialize(IERC20(address(oldm)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
+        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
     }
 
     // ---------------------------------------------------------------------
@@ -193,7 +193,7 @@ contract BoardroomTest is BaseTest {
     function test_Exit_WithdrawsAllAndClaims() public {
         _stakeAlice(10 ether);
 
-        // Operator allocates 1 OLDM as reward. Move past reward lockup.
+        // Operator allocates 1 MONEY as reward. Move past reward lockup.
         _allocateReward(1 ether);
         treasuryMock.setEpoch(6);
         vm.roll(block.number + 1);
@@ -201,7 +201,7 @@ contract BoardroomTest is BaseTest {
         vm.prank(alice);
         boardroom.exit();
         assertEq(boardroom.balanceOf(alice), 0);
-        assertEq(oldm.balanceOf(alice), 1 ether); // got the full reward (sole staker)
+        assertEq(money.balanceOf(alice), 1 ether); // got the full reward (sole staker)
     }
 
     // ---------------------------------------------------------------------
@@ -210,9 +210,9 @@ contract BoardroomTest is BaseTest {
 
     function test_AllocateSeigniorage_OnlyOperator() public {
         _stakeAlice(10 ether);
-        oldm.mint(stranger, 1 ether); // this test contract is currently trustees
+        money.mint(stranger, 1 ether); // this test contract is currently trustees
         vm.prank(stranger);
-        oldm.approve(address(boardroom), 1 ether);
+        money.approve(address(boardroom), 1 ether);
         vm.roll(block.number + 1); // dodge onlyOneBlock
         vm.prank(stranger);
         vm.expectRevert(Boardroom.NotOperator.selector);
@@ -228,9 +228,9 @@ contract BoardroomTest is BaseTest {
     }
 
     function test_AllocateSeigniorage_RejectsEmptyPool() public {
-        oldm.mint(owner, 1 ether);
+        money.mint(owner, 1 ether);
         vm.prank(owner);
-        oldm.approve(address(boardroom), 1 ether);
+        money.approve(address(boardroom), 1 ether);
         vm.prank(owner);
         vm.expectRevert(Boardroom.CannotAllocateWhenTotalSupplyZero.selector);
         boardroom.allocateSeigniorage(1 ether);
@@ -240,7 +240,7 @@ contract BoardroomTest is BaseTest {
         _stakeAlice(10 ether);
         _stakeBob(30 ether);
 
-        // Owner (operator) allocates 4 OLDM. Alice = 25%, bob = 75%.
+        // Owner (operator) allocates 4 MONEY. Alice = 25%, bob = 75%.
         _allocateReward(4 ether);
 
         // earned() is what each member can claim.
@@ -267,7 +267,7 @@ contract BoardroomTest is BaseTest {
         emit RewardPaid(alice, 1 ether);
         vm.prank(alice);
         boardroom.claimReward();
-        assertEq(oldm.balanceOf(alice), 1 ether);
+        assertEq(money.balanceOf(alice), 1 ether);
     }
 
     function test_ClaimReward_NoopWhenZero() public {
@@ -276,7 +276,7 @@ contract BoardroomTest is BaseTest {
         // No reward allocated. claimReward should be a silent no-op.
         vm.prank(alice);
         boardroom.claimReward();
-        assertEq(oldm.balanceOf(alice), 0);
+        assertEq(money.balanceOf(alice), 0);
     }
 
     // ---------------------------------------------------------------------
@@ -312,10 +312,10 @@ contract BoardroomTest is BaseTest {
     // governanceRecoverUnsupported
     // ---------------------------------------------------------------------
 
-    function test_GovernanceRecoverUnsupported_BlocksOldm() public {
+    function test_GovernanceRecoverUnsupported_BlocksMoney() public {
         vm.prank(owner);
         vm.expectRevert(Boardroom.ProtectedToken.selector);
-        boardroom.governanceRecoverUnsupported(IERC20(address(oldm)), 1, alice);
+        boardroom.governanceRecoverUnsupported(IERC20(address(money)), 1, alice);
     }
 
     function test_GovernanceRecoverUnsupported_BlocksShare() public {
@@ -350,10 +350,10 @@ contract BoardroomTest is BaseTest {
     function _allocateReward(
         uint256 amount
     ) internal {
-        // This test contract is the OLDM trustees (set in setUp); mint OLDM to owner.
-        oldm.mint(owner, amount);
+        // This test contract is the MONEY trustees (set in setUp); mint MONEY to owner.
+        money.mint(owner, amount);
         vm.prank(owner);
-        oldm.approve(address(boardroom), amount);
+        money.approve(address(boardroom), amount);
         vm.roll(block.number + 1);
         vm.prank(owner);
         boardroom.allocateSeigniorage(amount);

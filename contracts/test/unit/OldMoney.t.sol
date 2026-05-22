@@ -22,7 +22,7 @@ contract MockERC20 is ERC20 {
 }
 
 contract OldMoneyTest is BaseTest {
-    OldMoney internal oldm;
+    OldMoney internal money;
 
     address internal genesisPool = makeAddr("genesisPool");
     address internal mainPool = makeAddr("mainPool");
@@ -42,11 +42,11 @@ contract OldMoneyTest is BaseTest {
 
         // Deploy from `owner` so owner is initial owner + initial trustees.
         vm.prank(owner);
-        oldm = new OldMoney();
+        money = new OldMoney();
 
         // Rotate trustees to the dedicated `trustees` actor.
         vm.prank(owner);
-        oldm.transferTrustees(trustees);
+        money.transferTrustees(trustees);
     }
 
     // ---------------------------------------------------------------------
@@ -54,9 +54,9 @@ contract OldMoneyTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(oldm.name(), "Old Money");
-        assertEq(oldm.symbol(), "OLDM");
-        assertEq(oldm.decimals(), 18);
+        assertEq(money.name(), "Old Money");
+        assertEq(money.symbol(), "MONEY");
+        assertEq(money.decimals(), 18);
     }
 
     function test_Constructor_OwnerAndInitialDeployerMint() public {
@@ -79,31 +79,31 @@ contract OldMoneyTest is BaseTest {
     function test_TransferTrustees_OnlyOwner() public {
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
-        oldm.transferTrustees(alice);
+        money.transferTrustees(alice);
     }
 
     function test_TransferTrustees_RejectsZero() public {
         vm.prank(owner);
         vm.expectRevert(Trustees.ZeroTrusteesAddress.selector);
-        oldm.transferTrustees(address(0));
+        money.transferTrustees(address(0));
     }
 
     function test_TransferTrustees_EmitsEvent() public {
         vm.expectEmit(true, true, true, true);
         emit TrusteesTransferred(trustees, alice);
         vm.prank(owner);
-        oldm.transferTrustees(alice);
-        assertEq(oldm.trustees(), alice);
+        money.transferTrustees(alice);
+        assertEq(money.trustees(), alice);
     }
 
     function test_IsTrustees_TrueForTrustees() public {
         vm.prank(trustees);
-        assertTrue(oldm.isTrustees());
+        assertTrue(money.isTrustees());
     }
 
     function test_IsTrustees_FalseForNonTrustees() public {
         vm.prank(stranger);
-        assertFalse(oldm.isTrustees());
+        assertFalse(money.isTrustees());
     }
 
     // ---------------------------------------------------------------------
@@ -113,27 +113,27 @@ contract OldMoneyTest is BaseTest {
     function test_Mint_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        oldm.mint(alice, 1 ether);
+        money.mint(alice, 1 ether);
     }
 
     function test_Mint_OwnerCannotMint() public {
         vm.prank(owner);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        oldm.mint(alice, 1 ether);
+        money.mint(alice, 1 ether);
     }
 
     function test_Mint_ReturnsTrueOnPositiveAmount() public {
         vm.prank(trustees);
-        bool ok = oldm.mint(alice, 1 ether);
+        bool ok = money.mint(alice, 1 ether);
         assertTrue(ok);
-        assertEq(oldm.balanceOf(alice), 1 ether);
+        assertEq(money.balanceOf(alice), 1 ether);
     }
 
     function test_Mint_ReturnsFalseOnZeroAmount() public {
         vm.prank(trustees);
-        bool ok = oldm.mint(alice, 0);
+        bool ok = money.mint(alice, 0);
         assertFalse(ok);
-        assertEq(oldm.balanceOf(alice), 0);
+        assertEq(money.balanceOf(alice), 0);
     }
 
     function test_Mint_EmitsCoinedAndTransfer() public {
@@ -143,7 +143,7 @@ contract OldMoneyTest is BaseTest {
         emit Coined(alice, 1 ether);
 
         vm.prank(trustees);
-        oldm.mint(alice, 1 ether);
+        money.mint(alice, 1 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -152,39 +152,39 @@ contract OldMoneyTest is BaseTest {
 
     function test_Burn_HolderCanBurnOwnBalance() public {
         vm.prank(trustees);
-        oldm.mint(alice, 5 ether);
+        money.mint(alice, 5 ether);
         vm.prank(alice);
-        oldm.burn(2 ether);
-        assertEq(oldm.balanceOf(alice), 3 ether);
+        money.burn(2 ether);
+        assertEq(money.balanceOf(alice), 3 ether);
     }
 
     function test_BurnFrom_OnlyTrustees() public {
         vm.prank(trustees);
-        oldm.mint(alice, 5 ether);
+        money.mint(alice, 5 ether);
         vm.prank(alice);
-        oldm.approve(bob, 5 ether);
+        money.approve(bob, 5 ether);
 
         // bob has allowance, but bob is not trustees — burnFrom must revert.
         vm.prank(bob);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        oldm.burnFrom(alice, 1 ether);
+        money.burnFrom(alice, 1 ether);
     }
 
     function test_BurnFrom_TrusteesNeedsAllowance() public {
         vm.prank(trustees);
-        oldm.mint(alice, 5 ether);
+        money.mint(alice, 5 ether);
 
         // Without an allowance, trustees still cannot burnFrom.
         vm.prank(trustees);
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, trustees, 0, 1 ether));
-        oldm.burnFrom(alice, 1 ether);
+        money.burnFrom(alice, 1 ether);
 
         // With allowance, trustees can burnFrom.
         vm.prank(alice);
-        oldm.approve(trustees, 1 ether);
+        money.approve(trustees, 1 ether);
         vm.prank(trustees);
-        oldm.burnFrom(alice, 1 ether);
-        assertEq(oldm.balanceOf(alice), 4 ether);
+        money.burnFrom(alice, 1 ether);
+        assertEq(money.balanceOf(alice), 4 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -194,55 +194,55 @@ contract OldMoneyTest is BaseTest {
     function test_DistributeReward_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet);
+        money.distributeReward(genesisPool, mainPool, airdropWallet);
     }
 
     function test_DistributeReward_RejectsZeroGenesis() public {
         vm.prank(trustees);
         vm.expectRevert(OldMoney.ZeroAddress.selector);
-        oldm.distributeReward(address(0), mainPool, airdropWallet);
+        money.distributeReward(address(0), mainPool, airdropWallet);
     }
 
     function test_DistributeReward_RejectsZeroMain() public {
         vm.prank(trustees);
         vm.expectRevert(OldMoney.ZeroAddress.selector);
-        oldm.distributeReward(genesisPool, address(0), airdropWallet);
+        money.distributeReward(genesisPool, address(0), airdropWallet);
     }
 
     function test_DistributeReward_RejectsZeroAirdrop() public {
         vm.prank(trustees);
         vm.expectRevert(OldMoney.ZeroAddress.selector);
-        oldm.distributeReward(genesisPool, mainPool, address(0));
+        money.distributeReward(genesisPool, mainPool, address(0));
     }
 
     function test_DistributeReward_MintsExactAllocations() public {
         vm.prank(trustees);
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet);
+        money.distributeReward(genesisPool, mainPool, airdropWallet);
 
-        assertEq(oldm.balanceOf(genesisPool), oldm.INITIAL_GENESIS_POOL_DISTRIBUTION());
-        assertEq(oldm.balanceOf(mainPool), oldm.INITIAL_MAIN_POOL_DISTRIBUTION());
-        assertEq(oldm.balanceOf(airdropWallet), oldm.INITIAL_AIRDROP_WALLET_DISTRIBUTION());
+        assertEq(money.balanceOf(genesisPool), money.INITIAL_GENESIS_POOL_DISTRIBUTION());
+        assertEq(money.balanceOf(mainPool), money.INITIAL_MAIN_POOL_DISTRIBUTION());
+        assertEq(money.balanceOf(airdropWallet), money.INITIAL_AIRDROP_WALLET_DISTRIBUTION());
 
         // The 1 ether deploy seed + 11k + 140k + 9k.
         uint256 expectedSupply = 1 ether + 11_000 ether + 140_000 ether + 9000 ether;
-        assertEq(oldm.totalSupply(), expectedSupply);
-        assertTrue(oldm.rewardPoolDistributed());
+        assertEq(money.totalSupply(), expectedSupply);
+        assertTrue(money.rewardPoolDistributed());
     }
 
     function test_DistributeReward_EmitsEvent() public {
         vm.expectEmit(true, true, true, true);
         emit RewardPoolDistributed(genesisPool, mainPool, airdropWallet);
         vm.prank(trustees);
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet);
+        money.distributeReward(genesisPool, mainPool, airdropWallet);
     }
 
     function test_DistributeReward_OneShot() public {
         vm.prank(trustees);
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet);
+        money.distributeReward(genesisPool, mainPool, airdropWallet);
 
         vm.prank(trustees);
         vm.expectRevert(OldMoney.AlreadyDistributed.selector);
-        oldm.distributeReward(genesisPool, mainPool, airdropWallet);
+        money.distributeReward(genesisPool, mainPool, airdropWallet);
     }
 
     // ---------------------------------------------------------------------
@@ -251,24 +251,24 @@ contract OldMoneyTest is BaseTest {
 
     function test_GovernanceRecoverUnsupported_OnlyTrustees() public {
         MockERC20 stuck = new MockERC20();
-        stuck.mint(address(oldm), 100 ether);
+        stuck.mint(address(money), 100 ether);
 
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        oldm.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
+        money.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
     }
 
     function test_GovernanceRecoverUnsupported_TransfersStuckTokens() public {
         MockERC20 stuck = new MockERC20();
-        stuck.mint(address(oldm), 100 ether);
+        stuck.mint(address(money), 100 ether);
 
         vm.expectEmit(true, true, true, true);
         emit UnsupportedTokenRecovered(IERC20(address(stuck)), 100 ether, alice);
         vm.prank(trustees);
-        oldm.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
+        money.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
 
         assertEq(stuck.balanceOf(alice), 100 ether);
-        assertEq(stuck.balanceOf(address(oldm)), 0);
+        assertEq(stuck.balanceOf(address(money)), 0);
     }
 
     // ---------------------------------------------------------------------
@@ -277,14 +277,14 @@ contract OldMoneyTest is BaseTest {
 
     function test_OwnershipTransfer_TwoStep() public {
         vm.prank(owner);
-        oldm.transferOwnership(alice);
-        assertEq(oldm.owner(), owner);
-        assertEq(oldm.pendingOwner(), alice);
+        money.transferOwnership(alice);
+        assertEq(money.owner(), owner);
+        assertEq(money.pendingOwner(), alice);
 
         vm.prank(alice);
-        oldm.acceptOwnership();
-        assertEq(oldm.owner(), alice);
-        assertEq(oldm.pendingOwner(), address(0));
+        money.acceptOwnership();
+        assertEq(money.owner(), alice);
+        assertEq(money.pendingOwner(), address(0));
     }
 
     // ---------------------------------------------------------------------
@@ -295,9 +295,9 @@ contract OldMoneyTest is BaseTest {
         (uint256 pk, address holder) = _makeSigner("permit_holder");
 
         vm.prank(trustees);
-        oldm.mint(holder, 10 ether);
+        money.mint(holder, 10 ether);
 
-        uint256 nonce = oldm.nonces(holder);
+        uint256 nonce = money.nonces(holder);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 value = 5 ether;
         address spender = bob;
@@ -305,13 +305,13 @@ contract OldMoneyTest is BaseTest {
         bytes32 typehash =
             keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
         bytes32 structHash = keccak256(abi.encode(typehash, holder, spender, value, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", oldm.DOMAIN_SEPARATOR(), structHash));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", money.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
 
-        oldm.permit(holder, spender, value, deadline, v, r, s);
+        money.permit(holder, spender, value, deadline, v, r, s);
 
-        assertEq(oldm.allowance(holder, spender), value);
-        assertEq(oldm.nonces(holder), nonce + 1);
+        assertEq(money.allowance(holder, spender), value);
+        assertEq(money.nonces(holder), nonce + 1);
     }
 
     // ---------------------------------------------------------------------
@@ -321,11 +321,11 @@ contract OldMoneyTest is BaseTest {
     function testFuzz_Mint_IncreasesSupplyByExactly(
         uint96 amount
     ) public {
-        uint256 supplyBefore = oldm.totalSupply();
+        uint256 supplyBefore = money.totalSupply();
         vm.prank(trustees);
-        oldm.mint(alice, amount);
-        assertEq(oldm.totalSupply(), supplyBefore + amount);
-        assertEq(oldm.balanceOf(alice), amount);
+        money.mint(alice, amount);
+        assertEq(money.totalSupply(), supplyBefore + amount);
+        assertEq(money.balanceOf(alice), amount);
     }
 
     function testFuzz_Burn_DecreasesSupplyByExactly(
@@ -333,11 +333,11 @@ contract OldMoneyTest is BaseTest {
         uint96 burnAmount
     ) public {
         vm.assume(burnAmount <= mintAmount);
-        uint256 supplyBefore = oldm.totalSupply();
+        uint256 supplyBefore = money.totalSupply();
         vm.prank(trustees);
-        oldm.mint(alice, mintAmount);
+        money.mint(alice, mintAmount);
         vm.prank(alice);
-        oldm.burn(burnAmount);
-        assertEq(oldm.totalSupply(), supplyBefore + uint256(mintAmount) - uint256(burnAmount));
+        money.burn(burnAmount);
+        assertEq(money.totalSupply(), supplyBefore + uint256(mintAmount) - uint256(burnAmount));
     }
 }
