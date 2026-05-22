@@ -61,7 +61,9 @@ contract PegDefenseHookTest is BaseTest {
 
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
-        hookAddr = address(uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG));
+        hookAddr = address(
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
+        );
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook", abi.encode(IPoolManager(address(pm)), address(money)), hookAddr
@@ -91,10 +93,11 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(hook.money(), address(money));
     }
 
-    function test_HookPermissions_OnlyAfterInitAndBeforeSwap() public view {
+    function test_HookPermissions_AfterInitBeforeSwapAndReturnsDelta() public view {
         Hooks.Permissions memory p = hook.getHookPermissions();
         assertTrue(p.afterInitialize);
         assertTrue(p.beforeSwap);
+        assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
         assertFalse(p.beforeInitialize);
         assertFalse(p.afterSwap);
         assertFalse(p.beforeAddLiquidity);
@@ -103,7 +106,6 @@ contract PegDefenseHookTest is BaseTest {
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.beforeSwapReturnDelta);
         assertFalse(p.afterSwapReturnDelta);
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);

@@ -95,6 +95,12 @@ contract Deploy is Script {
         money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
         estate.distributeReward(address(shareRewardPool));
 
+        // Wire Treasury into the hook so the Sprint 4b tax can route MONEY there above
+        // the burn threshold. Hook trustees defaults to the deployer at construction; the
+        // setter is invoked from that role. (autoCalculateTax stays false at deploy —
+        // Trustees enables post-launch.)
+        hook.setTreasury(address(treasury));
+
         money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));
         trustnote.transferTrustees(address(treasury));
@@ -133,7 +139,8 @@ contract Deploy is Script {
     ) internal {
         IPoolManager pm = IPoolManager(Addresses.poolManager());
         bytes memory creationCode = abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money)));
-        uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
+        uint160 flags =
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         // Mine against the canonical CREATE2 deployer — Foundry routes broadcast
         // create2 calls through it, so the deployed address is derived from this
         // address, not the deployer EOA. (deployer param kept for ABI compat.)

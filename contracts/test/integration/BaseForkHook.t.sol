@@ -92,7 +92,8 @@ contract BaseForkHookTest is BaseTest {
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right
         //    permission bits (AFTER_INITIALIZE | BEFORE_SWAP).
-        uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
+        uint160 flags =
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money)));
         (address minedAddr, bytes32 hookSalt) = HookMiner.find(address(this), flags, hookCreationCode);
@@ -165,8 +166,13 @@ contract BaseForkHookTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_HookAddressHasCorrectPermissionBits() public view {
-        uint160 expected = uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        assertEq(uint160(address(hook)) & 0x3FFF, expected, "Hook address must encode AFTER_INIT|BEFORE_SWAP");
+        uint160 expected =
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        assertEq(
+            uint160(address(hook)) & 0x3FFF,
+            expected,
+            "Hook address must encode AFTER_INIT|BEFORE_SWAP|BEFORE_SWAP_RETURNS_DELTA"
+        );
     }
 
     function test_HookBoundToPoolAfterInitialize() public view {
