@@ -1,6 +1,6 @@
 # Deploy
 
-How to deploy Old Money to a chain. Production deploys follow this exact path; testnet deploys differ only in that cbETH is mocked.
+How to deploy Old Money to a chain. Production deploys follow this exact path; testnet deploys differ only in that WETH is mocked.
 
 ## Prerequisites
 
@@ -28,10 +28,10 @@ The three reward pool contracts (`GenesisRewardPool`, `MainRewardPool`, `ShareRe
 ## Commands
 
 ```bash
-# Base Sepolia (uses MockCbeth — no real cbETH on testnet)
+# Base Sepolia (WETH at canonical OP-stack predeploy 0x4200...0006)
 forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --verify
 
-# Base mainnet (uses real cbETH at 0x2Ae3F1...)
+# Base mainnet (WETH at canonical OP-stack predeploy 0x4200...0006)
 forge script script/Deploy.s.sol --rpc-url base --broadcast --verify
 
 # Dry run against a Base fork — no broadcast, just simulates
@@ -42,7 +42,7 @@ forge script script/Deploy.s.sol --rpc-url base
 
 The script implements an 8-step sequence:
 
-1. Resolve cbETH (real on mainnet chains, `MockCbeth` on testnets).
+1. Read WETH address from `Addresses.weth()` (canonical on every supported chain — no mock).
 2. Deploy `OldMoney`, `Estate`, `TrustNote`.
 3. Mine a CREATE2 salt for `PegDefenseHook` → deploy via `create2` opcode at the required permission-bit address (`AFTER_INITIALIZE | BEFORE_SWAP` → low-14-bit pattern `0x1080`).
 4. Call `PoolManager.initialize(poolKey, sqrtPriceX96)` on the live V4 PoolManager. The hook's `afterInitialize` fires and binds it to the pool.
@@ -61,7 +61,7 @@ The script asserts post-deploy that every operator handoff landed correctly, the
    - Same for `estate`, `trustnote`, `treasury`, `boardroom`, `oracle`, `hook`
 3. **Verify on BaseScan** — `--verify` should handle this automatically when the API key is set, but spot-check the contracts page for green checkmarks.
 4. **Seed the V4 pool with initial liquidity.** The script initializes the pool but does NOT add liquidity. Someone (typically the team) must:
-   - Acquire some cbETH (testnet: mint from MockCbeth; mainnet: buy on a DEX)
+   - Acquire some WETH (deposit ETH to WETH at `0x4200...0006` on OP-stack chains, or buy on a DEX)
    - Acquire some MONEY (this is what the LP pools will distribute over time, so on day 1 the team supplies initial liquidity from the airdrop wallet allocation)
    - Use Uniswap's V4 position manager to add liquidity at a tight range around tick 0 (parity)
 
@@ -78,9 +78,9 @@ After running, check the output for the deployed addresses. Run the post-deploy 
 
 ## Known caveats / pending items
 
-- **The three reward pools are deployed BUT empty of pool entries.** Each pool's `add(allocPoint, lpToken, false, 0)` must be called by the operator (initially the deployer) for every LP token to support — e.g., the MONEY/cbETH V4 LP token, a USDC/cbETH pair, etc. Until that's done, the pools hold the MONEY/ESTATE but no one can stake to earn it.
+- **The three reward pools are deployed BUT empty of pool entries.** Each pool's `add(allocPoint, lpToken, false, 0)` must be called by the operator (initially the deployer) for every LP token to support — e.g., the MONEY/WETH V4 LP token, a USDC/WETH pair, etc. Until that's done, the pools hold the MONEY/ESTATE but no one can stake to earn it.
 - **No Timelock deploy script yet.** Sprint 14.
-- **No real liquidity provisioning.** A separate manual step — fund the V4 OLDM/cbETH pool with initial liquidity from the airdrop wallet allocation before genesis pool opens.
+- **No real liquidity provisioning.** A separate manual step — fund the V4 OLDM/WETH pool with initial liquidity from the airdrop wallet allocation before genesis pool opens.
 - **No automated pool-side swap test on mainnet.** The deploy script initializes the pool but doesn't run a swap through it. The first swap will trigger `beforeSwap` and the dynamic fee logic for real.
 
 ## Rollback / recovery

@@ -27,7 +27,7 @@ Every contract we ship on Old Money has a Tomb counterpart documented here. The 
 | Timelock | `Timelock` | Tomb-faithful |
 | TaxOffice / TaxOfficeV2 | `PegDefenseHook` (V4 hook) | **Deliberate deviation** — see gap #3 |
 | Distributor | `Distributor` | Tomb-faithful |
-| (FTM peg) | (cbETH peg) | Different paired asset, same algebra |
+| (FTM peg) | (WETH peg) | Different paired asset, same algebra |
 
 ## Required reading order before any new sprint
 

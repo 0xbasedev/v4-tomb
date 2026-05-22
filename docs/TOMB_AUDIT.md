@@ -272,7 +272,7 @@ OldMoney, Estate, TrustNote, Oracle, GenesisRewardPool, MainRewardPool, Timelock
 | BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | MEDIUM | **DEFERRED** — documented as v1 deliberate omission; core peg mechanics function without it; future Treasury upgrade may add | ✅ documented in Treasury.sol NatSpec |
 | Gap #3 | PegDefenseHook doesn't burn/route value | HIGH | **BUILD SPRINT 4B** — `beforeSwapReturnDelta` tax routing | ⏳ pending implementation |
 | Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when ESTATE/WETH V4 pool + wrapper exists | ⏳ pending |
-| Peg | cbETH → WETH | Decided | **EXECUTE** | ⏳ pending |
+| Peg | cbETH → WETH | Decided | **DONE** — commit `c1fd029` | ✅ done |
 
 ### What's NOT a decision (just execution)
 
