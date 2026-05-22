@@ -150,6 +150,13 @@ contract BaseForkHookTest is BaseTest {
         trustnote.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
 
+        // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
+        // The test contract (deployer) holds 1 ESTATE from Estate's constructor mint.
+        // Stake a tiny amount in Boardroom so allocateSeigniorage doesn't revert with
+        // CannotAllocateWhenTotalSupplyZero when the bootstrap branch fires.
+        estate.approve(address(boardroom), 1);
+        boardroom.stake(1);
+
         vm.warp(startTime + 1);
     }
 

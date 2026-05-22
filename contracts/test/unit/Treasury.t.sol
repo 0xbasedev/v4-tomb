@@ -102,6 +102,18 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.maxExpansionTiers(8), 100);
     }
 
+    function test_Initialize_SetsTombFaithfulBootstrap() public view {
+        // Per docs/TOMB_AUDIT.md BUG #1 fix: bootstrapEpochs = 28, bootstrapSupplyExpansionPercent = 450.
+        // Mirrors Tomb's actual launch behavior per docs/tomb-skill/references/HOW_IT_WORKED.md.
+        assertEq(treasury.bootstrapEpochs(), 28);
+        assertEq(treasury.bootstrapSupplyExpansionPercent(), 450);
+    }
+
+    function test_Initialize_SetsTombFaithfulMaxDebtRatio() public view {
+        // Per docs/TOMB_AUDIT.md BUG #2 fix: 3500 bps (35%) matches Tomb. Previously was 4500.
+        assertEq(treasury.maxDebtRatioPercent(), 3500);
+    }
+
     function test_Initialize_OneShot() public {
         address[] memory excluded = new address[](0);
         vm.prank(owner);

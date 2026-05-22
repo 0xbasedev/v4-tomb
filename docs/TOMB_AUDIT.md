@@ -263,16 +263,16 @@ Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Boardroom
 
 OldMoney, Estate, TrustNote, Oracle, GenesisRewardPool, MainRewardPool, Timelock, Distributor, Boardroom — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
 
-### Decisions needed
+### Decisions (signed off 2026-05-22)
 
-| # | Topic | Severity | Recommendation | Cost |
+| # | Topic | Severity | Decision | Status |
 |---|---|---|---|---|
-| BUG #1 | Treasury: `bootstrapEpochs = 0` | **HIGH** — bootstrap branch is dead code; first-launch Boardroom-empty risk magnified (gap #16) | **Set to `28`** per HOW_IT_WORKED | 1 line + redeploy |
-| BUG #2 | Treasury: `maxDebtRatioPercent = 4500` | **MEDIUM** — allows 45% bond supply vs Tomb's 35%; longer redemption risk in sustained contraction | **Set to `3500`** per Tomb | 1 line + redeploy |
-| BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | **MEDIUM** — Tomb mints 5% of supply/epoch to POL bond treasury for protocol-owned-liquidity bonds | **Document as deliberate omission** for v1 launch (keep contraction bonds only); add POL later as a separate sprint if needed | Document = small; build = multi-turn |
-| Gap #3 | PegDefenseHook doesn't burn/route value | **HIGH** — Tomb burned MONEY during deep contraction (load-bearing deflationary lever); ours only raises LP fees | **Build Sprint 4b** — `beforeSwapReturnDelta` taxes swap input as MONEY, burns it during deep contraction. Restores Tomb's strongest peg-defense lever. Recommended for production. | Multi-turn (V4 returnDelta + Permit2 + tests) |
-| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | **MEDIUM** — without ESTATE/WETH LP pool, ESTATE has no AMM market | **Defer (Option C)** — launch with one pool, operator adds second pool later when ESTATE/WETH V4 pool + second wrapper exists. | Defer = 0 work now; build later as separate sprint |
-| Peg | cbETH → WETH | Already decided | Execute migration | 1-2 turns |
+| BUG #1 | Treasury: `bootstrapEpochs = 0` | HIGH | **FIXED** — set to 28 per HOW_IT_WORKED | ✅ done (commit pending) |
+| BUG #2 | Treasury: `maxDebtRatioPercent = 4500` | MEDIUM | **FIXED** — set to 3500 per Tomb | ✅ done (commit pending) |
+| BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | MEDIUM | **DEFERRED** — documented as v1 deliberate omission; core peg mechanics function without it; future Treasury upgrade may add | ✅ documented in Treasury.sol NatSpec |
+| Gap #3 | PegDefenseHook doesn't burn/route value | HIGH | **BUILD SPRINT 4B** — `beforeSwapReturnDelta` tax routing | ⏳ pending implementation |
+| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when ESTATE/WETH V4 pool + wrapper exists | ⏳ pending |
+| Peg | cbETH → WETH | Decided | **EXECUTE** | ⏳ pending |
 
 ### What's NOT a decision (just execution)
 

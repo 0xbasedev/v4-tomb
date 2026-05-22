@@ -93,10 +93,22 @@ contract BaseForkTest is BaseTest {
         money.distributeReward(genesisPool, mainPool, airdropWallet);
         estate.distributeReward(farmingPool);
 
+        // Override bootstrap to 0 so tests can exercise post-bootstrap recovery
+        // mechanics directly. Bootstrap behavior tested separately.
+        treasury.setBootstrap(0, 100);
+
         money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));
         trustnote.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
+
+        // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
+        // owner holds 1 ESTATE from Estate's constructor mint. Stake a tiny
+        // amount so allocateSeigniorage's bootstrap branch can credit Boardroom
+        // without reverting CannotAllocateWhenTotalSupplyZero.
+        estate.approve(address(boardroom), 1);
+        boardroom.stake(1);
+
         vm.stopPrank();
 
         vm.warp(startTime + 1);

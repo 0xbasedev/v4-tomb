@@ -303,13 +303,28 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         bondDepletionFloorPercent = 10_000;
         seigniorageExpansionFloorPercent = 3500;
         maxSupplyContractionPercent = 300;
-        maxDebtRatioPercent = 4500;
+        // Tomb-faithful per docs/tomb-skill/SKILL.md + HOW_IT_WORKED.md: 3500 (35%).
+        // Previously 4500 (45%) — fixed per TOMB_AUDIT BUG #2 (2026-05-22).
+        maxDebtRatioPercent = 3500;
 
         premiumThreshold = 110;
         premiumPercent = 7000;
 
-        bootstrapEpochs = 0;
+        // Tomb-faithful per docs/tomb-skill/references/HOW_IT_WORKED.md: 28 epochs (7 days
+        // at 6h epochs) of guaranteed expansion to Boardroom regardless of price.
+        // Previously 0 — fixed per TOMB_AUDIT BUG #1 (2026-05-22). The bootstrap phase
+        // is load-bearing: it incentivizes early ESTATE staking, which is what
+        // prevents the Boardroom-empty bricking condition (gap #16) from triggering
+        // when the protocol enters its first expansion epoch.
+        bootstrapEpochs = 28;
         bootstrapSupplyExpansionPercent = 450;
+
+        // POL bondTreasury mechanism (Tomb's _sendToBondTreasury, 5% supply/epoch to a
+        // separate POL bond contract) is intentionally OMITTED from Old Money v1. See
+        // docs/TOMB_AUDIT.md BUG #3 and docs/GAP_AUDIT.md. Rationale: the core peg-defense
+        // mechanism (seigniorage + contraction bonds) functions identically without it;
+        // POL is a long-term durability layer that can be added in a future Treasury
+        // upgrade. Documenting here so auditors do not flag the missing step as a bug.
 
         seigniorageSaved = IERC20(money).balanceOf(address(this));
 

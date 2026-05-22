@@ -91,6 +91,12 @@ contract EpochCycleTest is BaseTest {
         money.distributeReward(genesisPool, mainPool, airdropWallet); // 11k + 140k + 9k
         estate.distributeReward(farmingPool); // 59.5k
 
+        // Override bootstrap to 0 epochs so tests exercise post-bootstrap expansion /
+        // contraction mechanics directly. Bootstrap-specific behavior is tested separately.
+        // owner is still treasury.operator at this point (transferTrustees on tokens
+        // doesn't rotate Treasury's own operator).
+        treasury.setBootstrap(0, 100);
+
         // 6. Hand off mint/burn authority on every token + boardroom to Treasury.
         money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));
@@ -346,6 +352,11 @@ contract EpochCycleTest is BaseTest {
 
     function test_AllocateSeigniorage_RejectsBeforeEpoch() public {
         _stakeAll();
+        // Advance one block past the last boardroom.stake — otherwise Boardroom's
+        // onlyOneBlock guard rejects the chained boardroom.allocateSeigniorage call
+        // from Treasury (bootstrap branch fires every epoch for epochs 0–27, which
+        // routes through boardroom.allocateSeigniorage).
+        vm.roll(block.number + 1);
         // No warp — block.timestamp == startTime+1, epoch=0, nextEpochPoint=startTime.
         // The first call IS allowed since nextEpochPoint() == startTime <= block.timestamp.
         // Call it once successfully…
