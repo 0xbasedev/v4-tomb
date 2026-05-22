@@ -14,6 +14,10 @@ import {Addresses} from "../src/libs/Addresses.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
+import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
+import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
+import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
+
 import {MockCbeth} from "./MockCbeth.sol";
 
 import {HookMiner} from "../test/utils/HookMiner.sol";
@@ -32,16 +36,18 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /**
  * @title Deploy
  * @notice One-shot Foundry deploy script for the Old Money protocol.
+ *
+ *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
+ *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
+ *         the human-controlled ones: AIRDROP_WALLET, COMMUNITY_FUND, DEV_FUND.
+ *
  *         See docs/DEPLOY.md for env-var setup and per-chain commands.
  */
 contract Deploy is Script {
     using PoolIdLibrary for PoolKey;
 
     struct Genesis {
-        address genesisPool;
-        address mainPool;
         address airdropWallet;
-        address farmingPool;
         address communityFund;
         address devFund;
         uint256 vestingStart;
@@ -55,6 +61,9 @@ contract Deploy is Script {
     Oracle public oracle;
     Treasury public treasury;
     Boardroom public boardroom;
+    GenesisRewardPool public genesisRewardPool;
+    MainRewardPool public mainRewardPool;
+    ShareRewardPool public shareRewardPool;
     address public cbethAddress;
     PoolKey public poolKey;
 
@@ -74,10 +83,12 @@ contract Deploy is Script {
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
         _deployOracle(g);
+        _deployRewardPools(g);
         _deployCoreAndInit(g);
 
-        money.distributeReward(g.genesisPool, g.mainPool, g.airdropWallet);
-        estate.distributeReward(g.farmingPool);
+        // Genesis distributions go directly to the freshly deployed pool contracts.
+        money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
+        estate.distributeReward(address(shareRewardPool));
 
         money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));
@@ -94,10 +105,7 @@ contract Deploy is Script {
     // ------------------------------------------------------------------
 
     function _readGenesis() internal view returns (Genesis memory g) {
-        g.genesisPool = vm.envAddress("GENESIS_POOL");
-        g.mainPool = vm.envAddress("MAIN_POOL");
         g.airdropWallet = vm.envAddress("AIRDROP_WALLET");
-        g.farmingPool = vm.envAddress("FARMING_POOL");
         g.communityFund = vm.envAddress("COMMUNITY_FUND");
         g.devFund = vm.envAddress("DEV_FUND");
         g.vestingStart = vm.envOr("VESTING_START", block.timestamp + 1 hours);
@@ -164,6 +172,22 @@ contract Deploy is Script {
         console2.log("Oracle:", address(oracle));
     }
 
+    /// @notice Deploy the three reward pools. Each constructor requires
+    ///         block.timestamp < _poolStartTime, so:
+    ///           - GenesisRewardPool opens at epochStart (24h window).
+    ///           - MainRewardPool opens at epochStart + 1 day (genesis closes first).
+    ///           - ShareRewardPool opens at epochStart + 1 day (concurrent with main).
+    function _deployRewardPools(
+        Genesis memory g
+    ) internal {
+        genesisRewardPool = new GenesisRewardPool(address(money), g.epochStart);
+        mainRewardPool = new MainRewardPool(address(money), g.epochStart + 1 days);
+        shareRewardPool = new ShareRewardPool(address(estate), g.epochStart + 1 days);
+        console2.log("GenesisRewardPool:", address(genesisRewardPool));
+        console2.log("MainRewardPool:   ", address(mainRewardPool));
+        console2.log("ShareRewardPool:  ", address(shareRewardPool));
+    }
+
     function _deployCoreAndInit(
         Genesis memory g
     ) internal {
@@ -171,9 +195,12 @@ contract Deploy is Script {
         boardroom = new Boardroom();
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
+        // Pools + airdrop wallet are the addresses that hold un-emitted MONEY; they
+        // must be excluded from `getMoneyCirculatingSupply` so the contraction-headroom
+        // math doesn't count them as circulating.
         address[] memory excluded = new address[](3);
-        excluded[0] = g.genesisPool;
-        excluded[1] = g.mainPool;
+        excluded[0] = address(genesisRewardPool);
+        excluded[1] = address(mainRewardPool);
         excluded[2] = g.airdropWallet;
         treasury.initialize(
             address(money),
@@ -198,10 +225,17 @@ contract Deploy is Script {
         require(hook.bound(), "Deploy: hook not bound");
         require(treasury.isInitialized(), "Deploy: treasury not initialized");
 
+        require(money.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");
+        require(money.balanceOf(address(mainRewardPool)) == 140_000 ether, "Deploy: main funding mismatch");
+        require(money.balanceOf(g.airdropWallet) == 9000 ether, "Deploy: airdrop funding mismatch");
+        require(estate.balanceOf(address(shareRewardPool)) == 59_500 ether, "Deploy: share funding mismatch");
+
         console2.log("\n=== POST-DEPLOY SANITY ===");
-        console2.log("genesisPool MONEY:  ", money.balanceOf(g.genesisPool));
-        console2.log("mainPool MONEY:     ", money.balanceOf(g.mainPool));
-        console2.log("airdropWallet MONEY:", money.balanceOf(g.airdropWallet));
-        console2.log("farmingPool ESTATE: ", estate.balanceOf(g.farmingPool));
+        console2.log("GenesisRewardPool MONEY:", money.balanceOf(address(genesisRewardPool)));
+        console2.log("MainRewardPool MONEY:   ", money.balanceOf(address(mainRewardPool)));
+        console2.log("airdropWallet MONEY:    ", money.balanceOf(g.airdropWallet));
+        console2.log("ShareRewardPool ESTATE: ", estate.balanceOf(address(shareRewardPool)));
+        console2.log("\nNext: operator (deployer) calls .add(allocPoint, lpToken, false, 0) on each");
+        console2.log("reward pool for each LP token pair to support (e.g. MONEY/cbETH, USDC/cbETH).");
     }
 }

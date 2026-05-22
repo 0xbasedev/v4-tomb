@@ -17,14 +17,13 @@ Set in `contracts/.env` (gitignored). Copy from `.env.example` and fill in.
 | `DEPLOYER_PRIVATE_KEY` | Signer key for the deploy. Prefer `--ledger` over a raw PK; if using a PK use a fresh address with just enough gas. |
 | `BASE_RPC_URL` / `BASE_SEPOLIA_RPC_URL` / `MAINNET_RPC_URL` / `ETH_SEPOLIA_RPC_URL` | RPC endpoint per chain. |
 | `BASESCAN_API_KEY` | For `--verify`. |
-| `GENESIS_POOL` | Address that receives 11,000 MONEY at genesis. **Until Sprint 13 lands the real `GenesisRewardPool` contract, set this to a temporary multisig or hot wallet that will hand the tokens over to the pool when it deploys.** |
-| `MAIN_POOL` | Address that receives 140,000 MONEY. Same caveat as `GENESIS_POOL`. |
-| `AIRDROP_WALLET` | Address that receives 9,000 MONEY for airdrop campaign. |
-| `FARMING_POOL` | Address that receives 59,500 ESTATE. Same caveat — pending the `ShareRewardPool` contract in Sprint 13. |
+| `AIRDROP_WALLET` | Address that receives 9,000 MONEY for airdrop campaign. Should be a multisig. |
 | `COMMUNITY_FUND` | Address receiving the 5,500 ESTATE community vesting drip. |
 | `DEV_FUND` | Address receiving the 5,000 ESTATE dev vesting drip. **Also controls `setTreasuryFund` / `setDevFund` rotation per Tomb's quirk — make this a multisig.** |
 | `VESTING_START` (optional) | Unix timestamp for ESTATE vesting start. Defaults to `block.timestamp + 1 hour`. |
 | `EPOCH_START` (optional) | Unix timestamp for first epoch. Defaults to `VESTING_START`. |
+
+The three reward pool contracts (`GenesisRewardPool`, `MainRewardPool`, `ShareRewardPool`) are deployed by the script itself — no env vars needed. The script funds them in the same transaction.
 
 ## Commands
 
@@ -41,16 +40,18 @@ forge script script/Deploy.s.sol --rpc-url base
 
 ## What the script does
 
-The script implements the same 6-step sequence validated in `test/integration/BaseForkHook.t.sol`:
+The script implements an 8-step sequence:
 
-1. Resolve cbETH (real on mainnet chains, MockCbeth on testnets).
+1. Resolve cbETH (real on mainnet chains, `MockCbeth` on testnets).
 2. Deploy `OldMoney`, `Estate`, `TrustNote`.
 3. Mine a CREATE2 salt for `PegDefenseHook` → deploy via `create2` opcode at the required permission-bit address (`AFTER_INITIALIZE | BEFORE_SWAP` → low-14-bit pattern `0x1080`).
 4. Call `PoolManager.initialize(poolKey, sqrtPriceX96)` on the live V4 PoolManager. The hook's `afterInitialize` fires and binds it to the pool.
 5. Deploy `Oracle` pointing to the hook as `IPriceSource`.
-6. Deploy `Treasury` + `Boardroom`, initialize both, run genesis distributions, hand off operator authority on every protocol contract to the Treasury.
+6. Deploy `GenesisRewardPool` (opens at `epochStart`), `MainRewardPool` (opens at `epochStart + 1 day`), `ShareRewardPool` (opens at `epochStart + 1 day`).
+7. Deploy `Treasury` + `Boardroom`, initialize both — Treasury's `excludedFromTotalSupply` list contains `genesisRewardPool`, `mainRewardPool`, and `airdropWallet` so their un-emitted MONEY doesn't get counted as circulating supply.
+8. Run genesis distributions — sends 11k MONEY to `GenesisRewardPool`, 140k MONEY to `MainRewardPool`, 9k MONEY to `AIRDROP_WALLET`, and 59.5k ESTATE to `ShareRewardPool`. Hand off operator authority on every protocol contract to the Treasury.
 
-The script asserts post-deploy that every operator handoff landed correctly and the hook is bound — it reverts the entire deploy if any check fails.
+The script asserts post-deploy that every operator handoff landed correctly, the hook is bound, and the four token-balance funding amounts match the expected values — it reverts the entire deploy if any check fails.
 
 ## Post-deploy steps (manual, NOT in the script)
 
@@ -77,9 +78,9 @@ After running, check the output for the deployed addresses. Run the post-deploy 
 
 ## Known caveats / pending items
 
-- **No real Genesis / Main / Share reward pool contracts yet.** Sprint 13 work. Until then, `GENESIS_POOL` / `MAIN_POOL` / `FARMING_POOL` are address placeholders that will later transfer their balances into the real pool contracts when those deploy.
-- **No Timelock deploy script yet.** Sprint 12c.
-- **No real liquidity provisioning.** Sprint 12c — a separate script to add initial liquidity to the V4 pool from the airdrop wallet allocation.
+- **The three reward pools are deployed BUT empty of pool entries.** Each pool's `add(allocPoint, lpToken, false, 0)` must be called by the operator (initially the deployer) for every LP token to support — e.g., the MONEY/cbETH V4 LP token, a USDC/cbETH pair, etc. Until that's done, the pools hold the MONEY/ESTATE but no one can stake to earn it.
+- **No Timelock deploy script yet.** Sprint 14.
+- **No real liquidity provisioning.** A separate manual step — fund the V4 OLDM/cbETH pool with initial liquidity from the airdrop wallet allocation before genesis pool opens.
 - **No automated pool-side swap test on mainnet.** The deploy script initializes the pool but doesn't run a swap through it. The first swap will trigger `beforeSwap` and the dynamic fee logic for real.
 
 ## Rollback / recovery
