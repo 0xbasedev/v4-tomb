@@ -62,7 +62,7 @@ contract EpochCycleTest is BaseTest {
         trustnote = new TrustNote();
         vm.stopPrank();
 
-        // 2. Mock oracle at parity (1 MONEY = 1 cbETH).
+        // 2. Mock oracle at parity (1 MONEY = 1 WETH).
         oracle = new MockOracle(1e18);
 
         // 3. Deploy core contracts.

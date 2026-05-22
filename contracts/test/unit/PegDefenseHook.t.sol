@@ -43,14 +43,14 @@ contract PegDefenseHookTest is BaseTest {
     PegDefenseHook internal hook;
     MockPoolManager internal pm;
     OldMoney internal money;
-    address internal cbeth = makeAddr("cbeth");
+    address internal weth = makeAddr("weth");
     PoolKey internal poolKey;
 
     address internal hookAddr;
 
     function setUp() public override {
         super.setUp();
-        vm.label(cbeth, "cbeth");
+        vm.label(weth, "weth");
 
         vm.warp(1_700_000_000);
 
@@ -69,9 +69,9 @@ contract PegDefenseHookTest is BaseTest {
         hook = PegDefenseHook(hookAddr);
 
         // Sort the two tokens into V4 currency order.
-        (Currency c0, Currency c1) = address(money) < cbeth
-            ? (Currency.wrap(address(money)), Currency.wrap(cbeth))
-            : (Currency.wrap(cbeth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(money) < weth
+            ? (Currency.wrap(address(money)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(money)));
 
         poolKey = PoolKey({
             currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hookAddr)
@@ -145,7 +145,7 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(address(pm));
         hook.afterInitialize(address(0), poolKey, 0, 0);
         // MONEY is currency0 iff its address is the lower of the two.
-        bool expectedIsCurrency0 = address(money) < cbeth;
+        bool expectedIsCurrency0 = address(money) < weth;
         assertEq(hook.moneyIsCurrency0(), expectedIsCurrency0);
     }
 

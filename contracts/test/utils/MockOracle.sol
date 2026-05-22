@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {IOracle} from "../../src/interfaces/IOracle.sol";
 
 /// @notice Test-only IOracle that returns a settable price. Treasury reads
-///         `consult(money, 1e18)` → expected return is the MONEY/cbETH ratio scaled to 1e18.
+///         `consult(money, 1e18)` → expected return is the MONEY/WETH ratio scaled to 1e18.
 contract MockOracle is IOracle {
     uint256 public price;
     uint256 public updateCount;

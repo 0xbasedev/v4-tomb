@@ -7,8 +7,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 /**
  * @title GenesisRewardPool
  * @notice 24-hour MasterChef-style farm. The Treasury sends 11,000 MONEY here as part of
- *         the genesis `distributeReward(...)` call. LPs stake their (cbETH/MONEY,
- *         USDC/cbETH, etc.) LP tokens here and earn MONEY pro-rata over the 24-hour
+ *         the genesis `distributeReward(...)` call. LPs stake their (WETH/MONEY,
+ *         USDC/WETH, etc.) LP tokens here and earn MONEY pro-rata over the 24-hour
  *         window. After the window closes, withdrawals continue and stakes can leave.
  *
  * @dev    Direct port of Tomb Finance's BombGenesisRewardPool (bombmoney/bomb-contracts).

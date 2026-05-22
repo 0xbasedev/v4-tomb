@@ -18,8 +18,6 @@ import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
 import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
 import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
 
-import {MockCbeth} from "./MockCbeth.sol";
-
 import {HookMiner} from "../test/utils/HookMiner.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -70,7 +68,7 @@ contract Deploy is Script {
     GenesisRewardPool public genesisRewardPool;
     MainRewardPool public mainRewardPool;
     ShareRewardPool public shareRewardPool;
-    address public cbethAddress;
+    address public wethAddress;
     PoolKey public poolKey;
 
     function run() external {
@@ -85,7 +83,8 @@ contract Deploy is Script {
 
         vm.startBroadcast(pk);
 
-        cbethAddress = _resolveCbeth();
+        wethAddress = Addresses.weth();
+        console2.log("WETH:", wethAddress);
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
         _deployOracle(g);
@@ -118,17 +117,6 @@ contract Deploy is Script {
         g.epochStart = vm.envOr("EPOCH_START", g.vestingStart);
     }
 
-    function _resolveCbeth() internal returns (address) {
-        if (Addresses.hasCbeth()) {
-            address real = Addresses.cbeth();
-            console2.log("cbETH (real):", real);
-            return real;
-        }
-        MockCbeth mock = new MockCbeth();
-        console2.log("cbETH (mock):", address(mock));
-        return address(mock);
-    }
-
     function _deployTokens(
         Genesis memory g
     ) internal {
@@ -157,9 +145,9 @@ contract Deploy is Script {
         hook = deployedHook;
         console2.log("PegDefenseHook:", address(hook));
 
-        (Currency c0, Currency c1) = address(money) < cbethAddress
-            ? (Currency.wrap(address(money)), Currency.wrap(cbethAddress))
-            : (Currency.wrap(cbethAddress), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(money) < wethAddress
+            ? (Currency.wrap(address(money)), Currency.wrap(wethAddress))
+            : (Currency.wrap(wethAddress), Currency.wrap(address(money)));
         poolKey = PoolKey({
             currency0: c0,
             currency1: c1,
@@ -173,7 +161,7 @@ contract Deploy is Script {
     function _deployOracle(
         Genesis memory g
     ) internal {
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), cbethAddress, 6 hours, g.epochStart);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), wethAddress, 6 hours, g.epochStart);
         console2.log("Oracle:", address(oracle));
     }
 
@@ -242,7 +230,8 @@ contract Deploy is Script {
         console2.log("MainRewardPool MONEY:   ", money.balanceOf(address(mainRewardPool)));
         console2.log("airdropWallet MONEY:    ", money.balanceOf(g.airdropWallet));
         console2.log("ShareRewardPool ESTATE: ", estate.balanceOf(address(shareRewardPool)));
-        console2.log("\nNext: operator (deployer) calls .add(allocPoint, lpToken, false, 0) on each");
-        console2.log("reward pool for each LP token pair to support (e.g. MONEY/cbETH, USDC/cbETH).");
+        console2.log("\nNext: operator (deployer) calls .add(allocPoint, stakeToken, false, 0) on each");
+        console2.log("reward pool. Genesis pool: stake WETH (or USDC). Main+Share pools: stake");
+        console2.log("MONEY/WETH LP wrapper tokens (deploy in a separate sprint).");
     }
 }

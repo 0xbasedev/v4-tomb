@@ -14,7 +14,7 @@ import {IPriceSource} from "../interfaces/IPriceSource.sol";
  * @dev    Same period-windowed semantics and same (`update` / `consult` / `twap`) interface as
  *         Tomb. The only deviation from Tomb's V2-cumulative-price design is internal: this
  *         oracle reads tick cumulatives from an IPriceSource (the PegDefenseHook on the V4
- *         MONEY/cbETH pool, once that lands in Sprint 4) rather than from a V2 pair's
+ *         MONEY/WETH pool, once that lands in Sprint 4) rather than from a V2 pair's
  *         `price0CumulativeLast`. The math is equivalent — V3/V4's tick cumulative replaces
  *         V2's price cumulative — and the resulting TWAP is mathematically the same once
  *         tick is converted to price.

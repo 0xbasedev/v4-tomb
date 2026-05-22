@@ -8,7 +8,7 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title TrustNote
- * @notice $TRUSTNOTE — the contraction bond. During contraction epochs (TWAP < 1.0 cbETH),
+ * @notice $TRUSTNOTE — the contraction bond. During contraction epochs (TWAP < 1.0 WETH),
  *         users can burn $MONEY to mint $TRUSTNOTE at a discount. During the next expansion,
  *         trustees redeems $TRUSTNOTE for $MONEY at a premium via the Treasury.
  * @dev    Direct port of Tomb Finance's BBOND (BBond.sol in bombmoney/bomb-contracts).

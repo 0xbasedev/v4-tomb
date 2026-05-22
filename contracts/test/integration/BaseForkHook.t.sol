@@ -31,7 +31,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @notice Forks Base mainnet and validates the FULL real-hook deploy path:
  *           1. Mine a CREATE2 salt for PegDefenseHook with the right permission bits.
  *           2. CREATE2-deploy the hook against the real Base V4 PoolManager.
- *           3. Initialize a real MONEY/cbETH V4 pool, which fires afterInitialize on
+ *           3. Initialize a real MONEY/WETH V4 pool, which fires afterInitialize on
  *              the hook and binds it.
  *           4. Deploy our Oracle pointing to the hook as its IPriceSource.
  *           5. Deploy Treasury and Boardroom against the real Oracle (no MockOracle).
@@ -39,7 +39,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *              one full no-op epoch ticks correctly.
  *
  *         What this test does NOT do (lives in the deploy script / Sprint 12+):
- *           - Add real liquidity to the pool (would need to source cbETH on the fork).
+ *           - Add real liquidity to the pool (would need to source WETH on the fork).
  *           - Run real swaps to drive the hook's observation feed past tick 0.
  *           - Assert price-driven expansion (need real ticks > 0 to trigger expansion).
  *
@@ -58,7 +58,7 @@ contract BaseForkHookTest is BaseTest {
     IPoolManager internal poolManager;
     PoolKey internal poolKey;
 
-    address internal cbeth;
+    address internal weth;
     address internal genesisPool = makeAddr("genesisPool");
     address internal mainPool = makeAddr("mainPool");
     address internal airdropWallet = makeAddr("airdropWallet");
@@ -83,7 +83,7 @@ contract BaseForkHookTest is BaseTest {
 
         startTime = block.timestamp + 1 hours;
         poolManager = IPoolManager(Addresses.poolManager());
-        cbeth = Addresses.cbeth();
+        weth = Addresses.weth();
 
         // 1. Deploy tokens.
         money = new OldMoney();
@@ -106,11 +106,11 @@ contract BaseForkHookTest is BaseTest {
         require(address(deployedHook) == minedAddr, "BaseForkHook: hook addr mismatch");
         hook = deployedHook;
 
-        // 3. Initialize the MONEY/cbETH V4 pool with the hook attached. This fires
+        // 3. Initialize the MONEY/WETH V4 pool with the hook attached. This fires
         //    afterInitialize on the hook.
-        (Currency c0, Currency c1) = address(money) < cbeth
-            ? (Currency.wrap(address(money)), Currency.wrap(cbeth))
-            : (Currency.wrap(cbeth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(money) < weth
+            ? (Currency.wrap(address(money)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(money)));
         poolKey = PoolKey({
             currency0: c0,
             currency1: c1,
@@ -121,7 +121,7 @@ contract BaseForkHookTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // 4. Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), cbeth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
 
         // 5. Deploy Treasury + Boardroom, init, hand off operator.
         treasury = new Treasury();
@@ -174,7 +174,7 @@ contract BaseForkHookTest is BaseTest {
         assertEq(PoolId.unwrap(hook.poolId()), PoolId.unwrap(poolKey.toId()), "Hook poolId should match");
         assertEq(hook.lastTick(), 0, "Initial tick should be 0 (parity)");
         // MONEY orientation: matches whether money sorts as currency0.
-        assertEq(hook.moneyIsCurrency0(), address(money) < cbeth);
+        assertEq(hook.moneyIsCurrency0(), address(money) < weth);
     }
 
     function test_OracleReadsFromHook() public view {

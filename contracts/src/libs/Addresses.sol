@@ -5,12 +5,17 @@ pragma solidity 0.8.26;
  * @title Addresses
  * @notice Per-chain canonical contract addresses used by Old Money deploys.
  *
- *         The library returns deterministic addresses for the chain it's called on:
  *         - V4 PoolManager (real, from developers.uniswap.org/contracts/v4/deployments)
- *         - cbETH (real on mainnet chains where Coinbase deploys it; reverts on
- *           testnets — caller is expected to deploy a mock cbETH there)
+ *         - WETH (canonical wrapped ETH; pre-deployed on every OP-stack chain at
+ *           the predeploy slot 0x4200...0006; canonical 0xC02a... on Ethereum mainnet;
+ *           etc.)
  *
- *         Verified 2026-05-22. See memory/reference_v4_deployments.md for the source.
+ *         Old Money pegs $MONEY 1:1 to WETH (1 MONEY = 1 ETH at parity). WETH is
+ *         available on every supported chain — no mock needed on testnets, which
+ *         is a deliberate improvement over the prior cbETH peg (cbETH was Coinbase-
+ *         issued only on mainnet chains, forcing a `MockCbeth` shim on testnets).
+ *
+ *         Verified 2026-05-22. See memory/reference_v4_deployments.md for sources.
  */
 library Addresses {
     uint256 internal constant ETHEREUM_MAINNET = 1;
@@ -23,7 +28,6 @@ library Addresses {
     uint256 internal constant UNICHAIN = 130;
 
     error UnsupportedChain(uint256 chainId);
-    error CbethNotOnChain(uint256 chainId);
 
     /// @notice V4 PoolManager for the current chain.
     function poolManager() internal view returns (address) {
@@ -39,19 +43,21 @@ library Addresses {
         revert UnsupportedChain(cid);
     }
 
-    /// @notice cbETH for the current chain. Reverts on chains where Coinbase has not
-    ///         deployed cbETH (notably all testnets) — caller deploys a mock.
-    function cbeth() internal view returns (address) {
+    /// @notice WETH for the current chain. Canonical wrapped ETH:
+    ///         - OP-stack chains (Base, Base Sepolia, Optimism, Unichain) use the
+    ///           predeploy at 0x4200...0006
+    ///         - Ethereum mainnet uses Wrapped Ether at 0xC02a...756Cc2
+    ///         - Other chains use their canonical WETH9 deployment
+    function weth() internal view returns (address) {
         uint256 cid = block.chainid;
-        if (cid == ETHEREUM_MAINNET) return 0xBe9895146f7AF43049ca1c1AE358B0541Ea49704;
-        if (cid == BASE_MAINNET) return 0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22;
-        if (cid == OPTIMISM) return 0xadDb6A0412DE1BA0F936DCaeb8Aaa24578dcF3B2;
-        revert CbethNotOnChain(cid);
-    }
-
-    /// @notice True iff the chain has a real Coinbase-deployed cbETH.
-    function hasCbeth() internal view returns (bool) {
-        uint256 cid = block.chainid;
-        return cid == ETHEREUM_MAINNET || cid == BASE_MAINNET || cid == OPTIMISM;
+        if (cid == ETHEREUM_MAINNET) return 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        if (cid == BASE_MAINNET) return 0x4200000000000000000000000000000000000006;
+        if (cid == BASE_SEPOLIA) return 0x4200000000000000000000000000000000000006;
+        if (cid == ETHEREUM_SEPOLIA) return 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
+        if (cid == OPTIMISM) return 0x4200000000000000000000000000000000000006;
+        if (cid == ARBITRUM) return 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
+        if (cid == POLYGON) return 0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619;
+        if (cid == UNICHAIN) return 0x4200000000000000000000000000000000000006;
+        revert UnsupportedChain(cid);
     }
 }

@@ -13,7 +13,7 @@ import {IOracle} from "../interfaces/IOracle.sol";
 
 /**
  * @title Treasury
- * @notice The seigniorage engine. Ticks every 6 hours: reads the MONEY/cbETH TWAP, decides
+ * @notice The seigniorage engine. Ticks every 6 hours: reads the MONEY/WETH TWAP, decides
  *         expansion or contraction, mints $MONEY to TheClub (Boardroom) during expansion,
  *         opens a discounted $TRUSTNOTE bond window during contraction, and redeems bonds
  *         from the treasury reserve during expansion.
@@ -29,7 +29,7 @@ import {IOracle} from "../interfaces/IOracle.sol";
  *         - `require` strings → custom errors.
  *         - `excludedFromTotalSupply` accepted as an init argument rather than hardcoded
  *           addresses (deploy ergonomics; semantically equivalent — still a one-shot set).
- *         - Peg target: `moneyPriceOne = 1e18` (1 MONEY = 1 cbETH on Base). Tomb used 1e14
+ *         - Peg target: `moneyPriceOne = 1e18` (1 MONEY = 1 WETH on Base). Tomb used 1e14
  *           (10,000 BOMB = 1 BTC). All `1e14` literals in Tomb's math are replaced with
  *           `moneyPriceOne` here — same algebra, different scale.
  */
@@ -283,7 +283,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
             excludedFromTotalSupply.push(_excludedFromTotalSupply[i]);
         }
 
-        moneyPriceOne = 1e18; // 1 MONEY = 1 cbETH (Base peg target)
+        moneyPriceOne = 1e18; // 1 MONEY = 1 WETH (Base peg target)
         moneyPriceCeiling = moneyPriceOne * 101 / 100;
 
         supplyTiers = [

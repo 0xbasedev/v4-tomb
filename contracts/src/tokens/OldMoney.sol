@@ -11,12 +11,12 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title OldMoney
- * @notice $MONEY — the algorithmic stable side of the Old Money trust. Pegged to 1 cbETH TWAP on Base.
+ * @notice $MONEY — the algorithmic stable side of the Old Money trust. Pegged to 1 WETH TWAP on Base.
  * @dev    Direct port of Tomb Finance's BOMB token (Bomb.sol in bombmoney/bomb-contracts),
  *         with one deliberate omission: the in-contract tax mechanism (TaxOffice / TaxOracle /
  *         taxTiers / `_transferWithTax` override of `transferFrom`) is REMOVED. Peg defense and
  *         contraction taxation are handled by a Uniswap V4 hook (PegDefenseHook) attached to the
- *         MONEY/cbETH pool. The V4 hook taxes pool swaps only, not wallet-to-wallet transfers —
+ *         MONEY/WETH pool. The V4 hook taxes pool swaps only, not wallet-to-wallet transfers —
  *         this is a behavior change vs Tomb and the explicit point of the V4 integration.
  *
  *         Non-logic-changing modernizations from Tomb's original:
@@ -43,7 +43,7 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
     /// @notice Initial mint to the genesis pool (24h zero-LP boot).
     uint256 public constant INITIAL_GENESIS_POOL_DISTRIBUTION = 11_000 ether;
 
-    /// @notice Initial mint to the main MONEY-cbETH LP reward pool (days 2-5).
+    /// @notice Initial mint to the main MONEY-WETH LP reward pool (days 2-5).
     uint256 public constant INITIAL_MAIN_POOL_DISTRIBUTION = 140_000 ether;
 
     /// @notice Initial mint to the airdrop wallet.

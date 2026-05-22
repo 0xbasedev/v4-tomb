@@ -16,16 +16,16 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /**
  * @title BaseForkTest
  * @notice Forks Base mainnet at runtime and validates that the Old Money stack deploys
- *         cleanly against the live cbETH token and Uniswap V4 PoolManager. The full V4
+ *         cleanly against the live WETH token and Uniswap V4 PoolManager. The full V4
  *         hook integration (real pool initialization, swap-driven observation feed)
- *         requires liquidity setup + swap routing and lives in Sprint 12.
+ *         lives in BaseForkHook.t.sol.
  *
  *         This test is gated on the BASE_RPC_URL env var; without it the whole contract
  *         is skipped so `forge test` in CI without that var stays green.
  */
 contract BaseForkTest is BaseTest {
-    /// @notice Coinbase Wrapped Staked ETH on Base mainnet.
-    address internal constant CBETH = 0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22;
+    /// @notice Canonical OP-stack predeploy WETH on Base mainnet (and Base Sepolia, OP, Unichain).
+    address internal constant WETH = 0x4200000000000000000000000000000000000006;
 
     /// @notice Uniswap V4 PoolManager on Base mainnet.
     address internal constant V4_POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
@@ -118,20 +118,18 @@ contract BaseForkTest is BaseTest {
     // Live Base state sanity checks
     // ---------------------------------------------------------------------
 
-    function test_CbethDeployedAndIsErc20() public view {
-        assertGt(CBETH.code.length, 0, "cbETH should have code on Base");
+    function test_WethDeployedAndIsErc20() public view {
+        assertGt(WETH.code.length, 0, "WETH should have code on Base");
 
-        // Standard ERC20 interface — decimals(), name(), symbol() are optional but
-        // present on cbETH per Coinbase's docs.
-        (bool ok, bytes memory data) = CBETH.staticcall(abi.encodeWithSignature("decimals()"));
-        assertTrue(ok, "cbETH.decimals() should succeed");
+        (bool ok, bytes memory data) = WETH.staticcall(abi.encodeWithSignature("decimals()"));
+        assertTrue(ok, "WETH.decimals() should succeed");
         uint8 decimals = abi.decode(data, (uint8));
-        assertEq(decimals, 18, "cbETH should have 18 decimals (matches our $MONEY)");
+        assertEq(decimals, 18, "WETH should have 18 decimals (matches our $MONEY)");
 
-        (bool ok2, bytes memory data2) = CBETH.staticcall(abi.encodeWithSignature("symbol()"));
-        assertTrue(ok2, "cbETH.symbol() should succeed");
+        (bool ok2, bytes memory data2) = WETH.staticcall(abi.encodeWithSignature("symbol()"));
+        assertTrue(ok2, "WETH.symbol() should succeed");
         string memory symbol = abi.decode(data2, (string));
-        assertEq(symbol, "cbETH", "cbETH symbol should be cbETH");
+        assertEq(symbol, "WETH", "WETH symbol should be WETH");
     }
 
     function test_V4PoolManagerDeployed() public view {

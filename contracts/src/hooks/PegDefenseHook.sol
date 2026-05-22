@@ -18,7 +18,7 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title PegDefenseHook
- * @notice V4 hook attached to the MONEY/cbETH pool. Does two jobs:
+ * @notice V4 hook attached to the MONEY/WETH pool. Does two jobs:
  *
  *           1. **Observation recording** — accumulates tick * time on every swap, exposing
  *              `getCurrentTickCumulative()` via the IPriceSource interface so our Oracle
@@ -47,7 +47,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     using LPFeeLibrary for uint24;
 
     /// @notice The MONEY token. The hook expects to be installed on a pool where one side
-    ///         is MONEY and the other is the paired peg asset (cbETH on Base).
+    ///         is MONEY and the other is the paired peg asset (WETH on Base).
     address public immutable money;
 
     /// @notice True if MONEY sorts as currency0 in the pool key. Derived in afterInitialize.
@@ -235,7 +235,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
 
     /// @dev Map current tick to a fee tier based on signed deviation from `pegTick`.
     ///      "Below peg" is direction-aware: when MONEY is currency0, below peg means
-    ///      currentTick < pegTick (price of MONEY in cbETH dropped). When MONEY is
+    ///      currentTick < pegTick (price of MONEY in WETH dropped). When MONEY is
     ///      currency1, the sign flips.
     function _feeForTick(
         int24 currentTick

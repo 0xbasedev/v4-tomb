@@ -90,8 +90,8 @@ contract TreasuryTest is BaseTest {
         assertTrue(treasury.isInitialized());
     }
 
-    function test_Initialize_SetsPegToCbethParity() public view {
-        assertEq(treasury.moneyPriceOne(), 1e18); // 1 MONEY = 1 cbETH
+    function test_Initialize_SetsPegToWethParity() public view {
+        assertEq(treasury.moneyPriceOne(), 1e18); // 1 MONEY = 1 WETH
         assertEq(treasury.moneyPriceCeiling(), 1.01e18);
     }
 
