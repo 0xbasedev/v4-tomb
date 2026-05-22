@@ -61,4 +61,26 @@ abstract contract Trustees is Ownable2Step {
         emit TrusteesTransferred(_trustees, newTrustees);
         _trustees = newTrustees;
     }
+
+    // ---------------------------------------------------------------------
+    // Tomb-shape aliases — let our tokens satisfy IBasisAsset (operator/isOperator/
+    // transferOperator) without renaming the themed `trustees` surface.
+    // ---------------------------------------------------------------------
+
+    /// @notice Tomb-shape alias for `trustees()`. Same address, same semantics.
+    function operator() public view returns (address) {
+        return _trustees;
+    }
+
+    /// @notice Tomb-shape alias for `isTrustees()`.
+    function isOperator() public view returns (bool) {
+        return msg.sender == _trustees;
+    }
+
+    /// @notice Tomb-shape alias for `transferTrustees`. Owner-only, same effect.
+    function transferOperator(
+        address newOperator
+    ) external onlyOwner {
+        _transferTrustees(newOperator);
+    }
 }
