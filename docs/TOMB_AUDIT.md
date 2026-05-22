@@ -149,69 +149,88 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 
 ---
 
-## $MONEY (was TOMB)
+## $MONEY (was TOMB) — ✓ CLEAN
 
-❓ TBD — audit pending. Quick check items:
+- `mint(recipient, amount) returns (bool)` trustees-only ✓ MATCH Tomb signature
+- `burnFrom(account, amount)` trustees-only ✓ MATCH (Tomb's stricter restriction over OZ default)
+- `burn(amount)` public ✓ MATCH
+- `distributeReward(genesisPool, mainPool, airdropWallet)` one-shot, mints 11k/140k/9k ✓ MATCH
+- Constructor mints 1 unit to deployer ✓ MATCH (Tomb seed)
+- `governanceRecoverUnsupported(token, amount, to)` ✓ MATCH
+- ⊕ ADDITIVE: `ERC20Permit` (EIP-2612), themed `Coined` event, custom errors, Ownable2Step
+- ⚠️ DEVIATION: transfer-tax mechanism moved to V4 hook (gap #3) — documented
 
-- [ ] `mint() returns (bool)` matches Tomb's interface
-- [ ] `burn` / `burnFrom` permissioning matches Tomb
-- [ ] `distributeReward(genesisPool, mainPool, airdropWallet)` one-shot, mints 11k/140k/9k
-- [ ] Constructor mints 1 unit to deployer (for initial LP seeding)
-- [ ] **Transfer-tax** mechanism: documented deviation (moved to V4 hook). Gap #3 in `GAP_AUDIT.md`.
+## $ESTATE (was TSHARE) — ✓ CLEAN
 
-## $ESTATE (was TSHARE)
+- Hard cap 70k = 59.5k + 5.5k + 5k ✓ MATCH
+- VESTING_DURATION = 365 days ✓ MATCH
+- `claimRewards()` permissionless ✓ MATCH
+- `distributeReward(farmingPool)` one-shot, mints 59.5k ✓ MATCH (pre-funded model, same as bomb-contracts BShare)
+- Constructor mints 1 unit to deployer ✓ MATCH
+- `setTreasuryFund` / `setDevFund` gated to `devFund` ✓ MATCH (Tomb quirk preserved)
+- ⊕ ADDITIVE: ERC20Permit, custom errors, Ownable2Step
+- ❓ NOTE: SKILL.md mentions BShare has public `mint(recipient, amount)` onlyOperator; the actual bomb-contracts BShare source uses pre-funded distributeReward and does NOT expose public mint(). Our Estate matches the actual source, not the SKILL claim. Likely a SKILL error.
 
-❓ TBD — audit pending. Quick check items:
+## $TRUSTNOTE (was TBOND) — ✓ CLEAN
 
-- [ ] Hard cap: 70k total = 59.5k + 5.5k + 5k
-- [ ] Vesting linear over 365 days
-- [ ] `claimRewards()` permissionless
-- [ ] Constructor mints 1 unit to deployer
-- [ ] Trustees can mint (used by ShareRewardPool — though our share pool is pre-funded, so the mint() path is rarely invoked)
-- [ ] **Quirk:** `setTreasuryFund` / `setDevFund` rotation gated to **devFund**, not operator. Confirm preserved.
+- ERC20Burnable + Trustees ✓ MATCH
+- No hard cap ✓ MATCH
+- `mint(recipient, amount) returns (bool)` trustees-only ✓ MATCH
+- `burn(amount)` public, `burnFrom(account, amount)` trustees-only ✓ MATCH
+- No `distributeReward` (bonds minted on demand by Treasury) ✓ MATCH
+- No initial mint in constructor (zero supply at deploy) ✓ MATCH
+- Strictly minimal — no Permit, no themed events, no governanceRecoverUnsupported — matches Tomb's BBond exactly
 
-## $TRUSTNOTE (was TBOND)
+## Oracle — ✓ CLEAN
 
-❓ TBD — audit pending. Quick check items:
+- `consult(token, amount) returns uint144` ✓ MATCH Tomb's signature
+- `twap(token, amount) returns uint144` ✓ MATCH
+- `update()` period-windowed via `Epoch.checkEpoch` ✓ MATCH
+- Returns 0 from `consult` before first `update()` ✓ MATCH Tomb behavior
+- Returns 0 from `twap` on unrecognized token (silent miss) ✓ MATCH
+- `consult` reverts on unrecognized token (explicit) ✓ MATCH
+- ⚠️ DEVIATION: reads V4 tick cumulatives via `IPriceSource` (PegDefenseHook) instead of V2 pair `currentCumulativePrices`. Math is mathematically equivalent — TWAP shape preserved.
 
-- [ ] No hard cap
-- [ ] mint/burn by Treasury only
-- [ ] No transfer tax
-- [ ] No `distributeReward` (bonds are minted on demand during contraction)
+## GenesisRewardPool — ✓ CLEAN
 
-## Oracle
+- `TOTAL_REWARDS = 11_000 ether` ✓ MATCH
+- `RUNNING_TIME = 1 days` ✓ MATCH
+- Accepts arbitrary outside ERC-20 stake tokens via operator `.add()` ✓ MATCH (Tomb-faithful mini-ICO)
+- `governanceRecoverUnsupported` protects MONEY + every staked LP for 90 days post-end ✓ MATCH
+- Per-pool reward debt accounting ✓ MATCH (MasterChef pattern)
 
-❓ TBD — audit pending. Key check:
+## MainRewardPool — ✓ CLEAN
 
-- [ ] `consult(token, amount)` returns price as `uint144` (per Tomb's interface) or compatible
-- [ ] `twap` and `update` match Tomb interface signatures
-- [ ] Period-windowed update (call only after `nextEpochPoint`)
-- ⚠️ **Known deviation:** Tomb reads V2 pair cumulatives via `currentCumulativePrices`. We read V4 tick cumulatives via `PegDefenseHook` as `IPriceSource`. Same TWAP shape, different source.
+- `TOTAL_REWARDS = 140_000 ether` ✓ MATCH
+- Two epochs: 80k over 4 days + 60k over 5 days = 9 days total ✓ MATCH (Tomb's exact "Day 2-5" + "Day 6-10")
+- Multi-epoch `getGeneratedReward` math correctly walks epoch boundary ✓ MATCH (8 tests passing)
 
-## GenesisRewardPool
+## ShareRewardPool — ⚠️ ARCHITECTURAL DECISION NEEDED (gap #17)
 
-❓ TBD — audit pending. Key check:
+- `TOTAL_REWARDS = 59_500 ether` ✓ MATCH
+- `RUNNING_TIME = 370 days` ✓ MATCH (HOW_IT_WORKED says 370; SKILL says 365 — our 370 matches actual bomb-contracts)
+- ⚠️ **Single-pool vs Tomb's TWO-pool model.** Tomb's TShareRewardPool launched with:
+  - Pool 0: TOMB-FTM LP → 35,700 TSHARE (60%)
+  - Pool 1: TSHARE-FTM LP → 23,800 TSHARE (40%)
 
-- [ ] `TOTAL_REWARDS = 11_000 ether` ✓ (verified earlier)
-- [ ] `RUNNING_TIME = 1 days` ✓ (verified earlier)
-- [ ] Accepts arbitrary outside ERC-20 stake tokens (operator `.add()` decides)
-- [ ] `governanceRecoverUnsupported` protects MONEY + every staked LP for 90 days post-end
+  Our `ShareRewardPool` mechanically supports multiple pools (operator can call `.add()` for each LP token), but to be Tomb-faithful we'd need to launch a SECOND V4 pool (ESTATE/WETH) and a SECOND LP wrapper for it. Without that, Tomb's incentive to maintain ESTATE/native liquidity is missing — ESTATE has no AMM market.
 
-## MainRewardPool
+  **Decision: how do we want ESTATE to trade?**
+  - **A.** Build the second V4 pool (ESTATE/WETH) + second LP wrapper. Full Tomb-fidelity. Adds work to Sprint 16. Recommended for a long-term protocol.
+  - **B.** Ship with one pool (MONEY/WETH LP only, weight 100%). ESTATE has no AMM market — trades only via direct transfer or off-chain OTC. Severely limits price discovery. Don't recommend.
+  - **C.** Defer — open with one pool, add second pool by operator action later. Acceptable middle ground; just don't forget.
 
-❓ TBD — audit pending. Key check:
+## Timelock — ✓ CLEAN
 
-- [ ] `TOTAL_REWARDS = 140_000 ether`
-- [ ] Two epochs: 80k over 4 days + 60k over 5 days = 9 days total
-- [ ] Multi-epoch `getGeneratedReward` math
+- `GRACE_PERIOD = 14 days` ✓ MATCH
+- `MINIMUM_DELAY = 1 days` ✓ MATCH
+- `MAXIMUM_DELAY = 30 days` ✓ MATCH
+- Compound-style queue/cancel/execute ✓ MATCH
+- Two-step admin transfer ✓ MATCH
 
-## ShareRewardPool
+## Distributor — ✓ CLEAN
 
-❓ TBD — audit pending. Key check:
-
-- [ ] `TOTAL_REWARDS = 59_500 ether`
-- [ ] `RUNNING_TIME = 370 days`
-- ⚠️ **Potential gap #17:** Tomb's TShareRewardPool had TWO pools (TOMB-FTM LP 60%, TSHARE-FTM LP 40%). Our `ShareRewardPool` supports multiple pools via `add()`, but to be Tomb-faithful we'd need a second V4 pool (ESTATE/cbETH or ESTATE/WETH) and its own LP wrapper. **Operator decision: do we ship with both pools, or just MONEY/WETH LP initially?**
+- Tiny aggregator, permissionless `distribute()` ✓ MATCH (verbatim port)
 
 ## PegDefenseHook (replaces TaxOffice)
 
@@ -234,30 +253,44 @@ Our `PegDefenseHook`:
 
 ---
 
-## Distributor / Timelock / Hook permissions
-
-❓ TBD — audit pending in next pass.
-
 ---
 
-## Summary of decisions needed (so far)
+## Final consolidated decisions matrix
 
-| # | Topic | Recommendation | Cost |
-|---|---|---|---|
-| BUG #1 | `bootstrapEpochs = 0` | Set to `28` per HOW_IT_WORKED | 1 line + redeploy |
-| BUG #2 | `maxDebtRatioPercent = 4500` | Set to `3500` per Tomb | 1 line + redeploy |
-| BUG #3 | POL `bondTreasury` missing | Decide: build it (Tomb-fidelity) or document deviation | Build = multi-turn; document = 1 doc commit |
-| Gap #3 | Hook tax not burning / routing | Build Sprint 4b (`beforeSwapReturnDelta`) | Multi-turn |
-| Gap #17 | Share pool double-LP (MONEY-WETH + ESTATE-WETH) | Need operator decision: ship with one pool or both | Build second wrapper + V4 pool if both |
-| Peg | cbETH → WETH | Decided (proceed) | 1-2 turns |
-| Token audit | Money / Estate / TrustNote vs Tomb | Continue audit | 1 turn |
-| Oracle / reward pools / Timelock audit | Continue audit | 1 turn each |
+Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Boardroom`, `src/core/Distributor`, `src/tokens/OldMoney`, `src/tokens/Estate`, `src/tokens/TrustNote`, `src/oracle/Oracle`, `src/governance/Timelock`, `src/hooks/PegDefenseHook`, `src/distribution/GenesisRewardPool`, `src/distribution/MainRewardPool`, `src/distribution/ShareRewardPool`).
 
----
+### 7 contracts found CLEAN
 
-## Next steps
+OldMoney, Estate, TrustNote, Oracle, GenesisRewardPool, MainRewardPool, Timelock, Distributor, Boardroom — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
 
-1. Continue audit: tokens (Money, Estate, TrustNote), Oracle, reward pools (full), Timelock, Distributor — one focused turn for each.
-2. After audit complete, surface ALL decisions to user.
-3. User picks A or B for each.
-4. THEN execute: code changes + WETH migration + redeploy in one consolidated sprint.
+### Decisions needed
+
+| # | Topic | Severity | Recommendation | Cost |
+|---|---|---|---|---|
+| BUG #1 | Treasury: `bootstrapEpochs = 0` | **HIGH** — bootstrap branch is dead code; first-launch Boardroom-empty risk magnified (gap #16) | **Set to `28`** per HOW_IT_WORKED | 1 line + redeploy |
+| BUG #2 | Treasury: `maxDebtRatioPercent = 4500` | **MEDIUM** — allows 45% bond supply vs Tomb's 35%; longer redemption risk in sustained contraction | **Set to `3500`** per Tomb | 1 line + redeploy |
+| BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | **MEDIUM** — Tomb mints 5% of supply/epoch to POL bond treasury for protocol-owned-liquidity bonds | **Document as deliberate omission** for v1 launch (keep contraction bonds only); add POL later as a separate sprint if needed | Document = small; build = multi-turn |
+| Gap #3 | PegDefenseHook doesn't burn/route value | **HIGH** — Tomb burned MONEY during deep contraction (load-bearing deflationary lever); ours only raises LP fees | **Build Sprint 4b** — `beforeSwapReturnDelta` taxes swap input as MONEY, burns it during deep contraction. Restores Tomb's strongest peg-defense lever. Recommended for production. | Multi-turn (V4 returnDelta + Permit2 + tests) |
+| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | **MEDIUM** — without ESTATE/WETH LP pool, ESTATE has no AMM market | **Defer (Option C)** — launch with one pool, operator adds second pool later when ESTATE/WETH V4 pool + second wrapper exists. | Defer = 0 work now; build later as separate sprint |
+| Peg | cbETH → WETH | Already decided | Execute migration | 1-2 turns |
+
+### What's NOT a decision (just execution)
+
+- Token contracts: leave as-is. All clean.
+- Oracle: leave as-is. Clean.
+- Reward pool contracts: leave as-is. Clean.
+- Boardroom: leave as-is. Clean.
+- Timelock + Distributor: leave as-is. Clean.
+
+### Sequencing once user signs off
+
+If user picks the recommendations above:
+
+1. **Code-change sprint** (1 turn): Treasury edits for BUG #1 + BUG #2. Document BUG #3 deviation in NatSpec + GAP_AUDIT. Run full suite.
+2. **WETH peg migration** (1-2 turns): Addresses.sol rename, MockCbeth deletion, Deploy.s.sol updates, fork test updates, doc updates.
+3. **Sprint 4b** (multi-turn, 3-4): PegDefenseHook tax routing with `beforeSwapReturnDelta`. Design doc first (Bunni V2 source read for returnDelta pattern reference), then contract + tests + fork tests + invariants.
+4. **Sprint 16** (multi-turn, 4-5): LiquidityVault for MONEY/WETH V4 LP → ERC-20 wrapper.
+5. **Redeploy Base Sepolia** (1 turn): Run updated Deploy + OpenLaunch scripts.
+6. **Pre-mainnet gates**: Coverage report, audit invariants 10k/200, professional audit, mainnet.
+
+Total time-to-mainnet: ~10-15 focused turns + audit duration. No half-baked shipping in `src/`.
