@@ -6,7 +6,10 @@ An algorithmic stable on Base, pegged to cbETH. Fork of Tomb Finance, modernized
 
 ## Status
 
-Pre-alpha. Scaffolding complete, no production contracts yet.
+Pre-audit. Core protocol contracts ported from Tomb Finance, V4 hook for
+peg defense + observation feed, 210 tests (unit + integration + invariant)
+all green, Slither 0 HIGH / 0 MEDIUM, full triage in [docs/SECURITY.md](docs/SECURITY.md).
+Gas optimization, fork tests, and deploy scripts remaining.
 
 ## Stack
 

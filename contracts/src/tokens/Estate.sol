@@ -47,16 +47,16 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
     uint256 public constant VESTING_DURATION = 365 days;
 
     /// @notice Timestamp at which vesting begins.
-    uint256 public startTime;
+    uint256 public immutable startTime;
 
     /// @notice Timestamp at which vesting completes.
-    uint256 public endTime;
+    uint256 public immutable endTime;
 
     /// @notice Per-second emission rate to the community fund (constant).
-    uint256 public communityFundRewardRate;
+    uint256 public immutable communityFundRewardRate;
 
     /// @notice Per-second emission rate to the dev fund (constant).
-    uint256 public devFundRewardRate;
+    uint256 public immutable devFundRewardRate;
 
     /// @notice Address receiving the community fund vesting drip.
     address public communityFund;

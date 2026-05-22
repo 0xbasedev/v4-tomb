@@ -22,7 +22,7 @@ import {Trustees} from "../governance/Trustees.sol";
  */
 abstract contract Epoch is Trustees {
     uint256 private _period;
-    uint256 private _startTime;
+    uint256 private immutable _startTime;
     uint256 private _lastEpochTime;
     uint256 private _epoch;
 

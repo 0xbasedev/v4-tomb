@@ -4,7 +4,8 @@ cache/
 broadcast/
 coverage/
 lcov.info
-.gas-snapshot
+# .gas-snapshot is intentionally tracked — it's the regression baseline that
+# forge snapshot --check enforces in CI.
 
 # Foundry deps (re-install with `forge install`)
 lib/
