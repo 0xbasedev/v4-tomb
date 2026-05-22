@@ -3,146 +3,208 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import {ERC20Pausable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title Estate
- * @notice $ESTATE — the share / governance side of the Old Money trust. Holders earn $OLDM
- *         seigniorage during expansion epochs by staking $ESTATE in TheClub (the Boardroom).
- * @dev    Tomb-Finance analog: TSHARE.
+ * @notice $ESTATE — the share / governance side of the Old Money trust. Holders stake $ESTATE
+ *         in TheClub (the Boardroom) to earn $OLDM seigniorage during expansion epochs.
+ * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
  *
- *         Supply model:
- *         - Fixed max supply of 80,000 $ESTATE. There is no `mint` function. Total supply
- *           is materialized exactly once via `distribute`, which is owner-callable a single
- *           time and mints the full 80,000 across three recipients in a 60/20/20 split:
- *             - 48,000 (60%) to Distributor — community LP / staking rewards pools.
- *             - 16,000 (20%) to a team VestingWallet — vested 12 months linear.
- *             - 16,000 (20%) to Treasury — endowment for protocol operations.
- *         - Burnable: holders can burn their own $ESTATE (`burn`) or another's via
- *           allowance (`burnFrom`). Burning permanently reduces supply.
- *         - Pausable by a Guardian role distinct from owner, per the same security
- *           posture as OldMoney: never concentrate freeze + governance in one key.
+ *         Supply (Tomb-exact):
+ *           - Total max: 70,000 ESTATE
+ *           - 59,500 to farming pool (minted one-shot via `distributeReward`)
+ *           -  5,500 to community fund (linear-vested over 365 days, claimable via `claimRewards`)
+ *           -  5,000 to dev fund (linear-vested over 365 days, claimable via `claimRewards`)
+ *           - 1 ESTATE minted to the initial owner in the constructor for initial pool setup.
  *
- *         Key invariants:
- *         - `totalSupply()` <= MAX_SUPPLY at all times.
- *         - After `distribute`, `totalSupply()` == MAX_SUPPLY (less any subsequent burns).
- *         - `distribute` can be called at most once.
- *         - COMMUNITY_ALLOC + TEAM_ALLOC + TREASURY_ALLOC == MAX_SUPPLY (asserted at deploy).
+ *         Non-logic-changing modernizations from Tomb's BShare:
+ *           - 0.6.12 → 0.8.26; SafeMath dropped.
+ *           - OZ v4 → OZ v5; ERC20Permit added (additive).
+ *           - Single-step Ownable → Ownable2Step via [[Trustees]].
+ *           - `require` strings → custom errors.
+ *
+ *         Quirk preserved from Tomb: `setTreasuryFund` and `setDevFund` are both gated to the
+ *         `devFund` address, not to owner or trustees. This is Tomb's chosen pattern.
  */
-contract Estate is ERC20Burnable, ERC20Pausable, ERC20Permit, Ownable2Step {
-    /// @notice Hard cap on $ESTATE supply.
-    uint256 public constant MAX_SUPPLY = 80_000 ether;
+contract Estate is ERC20Burnable, ERC20Permit, Trustees {
+    using SafeERC20 for IERC20;
 
-    /// @notice 60% of MAX_SUPPLY → community LP / staking rewards.
-    uint256 public constant COMMUNITY_ALLOC = 48_000 ether;
+    /// @notice 59,500 ESTATE — farming pool allocation, minted one-shot via `distributeReward`.
+    uint256 public constant FARMING_POOL_REWARD_ALLOCATION = 59_500 ether;
 
-    /// @notice 20% of MAX_SUPPLY → team, locked in a VestingWallet for 12 months linear.
-    uint256 public constant TEAM_ALLOC = 16_000 ether;
+    /// @notice 5,500 ESTATE — community fund, linear-vested over `VESTING_DURATION`.
+    uint256 public constant COMMUNITY_FUND_POOL_ALLOCATION = 5500 ether;
 
-    /// @notice 20% of MAX_SUPPLY → Treasury endowment.
-    uint256 public constant TREASURY_ALLOC = 16_000 ether;
+    /// @notice 5,000 ESTATE — dev fund, linear-vested over `VESTING_DURATION`.
+    uint256 public constant DEV_FUND_POOL_ALLOCATION = 5000 ether;
 
-    /// @notice Pause authority. Distinct from owner; intended for a Guardian multisig.
-    address public guardian;
+    /// @notice 365 days — duration over which community and dev fund vest linearly.
+    uint256 public constant VESTING_DURATION = 365 days;
 
-    /// @notice True once `distribute` has been called. Prevents re-distribution.
-    bool public distributed;
+    /// @notice Timestamp at which vesting begins.
+    uint256 public startTime;
 
-    /// @notice Emitted exactly once, when the genesis distribution is executed.
-    event Distributed(address indexed distributor, address indexed teamVesting, address indexed treasury);
+    /// @notice Timestamp at which vesting completes.
+    uint256 public endTime;
 
-    /// @notice Emitted when the guardian address is rotated.
-    event GuardianSet(address indexed previousGuardian, address indexed newGuardian);
+    /// @notice Per-second emission rate to the community fund (constant).
+    uint256 public communityFundRewardRate;
 
-    error NotGuardian();
-    error ZeroAddress();
+    /// @notice Per-second emission rate to the dev fund (constant).
+    uint256 public devFundRewardRate;
+
+    /// @notice Address receiving the community fund vesting drip.
+    address public communityFund;
+
+    /// @notice Address receiving the dev fund vesting drip.
+    address public devFund;
+
+    /// @notice Last timestamp at which community fund vesting was claimed.
+    uint256 public communityFundLastClaimed;
+
+    /// @notice Last timestamp at which dev fund vesting was claimed.
+    uint256 public devFundLastClaimed;
+
+    /// @notice True after `distributeReward` has been called. One-shot.
+    bool public rewardPoolDistributed;
+
+    event RewardPoolDistributed(address indexed farmingIncentiveFund);
+    event CommunityFundUpdated(address indexed previous, address indexed next);
+    event DevFundUpdated(address indexed previous, address indexed next);
+    event UnsupportedTokenRecovered(IERC20 indexed token, uint256 amount, address indexed to);
+
     error AlreadyDistributed();
-    error AllocationMismatch();
-
-    modifier onlyGuardian() {
-        if (msg.sender != guardian) revert NotGuardian();
-        _;
-    }
+    error ZeroAddress();
+    error NotDevFund();
 
     constructor(
-        address initialOwner
-    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Ownable(initialOwner) {
-        // Compile-time-ish sanity: the three allocations must sum to MAX_SUPPLY.
-        // Cheap belt-and-suspenders against future edits to the constants.
-        if (COMMUNITY_ALLOC + TEAM_ALLOC + TREASURY_ALLOC != MAX_SUPPLY) {
-            revert AllocationMismatch();
+        uint256 _startTime,
+        address _communityFund,
+        address _devFund
+    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Trustees() {
+        if (_communityFund == address(0)) revert ZeroAddress();
+        if (_devFund == address(0)) revert ZeroAddress();
+
+        // Tomb-faithful: mint 1 unit to deployer for initial pool setup / sanity check.
+        _mint(msg.sender, 1 ether);
+
+        startTime = _startTime;
+        endTime = _startTime + VESTING_DURATION;
+
+        communityFundLastClaimed = _startTime;
+        devFundLastClaimed = _startTime;
+
+        communityFundRewardRate = COMMUNITY_FUND_POOL_ALLOCATION / VESTING_DURATION;
+        devFundRewardRate = DEV_FUND_POOL_ALLOCATION / VESTING_DURATION;
+
+        communityFund = _communityFund;
+        devFund = _devFund;
+    }
+
+    // ---------------------------------------------------------------------
+    // devFund-controlled fund rotation (Tomb's quirk preserved)
+    // ---------------------------------------------------------------------
+
+    /// @notice Rotate the community fund recipient.
+    /// @dev Note the Tomb quirk: this is gated to `devFund`, not to owner. Matches BShare.
+    function setTreasuryFund(
+        address newCommunityFund
+    ) external {
+        if (msg.sender != devFund) revert NotDevFund();
+        if (newCommunityFund == address(0)) revert ZeroAddress();
+        emit CommunityFundUpdated(communityFund, newCommunityFund);
+        communityFund = newCommunityFund;
+    }
+
+    /// @notice Rotate the dev fund recipient.
+    /// @dev Note the Tomb quirk: this is gated to `devFund`, not to owner. Matches BShare.
+    function setDevFund(
+        address newDevFund
+    ) external {
+        if (msg.sender != devFund) revert NotDevFund();
+        if (newDevFund == address(0)) revert ZeroAddress();
+        emit DevFundUpdated(devFund, newDevFund);
+        devFund = newDevFund;
+    }
+
+    // ---------------------------------------------------------------------
+    // Linear vesting math
+    // ---------------------------------------------------------------------
+
+    /// @notice Amount of $ESTATE currently claimable by `communityFund`.
+    function unclaimedTreasuryFund() public view returns (uint256) {
+        uint256 _now = block.timestamp;
+        if (_now > endTime) _now = endTime;
+        if (communityFundLastClaimed >= _now) return 0;
+        return (_now - communityFundLastClaimed) * communityFundRewardRate;
+    }
+
+    /// @notice Amount of $ESTATE currently claimable by `devFund`.
+    function unclaimedDevFund() public view returns (uint256) {
+        uint256 _now = block.timestamp;
+        if (_now > endTime) _now = endTime;
+        if (devFundLastClaimed >= _now) return 0;
+        return (_now - devFundLastClaimed) * devFundRewardRate;
+    }
+
+    /// @notice Claim any pending community + dev fund vesting drips.
+    /// @dev Permissionless — anyone can poke the contract to mint due rewards.
+    function claimRewards() external {
+        uint256 communityPending = unclaimedTreasuryFund();
+        if (communityPending > 0 && communityFund != address(0)) {
+            _mint(communityFund, communityPending);
+            communityFundLastClaimed = block.timestamp;
+        }
+        uint256 devPending = unclaimedDevFund();
+        if (devPending > 0 && devFund != address(0)) {
+            _mint(devFund, devPending);
+            devFundLastClaimed = block.timestamp;
         }
     }
 
     // ---------------------------------------------------------------------
-    // Authority rotation
+    // One-shot farming pool distribution
     // ---------------------------------------------------------------------
 
-    /// @notice Set the Guardian — the only address allowed to pause/unpause $ESTATE.
-    /// @dev Owner-only. Production guardian is a multisig distinct from owner.
-    function setGuardian(
-        address newGuardian
-    ) external onlyOwner {
-        if (newGuardian == address(0)) revert ZeroAddress();
-        address previous = guardian;
-        guardian = newGuardian;
-        emit GuardianSet(previous, newGuardian);
+    /// @notice Mint the farming pool allocation in a single call. Callable at most once by trustees.
+    function distributeReward(
+        address farmingIncentiveFund
+    ) external onlyTrustees {
+        if (rewardPoolDistributed) revert AlreadyDistributed();
+        if (farmingIncentiveFund == address(0)) revert ZeroAddress();
+        rewardPoolDistributed = true;
+        _mint(farmingIncentiveFund, FARMING_POOL_REWARD_ALLOCATION);
+        emit RewardPoolDistributed(farmingIncentiveFund);
     }
 
     // ---------------------------------------------------------------------
-    // Pause control
+    // Burn (Tomb-faithful surface)
     // ---------------------------------------------------------------------
 
-    function pause() external onlyGuardian {
-        _pause();
-    }
-
-    function unpause() external onlyGuardian {
-        _unpause();
-    }
-
-    // ---------------------------------------------------------------------
-    // Genesis distribution
-    // ---------------------------------------------------------------------
-
-    /// @notice Mint the full 80,000 $ESTATE supply across the three genesis recipients.
-    /// @dev One-shot, owner-only. After this call, no further $ESTATE can be minted.
-    ///      The caller is responsible for deploying `teamVesting` as a properly-configured
-    ///      OpenZeppelin VestingWallet with the team beneficiary, the launch timestamp,
-    ///      and a 12-month linear cliff/vest duration.
-    /// @param distributor Receives `COMMUNITY_ALLOC` for LP and staking rewards programs.
-    /// @param teamVesting OpenZeppelin VestingWallet holding `TEAM_ALLOC` for the team.
-    /// @param treasury Receives `TREASURY_ALLOC` for the protocol endowment.
-    function distribute(
-        address distributor,
-        address teamVesting,
-        address treasury
-    ) external onlyOwner {
-        if (distributed) revert AlreadyDistributed();
-        if (distributor == address(0) || teamVesting == address(0) || treasury == address(0)) {
-            revert ZeroAddress();
-        }
-
-        distributed = true;
-
-        _mint(distributor, COMMUNITY_ALLOC);
-        _mint(teamVesting, TEAM_ALLOC);
-        _mint(treasury, TREASURY_ALLOC);
-
-        emit Distributed(distributor, teamVesting, treasury);
+    /// @notice Burn $ESTATE from the caller's own balance.
+    /// @dev Override preserves Tomb's explicit public restatement of the inherited symbol.
+    function burn(
+        uint256 amount
+    ) public override {
+        super.burn(amount);
     }
 
     // ---------------------------------------------------------------------
-    // OZ v5 inheritance resolution
+    // Stuck-token rescue
     // ---------------------------------------------------------------------
 
-    function _update(
-        address from,
-        address to,
-        uint256 value
-    ) internal override(ERC20, ERC20Pausable) {
-        super._update(from, to, value);
+    /// @notice Rescue an arbitrary ERC20 mistakenly sent to this contract.
+    function governanceRecoverUnsupported(
+        IERC20 token,
+        uint256 amount,
+        address to
+    ) external onlyTrustees {
+        token.safeTransfer(to, amount);
+        emit UnsupportedTokenRecovered(token, amount, to);
     }
 }

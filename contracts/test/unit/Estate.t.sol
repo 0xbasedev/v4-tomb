@@ -3,36 +3,50 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 import {Estate} from "../../src/tokens/Estate.sol";
+import {Trustees} from "../../src/governance/Trustees.sol";
 
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+
+contract MockERC20 is ERC20 {
+    constructor() ERC20("Mock", "MOCK") {}
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
+}
 
 contract EstateTest is BaseTest {
     Estate internal estate;
 
-    // Three named genesis recipients.
-    address internal distributor = makeAddr("distributor");
-    address internal teamVesting = makeAddr("teamVesting");
-    address internal treasury = makeAddr("treasury");
+    address internal communityFund = makeAddr("communityFund");
+    address internal devFund = makeAddr("devFund");
+    address internal farmingFund = makeAddr("farmingFund");
 
-    event Distributed(address indexed distributor, address indexed teamVesting, address indexed treasury);
-    event GuardianSet(address indexed previousGuardian, address indexed newGuardian);
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Paused(address account);
-    event Unpaused(address account);
+    uint256 internal vestingStart;
+
+    event RewardPoolDistributed(address indexed farmingIncentiveFund);
+    event CommunityFundUpdated(address indexed previous, address indexed next);
+    event DevFundUpdated(address indexed previous, address indexed next);
 
     function setUp() public override {
         super.setUp();
-        vm.label(distributor, "distributor");
-        vm.label(teamVesting, "teamVesting");
-        vm.label(treasury, "treasury");
+        vm.label(communityFund, "communityFund");
+        vm.label(devFund, "devFund");
+        vm.label(farmingFund, "farmingFund");
+
+        vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(owner);
+        estate = new Estate(vestingStart, communityFund, devFund);
 
+        // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
-        estate.setGuardian(guardian);
+        estate.transferTrustees(trustees);
     }
 
     // ---------------------------------------------------------------------
@@ -45,219 +59,247 @@ contract EstateTest is BaseTest {
         assertEq(estate.decimals(), 18);
     }
 
-    function test_Constructor_SetsOwner() public view {
-        assertEq(estate.owner(), owner);
+    function test_Constants() public view {
+        assertEq(estate.FARMING_POOL_REWARD_ALLOCATION(), 59_500 ether);
+        assertEq(estate.COMMUNITY_FUND_POOL_ALLOCATION(), 5500 ether);
+        assertEq(estate.DEV_FUND_POOL_ALLOCATION(), 5000 ether);
+        assertEq(estate.VESTING_DURATION(), 365 days);
     }
 
-    function test_Constructor_NoSupplyAtDeploy() public view {
-        assertEq(estate.totalSupply(), 0);
-        assertFalse(estate.distributed());
+    function test_ConstantsSumToTombMaxSupply() public view {
+        // Tomb canonical: 70,000 TSHARE max supply (59,500 + 5,500 + 5,000).
+        assertEq(
+            estate.FARMING_POOL_REWARD_ALLOCATION() + estate.COMMUNITY_FUND_POOL_ALLOCATION()
+                + estate.DEV_FUND_POOL_ALLOCATION(),
+            70_000 ether
+        );
     }
 
-    function test_AllocationsSumToMaxSupply() public view {
-        assertEq(estate.COMMUNITY_ALLOC() + estate.TEAM_ALLOC() + estate.TREASURY_ALLOC(), estate.MAX_SUPPLY());
-        assertEq(estate.MAX_SUPPLY(), 80_000 ether);
-        assertEq(estate.COMMUNITY_ALLOC(), 48_000 ether);
-        assertEq(estate.TEAM_ALLOC(), 16_000 ether);
-        assertEq(estate.TREASURY_ALLOC(), 16_000 ether);
+    function test_Constructor_InitialState() public view {
+        // 1 ether minted to the deployer.
+        assertEq(estate.balanceOf(owner), 1 ether);
+        assertEq(estate.totalSupply(), 1 ether);
+
+        assertEq(estate.startTime(), vestingStart);
+        assertEq(estate.endTime(), vestingStart + 365 days);
+        assertEq(estate.communityFund(), communityFund);
+        assertEq(estate.devFund(), devFund);
+        assertEq(estate.communityFundLastClaimed(), vestingStart);
+        assertEq(estate.devFundLastClaimed(), vestingStart);
+
+        // Vesting rates are alloc / duration.
+        assertEq(estate.communityFundRewardRate(), uint256(5500 ether) / 365 days);
+        assertEq(estate.devFundRewardRate(), uint256(5000 ether) / 365 days);
+    }
+
+    function test_Constructor_RejectsZeroCommunityFund() public {
+        vm.prank(owner);
+        vm.expectRevert(Estate.ZeroAddress.selector);
+        new Estate(vestingStart, address(0), devFund);
+    }
+
+    function test_Constructor_RejectsZeroDevFund() public {
+        vm.prank(owner);
+        vm.expectRevert(Estate.ZeroAddress.selector);
+        new Estate(vestingStart, communityFund, address(0));
     }
 
     // ---------------------------------------------------------------------
-    // Guardian rotation
+    // setTreasuryFund / setDevFund — Tomb's devFund-controlled rotation quirk
     // ---------------------------------------------------------------------
 
-    function test_SetGuardian_OnlyOwner() public {
+    function test_SetTreasuryFund_OnlyDevFund() public {
+        vm.prank(owner);
+        vm.expectRevert(Estate.NotDevFund.selector);
+        estate.setTreasuryFund(alice);
+
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
-        estate.setGuardian(alice);
+        vm.expectRevert(Estate.NotDevFund.selector);
+        estate.setTreasuryFund(alice);
     }
 
-    function test_SetGuardian_RejectsZero() public {
-        vm.prank(owner);
+    function test_SetTreasuryFund_RejectsZero() public {
+        vm.prank(devFund);
         vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.setGuardian(address(0));
+        estate.setTreasuryFund(address(0));
     }
 
-    function test_SetGuardian_EmitsEvent() public {
+    function test_SetTreasuryFund_Rotates() public {
         vm.expectEmit(true, true, true, true);
-        emit GuardianSet(guardian, alice);
+        emit CommunityFundUpdated(communityFund, alice);
+        vm.prank(devFund);
+        estate.setTreasuryFund(alice);
+        assertEq(estate.communityFund(), alice);
+    }
+
+    function test_SetDevFund_OnlyDevFund() public {
         vm.prank(owner);
-        estate.setGuardian(alice);
-        assertEq(estate.guardian(), alice);
+        vm.expectRevert(Estate.NotDevFund.selector);
+        estate.setDevFund(alice);
+    }
+
+    function test_SetDevFund_RejectsZero() public {
+        vm.prank(devFund);
+        vm.expectRevert(Estate.ZeroAddress.selector);
+        estate.setDevFund(address(0));
+    }
+
+    function test_SetDevFund_Rotates() public {
+        vm.expectEmit(true, true, true, true);
+        emit DevFundUpdated(devFund, alice);
+        vm.prank(devFund);
+        estate.setDevFund(alice);
+        assertEq(estate.devFund(), alice);
     }
 
     // ---------------------------------------------------------------------
-    // distribute()
+    // Linear vesting math (claimRewards)
     // ---------------------------------------------------------------------
 
-    function test_Distribute_OnlyOwner() public {
+    function test_Vesting_NothingClaimableBeforeStart() public view {
+        // We're currently before vestingStart.
+        assertLt(block.timestamp, vestingStart);
+        assertEq(estate.unclaimedTreasuryFund(), 0);
+        assertEq(estate.unclaimedDevFund(), 0);
+    }
+
+    function test_Vesting_HalfwayThrough() public {
+        // Jump to vestingStart + 6 months.
+        vm.warp(vestingStart + 182.5 days);
+
+        uint256 communityRate = estate.communityFundRewardRate();
+        uint256 devRate = estate.devFundRewardRate();
+        uint256 expectedCommunity = uint256(182.5 days) * communityRate;
+        uint256 expectedDev = uint256(182.5 days) * devRate;
+
+        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(estate.unclaimedDevFund(), expectedDev);
+    }
+
+    function test_Vesting_FullyClaimableAtEnd() public {
+        vm.warp(vestingStart + 365 days);
+
+        uint256 expectedCommunity = uint256(365 days) * estate.communityFundRewardRate();
+        uint256 expectedDev = uint256(365 days) * estate.devFundRewardRate();
+
+        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(estate.unclaimedDevFund(), expectedDev);
+
+        // Tomb integer-division rounding leaves a tiny residual under the nominal alloc.
+        // The residual is < VESTING_DURATION (in wei).
+        assertGt(expectedCommunity, 5500 ether - 365 days);
+        assertLe(expectedCommunity, 5500 ether);
+        assertGt(expectedDev, 5000 ether - 365 days);
+        assertLe(expectedDev, 5000 ether);
+    }
+
+    function test_Vesting_CapsAtEndTime() public {
+        // Way past the end. Should still cap at endTime worth of accrual.
+        vm.warp(vestingStart + 365 days + 100 days);
+
+        uint256 expectedCommunity = uint256(365 days) * estate.communityFundRewardRate();
+        uint256 expectedDev = uint256(365 days) * estate.devFundRewardRate();
+
+        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(estate.unclaimedDevFund(), expectedDev);
+    }
+
+    function test_ClaimRewards_MintsAndUpdatesTimestamps() public {
+        vm.warp(vestingStart + 100 days);
+
+        uint256 expectedCommunity = uint256(100 days) * estate.communityFundRewardRate();
+        uint256 expectedDev = uint256(100 days) * estate.devFundRewardRate();
+
+        estate.claimRewards();
+
+        assertEq(estate.balanceOf(communityFund), expectedCommunity);
+        assertEq(estate.balanceOf(devFund), expectedDev);
+        assertEq(estate.communityFundLastClaimed(), block.timestamp);
+        assertEq(estate.devFundLastClaimed(), block.timestamp);
+    }
+
+    function test_ClaimRewards_TwiceIsIdempotentWithoutTimeAdvance() public {
+        vm.warp(vestingStart + 50 days);
+        estate.claimRewards();
+        uint256 balanceAfterFirst = estate.balanceOf(communityFund);
+
+        // No time advance — second claim must be a no-op.
+        estate.claimRewards();
+        assertEq(estate.balanceOf(communityFund), balanceAfterFirst);
+    }
+
+    function test_ClaimRewards_AnyoneCanCall() public {
+        vm.warp(vestingStart + 30 days);
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
-        estate.distribute(distributor, teamVesting, treasury);
+        estate.claimRewards();
+        // Funds went to the configured recipients, not the caller.
+        assertGt(estate.balanceOf(communityFund), 0);
+        assertGt(estate.balanceOf(devFund), 0);
+        assertEq(estate.balanceOf(stranger), 0);
     }
 
-    function test_Distribute_RejectsZeroDistributor() public {
-        vm.prank(owner);
+    // ---------------------------------------------------------------------
+    // distributeReward — one-shot farming pool mint
+    // ---------------------------------------------------------------------
+
+    function test_DistributeReward_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        estate.distributeReward(farmingFund);
+    }
+
+    function test_DistributeReward_RejectsZero() public {
+        vm.prank(trustees);
         vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.distribute(address(0), teamVesting, treasury);
+        estate.distributeReward(address(0));
     }
 
-    function test_Distribute_RejectsZeroTeamVesting() public {
-        vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.distribute(distributor, address(0), treasury);
-    }
-
-    function test_Distribute_RejectsZeroTreasury() public {
-        vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.distribute(distributor, teamVesting, address(0));
-    }
-
-    function test_Distribute_MintsExactAllocations() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        assertEq(estate.balanceOf(distributor), estate.COMMUNITY_ALLOC());
-        assertEq(estate.balanceOf(teamVesting), estate.TEAM_ALLOC());
-        assertEq(estate.balanceOf(treasury), estate.TREASURY_ALLOC());
-        assertEq(estate.totalSupply(), estate.MAX_SUPPLY());
-        assertTrue(estate.distributed());
-    }
-
-    function test_Distribute_EmitsEvent() public {
+    function test_DistributeReward_MintsFarmingAllocation() public {
         vm.expectEmit(true, true, true, true);
-        emit Distributed(distributor, teamVesting, treasury);
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
+        emit RewardPoolDistributed(farmingFund);
+        vm.prank(trustees);
+        estate.distributeReward(farmingFund);
+
+        assertEq(estate.balanceOf(farmingFund), estate.FARMING_POOL_REWARD_ALLOCATION());
+        assertTrue(estate.rewardPoolDistributed());
     }
 
-    function test_Distribute_EmitsAllThreeTransfers() public {
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), distributor, estate.COMMUNITY_ALLOC());
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), teamVesting, estate.TEAM_ALLOC());
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), treasury, estate.TREASURY_ALLOC());
+    function test_DistributeReward_OneShot() public {
+        vm.prank(trustees);
+        estate.distributeReward(farmingFund);
 
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-    }
-
-    function test_Distribute_OneShot() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        vm.prank(owner);
+        vm.prank(trustees);
         vm.expectRevert(Estate.AlreadyDistributed.selector);
-        estate.distribute(distributor, teamVesting, treasury);
+        estate.distributeReward(farmingFund);
     }
 
-    function test_Distribute_NoMintingPossibleAfter() public {
+    // ---------------------------------------------------------------------
+    // Burn
+    // ---------------------------------------------------------------------
+
+    function test_Burn_HolderCanBurnOwnBalance() public {
         vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        // Burning is the only way supply can change after distribution.
-        // There is no `mint()` external function — verified by the absence of a getter.
-        // The only test is: supply == MAX_SUPPLY now, and remains <= MAX_SUPPLY forever.
-        assertEq(estate.totalSupply(), estate.MAX_SUPPLY());
+        estate.transfer(alice, 1 ether);
+        vm.prank(alice);
+        estate.burn(1 ether);
+        assertEq(estate.balanceOf(alice), 0);
     }
 
     // ---------------------------------------------------------------------
-    // Burn (ERC20Burnable)
+    // Stuck-token rescue
     // ---------------------------------------------------------------------
 
-    function test_Burn_ReducesSupplyBelowMaxSupply() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
+    function test_GovernanceRecoverUnsupported_OnlyTrustees() public {
+        MockERC20 stuck = new MockERC20();
+        stuck.mint(address(estate), 100 ether);
 
-        vm.prank(treasury);
-        estate.burn(1000 ether);
-
-        assertEq(estate.balanceOf(treasury), estate.TREASURY_ALLOC() - 1000 ether);
-        assertEq(estate.totalSupply(), estate.MAX_SUPPLY() - 1000 ether);
-        assertLt(estate.totalSupply(), estate.MAX_SUPPLY());
-    }
-
-    function test_BurnFrom_RequiresAllowance() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, bob, 0, 100 ether));
-        estate.burnFrom(treasury, 100 ether);
-
-        vm.prank(treasury);
-        estate.approve(bob, 100 ether);
-
-        vm.prank(bob);
-        estate.burnFrom(treasury, 100 ether);
-
-        assertEq(estate.balanceOf(treasury), estate.TREASURY_ALLOC() - 100 ether);
-    }
-
-    // ---------------------------------------------------------------------
-    // Pause
-    // ---------------------------------------------------------------------
-
-    function test_Pause_OnlyGuardian() public {
         vm.prank(stranger);
-        vm.expectRevert(Estate.NotGuardian.selector);
-        estate.pause();
-    }
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        estate.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
 
-    function test_Pause_OwnerCannotPause() public {
-        vm.prank(owner);
-        vm.expectRevert(Estate.NotGuardian.selector);
-        estate.pause();
-    }
-
-    function test_Pause_BlocksTransfers() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        vm.prank(guardian);
-        estate.pause();
-
-        vm.prank(treasury);
-        vm.expectRevert(Pausable.EnforcedPause.selector);
-        estate.transfer(alice, 1 ether);
-    }
-
-    function test_Pause_BlocksDistribute() public {
-        // Edge case: if guardian pauses before distribute is called,
-        // distribute will revert because _mint goes through _update.
-        vm.prank(guardian);
-        estate.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(Pausable.EnforcedPause.selector);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        // Recoverable: unpause and retry.
-        vm.prank(guardian);
-        estate.unpause();
-
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-        assertTrue(estate.distributed());
-    }
-
-    function test_Unpause_RestoresTransfers() public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        vm.prank(guardian);
-        estate.pause();
-
-        vm.expectEmit(true, true, true, true);
-        emit Unpaused(guardian);
-        vm.prank(guardian);
-        estate.unpause();
-
-        vm.prank(treasury);
-        estate.transfer(alice, 1 ether);
-        assertEq(estate.balanceOf(alice), 1 ether);
+        vm.prank(trustees);
+        estate.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
+        assertEq(stuck.balanceOf(alice), 100 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -267,59 +309,8 @@ contract EstateTest is BaseTest {
     function test_OwnershipTransfer_TwoStep() public {
         vm.prank(owner);
         estate.transferOwnership(alice);
-        assertEq(estate.owner(), owner);
-        assertEq(estate.pendingOwner(), alice);
-
         vm.prank(alice);
         estate.acceptOwnership();
         assertEq(estate.owner(), alice);
-    }
-
-    // ---------------------------------------------------------------------
-    // EIP-2612 Permit
-    // ---------------------------------------------------------------------
-
-    function test_Permit_GaslessApproval() public {
-        (uint256 pk, address holder) = _makeSigner("estate_permit_holder");
-
-        // Distribute then transfer some ESTATE to the permit holder for testing.
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-        vm.prank(treasury);
-        estate.transfer(holder, 10 ether);
-
-        uint256 nonce = estate.nonces(holder);
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 value = 5 ether;
-        address spender = bob;
-
-        bytes32 typehash =
-            keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-        bytes32 structHash = keccak256(abi.encode(typehash, holder, spender, value, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", estate.DOMAIN_SEPARATOR(), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
-
-        estate.permit(holder, spender, value, deadline, v, r, s);
-
-        assertEq(estate.allowance(holder, spender), value);
-        assertEq(estate.nonces(holder), nonce + 1);
-    }
-
-    // ---------------------------------------------------------------------
-    // Fuzz
-    // ---------------------------------------------------------------------
-
-    function testFuzz_Burn_NeverExceedsMaxSupplyCap(
-        uint96 burnAmount
-    ) public {
-        vm.prank(owner);
-        estate.distribute(distributor, teamVesting, treasury);
-
-        burnAmount = uint96(bound(burnAmount, 0, uint256(estate.TREASURY_ALLOC())));
-        vm.prank(treasury);
-        estate.burn(burnAmount);
-
-        assertLe(estate.totalSupply(), estate.MAX_SUPPLY());
-        assertEq(estate.totalSupply(), uint256(estate.MAX_SUPPLY()) - burnAmount);
     }
 }

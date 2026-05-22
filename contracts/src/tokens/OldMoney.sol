@@ -3,130 +3,147 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import {ERC20Pausable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title OldMoney
- * @notice $OLDM — the algorithmic stable side of the Old Money trust.
- *         Pegged to 1 cbETH TWAP on Base. Mint authority is gated to a single Trustees
- *         (Treasury) address; pause authority is held by a separate Guardian so that
- *         freezing transfers and governing the contract require two different keys.
- * @dev    Tomb-Finance analog: TOMB.
+ * @notice $OLDM — the algorithmic stable side of the Old Money trust. Pegged to 1 cbETH TWAP on Base.
+ * @dev    Direct port of Tomb Finance's BOMB token (Bomb.sol in bombmoney/bomb-contracts),
+ *         with one deliberate omission: the in-contract tax mechanism (TaxOffice / TaxOracle /
+ *         taxTiers / `_transferWithTax` override of `transferFrom`) is REMOVED. Peg defense and
+ *         contraction taxation are handled by a Uniswap V4 hook (PegDefenseHook) attached to the
+ *         OLDM/cbETH pool. The V4 hook taxes pool swaps only, not wallet-to-wallet transfers —
+ *         this is a behavior change vs Tomb and the explicit point of the V4 integration.
  *
- *         Security posture:
- *         - Trustees can mint, never burn from arbitrary holders. Users opt in to
- *           mechanism participation by approving Trustees; ERC20Burnable provides
- *           self-burn (`burn`) and allowance-based burn (`burnFrom`).
- *         - Guardian's only powers are pause / unpause. Owner cannot pause.
- *         - Ownable2Step prevents accidental loss of admin authority during rotations.
- *         - 18 decimals. cbETH is 18 decimals. There is no 6-decimal trap here, but
- *           every external integrator must still verify decimals at the boundary.
+ *         Non-logic-changing modernizations from Tomb's original:
+ *           - Solidity 0.6.12 → 0.8.26 (built-in overflow checks; SafeMath dropped).
+ *           - OZ v4 ERC20Burnable → OZ v5 ERC20Burnable.
+ *           - Single-step Ownable (via Tomb's `Operator`) → Ownable2Step (via [[Trustees]]).
+ *           - `require` strings → custom errors.
+ *           - Added `ERC20Permit` (EIP-2612) for gasless approvals — additive, no existing
+ *             behavior changed.
  *
- *         Key invariants (asserted in test/invariant/SupplyInvariants.t.sol):
- *         - `totalSupply()` equals Σ minted minus Σ burned across the lifetime of the contract.
- *         - Only `trustees` can successfully call `mint`.
- *         - Only `guardian` can call `pause` / `unpause`.
- *         - `setTrustees(0)` / `setGuardian(0)` revert.
+ *         Genesis distribution (matches Tomb's BOMB exact numbers):
+ *           - 11,000 OLDM → genesis pool (24h zero-LP boot)
+ *           - 140,000 OLDM → main reward pool (days 2-5)
+ *           - 9,000 OLDM → airdrop wallet
+ *           Constructor additionally mints 1 OLDM to the initial owner for initial LP setup
+ *           (matches Tomb's deploy-time seed mint).
+ *
+ *         Trustees ( = Tomb's operator) has unilateral mint and burnFrom authority. Wallet-level
+ *         self-burn (`burn`) is public.
  */
-contract OldMoney is ERC20Burnable, ERC20Pausable, ERC20Permit, Ownable2Step {
-    /// @notice Sole address authorized to mint OLDM (the Treasury contract).
-    address public trustees;
+contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
+    using SafeERC20 for IERC20;
 
-    /// @notice Sole address authorized to pause / unpause OLDM. Should be a Guardian multisig.
-    address public guardian;
+    /// @notice Initial mint to the genesis pool (24h zero-LP boot).
+    uint256 public constant INITIAL_GENESIS_POOL_DISTRIBUTION = 11_000 ether;
 
-    /// @notice Emitted when the trustees address is rotated.
-    event TrusteesSet(address indexed previousTrustees, address indexed newTrustees);
+    /// @notice Initial mint to the main OLDM-cbETH LP reward pool (days 2-5).
+    uint256 public constant INITIAL_MAIN_POOL_DISTRIBUTION = 140_000 ether;
 
-    /// @notice Emitted when the guardian address is rotated.
-    event GuardianSet(address indexed previousGuardian, address indexed newGuardian);
+    /// @notice Initial mint to the airdrop wallet.
+    uint256 public constant INITIAL_AIRDROP_WALLET_DISTRIBUTION = 9000 ether;
 
-    /// @notice Emitted on every mint, in addition to the standard ERC20 Transfer(0, to, amount).
-    ///         Themed alias for offchain consumers; indexers may listen for either.
+    /// @notice True after `distributeReward` has been called. One-shot.
+    bool public rewardPoolDistributed;
+
+    /// @notice Emitted exactly once when the genesis distribution executes.
+    event RewardPoolDistributed(address indexed genesisPool, address indexed mainPool, address indexed airdropWallet);
+
+    /// @notice Themed alias emitted alongside the standard Transfer(0, to, amount) on every mint.
     event Coined(address indexed to, uint256 amount);
 
-    error NotTrustees();
-    error NotGuardian();
+    /// @notice Emitted by `governanceRecoverUnsupported` when stuck tokens are rescued.
+    event UnsupportedTokenRecovered(IERC20 indexed token, uint256 amount, address indexed to);
+
+    error AlreadyDistributed();
     error ZeroAddress();
 
-    modifier onlyTrustees() {
-        if (msg.sender != trustees) revert NotTrustees();
-        _;
-    }
-
-    modifier onlyGuardian() {
-        if (msg.sender != guardian) revert NotGuardian();
-        _;
-    }
-
-    constructor(
-        address initialOwner
-    ) ERC20("Old Money", "OLDM") ERC20Permit("Old Money") Ownable(initialOwner) {}
-
-    // ---------------------------------------------------------------------
-    // Authority rotation
-    // ---------------------------------------------------------------------
-
-    /// @notice Set the Trustees — the only address allowed to mint OLDM.
-    /// @dev Should be the Treasury contract. Owner-only; production owner is the Timelock.
-    function setTrustees(
-        address newTrustees
-    ) external onlyOwner {
-        if (newTrustees == address(0)) revert ZeroAddress();
-        address previous = trustees;
-        trustees = newTrustees;
-        emit TrusteesSet(previous, newTrustees);
-    }
-
-    /// @notice Set the Guardian — the only address allowed to pause/unpause OLDM.
-    /// @dev Owner-only. Production guardian is a multisig distinct from owner.
-    function setGuardian(
-        address newGuardian
-    ) external onlyOwner {
-        if (newGuardian == address(0)) revert ZeroAddress();
-        address previous = guardian;
-        guardian = newGuardian;
-        emit GuardianSet(previous, newGuardian);
+    constructor() ERC20("Old Money", "OLDM") ERC20Permit("Old Money") Trustees() {
+        // Tomb-faithful: mint 1 unit to the deployer for initial pool setup / sanity check.
+        _mint(msg.sender, 1 ether);
     }
 
     // ---------------------------------------------------------------------
-    // Pause control
+    // Trustees-only supply control (matches Tomb's onlyOperator surface)
     // ---------------------------------------------------------------------
 
-    function pause() external onlyGuardian {
-        _pause();
-    }
-
-    function unpause() external onlyGuardian {
-        _unpause();
-    }
-
-    // ---------------------------------------------------------------------
-    // Supply control
-    // ---------------------------------------------------------------------
-
-    /// @notice Mint OLDM. Only callable by Trustees during expansion epochs.
-    /// @param to Recipient of the freshly minted OLDM.
-    /// @param amount Amount to mint (18-decimal).
+    /// @notice Mint OLDM. Returns true if the recipient's balance actually increased.
+    /// @dev Tomb signature: `mint(address recipient_, uint256 amount_) returns (bool)`.
     function mint(
-        address to,
+        address recipient,
         uint256 amount
-    ) external onlyTrustees {
-        _mint(to, amount);
-        emit Coined(to, amount);
+    ) public onlyTrustees returns (bool) {
+        uint256 balanceBefore = balanceOf(recipient);
+        _mint(recipient, amount);
+        emit Coined(recipient, amount);
+        return balanceOf(recipient) > balanceBefore;
+    }
+
+    /// @notice Burn OLDM from an arbitrary account (subject to the standard ERC20 allowance check).
+    /// @dev Trustees-only. Tomb's `BBond.burnFrom` and `Bomb.burnFrom` both gate this to operator;
+    ///      the standard `ERC20Burnable.burnFrom` is open to any approved spender. Restricting
+    ///      preserves the property that only the protocol mechanism can call `burnFrom`.
+    function burnFrom(
+        address account,
+        uint256 amount
+    ) public override onlyTrustees {
+        super.burnFrom(account, amount);
+    }
+
+    /// @notice Burn OLDM from the caller's own balance. Public — anyone can opt out by burning.
+    /// @dev Override preserves Tomb's explicit public restatement of the inherited symbol.
+    function burn(
+        uint256 amount
+    ) public override {
+        super.burn(amount);
     }
 
     // ---------------------------------------------------------------------
-    // OZ v5 inheritance resolution
+    // One-shot genesis distribution
     // ---------------------------------------------------------------------
 
-    function _update(
-        address from,
-        address to,
-        uint256 value
-    ) internal override(ERC20, ERC20Pausable) {
-        super._update(from, to, value);
+    /// @notice Mint the three Tomb-style initial allocations to their respective recipients.
+    ///         Callable at most once by trustees.
+    /// @param genesisPool   Receives `INITIAL_GENESIS_POOL_DISTRIBUTION`.
+    /// @param mainPool      Receives `INITIAL_MAIN_POOL_DISTRIBUTION`.
+    /// @param airdropWallet Receives `INITIAL_AIRDROP_WALLET_DISTRIBUTION`.
+    function distributeReward(
+        address genesisPool,
+        address mainPool,
+        address airdropWallet
+    ) external onlyTrustees {
+        if (rewardPoolDistributed) revert AlreadyDistributed();
+        if (genesisPool == address(0) || mainPool == address(0) || airdropWallet == address(0)) {
+            revert ZeroAddress();
+        }
+
+        rewardPoolDistributed = true;
+        _mint(genesisPool, INITIAL_GENESIS_POOL_DISTRIBUTION);
+        _mint(mainPool, INITIAL_MAIN_POOL_DISTRIBUTION);
+        _mint(airdropWallet, INITIAL_AIRDROP_WALLET_DISTRIBUTION);
+
+        emit RewardPoolDistributed(genesisPool, mainPool, airdropWallet);
+    }
+
+    // ---------------------------------------------------------------------
+    // Stuck-token rescue
+    // ---------------------------------------------------------------------
+
+    /// @notice Rescue an arbitrary ERC20 mistakenly sent to this contract.
+    /// @dev Matches Tomb's `governanceRecoverUnsupported`. Uses SafeERC20 because the recovered
+    ///      token may be USDT-shaped (no boolean return) per ETHSKILLS security guidance.
+    function governanceRecoverUnsupported(
+        IERC20 token,
+        uint256 amount,
+        address to
+    ) external onlyTrustees {
+        token.safeTransfer(to, amount);
+        emit UnsupportedTokenRecovered(token, amount, to);
     }
 }
