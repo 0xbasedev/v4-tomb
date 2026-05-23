@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useEffect, useRef, useState } from "react";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 
 import { lpWrapperAbi, positionManagerAbi } from "@/lib/abis";
 import { useDeployment, useV4Position } from "@/lib/hooks";
@@ -24,12 +24,44 @@ import { useToast } from "@/components/ToastProvider";
 interface WrapPanelProps {
   /** Title shown above the panel — varies by pool tab ("Main" / "Share"). */
   poolName: string;
+  /**
+   * Optional: pre-fill the input with this tokenId. Vault wires this from
+   * the MintPositionPanel's onMinted so a fresh mint flows straight into wrap.
+   * Uses a useEffect to react when the value changes; doesn't clobber the
+   * user's input if they're actively typing.
+   */
+  prefillTokenId?: bigint | null;
 }
 
-export function WrapPanel({ poolName }: WrapPanelProps) {
+export function WrapPanel({ poolName, prefillTokenId }: WrapPanelProps) {
   const deployment = useDeployment();
+  const { address, isConnected } = useAccount();
   const toast = useToast();
   const [tokenIdInput, setTokenIdInput] = useState("");
+  const lastPrefillRef = useRef<bigint | null>(null);
+
+  // How many V4 LP NFTs does the connected wallet hold? Surfaced as a hint so
+  // users know whether they have positions to wrap before they start hunting
+  // for a tokenId. Doesn't enumerate the tokenIds themselves (PositionManager
+  // isn't ERC-721 Enumerable) — Sprint C polish would scan Transfer events.
+  const nftCountRead = useReadContract({
+    address: deployment?.positionManager,
+    abi: positionManagerAbi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
+  });
+  const nftCount = nftCountRead.data ?? 0n;
+
+  // When the parent hands us a fresh tokenId from a successful mint, fill the
+  // input. Tracked with a ref to fire only once per new value — re-runs across
+  // re-renders for the same prefill don't clobber user edits.
+  useEffect(() => {
+    if (prefillTokenId !== undefined && prefillTokenId !== null && prefillTokenId !== lastPrefillRef.current) {
+      lastPrefillRef.current = prefillTokenId;
+      setTokenIdInput(prefillTokenId.toString());
+    }
+  }, [prefillTokenId]);
 
   const pos = useV4Position(tokenIdInput);
 
@@ -153,12 +185,34 @@ export function WrapPanel({ poolName }: WrapPanelProps) {
         Wrap your MONEY · WETH Position
       </h2>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
-      <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
+      <p className="mb-4 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
         The {poolName} accepts only the wrapper's ERC-20 share certificate. Provide
         the token ID of your full-range MONEY-WETH V4 LP, and the wrapper will
-        mint you shares equal to its liquidity. Mint a position via the Uniswap
-        V4 frontend if you do not yet hold one.
+        mint you shares equal to its liquidity. Mint a position above if you do
+        not yet hold one.
       </p>
+
+      {/* Wallet-context strip: shows how many V4 LP NFTs the wallet owns,
+          or a 'connect' nudge when no wallet is connected. */}
+      <div className="mb-6 flex items-center justify-center gap-3 border border-deco-gold/30 bg-deco-ground-soft px-4 py-2">
+        {!isConnected ? (
+          <span className="label-deco text-deco-gold-dark">
+            Connect a wallet on Base Sepolia to inspect your positions
+          </span>
+        ) : (
+          <>
+            <span className="label-deco text-deco-gold-dark">Your V4 LP NFTs</span>
+            <span className="font-display text-base italic text-deco-ivory">
+              {nftCount.toString()}
+            </span>
+            {nftCount === 0n && (
+              <span className="font-body text-xs italic text-deco-gold-dark">
+                · mint a position above
+              </span>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="mb-2 flex items-baseline justify-between px-1">
         <span className="label-deco text-deco-gold-dark">V4 LP Token ID</span>

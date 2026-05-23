@@ -31,9 +31,15 @@ const DYNAMIC_FEE_FLAG = 0x800000;
 
 interface MintPositionPanelProps {
   poolName: string;
+  /**
+   * Called when a mint receipt confirms with the parsed tokenId. The Vault
+   * uses this to hand the tokenId straight to the WrapPanel below, so the
+   * user doesn't have to copy/paste from BaseScan.
+   */
+  onMinted?: (tokenId: bigint) => void;
 }
 
-export function MintPositionPanel({ poolName }: MintPositionPanelProps) {
+export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps) {
   const deployment = useDeployment();
   const { address } = useAccount();
   const mint = useMintPosition();
@@ -160,10 +166,11 @@ export function MintPositionPanel({ poolName }: MintPositionPanelProps) {
       recipient: address,
       token0: token0 as Address,
       token1: token1 as Address,
-      onSuccess: () => {
+      onSuccess: (_hash, tokenId) => {
         tickRead.refetch();
         setMoneyInput("");
         setWethInput("");
+        if (tokenId !== null) onMinted?.(tokenId);
       },
     });
   }

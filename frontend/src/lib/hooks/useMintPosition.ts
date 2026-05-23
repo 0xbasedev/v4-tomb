@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { maxUint160, zeroAddress, type Address } from "viem";
+import { maxUint160, parseAbiItem, parseEventLogs, zeroAddress, type Address } from "viem";
 
 import { erc20Abi, permit2Abi, positionManagerAbi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 import { useToast } from "@/components/ToastProvider";
 import { encodeMintPosition } from "@/lib/swap/encodeMintPosition";
 import type { PoolKey } from "@/lib/swap/encodeV4Swap";
+
+/** ERC-721 Transfer event signature, used to extract the tokenId from a PositionManager mint. */
+const ERC721_TRANSFER = parseAbiItem(
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+);
 
 /**
  * Mint a MONEY-WETH V4 LP position via PositionManager.modifyLiquidities.
@@ -39,7 +44,13 @@ export interface MintSubmitArgs {
   /** Token addresses for the approval reads/writes (sorted: currency0 < currency1). */
   token0: Address;
   token1: Address;
-  onSuccess?: (txHash: `0x${string}`) => void;
+  /**
+   * Called once the mint receipt confirms. Receives the tx hash AND the
+   * tokenId parsed from the PositionManager's Transfer event — so the caller
+   * can chain straight into the Wrap flow without making the user dig through
+   * BaseScan to find their new NFT.
+   */
+  onSuccess?: (txHash: `0x${string}`, tokenId: bigint | null) => void;
 }
 
 type MintState =
@@ -142,14 +153,40 @@ export function useMintPosition() {
     if (r5.isError) return handleError(mintExec.error?.message ?? "Mint reverted");
     if (r5.isSuccess && mintExec.data) {
       const args = pendingRef.current;
+
+      // Parse the PositionManager Transfer event from the receipt to recover
+      // the new tokenId. The mint emits Transfer(0x0, recipient, tokenId);
+      // filter on PositionManager address + from=0x0 + to=recipient.
+      let mintedTokenId: bigint | null = null;
+      if (deployment && r5.data) {
+        try {
+          const logs = parseEventLogs({
+            abi: [ERC721_TRANSFER],
+            eventName: "Transfer",
+            logs: r5.data.logs,
+          });
+          const mintLog = logs.find(
+            (l) =>
+              l.address.toLowerCase() === deployment.positionManager.toLowerCase() &&
+              l.args.from === zeroAddress &&
+              l.args.to?.toLowerCase() === args?.recipient.toLowerCase(),
+          );
+          if (mintLog) mintedTokenId = mintLog.args.tokenId ?? null;
+        } catch {
+          // Best-effort — the caller still gets onSuccess with null tokenId
+        }
+      }
+
       toastIdRef.current &&
         toast.update(toastIdRef.current, {
           variant: "success",
           title: "Position Minted",
-          message: "Your V4 LP NFT is in your wallet. Wrap it below to stake.",
+          message: mintedTokenId !== null
+            ? `Token ID #${mintedTokenId.toString()} is in your wallet. Wrap below to stake.`
+            : "Your V4 LP NFT is in your wallet. Wrap it below to stake.",
           txHash: mintExec.data,
         });
-      args?.onSuccess?.(mintExec.data);
+      args?.onSuccess?.(mintExec.data, mintedTokenId);
       setState("done");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -84,6 +84,11 @@ export function TheVault() {
   const deployment = useDeployment();
   const meta = META[activeId];
 
+  // Lifted state: when MintPositionPanel mints, it hands the new tokenId here
+  // and the WrapPanel below picks it up via prefillTokenId. Lets the user go
+  // mint → wrap → stake without leaving the page or finding their NFT.
+  const [recentTokenId, setRecentTokenId] = useState<bigint | null>(null);
+
   const action = useApproveAndCall();
 
   function parseAmount(s: string): bigint {
@@ -296,8 +301,11 @@ export function TheVault() {
       {(activeId === "main" || activeId === "share") && (
         <section className="px-6 pb-12 md:px-12 md:pb-16">
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
-            <MintPositionPanel poolName={meta.formalName} />
-            <WrapPanel poolName={meta.formalName} />
+            <MintPositionPanel
+              poolName={meta.formalName}
+              onMinted={(tokenId) => setRecentTokenId(tokenId)}
+            />
+            <WrapPanel poolName={meta.formalName} prefillTokenId={recentTokenId} />
           </div>
         </section>
       )}
