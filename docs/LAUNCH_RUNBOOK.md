@@ -148,25 +148,95 @@ cast send <hook> 'setTreasury(address)' $TEAM_WALLET --rpc-url base_sepolia --pr
 
 ## 5 · Governance Rotation (pre-mainnet only)
 
-Before mainnet, rotate every admin-bearing contract from the deployer EOA to the Timelock. This is Sprint 14, two-phase, with the `TIMELOCK_DELAY` between queue and execute (default 24h).
+Before mainnet, rotate every admin-bearing contract from the deployer EOA to the Timelock. Two-phase, with the `TIMELOCK_DELAY` (default 24h) between queue and execute.
+
+**What rotates:**
+
+| Target | Mechanism | Reversible? |
+|---|---|---|
+| `$MONEY` / `$ESTATE` / `$TRUSTNOTE` / `PegDefenseHook` ownership | Ownable2Step (transferOwnership + acceptOwnership) | Two-step; queue can be cancelled |
+| `PegDefenseHook` trustees | one-step `transferTrustees` | One-way once queue executes |
+| Treasury operator + Genesis/Main/Share reward pool operators | one-step `setOperator` | One-way |
+| Boardroom operator | **stays as Treasury** (intentional — protocol-internal) | — |
+| V4PositionWrapper | no admin role (intentional) | — |
+
+The `/admin` Rotation Status panel reads on-chain state and surfaces which phase you're in, plus the exact env-var-prefilled command to run.
 
 ### 5.1 Queue
 
+Required env vars (all live in `frontend/src/lib/addresses.ts` for the active chain):
+
 ```bash
-forge script script/RotateGovernanceQueue.s.sol --rpc-url base --broadcast
+cd contracts
+set -a && source .env && set +a
+
+# Base Sepolia values (mirror frontend/src/lib/addresses.ts)
+export TIMELOCK=0x216452DeD9bB3eDc618A40E6BCf84c33167F03d1
+export MONEY=0xb650e095c528fAc0f7DBC57121c60176323d8177
+export ESTATE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
+export TRUSTNOTE=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
+export HOOK=0x8FF87C2B51eE70cA39B3ECD72B60db13ad86D088
+export TREASURY=0x928B72a3E734d6D07606d9655c55289D3a224c20
+export GENESIS_REWARD_POOL=0xBf511845D6252E622734681f2713131EF39a6487
+export MAIN_REWARD_POOL=0x3190962F3f0F50f3D486B3fa81D61088a06FAb2D
+export SHARE_REWARD_POOL=0x5193Ce115BA7df3d25c7f5dA4c29DA2CD7c890bC
+
+forge script script/RotateGovernanceQueue.s.sol \
+  --rpc-url base_sepolia --broadcast --slow
 ```
 
-Queues `transferOwnership` calls on every Ownable2Step + `setOperator` on every operator-bearing contract.
+**What it does:**
+1. `transferOwnership(Timelock)` on MONEY/ESTATE/TRUSTNOTE/HOOK (Ownable2Step → sets pendingOwner)
+2. `transferTrustees(Timelock)` on HOOK (one-step)
+3. `setOperator(Timelock)` on Treasury + Genesis/Main/Share pools (one-step)
+4. `queueTransaction(acceptOwnership)` on Timelock for MONEY/ESTATE/TRUSTNOTE/HOOK
+
+13 broadcasts total. **The script logs the ETA** — save it for Execute. If you didn't override, it's `(queue_block.timestamp + Timelock.delay() + 60)`.
+
+After this script: deployer has lost Treasury/Hook/reward-pool admin power. Token ownership is suspended (pendingOwner set, owner still deployer). The 24h clock starts.
 
 ### 5.2 Wait `TIMELOCK_DELAY` seconds (default 86,400 = 24h)
+
+The `/admin` Rotation Status panel will show "Phase · Awaiting Execute" during this window. The Treasury continues operating (keeper still ticks epochs; users still stake/withdraw/swap) — only the admin surface is paused.
 
 ### 5.3 Execute
 
 ```bash
-forge script script/RotateGovernanceExecute.s.sol --rpc-url base --broadcast
+cd contracts
+set -a && source .env && set +a
+
+export TIMELOCK=0x216452DeD9bB3eDc618A40E6BCf84c33167F03d1
+export MONEY=0xb650e095c528fAc0f7DBC57121c60176323d8177
+export ESTATE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
+export TRUSTNOTE=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
+export HOOK=0x8FF87C2B51eE70cA39B3ECD72B60db13ad86D088
+export ETA=<unix-timestamp-from-queue-log>
+
+forge script script/RotateGovernanceExecute.s.sol \
+  --rpc-url base_sepolia --broadcast --slow
 ```
 
-**After this:** every admin action must go through the Timelock's queue/execute pattern. The deployer EOA is no longer privileged.
+**What it does:** 4 `executeTransaction(acceptOwnership)` calls — one per token + hook. The Timelock pulls the queued txs and runs them against each target, finalizing the Ownable2Step transfer.
+
+After this script: Timelock owns MONEY/ESTATE/TRUSTNOTE/HOOK + is the operator/trustees of every privileged surface. The deployer EOA is no longer privileged. Every admin action now goes through the Timelock's queue/execute pattern (24h delay between proposing and acting).
+
+### 5.4 Verifying
+
+The `/admin` Rotation Status panel should show "Phase · Complete" — every row in its state table reads the Timelock address with an emerald check.
+
+Sanity check via cast:
+
+```bash
+cast call --rpc-url base_sepolia $TREASURY 'operator()(address)'   # expect Timelock
+cast call --rpc-url base_sepolia $MONEY 'owner()(address)'         # expect Timelock
+cast call --rpc-url base_sepolia $HOOK 'trustees()(address)'       # expect Timelock
+```
+
+### 5.5 If something goes wrong
+
+- **Forgot ETA before 24h elapsed** — recover from the queue script's transaction logs on BaseScan (`QueueTransaction` event includes the eta).
+- **Past the grace window (eta + 14 days)** — the queued txs are stale. You'd need to queue them again, which requires the Timelock admin (deployer at this point still, since acceptOwnership hasn't executed). Re-run RotateGovernanceQueue with `ETA=<new-time>`.
+- **Wrong address in a queue tx** — `cancelTransaction` on the Timelock as deployer/admin before the eta elapses. Re-queue with the correct values.
 
 ---
 

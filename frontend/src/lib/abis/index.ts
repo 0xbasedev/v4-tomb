@@ -8,3 +8,4 @@ export { lpWrapperAbi } from "./lpWrapper";
 export { permit2Abi } from "./permit2";
 export { universalRouterAbi, UR_COMMANDS, V4_ACTIONS } from "./universalRouter";
 export { genesisRewardPoolAbi } from "./genesisRewardPool";
+export { ownable2StepAbi } from "./ownable";

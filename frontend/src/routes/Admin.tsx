@@ -3,6 +3,7 @@ import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
 
 import { LaunchSequence } from "@/components/LaunchSequence";
+import { RotationStatusPanel } from "@/components/RotationStatusPanel";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { useToast } from "@/components/ToastProvider";
@@ -187,6 +188,8 @@ export function Admin() {
               })
             }
           />
+
+          <RotationStatusPanel />
         </>
       )}
     </div>
