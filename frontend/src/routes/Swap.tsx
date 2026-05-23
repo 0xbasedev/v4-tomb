@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatUnits, parseUnits, type Address } from "viem";
+import { useAccount, useReadContracts } from "wagmi";
 
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
@@ -8,8 +9,10 @@ import { TabBar } from "@/components/TabBar";
 import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
 
 import { useDeployment, usePoolPrice, useSwap } from "@/lib/hooks";
+import { erc20Abi } from "@/lib/abis";
 import { useToast } from "@/components/ToastProvider";
 import { maskDecimalInput } from "@/lib/util/decimal";
+import { formatToken } from "@/lib/format";
 
 /** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
 const DYNAMIC_FEE_FLAG = 0x800000;
@@ -87,8 +90,25 @@ export function Swap() {
   const poolMeta = POOLS[activeId];
   const liveHook = usePoolPrice();
   const deployment = useDeployment();
+  const { address } = useAccount();
   const swap = useSwap();
   const toast = useToast();
+
+  // Read MONEY + WETH balances so the SwapCard's MAX has something to fill
+  // and the disabled state can gate on actual funds.
+  const balances = useReadContracts({
+    allowFailure: false,
+    contracts:
+      deployment && address
+        ? [
+            { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [address] },
+            { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [address] },
+          ]
+        : [],
+    query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
+  });
+  const moneyBal = balances.data?.[0] ?? 0n;
+  const wethBal = balances.data?.[1] ?? 0n;
 
   // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
   // is not bound to any of our hooks, so for now we keep its spot at the
@@ -102,6 +122,14 @@ export function Swap() {
   const tokenIn = sellingBase ? poolMeta.base : poolMeta.quote;
   const tokenOut = sellingBase ? poolMeta.quote : poolMeta.base;
   const rate = sellingBase ? liveSpot : 1 / liveSpot;
+
+  // Active-direction tokenIn balance — drives the MAX button and the
+  // disabled state. Only MONEY-WETH is wired; ESTATE-WETH tokenIn is
+  // currently ESTATE which we don't read here (the panel is disabled
+  // for ESTATE-WETH anyway).
+  const tokenInBalance =
+    activeId === "money-weth" ? (sellingBase ? moneyBal : wethBal) : 0n;
+  const maxInDisplay = formatToken(tokenInBalance, 6);
 
   // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
   // hook actually has autoCalculateTax enabled. The schedule itself still
@@ -186,7 +214,7 @@ export function Swap() {
         hooks: deployment.hook,
       },
       zeroForOne,
-      tokenIn,
+      tokenIn: tokenIn as Address,
       amountIn,
       amountOutMinimum,
       onSuccess: () => {
@@ -243,20 +271,26 @@ export function Swap() {
         <SwapCard
           tokenIn={tokenIn}
           tokenOut={tokenOut}
-          maxIn="0"
+          maxIn={maxInDisplay}
           rate={rate}
           hookFeeBps={poolMeta.baseFeeBps}
           taxBps={tier.bps}
           tierLabel={tier.label}
           onFlip={() => setSellingBase((b) => !b)}
           onSubmit={handleSwapSubmit}
-          disabled={swap.isInFlight || activeId !== "money-weth"}
+          disabled={
+            swap.isInFlight ||
+            activeId !== "money-weth" ||
+            (activeId === "money-weth" && tokenInBalance === 0n)
+          }
           disabledReason={
             activeId !== "money-weth"
               ? "ESTATE-WETH pool is not yet deployed."
               : swap.isInFlight
                 ? "Swap in flight…"
-                : undefined
+                : tokenInBalance === 0n
+                  ? `No ${tokenIn} in your wallet.`
+                  : undefined
           }
         />
       </section>
