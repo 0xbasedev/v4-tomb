@@ -18,17 +18,23 @@ const PRESETS = [
   { label: "0.5%", bps: 50 },
   { label: "1.0%", bps: 100 },
   { label: "5.0%", bps: 500 },
+  { label: "50%", bps: 5_000 },
 ] as const;
 
 interface SlippageChipsProps {
   /** Current slippage in basis points (100 = 1%). */
   valueBps: number;
   onChange: (bps: number) => void;
-  /** Optional cap on user-entered slippage, in bps. Default 5000 (50%). */
+  /**
+   * Optional cap on user-entered slippage, in bps. Default 9900 (99%) —
+   * needed for testnet pools where seed depth is small enough that any
+   * meaningful swap has huge price impact. Production mainnet pools would
+   * never need anywhere near this; user should normally pick 0.5–5%.
+   */
   maxBps?: number;
 }
 
-export function SlippageChips({ valueBps, onChange, maxBps = 5000 }: SlippageChipsProps) {
+export function SlippageChips({ valueBps, onChange, maxBps = 9_900 }: SlippageChipsProps) {
   const [customRaw, setCustomRaw] = useState("");
 
   // "Custom" is active when valueBps doesn't match any preset.
