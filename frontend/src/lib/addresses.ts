@@ -52,6 +52,10 @@ export interface OldMoneyDeployment {
   poolManager: Address;
   /** V4 PositionManager on this chain. */
   positionManager: Address;
+  /** Canonical Permit2 (same address every chain). */
+  permit2: Address;
+  /** UniversalRouter v2 (V4-capable variant) on this chain. */
+  universalRouter: Address;
 }
 
 export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
@@ -71,6 +75,10 @@ export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
     weth: "0x4200000000000000000000000000000000000006",
     poolManager: "0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408",
     positionManager: "0x4B2C77d209D3405F41a037Ec6c77F7F5b8e2ca80",
+    permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    // UniversalRouter v2 (V4-capable). Source: developers.uniswap.org/contracts/v4/deployments.
+    // VERIFY before any mainnet wiring — Uniswap may rotate addresses between versions.
+    universalRouter: "0x492E6456D9528771018DeB9E87ef7750EF184104",
   },
   [CHAIN_IDS.base]: null, // Mainnet deploy pending the testnet shakedown.
 };

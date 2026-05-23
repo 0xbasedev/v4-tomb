@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits, type Address } from "viem";
 
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
@@ -7,8 +7,13 @@ import { SwapCard } from "@/components/SwapCard";
 import { TabBar } from "@/components/TabBar";
 import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
 
-import { usePoolPrice } from "@/lib/hooks";
+import { useDeployment, usePoolPrice, useSwap } from "@/lib/hooks";
 import { useToast } from "@/components/ToastProvider";
+import { maskDecimalInput } from "@/lib/util/decimal";
+
+/** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
+const DYNAMIC_FEE_FLAG = 0x800000;
+const MONEY_WETH_TICK_SPACING = 60;
 
 /**
  * The Exchange — V4 swap with PegDefenseHook tax surface.
@@ -81,6 +86,8 @@ export function Swap() {
 
   const poolMeta = POOLS[activeId];
   const liveHook = usePoolPrice();
+  const deployment = useDeployment();
+  const swap = useSwap();
   const toast = useToast();
 
   // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
@@ -112,18 +119,65 @@ export function Swap() {
           ? `Tax Active · ${tier.label}`
           : "Tax Disabled";
 
-  // Submission is intentionally stubbed for this release. V4 swap requires
-  // either the UniversalRouter (with Permit2 setup) or a direct PoolManager
-  // unlock+callback. Both are substantial enough to warrant their own focused
-  // turn; surfacing the swap as a coming-soon notice is the honest move
-  // versus shipping a half-working broadcast path against real funds.
-  function handleSwapSubmit() {
-    toast.push({
-      variant: "info",
-      title: "Swap submission pending",
-      message:
-        "V4 routing is wired through the UniversalRouter + Permit2 in a follow-up turn. Until then, swap directly on the V4 frontend at app.uniswap.org.",
-      durationMs: 8_000,
+  // Compose the V4 swap pipeline. MONEY-WETH only — ESTATE-WETH isn't a deployed pool yet.
+  function handleSwapSubmit(amountStr: string) {
+    if (activeId !== "money-weth") {
+      toast.push({
+        variant: "info",
+        title: "Pool not yet live",
+        message: "ESTATE-WETH is not deployed. Trade MONEY-WETH on the I tab instead.",
+        durationMs: 6_000,
+      });
+      return;
+    }
+    if (!deployment) {
+      toast.push({
+        variant: "error",
+        title: "Wallet not connected",
+        message: "Connect on Base Sepolia to swap.",
+      });
+      return;
+    }
+
+    const clean = maskDecimalInput(amountStr);
+    let amountIn: bigint;
+    try {
+      amountIn = parseUnits(clean || "0", 18);
+    } catch {
+      return;
+    }
+    if (amountIn <= 0n) return;
+
+    // Pool key for MONEY-WETH: WETH sorts as currency0 on Base/Base Sepolia
+    // (0x4200... < 0xb650...). Verify via the hook's moneyIsCurrency0 flag
+    // in case we ever flip token addresses (e.g., mainnet rotation).
+    const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
+    const currency0: Address = wethIsToken0 ? deployment.weth : deployment.money;
+    const currency1: Address = wethIsToken0 ? deployment.money : deployment.weth;
+
+    // zeroForOne: are we swapping currency0 → currency1?
+    // sellingBase = true → selling MONEY → we want MONEY -> WETH.
+    //   If MONEY is currency1, then currency1 -> currency0, so zeroForOne = false.
+    const sellingMoney = sellingBase;
+    const zeroForOne = wethIsToken0 ? !sellingMoney : sellingMoney;
+
+    const tokenIn: Address = zeroForOne ? currency0 : currency1;
+
+    swap.submit({
+      poolKey: {
+        currency0,
+        currency1,
+        fee: DYNAMIC_FEE_FLAG,
+        tickSpacing: MONEY_WETH_TICK_SPACING,
+        hooks: deployment.hook,
+      },
+      zeroForOne,
+      tokenIn,
+      amountIn,
+      amountOutMinimum: 0n /* TODO: slippage UI lands in Sprint C polish */,
+      onSuccess: () => {
+        liveHook.refetch();
+      },
     });
   }
 
@@ -182,6 +236,14 @@ export function Swap() {
           tierLabel={tier.label}
           onFlip={() => setSellingBase((b) => !b)}
           onSubmit={handleSwapSubmit}
+          disabled={swap.isInFlight || activeId !== "money-weth"}
+          disabledReason={
+            activeId !== "money-weth"
+              ? "ESTATE-WETH pool is not yet deployed."
+              : swap.isInFlight
+                ? "Swap in flight…"
+                : undefined
+          }
         />
       </section>
 
