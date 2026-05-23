@@ -1,10 +1,14 @@
 import { useState } from "react";
+import { formatUnits } from "viem";
 
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { SwapCard } from "@/components/SwapCard";
 import { TabBar } from "@/components/TabBar";
 import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
+
+import { usePoolPrice } from "@/lib/hooks";
+import { useToast } from "@/components/ToastProvider";
 
 /**
  * The Exchange — V4 swap with PegDefenseHook tax surface.
@@ -75,17 +79,53 @@ export function Swap() {
   // Direction: when true, base → quote (sell). When false, quote → base (buy).
   const [sellingBase, setSellingBase] = useState(true);
 
-  const pool = POOLS[activeId];
-  const tokenIn = sellingBase ? pool.base : pool.quote;
-  const tokenOut = sellingBase ? pool.quote : pool.base;
-  // Rate from tokenIn → tokenOut, derived from spot.
-  const rate = sellingBase ? pool.spotPrice : 1 / pool.spotPrice;
+  const poolMeta = POOLS[activeId];
+  const liveHook = usePoolPrice();
+  const toast = useToast();
 
-  // Tax only applies when selling MONEY into the money-weth pool and price < 1.0.
-  const tier =
-    activeId === "money-weth" && sellingBase
-      ? tierAt(pool.spotPrice)
-      : { label: "No Tax", bps: 0 };
+  // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
+  // is not bound to any of our hooks, so for now we keep its spot at the
+  // hardcoded placeholder — a future turn ships a generic V4 PoolManager
+  // getSlot0 reader for non-hooked pools.
+  const liveSpot =
+    activeId === "money-weth" && liveHook.bound && liveHook.price > 0n
+      ? Number(formatUnits(liveHook.price, 18))
+      : poolMeta.spotPrice;
+
+  const tokenIn = sellingBase ? poolMeta.base : poolMeta.quote;
+  const tokenOut = sellingBase ? poolMeta.quote : poolMeta.base;
+  const rate = sellingBase ? liveSpot : 1 / liveSpot;
+
+  // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
+  // hook actually has autoCalculateTax enabled. The schedule itself still
+  // renders below — it's informational regardless of the on/off state.
+  const taxActive =
+    activeId === "money-weth" && sellingBase && liveHook.taxOn && liveSpot < 1.0;
+  const tier = taxActive ? tierAt(liveSpot) : { label: "No Tax", bps: 0 };
+
+  const hookStateLabel =
+    activeId !== "money-weth"
+      ? "—"
+      : !liveHook.bound
+        ? "Awaiting Pool Init"
+        : liveHook.taxOn
+          ? `Tax Active · ${tier.label}`
+          : "Tax Disabled";
+
+  // Submission is intentionally stubbed for this release. V4 swap requires
+  // either the UniversalRouter (with Permit2 setup) or a direct PoolManager
+  // unlock+callback. Both are substantial enough to warrant their own focused
+  // turn; surfacing the swap as a coming-soon notice is the honest move
+  // versus shipping a half-working broadcast path against real funds.
+  function handleSwapSubmit() {
+    toast.push({
+      variant: "info",
+      title: "Swap submission pending",
+      message:
+        "V4 routing is wired through the UniversalRouter + Permit2 in a follow-up turn. Until then, swap directly on the V4 frontend at app.uniswap.org.",
+      durationMs: 8_000,
+    });
+  }
 
   return (
     <div className="bg-deco-ground">
@@ -137,10 +177,11 @@ export function Swap() {
           tokenOut={tokenOut}
           maxIn="0"
           rate={rate}
-          hookFeeBps={pool.baseFeeBps}
+          hookFeeBps={poolMeta.baseFeeBps}
           taxBps={tier.bps}
           tierLabel={tier.label}
           onFlip={() => setSellingBase((b) => !b)}
+          onSubmit={handleSwapSubmit}
         />
       </section>
 
@@ -153,22 +194,22 @@ export function Swap() {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="Spot Quotation"
-              value={pool.spotPrice.toFixed(4)}
-              hint={`WETH per 1 ${pool.base}`}
+              value={liveSpot.toFixed(4)}
+              hint={`WETH per 1 ${poolMeta.base}`}
             />
             <StatTile
               label="Liquidity"
-              value={pool.liquidity}
+              value={poolMeta.liquidity}
               hint="WETH · Pool Depth"
             />
             <StatTile
               label="Volume · 24h"
-              value={pool.volume24h}
+              value={poolMeta.volume24h}
               hint="WETH · Trailing"
             />
             <StatTile
               label="Hook State"
-              value={pool.hookState}
+              value={hookStateLabel}
               hint={activeId === "money-weth" ? "PegDefenseHook" : "No Hook Attached"}
             />
           </div>
@@ -179,7 +220,7 @@ export function Swap() {
       {activeId === "money-weth" && (
         <section className="px-6 pb-14 md:px-12 md:pb-16">
           <div className="mx-auto max-w-3xl">
-            <TaxScheduleTable activePriceEth={pool.spotPrice} />
+            <TaxScheduleTable activePriceEth={liveSpot} />
           </div>
         </section>
       )}

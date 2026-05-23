@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 
+import { maskDecimalInput } from "@/lib/util/decimal";
+
 /**
  * BondForm — input field + computed preview + CTA, used for the Trust Notes
  * acquire/redeem flows.
@@ -68,19 +70,21 @@ export function BondForm({
           type="button"
           onClick={() => setAmount(maxAvailable)}
           disabled={disabled}
-          className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light disabled:opacity-40"
+          aria-label={`Set amount to maximum (${maxAvailable} ${inputAsset})`}
+          className="label-deco rounded-none text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold disabled:opacity-40"
         >
           Max · {maxAvailable}
         </button>
       </div>
-      <div className="mb-6 flex items-center border border-deco-gold/50 bg-deco-ground">
+      <div className="mb-6 flex items-center border border-deco-gold/50 bg-deco-ground focus-within:border-deco-gold">
         <input
           type="text"
           inputMode="decimal"
           placeholder="0.00"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => setAmount(maskDecimalInput(e.target.value))}
           disabled={disabled}
+          aria-label={`${inputLabel} in ${inputAsset}`}
           className="font-display w-full bg-transparent px-4 py-3 text-right text-2xl text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none disabled:opacity-50"
         />
         <span

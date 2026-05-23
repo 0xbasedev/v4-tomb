@@ -196,6 +196,13 @@
     inset: 2px;
     border-color: theme(colors.deco-ground);
   }
+  .btn-deco:focus-visible {
+    outline: 2px solid theme(colors.deco-gold);
+    outline-offset: 4px;
+  }
+  .btn-deco:disabled {
+    cursor: not-allowed;
+  }
 
   .btn-deco-primary {
     color: theme(colors.deco-ground);

@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 
+import { maskDecimalInput } from "@/lib/util/decimal";
+
 /**
  * SwapCard — token in / token out / flip / quote / CTA.
  *
@@ -89,19 +91,21 @@ export function SwapCard({
           type="button"
           onClick={() => setAmount(maxIn)}
           disabled={disabled}
-          className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light disabled:opacity-40"
+          aria-label={`Set amount to maximum (${maxIn} ${tokenIn})`}
+          className="label-deco rounded-none text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold disabled:opacity-40"
         >
           Max · {maxIn}
         </button>
       </div>
-      <div className="mb-4 flex items-center border border-deco-gold/50 bg-deco-ground">
+      <div className="mb-4 flex items-center border border-deco-gold/50 bg-deco-ground focus-within:border-deco-gold">
         <input
           type="text"
           inputMode="decimal"
           placeholder="0.00"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => setAmount(maskDecimalInput(e.target.value))}
           disabled={disabled}
+          aria-label={`Amount of ${tokenIn} to swap`}
           className="font-display w-full bg-transparent px-4 py-3 text-right text-2xl text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none disabled:opacity-50"
         />
         <div className="mr-4 flex items-center gap-2">
@@ -122,7 +126,7 @@ export function SwapCard({
           onClick={onFlip}
           disabled={disabled}
           aria-label="Reverse swap direction"
-          className="group flex h-10 w-10 items-center justify-center border border-deco-gold/50 bg-deco-ground-soft text-deco-gold transition-colors hover:border-deco-gold hover:text-deco-gold-light disabled:opacity-40"
+          className="group flex h-10 w-10 items-center justify-center border border-deco-gold/50 bg-deco-ground-soft text-deco-gold transition-colors hover:border-deco-gold hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold disabled:opacity-40"
         >
           <span className="text-lg leading-none">◇</span>
         </button>
