@@ -11,7 +11,7 @@ import {
   useTreasuryEvents,
   type TreasuryEventKind,
 } from "@/lib/hooks";
-import { formatToken, formatPrice, formatCountdown } from "@/lib/format";
+import { formatToken, formatTokenAuto, formatPrice, formatCountdown } from "@/lib/format";
 
 /**
  * Dashboard — "The Ledger." Live operating state of the Trust.
@@ -183,28 +183,28 @@ export function Dashboard() {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="MONEY · Circulating"
-              value={formatToken(market.circulatingSupply, 0)}
-              hint="Per Treasury"
+              value={formatTokenAuto(market.circulatingSupply)}
+              hint="Per Treasury (excludes reward pools + airdrop)"
             />
             <StatTile
               label="MONEY · Total Supply"
-              value={formatToken(supplies.moneySupply, 0)}
-              hint="Token-Level"
+              value={formatTokenAuto(supplies.moneySupply)}
+              hint="Including Treasury + Pools"
             />
             <StatTile
               label="ESTATE · Outstanding"
-              value={formatToken(supplies.estateSupply, 0)}
+              value={formatTokenAuto(supplies.estateSupply)}
               hint="Hard Cap 70,000"
             />
             <StatTile
               label="Trust Notes · Outstanding"
-              value={formatToken(supplies.trustNoteSupply, 0)}
+              value={formatTokenAuto(supplies.trustNoteSupply)}
               hint="Bonds Held"
             />
             <StatTile
               label="Treasury · Reserve"
-              value={formatToken(market.seigniorageSaved, 0)}
-              hint="MONEY · For Redemption"
+              value={formatTokenAuto(market.seigniorageSaved)}
+              hint="MONEY · Empty in Bootstrap"
             />
             <StatTile label="Genesis Pool" value="11,000" hint="MONEY · 24-Hour Window" />
             <StatTile label="Main Pool" value="140,000" hint="MONEY · 9-Day Distribution" />

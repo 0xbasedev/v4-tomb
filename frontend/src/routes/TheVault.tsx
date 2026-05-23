@@ -118,6 +118,16 @@ export function TheVault() {
   });
   const stakeLabel = pid0.exists && symbolRead.data ? symbolRead.data : meta.defaultStakeLabel;
 
+  // Read the stake token's balance held by the pool itself — total staked across all users.
+  const poolBalanceRead = useReadContract({
+    address: pid0.stakeToken,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: poolAddress ? [poolAddress] : undefined,
+    query: { enabled: !!pid0.stakeToken && !!poolAddress && pid0.exists, refetchInterval: 15_000 },
+  });
+  const poolBalanceDisplay = pid0.exists ? formatToken(poolBalanceRead.data ?? 0n, 4) : "—";
+
   // Window-end countdown. Genesis/Main expose poolEndTime; Share extends 370d.
   // We only render poolStartTime + a fixed window duration, since the contract
   // doesn't expose a public end-time view for Share.
@@ -273,7 +283,7 @@ export function TheVault() {
                     allocPoint={Number(pid0.allocPoint)}
                     yourBalance={walletDisplay}
                     yourStake={yourStakeDisplay}
-                    poolBalance="—" /* Sprint C: token.balanceOf(pool) read */
+                    poolBalance={poolBalanceDisplay}
                   />
                 </tbody>
               </table>

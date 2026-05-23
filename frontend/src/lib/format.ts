@@ -29,6 +29,37 @@ export function formatToken(
   return fracPart ? `${withSep}.${fracPart}` : withSep;
 }
 
+/**
+ * Auto-precision formatter: picks decimals based on magnitude so values
+ * never display as "0" when they're actually non-zero, and never bloat with
+ * trailing zeros for large round numbers.
+ *
+ *   >= 1000   →  0 decimals  ("11,000")
+ *   >= 1      →  2 decimals  ("1.50", "999.99")
+ *   >= 0.01   →  4 decimals  ("0.5400", "0.1092")
+ *   < 0.01    →  6 decimals  ("0.000123")
+ *   == 0      →  "0"
+ *   undefined →  "—"
+ */
+export function formatTokenAuto(value: bigint | undefined | null): string {
+  if (value === undefined || value === null) return "—";
+  if (value === 0n) return "0";
+  const raw = formatUnits(value, 18);
+  const num = parseFloat(raw);
+  if (!isFinite(num)) return "—";
+
+  let decimals: number;
+  if (num >= 1000) decimals = 0;
+  else if (num >= 1) decimals = 2;
+  else if (num >= 0.01) decimals = 4;
+  else decimals = 6;
+
+  const fixed = num.toFixed(decimals);
+  const [intPart, fracPart] = fixed.split(".");
+  const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fracPart ? `${withSep}.${fracPart}` : withSep;
+}
+
 /** Format a 1e18-scaled price as a 4-decimal price string. */
 export function formatPrice(value: bigint | undefined | null): string {
   if (value === undefined || value === null || value === 0n) return "—";
