@@ -1,7 +1,7 @@
 /**
- * Minimal ERC-20 read surface used by the frontend. Wagmi infers types from the
- * `as const` array, so the function names + arg shapes flow through to typed
- * useReadContract calls.
+ * Minimal ERC-20 surface used by the frontend. Reads + the one write we use
+ * (approve). Wagmi infers types from the `as const` array, so the function
+ * names + arg shapes flow through to typed useReadContract calls.
  */
 export const erc20Abi = [
   {
@@ -41,5 +41,15 @@ export const erc20Abi = [
       { name: "spender", type: "address" },
     ],
     outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
