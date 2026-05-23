@@ -87,7 +87,7 @@ export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
     // UniversalRouter v2 (V4-capable). Source: developers.uniswap.org/contracts/v4/deployments.
     // VERIFY before any mainnet wiring — Uniswap may rotate addresses between versions.
     universalRouter: "0x492E6456D9528771018DeB9E87ef7750EF184104",
-    miniSwapRouter: "0xd76d5400b4796A3889dF9fCc3715f4C79d56cFAe",
+    miniSwapRouter: "0xD76d5400b4796A3889Df9fCC3715F4c79D56cFae",
     deployBlock: 41_868_762n,
   },
   [CHAIN_IDS.base]: null, // Mainnet deploy pending the testnet shakedown.

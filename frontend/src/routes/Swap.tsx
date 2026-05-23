@@ -12,7 +12,7 @@ import { useDeployment, usePoolPrice, useSwap } from "@/lib/hooks";
 import { erc20Abi } from "@/lib/abis";
 import { useToast } from "@/components/ToastProvider";
 import { maskDecimalInput } from "@/lib/util/decimal";
-import { formatToken } from "@/lib/format";
+import { formatToken, formatTokenAuto } from "@/lib/format";
 
 /** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
 const DYNAMIC_FEE_FLAG = 0x800000;
@@ -109,6 +109,25 @@ export function Swap() {
   });
   const moneyBal = balances.data?.[0] ?? 0n;
   const wethBal = balances.data?.[1] ?? 0n;
+
+  // Pool depth — what the PoolManager holds. On a chain where MONEY only
+  // lives in this one V4 pool, MONEY.balanceOf(PoolManager) equals exactly
+  // our pool's MONEY. WETH may live in other V4 pools on the same chain;
+  // on Base Sepolia our pool is currently the only WETH-bearing one so the
+  // read is accurate. Mainnet should swap to a proper getLiquidity reader
+  // via the V4 StateView contract.
+  const poolDepth = useReadContracts({
+    allowFailure: false,
+    contracts: deployment
+      ? [
+          { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [deployment.poolManager] },
+          { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [deployment.poolManager] },
+        ]
+      : [],
+    query: { enabled: !!deployment, refetchInterval: 15_000 },
+  });
+  const poolMoney = poolDepth.data?.[0] ?? 0n;
+  const poolWeth = poolDepth.data?.[1] ?? 0n;
 
   // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
   // is not bound to any of our hooks, so for now we keep its spot at the
@@ -308,14 +327,14 @@ export function Swap() {
               hint={`WETH per 1 ${poolMeta.base}`}
             />
             <StatTile
-              label="Liquidity"
-              value={poolMeta.liquidity}
-              hint="WETH · Pool Depth"
+              label="Pool · MONEY"
+              value={activeId === "money-weth" ? formatTokenAuto(poolMoney) : "—"}
+              hint="$MONEY held by V4 PoolManager"
             />
             <StatTile
-              label="Volume · 24h"
-              value={poolMeta.volume24h}
-              hint="WETH · Trailing"
+              label="Pool · WETH"
+              value={activeId === "money-weth" ? formatTokenAuto(poolWeth) : "—"}
+              hint="$WETH held by V4 PoolManager"
             />
             <StatTile
               label="Hook State"
