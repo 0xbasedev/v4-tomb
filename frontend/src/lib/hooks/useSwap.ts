@@ -1,39 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAccount, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { maxUint160, zeroAddress, type Address } from "viem";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { zeroAddress, type Address } from "viem";
 
-import {
-  erc20Abi,
-  permit2Abi,
-  universalRouterAbi,
-} from "@/lib/abis";
+import { erc20Abi, miniSwapRouterAbi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 import { useToast } from "@/components/ToastProvider";
-import { encodeV4Swap, type PoolKey } from "@/lib/swap/encodeV4Swap";
+import type { PoolKey } from "@/lib/swap/encodeV4Swap";
 
 /**
- * Orchestrate a UniversalRouter V4 swap.
+ * Orchestrate a MiniSwapRouter swap.
  *
- * The full chain on a cold cache is FOUR wallet pops:
- *   1. tokenIn.approve(permit2, max)         — first time only, ERC-20 leg
- *   2. permit2.approve(tokenIn, UR, max, exp) — first time only, Permit2 leg
- *   3. UR.execute(commands, inputs, deadline) — every swap
+ * Replaces the prior UniversalRouter + Permit2 path. Reasoning in
+ * src/swap/MiniSwapRouter.sol — Uniswap's UR has shifted ExactInputSingleParams
+ * shape across versions, making frontend encoding brittle. Our router takes
+ * a single calldata shape we own.
  *
- * The hook reads the current state of (1) and (2) and skips them when allowances
- * are already sufficient. Most users will see a single signature for repeat swaps
- * with the same token + reasonably-soon expiration.
+ * Cold-cache flow is 2 wallet pops:
+ *   1. tokenIn.approve(router, amountIn)  — plain ERC-20, no Permit2
+ *   2. router.swapExactIn(poolKey, zeroForOne, amountIn, minOut, recipient)
  *
- * Toast lifecycle mirrors useApproveAndCall — pending toast upgraded to success
- * or error in place, with BaseScan link on success.
+ * Repeat swaps in the same direction with the same amount-ish: 1 pop
+ * (allowance still good).
  *
- * Slippage: amountOutMinimum currently 0n (no protection). Sprint C polish
- * lets the user specify a slippage tolerance (e.g., 50 bps) and we'd multiply
- * the expected output by (10_000 - slippageBps) / 10_000.
+ * Slippage protection: amountOutMin is checked inside MiniSwapRouter and
+ * reverts cleanly with TooLittleReceived(min, actual) — a real revert reason
+ * the frontend / wallet can decode, not the "exceeds max gas" wall we hit
+ * with UR.
  */
-
-const PERMIT2_APPROVE_EXPIRATION = Number(
-  BigInt(Math.floor(Date.now() / 1000)) + 30n * 24n * 60n * 60n,
-); // 30 days from "now"; refreshed per-submit below
 
 export interface SwapSubmitArgs {
   poolKey: PoolKey;
@@ -44,7 +37,7 @@ export interface SwapSubmitArgs {
   onSuccess?: () => void;
 }
 
-type SwapState = "idle" | "approvingErc20" | "approvingPermit2" | "swapping" | "done" | "error";
+type SwapState = "idle" | "approving" | "swapping" | "done" | "error";
 
 export function useSwap() {
   const deployment = useDeployment();
@@ -55,93 +48,67 @@ export function useSwap() {
   const pendingRef = useRef<SwapSubmitArgs | null>(null);
   const [state, setState] = useState<SwapState>("idle");
 
-  const erc20Approve = useWriteContract();
-  const permit2Approve = useWriteContract();
-  const swapExec = useWriteContract();
+  const approve = useWriteContract();
+  const exec = useWriteContract();
+  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data });
+  const execReceipt = useWaitForTransactionReceipt({ hash: exec.data });
 
-  const erc20Receipt = useWaitForTransactionReceipt({ hash: erc20Approve.data });
-  const permit2Receipt = useWaitForTransactionReceipt({ hash: permit2Approve.data });
-  const swapReceipt = useWaitForTransactionReceipt({ hash: swapExec.data });
-
-  // Read allowances + permit2 allowance for the in-flight token. We deliberately
-  // accept that the caller drives the read via `submit` — we don't pre-subscribe
-  // to every potential token. The read happens fresh inside submit().
-  const enabledRead = !!deployment && !!pendingRef.current;
-  const checkRead = useReadContracts({
-    allowFailure: false,
-    contracts:
-      enabledRead && pendingRef.current && deployment
-        ? [
-            {
-              address: pendingRef.current.tokenIn,
-              abi: erc20Abi,
-              functionName: "allowance",
-              args: [user, deployment.permit2],
-            },
-            {
-              address: deployment.permit2,
-              abi: permit2Abi,
-              functionName: "allowance",
-              args: [user, pendingRef.current.tokenIn, deployment.universalRouter],
-            },
-          ]
-        : [],
-    query: { enabled: enabledRead },
+  // Track tokenIn allowance for the MiniSwapRouter so submit() can fast-path
+  // past approve when the allowance already covers the swap.
+  const allowanceRead = useReadContract({
+    address: pendingRef.current?.tokenIn,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: deployment ? [user, deployment.miniSwapRouter] : undefined,
+    query: { enabled: !!deployment && !!pendingRef.current?.tokenIn },
   });
 
-  // ----- State machine transitions -----
-
-  // ERC-20 approve confirmed → check Permit2 leg
+  // Approve confirmed → submit swap
   useEffect(() => {
-    if (state !== "approvingErc20") return;
-    if (erc20Receipt.isError) return handleError(erc20Approve.error?.message ?? "ERC-20 approve reverted");
-    if (erc20Receipt.isSuccess) advanceFromErc20Approved();
+    if (state !== "approving") return;
+    if (approveReceipt.isError) {
+      handleError(approve.error?.message ?? "Approval reverted");
+      return;
+    }
+    if (approveReceipt.isSuccess) submitSwapCall();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, erc20Receipt.isSuccess, erc20Receipt.isError]);
-
-  // Permit2 approve confirmed → submit swap
-  useEffect(() => {
-    if (state !== "approvingPermit2") return;
-    if (permit2Receipt.isError) return handleError(permit2Approve.error?.message ?? "Permit2 approve reverted");
-    if (permit2Receipt.isSuccess) advanceFromPermit2Approved();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, permit2Receipt.isSuccess, permit2Receipt.isError]);
+  }, [state, approveReceipt.isSuccess, approveReceipt.isError]);
 
   // Swap confirmed → done
   useEffect(() => {
     if (state !== "swapping") return;
-    if (swapReceipt.isError) return handleError(swapExec.error?.message ?? "Swap reverted");
-    if (swapReceipt.isSuccess) {
+    if (execReceipt.isError) {
+      handleError(exec.error?.message ?? "Swap reverted");
+      return;
+    }
+    if (execReceipt.isSuccess) {
       const args = pendingRef.current;
       toastIdRef.current &&
         toast.update(toastIdRef.current, {
           variant: "success",
           title: "Swap Confirmed",
           message: "Tokens delivered to your wallet.",
-          txHash: swapExec.data,
+          txHash: exec.data,
         });
       args?.onSuccess?.();
       setState("done");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, swapReceipt.isSuccess, swapReceipt.isError]);
+  }, [state, execReceipt.isSuccess, execReceipt.isError]);
 
   // Wallet-side rejections
   useEffect(() => {
-    if (state === "approvingErc20" && erc20Approve.isError) {
-      handleError(erc20Approve.error?.message ?? "Approval rejected");
+    if (state === "approving" && approve.isError) {
+      handleError(approve.error?.message ?? "Approval rejected");
     }
-    if (state === "approvingPermit2" && permit2Approve.isError) {
-      handleError(permit2Approve.error?.message ?? "Permit2 approval rejected");
-    }
-    if (state === "swapping" && swapExec.isError) {
-      handleError(swapExec.error?.message ?? "Swap rejected");
+    if (state === "swapping" && exec.isError) {
+      handleError(exec.error?.message ?? "Swap rejected");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, erc20Approve.isError, permit2Approve.isError, swapExec.isError]);
+  }, [state, approve.isError, exec.isError]);
 
   function handleError(message: string) {
-    const short = message.split("\n")[0]?.slice(0, 120) ?? "Reverted";
+    const short = message.split("\n")[0]?.slice(0, 200) ?? "Reverted";
     toastIdRef.current &&
       toast.update(toastIdRef.current, {
         variant: "error",
@@ -151,51 +118,32 @@ export function useSwap() {
     setState("error");
   }
 
-  function advanceFromErc20Approved() {
+  function submitSwapCall() {
     const args = pendingRef.current;
     if (!args || !deployment) return;
-    toastIdRef.current &&
-      toast.update(toastIdRef.current, {
-        variant: "pending",
-        title: "Authorize Permit2",
-        message: "Approving Permit2 to spend on UniversalRouter.",
-      });
-    const expiration = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
-    permit2Approve.writeContract({
-      address: deployment.permit2,
-      abi: permit2Abi,
-      functionName: "approve",
-      args: [args.tokenIn, deployment.universalRouter, maxUint160, expiration],
-    });
-    setState("approvingPermit2");
-  }
-
-  function advanceFromPermit2Approved() {
-    const args = pendingRef.current;
-    if (!args || !deployment) return;
-    submitSwapCall(args);
-  }
-
-  function submitSwapCall(args: SwapSubmitArgs) {
-    if (!deployment) return;
     toastIdRef.current &&
       toast.update(toastIdRef.current, {
         variant: "pending",
         title: "Submit Swap",
-        message: "Awaiting your final signature.",
+        message: "Awaiting your signature.",
       });
-    const { commands, inputs } = encodeV4Swap({
-      poolKey: args.poolKey,
-      zeroForOne: args.zeroForOne,
-      amountIn: args.amountIn,
-      amountOutMinimum: args.amountOutMinimum,
-    });
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
-    swapExec.writeContract({
-      address: deployment.universalRouter,
-      abi: universalRouterAbi,
-      functionName: "execute",
-      args: [commands, inputs, deadline],
+    exec.writeContract({
+      address: deployment.miniSwapRouter,
+      abi: miniSwapRouterAbi,
+      functionName: "swapExactIn",
+      args: [
+        {
+          currency0: args.poolKey.currency0,
+          currency1: args.poolKey.currency1,
+          fee: args.poolKey.fee,
+          tickSpacing: args.poolKey.tickSpacing,
+          hooks: args.poolKey.hooks,
+        },
+        args.zeroForOne,
+        args.amountIn,
+        args.amountOutMinimum,
+        user,
+      ],
     });
     setState("swapping");
   }
@@ -208,52 +156,34 @@ export function useSwap() {
       toastIdRef.current = toast.push({
         variant: "pending",
         title: "Initiating Swap",
-        message: "Reading allowances…",
+        message: "Reading allowance…",
       });
 
-      // Fresh allowance read for this token
-      const fresh = await checkRead.refetch();
-      const erc20Allowance = (fresh.data?.[0] as bigint) ?? 0n;
-      const permit2AllowanceTuple = fresh.data?.[1] as
-        | readonly [bigint, number, number]
-        | undefined;
-      const permit2AllowedAmount = permit2AllowanceTuple?.[0] ?? 0n;
-      const permit2ExpiresAt = permit2AllowanceTuple?.[1] ?? 0;
-      const now = Math.floor(Date.now() / 1000);
+      const fresh = await allowanceRead.refetch();
+      const currentAllowance = (fresh.data as bigint | undefined) ?? 0n;
 
-      const needsErc20 = erc20Allowance < args.amountIn;
-      const needsPermit2 = permit2AllowedAmount < args.amountIn || permit2ExpiresAt < now;
-
-      if (needsErc20) {
+      if (currentAllowance < args.amountIn) {
         toastIdRef.current &&
           toast.update(toastIdRef.current, {
             variant: "pending",
-            title: "Authorize Permit2 (1/2)",
-            message: "Approving Permit2 on the input token.",
+            title: "Authorize Token",
+            message: "Approving the router to spend your input token.",
           });
-        erc20Approve.writeContract({
+        approve.writeContract({
           address: args.tokenIn,
           abi: erc20Abi,
           functionName: "approve",
-          args: [deployment.permit2, 2n ** 256n - 1n],
+          args: [deployment.miniSwapRouter, 2n ** 256n - 1n],
         });
-        setState("approvingErc20");
-      } else if (needsPermit2) {
-        advanceFromErc20Approved();
+        setState("approving");
       } else {
-        submitSwapCall(args);
+        submitSwapCall();
       }
     },
-    [deployment, checkRead, erc20Approve, toast],
+    [deployment, allowanceRead, approve, toast],
   );
 
-  const isInFlight =
-    state === "approvingErc20" || state === "approvingPermit2" || state === "swapping";
+  const isInFlight = state === "approving" || state === "swapping";
 
   return { state, submit, isInFlight };
 }
-
-// Silence unused import warning — PERMIT2_APPROVE_EXPIRATION is a reference
-// constant kept for clarity even though we recompute the actual expiration
-// inside `advanceFromErc20Approved` to keep it relative to call time.
-void PERMIT2_APPROVE_EXPIRATION;

@@ -56,6 +56,12 @@ export interface OldMoneyDeployment {
   permit2: Address;
   /** UniversalRouter v2 (V4-capable variant) on this chain. */
   universalRouter: Address;
+  /**
+   * In-house V4 swap router. Bypasses UniversalRouter's calldata version drift
+   * by exposing a single exact-input swap entry that wraps the V4 unlock+callback
+   * pattern. See src/swap/MiniSwapRouter.sol for the design rationale.
+   */
+  miniSwapRouter: Address;
   /** First block of the deploy. Used to bound event-log scans. */
   deployBlock: bigint;
 }
@@ -81,6 +87,7 @@ export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
     // UniversalRouter v2 (V4-capable). Source: developers.uniswap.org/contracts/v4/deployments.
     // VERIFY before any mainnet wiring — Uniswap may rotate addresses between versions.
     universalRouter: "0x492E6456D9528771018DeB9E87ef7750EF184104",
+    miniSwapRouter: "0xd76d5400b4796A3889dF9fCc3715f4C79d56cFAe",
     deployBlock: 41_868_762n,
   },
   [CHAIN_IDS.base]: null, // Mainnet deploy pending the testnet shakedown.
