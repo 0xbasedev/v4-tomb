@@ -106,20 +106,17 @@ function Footer() {
             MMXXVI · The House of Old Money
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-5">
-            <a href="#twitter" className="label-deco hover:text-deco-gold-light">
-              Correspondence
-            </a>
-            <span className="text-deco-gold-dark">·</span>
-            <a href="#docs" className="label-deco hover:text-deco-gold-light">
-              The Mechanism
-            </a>
-            <span className="text-deco-gold-dark">·</span>
-            <a
-              href="https://github.com/anthropics/old-money"
-              className="label-deco hover:text-deco-gold-light"
-            >
+            <Link to="/dashboard" className="label-deco hover:text-deco-gold-light">
               The Ledger
-            </a>
+            </Link>
+            <span className="text-deco-gold-dark">·</span>
+            <Link to="/#mechanism" className="label-deco hover:text-deco-gold-light">
+              The Mechanism
+            </Link>
+            <span className="text-deco-gold-dark">·</span>
+            <Link to="/club" className="label-deco hover:text-deco-gold-light">
+              The Club
+            </Link>
           </div>
         </div>
       </div>

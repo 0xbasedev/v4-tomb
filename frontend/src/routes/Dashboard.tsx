@@ -4,6 +4,7 @@ import { PhaseBanner } from "@/components/PhaseBanner";
 import { RuleTrio } from "@/components/RuleTrio";
 
 import {
+  useBondMarket,
   useDeployment,
   useEpoch,
   useMoneyMarket,
@@ -70,6 +71,7 @@ export function Dashboard() {
   const deployment = useDeployment();
   const { epoch, secondsUntilNextEpoch } = useEpoch();
   const market = useMoneyMarket();
+  const bonds = useBondMarket();
   const supplies = useTokenSupplies();
   const events = useTreasuryEvents({ limit: 10 });
 
@@ -220,9 +222,29 @@ export function Dashboard() {
             The Mechanism · State
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Bond Discount" value="—" hint="Only Below Peg" />
-            <StatTile label="Bond Premium" value="—" hint="Only Above Premium Threshold" />
-            <StatTile label="Contraction Headroom" value="—" hint="MONEY · Burnable This Epoch" />
+            <StatTile
+              label="Bond Discount"
+              value={
+                bonds.discountRate > 0n
+                  ? `${(Number(bonds.discountRate) / 1e18).toFixed(4)}×`
+                  : "—"
+              }
+              hint={bonds.discountRate > 0n ? "TRUSTNOTE per MONEY burned" : "Active only below peg"}
+            />
+            <StatTile
+              label="Bond Premium"
+              value={
+                bonds.premiumRate > 0n
+                  ? `${(Number(bonds.premiumRate) / 1e18).toFixed(4)}×`
+                  : "—"
+              }
+              hint={bonds.premiumRate > 0n ? "MONEY per TRUSTNOTE redeemed" : "Active above 1.10 ETH"}
+            />
+            <StatTile
+              label="Contraction Headroom"
+              value={formatTokenAuto(bonds.burnableLeft)}
+              hint="MONEY · Burnable This Epoch"
+            />
             <StatTile
               label="Peg Ceiling"
               value={ceilingStr}

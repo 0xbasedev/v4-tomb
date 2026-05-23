@@ -146,7 +146,7 @@ export function Landing() {
       </section>
 
       {/* ===== The Mechanism ===== */}
-      <section className="relative bg-deco-ground-soft px-6 py-24 md:px-12 md:py-32">
+      <section id="mechanism" className="relative bg-deco-ground-soft px-6 py-24 md:px-12 md:py-32">
         <div className="mx-auto max-w-4xl">
           <div className="label-deco mb-3 text-deco-gold-dark">In Brief</div>
           <h2 className="gold-text mb-4 font-display italic text-section">
