@@ -68,19 +68,21 @@ export function encodeV4Swap(args: V4SwapArgs): { commands: Hex; inputs: Hex[] }
   const currencyOut = zeroForOne ? poolKey.currency1 : poolKey.currency0;
 
   // Inner action params.
-  // 6 top-level params: tuple(PoolKey), bool, uint128, uint128, uint256, bytes.
-  // The outer parens around all 6 would make viem parse this as a single 6-tuple
-  // param — which is wrong; we want 6 distinct params.
+  // 5 top-level params matching the deployed v4-periphery V4Router on Base
+  // Sepolia: tuple(PoolKey), bool, uint128, uint128, bytes.
+  // Note: our local lib/v4-periphery is newer and adds a `minHopPriceX36` uint256
+  // between amountOutMinimum and hookData (making it 6 fields). The deployed UR
+  // was compiled against the older 5-field shape. If the UR is later upgraded,
+  // bring this encoder back to 6 fields.
   const params0 = encodeAbiParameters(
     parseAbiParameters(
-      "(address,address,uint24,int24,address) poolKey, bool zeroForOne, uint128 amountIn, uint128 amountOutMinimum, uint256 minHopPriceX36, bytes hookData",
+      "(address,address,uint24,int24,address) poolKey, bool zeroForOne, uint128 amountIn, uint128 amountOutMinimum, bytes hookData",
     ),
     [
       [poolKey.currency0, poolKey.currency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
       zeroForOne,
       amountIn,
       amountOutMinimum,
-      0n /* minHopPriceX36 = 0 disables per-hop check */,
       hookData,
     ],
   );
