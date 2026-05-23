@@ -42,10 +42,10 @@ Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it
 - Fork integration tests: 5 new tests against real Base V4 PoolManager (commit `f2ed8dd`)
 - Fuzz invariants: 4 new tests (commit `b6d31cd` / pending)
 
-### 4. Deployer is the operator of everything pre-Timelock
-After the Sepolia deploy, the deployer EOA is `operator` / `trustees` of: Treasury, Boardroom, OldMoney, Estate, TrustNote, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool. They can mint MONEY, pause epoch ticks, drain reward pools (after the 90-day governance window), rotate operators, etc.
+### 4. Deployer is the operator of everything pre-Timelock — ✅ CLOSED 2026-05-22
+After the Sepolia deploy, the deployer EOA was `operator` / `trustees` of: Treasury, Boardroom, OldMoney, Estate, TrustNote, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool.
 
-**Status:** Sprint 14 was supposed to deploy the Timelock and rotate ownership of every contract to it. Until that ships, do NOT advertise Sepolia as testnet-ready for outside users.
+**Closed by Sprint 14.** `DeployTimelock.s.sol` + `RotateGovernanceQueue.s.sol` + `RotateGovernanceExecute.s.sol` walk the deployer through transferring every admin role to a Compound-style Timelock with a 24h delay (configurable). 6 integration tests in `test/integration/GovernanceRotation.t.sol` verify the ceremony works end-to-end. Final state: deployer EOA has no admin power; Timelock controls everything via queue/execute. See `docs/GOVERNANCE.md` for the full ceremony.
 
 ### 5. No automated seed-liquidity / governance-rotation scripts
 Tied to #2 and #4. The post-deploy ceremony is currently undocumented as a script.
