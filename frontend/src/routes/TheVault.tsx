@@ -9,6 +9,7 @@ import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
 import { MintPositionPanel } from "@/components/MintPositionPanel";
+import { UnwindPanel } from "@/components/UnwindPanel";
 import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
@@ -311,7 +312,7 @@ export function TheVault() {
       )}
 
       {/* ===== Actions ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
+      <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-7xl">
           <div className="label-deco mb-6 text-center text-deco-gold-dark">
             The Actions of The Depositor
@@ -416,6 +417,15 @@ export function TheVault() {
           </div>
         </div>
       </section>
+
+      {/* ===== Unwind (Main + Share only) ===== */}
+      {(activeId === "main" || activeId === "share") && (
+        <section className="px-6 pb-20 md:px-12 md:pb-28">
+          <div className="mx-auto max-w-3xl">
+            <UnwindPanel poolName={meta.formalName} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
