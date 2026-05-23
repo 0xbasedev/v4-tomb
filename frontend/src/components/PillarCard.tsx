@@ -19,7 +19,7 @@ export function PillarCard({ numeral, title, blurb, cta, href }: PillarCardProps
   return (
     <a
       href={href}
-      className="deco-panel group block text-center transition-colors duration-300 hover:bg-deco-ground-medium"
+      className="deco-panel group flex h-full flex-col text-center transition-colors duration-300 hover:bg-deco-ground-medium"
     >
       <div
         className="font-ornament mb-6 text-3xl font-bold text-deco-gold"
@@ -34,10 +34,12 @@ export function PillarCard({ numeral, title, blurb, cta, href }: PillarCardProps
         {title}
       </h3>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
-      <p className="mx-auto mb-7 max-w-sm font-body text-base text-deco-ivory-soft md:text-lg">
+      {/* flex-1 lets the blurb expand to fill remaining card height so the CTA
+          below pins to a consistent baseline across all three pillars. */}
+      <p className="mx-auto mb-7 max-w-sm flex-1 font-body text-base text-deco-ivory-soft md:text-lg">
         {blurb}
       </p>
-      <span className="label-deco inline-flex items-center gap-3 text-deco-gold transition-colors group-hover:text-deco-gold-light">
+      <span className="label-deco inline-flex items-center justify-center gap-3 self-center text-deco-gold transition-colors group-hover:text-deco-gold-light">
         {cta}
         <span className="font-display text-base">→</span>
       </span>
