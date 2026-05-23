@@ -3,7 +3,14 @@ import { FeaturedTile } from "@/components/FeaturedTile";
 import { PhaseBanner } from "@/components/PhaseBanner";
 import { RuleTrio } from "@/components/RuleTrio";
 
-import { useEpoch, useMoneyMarket, useTokenSupplies, useDeployment } from "@/lib/hooks";
+import {
+  useDeployment,
+  useEpoch,
+  useMoneyMarket,
+  useTokenSupplies,
+  useTreasuryEvents,
+  type TreasuryEventKind,
+} from "@/lib/hooks";
 import { formatToken, formatPrice, formatCountdown } from "@/lib/format";
 
 /**
@@ -42,11 +49,29 @@ function toRoman(n: number): string {
   return result;
 }
 
+// Friendly labels for the event-feed table.
+const EVENT_LABEL: Record<TreasuryEventKind, string> = {
+  TreasuryFunded: "Reserve · Treasury Funded",
+  BoardroomFunded: "Expansion · Boardroom Paid",
+  DaoFundFunded: "Allocation · Dao Fund",
+  DevFundFunded: "Allocation · Dev Fund",
+  BoughtBonds: "Bond · Acquired",
+  RedeemedBonds: "Bond · Redeemed",
+};
+
+function formatRelativeTime(secondsAgo: number): string {
+  if (secondsAgo < 60) return `${Math.floor(secondsAgo)}s ago`;
+  if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
+  if (secondsAgo < 86_400) return `${Math.floor(secondsAgo / 3600)}h ago`;
+  return `${Math.floor(secondsAgo / 86_400)}d ago`;
+}
+
 export function Dashboard() {
   const deployment = useDeployment();
   const { epoch, secondsUntilNextEpoch } = useEpoch();
   const market = useMoneyMarket();
   const supplies = useTokenSupplies();
+  const events = useTreasuryEvents({ limit: 10 });
 
   const epochNum = epoch !== undefined ? Number(epoch) : 0;
   const bootstrapNum = Number(market.bootstrapEpochs);
@@ -218,25 +243,66 @@ export function Dashboard() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-deco-gold/30">
-                  <th className="label-deco px-5 py-4 text-deco-gold-dark">Epoch</th>
-                  <th className="label-deco px-5 py-4 text-deco-gold-dark">Price · ETH</th>
+                  <th className="label-deco px-5 py-4 text-deco-gold-dark">When</th>
                   <th className="label-deco px-5 py-4 text-deco-gold-dark">Action</th>
-                  <th className="label-deco px-5 py-4 text-right text-deco-gold-dark">Supply After</th>
+                  <th className="label-deco px-5 py-4 text-right text-deco-gold-dark">Amount</th>
+                  <th className="label-deco px-5 py-4 text-right text-deco-gold-dark">Tx</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-deco-gold/15 last:border-b-0">
-                  <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-gold-dark">
-                    Event-log scan pending. Records will populate from{" "}
-                    <code className="font-ornament text-deco-gold">TreasuryFunded</code> events.
-                  </td>
-                </tr>
+                {events.isLoading ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-gold-dark">
+                      Reading the ledger…
+                    </td>
+                  </tr>
+                ) : events.isError ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-ruby/80">
+                      Event scan failed — see browser console.
+                    </td>
+                  </tr>
+                ) : events.rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-gold-dark">
+                      No epoch ticks yet. The first record will appear after the keeper
+                      advances the Treasury past <code className="font-ornament text-deco-gold">nextEpochPoint</code>.
+                    </td>
+                  </tr>
+                ) : (
+                  events.rows.map((row) => {
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    const when = Number(row.timestamp) > 0 ? formatRelativeTime(nowSec - Number(row.timestamp)) : "—";
+                    const isBond = row.kind === "BoughtBonds" || row.kind === "RedeemedBonds";
+                    const amountAsset = isBond ? "MONEY" : "MONEY";
+                    return (
+                      <tr key={`${row.transactionHash}-${row.logIndex}`} className="border-b border-deco-gold/15 last:border-b-0">
+                        <td className="px-5 py-4 font-body text-base italic text-deco-ivory-soft">{when}</td>
+                        <td className="px-5 py-4 font-display text-lg text-deco-ivory">{EVENT_LABEL[row.kind]}</td>
+                        <td className="px-5 py-4 text-right font-display text-lg text-deco-ivory">
+                          {formatToken(row.amount, 2)}{" "}
+                          <span className="font-ornament text-xs text-deco-gold-dark">{amountAsset}</span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <a
+                            href={`https://sepolia.basescan.org/tx/${row.transactionHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold"
+                          >
+                            View →
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
           <p className="mt-6 text-center font-body text-sm italic text-deco-gold-dark">
-            Records update with each epoch.
+            Live event scan · refreshes every minute.
           </p>
         </div>
       </section>

@@ -56,6 +56,8 @@ export interface OldMoneyDeployment {
   permit2: Address;
   /** UniversalRouter v2 (V4-capable variant) on this chain. */
   universalRouter: Address;
+  /** First block of the deploy. Used to bound event-log scans. */
+  deployBlock: bigint;
 }
 
 export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
@@ -79,6 +81,7 @@ export const DEPLOYMENTS: Record<ChainId, OldMoneyDeployment | null> = {
     // UniversalRouter v2 (V4-capable). Source: developers.uniswap.org/contracts/v4/deployments.
     // VERIFY before any mainnet wiring — Uniswap may rotate addresses between versions.
     universalRouter: "0x492E6456D9528771018DeB9E87ef7750EF184104",
+    deployBlock: 41_868_762n,
   },
   [CHAIN_IDS.base]: null, // Mainnet deploy pending the testnet shakedown.
 };
