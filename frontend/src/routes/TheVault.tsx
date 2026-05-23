@@ -305,6 +305,7 @@ export function TheVault() {
               blurb={`Deposit your stake asset. Begin earning $${meta.rewardAsset} pro-rata.`}
               asset={stakeLabel}
               maxAvailable={walletDisplay}
+              maxWei={tokenStatus.balance}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
               disabled={
                 !pid0.exists ||
@@ -342,6 +343,7 @@ export function TheVault() {
               blurb="Recall your stake. Pending rewards are claimed automatically."
               asset={stakeLabel}
               maxAvailable={yourStakeDisplay}
+              maxWei={pid0.yourStake}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
               disabled={pid0.yourStake === 0n || action.isInFlight || !poolAddress}
               disabledReason="Nothing currently deposited."

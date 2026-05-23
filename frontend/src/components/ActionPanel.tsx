@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatUnits } from "viem";
 
 import { maskDecimalInput } from "@/lib/util/decimal";
 
@@ -22,8 +23,16 @@ interface ActionPanelProps {
   blurb: string;
   /** Asset label shown next to the input field, e.g. "ESTATE". */
   asset: string;
-  /** Maximum amount the user could supply (for the MAX button). */
+  /** Display string shown on the MAX button label (e.g. "0.0540"). */
   maxAvailable: string;
+  /**
+   * Exact balance in wei. When provided, the MAX button click fills the input
+   * with the precise unrounded value (formatUnits(maxWei, 18)) so the
+   * downstream parseUnits never asks for more than the user holds. Without
+   * this, the display string would be rounded and trigger 'insufficient
+   * balance' reverts on full-balance deposits.
+   */
+  maxWei?: bigint;
   /** CTA button label. */
   cta: string;
   /** If true, the action is disabled — show the gate reason. */
@@ -42,6 +51,7 @@ export function ActionPanel({
   blurb,
   asset,
   maxAvailable,
+  maxWei,
   cta,
   disabled = false,
   disabledReason,
@@ -51,7 +61,13 @@ export function ActionPanel({
   const [amount, setAmount] = useState("");
 
   function handleMax() {
-    setAmount(maxAvailable);
+    // Prefer the wei-precise value when available; fall back to the display
+    // string for callers that haven't been migrated yet.
+    if (maxWei !== undefined) {
+      setAmount(formatUnits(maxWei, 18));
+    } else {
+      setAmount(maxAvailable);
+    }
   }
 
   function handleSubmit() {

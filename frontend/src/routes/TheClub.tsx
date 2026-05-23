@@ -140,6 +140,7 @@ export function TheClub() {
               blurb="Deposit $ESTATE into the Boardroom. Begin earning seigniorage each expansion epoch."
               asset="ESTATE"
               maxAvailable={walletDisplay}
+              maxWei={club.estateInWallet ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
               disabled={club.estateInWallet === 0n || action.isInFlight || !deployment}
               disabledReason="No $ESTATE in wallet."
@@ -169,6 +170,7 @@ export function TheClub() {
               blurb="Recall your $ESTATE from the Boardroom. Six-epoch lock from your last interaction."
               asset="ESTATE"
               maxAvailable={stakedDisplay}
+              maxWei={club.yourStake ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
               disabled={cantWithdraw || action.isInFlight || !deployment}
               disabledReason={
