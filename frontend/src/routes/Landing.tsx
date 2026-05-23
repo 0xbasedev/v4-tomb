@@ -78,9 +78,9 @@ export function Landing() {
             <Link to="/dashboard" className="btn-deco btn-deco-primary">
               Enter The Trust
             </Link>
-            <a href="#mechanism" className="btn-deco">
+            <Link to="/docs" className="btn-deco">
               Discover The Mechanism
-            </a>
+            </Link>
           </div>
         </div>
 

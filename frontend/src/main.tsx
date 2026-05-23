@@ -15,6 +15,7 @@ import { TheVault } from "./routes/TheVault";
 import { TrustNotes } from "./routes/TrustNotes";
 import { Swap } from "./routes/Swap";
 import { Admin } from "./routes/Admin";
+import { Docs } from "./routes/Docs";
 
 import "./styles/index.css";
 
@@ -38,6 +39,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/notes" element={<TrustNotes />} />
               <Route path="/swap" element={<Swap />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/docs" element={<Docs />} />
             </Route>
           </Routes>
         </BrowserRouter>

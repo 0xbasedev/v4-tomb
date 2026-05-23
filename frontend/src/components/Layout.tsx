@@ -18,6 +18,7 @@ const NAV_ITEMS: { label: string; to: string }[] = [
   { label: "The Vault", to: "/vault" },
   { label: "Trust Notes", to: "/notes" },
   { label: "Exchange", to: "/swap" },
+  { label: "Docs", to: "/docs" },
 ];
 
 export function Layout() {
@@ -110,7 +111,7 @@ function Footer() {
               The Ledger
             </Link>
             <span className="text-deco-gold-dark">·</span>
-            <Link to="/#mechanism" className="label-deco hover:text-deco-gold-light">
+            <Link to="/docs" className="label-deco hover:text-deco-gold-light">
               The Mechanism
             </Link>
             <span className="text-deco-gold-dark">·</span>
