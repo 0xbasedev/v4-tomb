@@ -136,4 +136,25 @@ export const treasuryAbi = [
     inputs: [],
     outputs: [{ name: "redeemable", type: "uint256" }],
   },
+  // ----- Writes -----
+  {
+    type: "function",
+    name: "buyBonds",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "_moneyAmount", type: "uint256" },
+      { name: "targetPrice", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "redeemBonds",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "_bondAmount", type: "uint256" },
+      { name: "targetPrice", type: "uint256" },
+    ],
+    outputs: [],
+  },
 ] as const;

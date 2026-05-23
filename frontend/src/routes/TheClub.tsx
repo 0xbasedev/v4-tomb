@@ -1,9 +1,12 @@
+import { parseUnits } from "viem";
+
 import { ActionPanel } from "@/components/ActionPanel";
 import { LockupClock } from "@/components/LockupClock";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 
-import { useBoardroom, useEpoch } from "@/lib/hooks";
+import { useApproveAndCall, useBoardroom, useDeployment, useEpoch } from "@/lib/hooks";
+import { boardroomAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
@@ -22,8 +25,20 @@ import { formatToken } from "@/lib/format";
  * Write actions (stake/withdraw/claim) are placeholders this turn — wired in T9.
  */
 export function TheClub() {
+  const deployment = useDeployment();
   const epoch = useEpoch();
   const club = useBoardroom();
+
+  function parseAmount(s: string): bigint {
+    try {
+      return parseUnits(s || "0", 18);
+    } catch {
+      return 0n;
+    }
+  }
+
+  // One shared write pipeline — Club only ever runs one action at a time.
+  const action = useApproveAndCall();
 
   // Lockup countdown derivation. PERIOD is the Treasury epoch length (6h);
   // each epoch nextEpochPoint = startTime + epoch * PERIOD.
@@ -125,9 +140,28 @@ export function TheClub() {
               blurb="Deposit $ESTATE into the Boardroom. Begin earning seigniorage each expansion epoch."
               asset="ESTATE"
               maxAvailable={walletDisplay}
-              cta="Authorize · Stake"
-              disabled={club.estateInWallet === 0n}
+              cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
+              disabled={club.estateInWallet === 0n || action.isInFlight || !deployment}
               disabledReason="No $ESTATE in wallet."
+              onSubmit={(s) => {
+                if (!deployment) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount,
+                  currentAllowance: club.estateAllowance ?? 0n,
+                  token: deployment.estate,
+                  spender: deployment.boardroom,
+                  call: {
+                    address: deployment.boardroom,
+                    abi: boardroomAbi,
+                    functionName: "stake",
+                    args: [amount],
+                  },
+                  label: "Stake into The Club",
+                  onSuccess: () => club.refetch(),
+                });
+              }}
             />
             <ActionPanel
               numeral="II"
@@ -135,13 +169,32 @@ export function TheClub() {
               blurb="Recall your $ESTATE from the Boardroom. Six-epoch lock from your last interaction."
               asset="ESTATE"
               maxAvailable={stakedDisplay}
-              cta="Withdraw"
-              disabled={cantWithdraw}
+              cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
+              disabled={cantWithdraw || action.isInFlight || !deployment}
               disabledReason={
                 club.yourStake === 0n
                   ? "Nothing currently deposited."
                   : "Withdraw lockup not yet matured."
               }
+              onSubmit={(s) => {
+                if (!deployment) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount: 0n,
+                  currentAllowance: 0n,
+                  token: null,
+                  spender: null,
+                  call: {
+                    address: deployment.boardroom,
+                    abi: boardroomAbi,
+                    functionName: "withdraw",
+                    args: [amount],
+                  },
+                  label: "Withdraw from The Club",
+                  onSuccess: () => club.refetch(),
+                });
+              }}
             />
             <ActionPanel
               numeral="III"
@@ -149,14 +202,31 @@ export function TheClub() {
               blurb="Claim accrued $MONEY. Three-epoch lock from your last interaction."
               asset="MONEY"
               maxAvailable={pendingDisplay}
-              cta="Claim Returns"
+              cta={action.isInFlight ? "Awaiting…" : "Claim Returns"}
               noInput
-              disabled={cantClaim}
+              disabled={cantClaim || action.isInFlight || !deployment}
               disabledReason={
                 club.earned === 0n
                   ? "No returns currently accrued."
                   : "Reward lockup not yet matured."
               }
+              onSubmit={() => {
+                if (!deployment) return;
+                action.submit({
+                  amount: 0n,
+                  currentAllowance: 0n,
+                  token: null,
+                  spender: null,
+                  call: {
+                    address: deployment.boardroom,
+                    abi: boardroomAbi,
+                    functionName: "claimReward",
+                    args: [],
+                  },
+                  label: "Claim Returns",
+                  onSuccess: () => club.refetch(),
+                });
+              }}
             />
           </div>
         </div>

@@ -6,6 +6,7 @@ import { WagmiProvider } from "wagmi";
 
 import { wagmiConfig } from "./lib/wagmi";
 
+import { ToastProvider } from "./components/ToastProvider";
 import { Layout } from "./components/Layout";
 import { Landing } from "./routes/Landing";
 import { Dashboard } from "./routes/Dashboard";
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
+        <ToastProvider>
         <BrowserRouter>
           <Routes>
             {/* Landing has its own full-bleed nav/footer — no Layout wrap */}
@@ -37,6 +39,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </Route>
           </Routes>
         </BrowserRouter>
+        </ToastProvider>
       </QueryClientProvider>
     </WagmiProvider>
   </React.StrictMode>,

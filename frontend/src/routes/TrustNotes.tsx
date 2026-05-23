@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 
 import { BondForm } from "@/components/BondForm";
 import { MarketStateBanner, type MarketState } from "@/components/MarketStateBanner";
@@ -7,7 +7,14 @@ import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
 
-import { useBondMarket, useMoneyMarket, useTokenSupplies } from "@/lib/hooks";
+import {
+  useApproveAndCall,
+  useBondMarket,
+  useDeployment,
+  useMoneyMarket,
+  useTokenSupplies,
+} from "@/lib/hooks";
+import { treasuryAbi } from "@/lib/abis";
 import { formatToken, formatPrice } from "@/lib/format";
 
 /**
@@ -37,9 +44,24 @@ type Tab = "acquire" | "present";
 export function TrustNotes() {
   const [tab, setTab] = useState<Tab>("acquire");
 
+  const deployment = useDeployment();
   const market = useMoneyMarket();
   const bonds = useBondMarket();
   const supplies = useTokenSupplies();
+  const action = useApproveAndCall();
+
+  function parseAmount(s: string): bigint {
+    try {
+      return parseUnits(s || "0", 18);
+    } catch {
+      return 0n;
+    }
+  }
+  const refetchAll = () => {
+    bonds.refetch();
+    market.refetch();
+    supplies.refetch();
+  };
 
   // Derive market state from price + thresholds. Pre-oracle-update price=0n
   // surfaces "closed" so the UI explains the bond office is offline rather than
@@ -149,8 +171,8 @@ export function TrustNotes() {
               outputAsset="TRUSTNOTE"
               rate={discountRate}
               rateLabel="Issuance Discount"
-              cta="Issue Note Against MONEY"
-              disabled={acquireDisabled}
+              cta={action.isInFlight ? "Awaiting…" : "Issue Note Against MONEY"}
+              disabled={acquireDisabled || action.isInFlight || !deployment}
               disabledReason={
                 marketState === "redemption"
                   ? "The Trust trades above peg. Notes are not issued — they are redeemed."
@@ -159,6 +181,25 @@ export function TrustNotes() {
                     : "The Trust has not yet entered a contraction."
               }
               helper="Your MONEY is permanently destroyed. The Note holds a claim against future MONEY at premium."
+              onSubmit={(s) => {
+                if (!deployment) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount,
+                  currentAllowance: bonds.moneyAllowance,
+                  token: deployment.money,
+                  spender: deployment.treasury,
+                  call: {
+                    address: deployment.treasury,
+                    abi: treasuryAbi,
+                    functionName: "buyBonds",
+                    args: [amount, market.price],
+                  },
+                  label: "Acquire Trust Notes",
+                  onSuccess: refetchAll,
+                });
+              }}
             />
           ) : (
             <BondForm
@@ -168,8 +209,8 @@ export function TrustNotes() {
               outputAsset="MONEY"
               rate={premiumRate}
               rateLabel="Maturity Premium"
-              cta="Present Note · Claim MONEY"
-              disabled={presentDisabled}
+              cta={action.isInFlight ? "Awaiting…" : "Present Note · Claim MONEY"}
+              disabled={presentDisabled || action.isInFlight || !deployment}
               disabledReason={
                 marketState === "acquisition"
                   ? "The Trust trades below peg. Notes are issued, not redeemed."
@@ -178,6 +219,25 @@ export function TrustNotes() {
                     : "The Treasury holds no MONEY reserve to redeem against."
               }
               helper="MONEY is drawn from the Treasury's reserve, accumulated during prior expansion epochs."
+              onSubmit={(s) => {
+                if (!deployment) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount,
+                  currentAllowance: bonds.trustNoteAllowance,
+                  token: deployment.trustNote,
+                  spender: deployment.treasury,
+                  call: {
+                    address: deployment.treasury,
+                    abi: treasuryAbi,
+                    functionName: "redeemBonds",
+                    args: [amount, market.price],
+                  },
+                  label: "Present Trust Notes",
+                  onSuccess: refetchAll,
+                });
+              }}
             />
           )}
         </div>

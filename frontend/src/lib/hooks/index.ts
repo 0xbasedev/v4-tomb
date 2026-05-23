@@ -5,3 +5,4 @@ export { useTokenSupplies } from "./useTokenSupplies";
 export { useBoardroom } from "./useBoardroom";
 export { useBondMarket } from "./useBondMarket";
 export { useRewardPool, useTokenStatus } from "./useRewardPool";
+export { useApproveAndCall, type CallState } from "./useApproveAndCall";

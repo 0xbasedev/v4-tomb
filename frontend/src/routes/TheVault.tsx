@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { parseUnits } from "viem";
 
 import { ActionPanel } from "@/components/ActionPanel";
 import { LockupClock } from "@/components/LockupClock";
@@ -7,7 +8,8 @@ import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
 
-import { useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
+import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
+import { moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
@@ -79,6 +81,16 @@ export function TheVault() {
   const deployment = useDeployment();
   const meta = META[activeId];
 
+  const action = useApproveAndCall();
+
+  function parseAmount(s: string): bigint {
+    try {
+      return parseUnits(s || "0", 18);
+    } catch {
+      return 0n;
+    }
+  }
+
   const poolAddress =
     activeId === "genesis"
       ? deployment?.genesisRewardPool
@@ -120,6 +132,12 @@ export function TheVault() {
   const yourStakeDisplay = formatToken(pid0.yourStake, 4);
   const pendingDisplay = formatToken(pid0.pending, 4);
   const walletDisplay = formatToken(tokenStatus.balance, 4);
+
+  const poolAbi = reward === "money" ? moneyRewardPoolAbi : shareRewardPoolAbi;
+  const refetchAll = () => {
+    pid0.refetch();
+    tokenStatus.refetch();
+  };
 
   return (
     <div className="bg-deco-ground">
@@ -264,13 +282,36 @@ export function TheVault() {
               blurb={`Deposit your stake asset. Begin earning $${meta.rewardAsset} pro-rata.`}
               asset={meta.defaultStakeLabel}
               maxAvailable={walletDisplay}
-              cta="Authorize · Stake"
-              disabled={!pid0.exists || tokenStatus.balance === 0n}
-              disabledReason={
-                !pid0.exists
-                  ? "No stake asset registered."
-                  : "No stake asset in wallet."
+              cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
+              disabled={
+                !pid0.exists ||
+                tokenStatus.balance === 0n ||
+                action.isInFlight ||
+                !poolAddress ||
+                !pid0.stakeToken
               }
+              disabledReason={
+                !pid0.exists ? "No stake asset registered." : "No stake asset in wallet."
+              }
+              onSubmit={(s) => {
+                if (!poolAddress || !pid0.stakeToken) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount,
+                  currentAllowance: tokenStatus.allowance,
+                  token: pid0.stakeToken,
+                  spender: poolAddress,
+                  call: {
+                    address: poolAddress,
+                    abi: poolAbi,
+                    functionName: "deposit",
+                    args: [0n, amount],
+                  },
+                  label: `Deposit into ${meta.formalName}`,
+                  onSuccess: refetchAll,
+                });
+              }}
             />
             <ActionPanel
               numeral="II"
@@ -278,9 +319,28 @@ export function TheVault() {
               blurb="Recall your stake. Pending rewards are claimed automatically."
               asset={meta.defaultStakeLabel}
               maxAvailable={yourStakeDisplay}
-              cta="Withdraw"
-              disabled={pid0.yourStake === 0n}
+              cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
+              disabled={pid0.yourStake === 0n || action.isInFlight || !poolAddress}
               disabledReason="Nothing currently deposited."
+              onSubmit={(s) => {
+                if (!poolAddress) return;
+                const amount = parseAmount(s);
+                if (amount <= 0n) return;
+                action.submit({
+                  amount: 0n,
+                  currentAllowance: 0n,
+                  token: null,
+                  spender: null,
+                  call: {
+                    address: poolAddress,
+                    abi: poolAbi,
+                    functionName: "withdraw",
+                    args: [0n, amount],
+                  },
+                  label: `Withdraw from ${meta.formalName}`,
+                  onSuccess: refetchAll,
+                });
+              }}
             />
             <ActionPanel
               numeral="III"
@@ -288,10 +348,27 @@ export function TheVault() {
               blurb="Emergency exit. Returns your stake but FORFEITS all pending rewards. Use only if compelled."
               asset={meta.defaultStakeLabel}
               maxAvailable={yourStakeDisplay}
-              cta="Forfeit · Exit"
+              cta={action.isInFlight ? "Awaiting…" : "Forfeit · Exit"}
               noInput
-              disabled={pid0.yourStake === 0n}
+              disabled={pid0.yourStake === 0n || action.isInFlight || !poolAddress}
               disabledReason="Nothing currently deposited."
+              onSubmit={() => {
+                if (!poolAddress) return;
+                action.submit({
+                  amount: 0n,
+                  currentAllowance: 0n,
+                  token: null,
+                  spender: null,
+                  call: {
+                    address: poolAddress,
+                    abi: poolAbi,
+                    functionName: "emergencyWithdraw",
+                    args: [0n],
+                  },
+                  label: `Forfeit · ${meta.formalName}`,
+                  onSuccess: refetchAll,
+                });
+              }}
             />
           </div>
         </div>
