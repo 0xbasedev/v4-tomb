@@ -1,0 +1,102 @@
+name: keeper
+
+# Periodic epoch tick. Calls `treasury.allocateSeigniorage()` on each configured
+# chain whenever block.timestamp >= treasury.nextEpochPoint().
+#
+# Cron: every 30 minutes. GitHub Actions cron may drift up to ~15 min during heavy
+# scheduling windows — we get roughly twelve attempts per 6-hour epoch which is
+# ample. The keeper script is a clean no-op when there's nothing to do, so
+# overshooting is harmless.
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   KEEPER_PRIVATE_KEY        — wallet that signs the tick. ETH for gas only,
+#                                NO admin roles. Generate fresh; don't reuse the
+#                                deployer key.
+#   BASE_SEPOLIA_RPC_URL      — RPC endpoint for Base Sepolia
+#   BASE_RPC_URL              — RPC endpoint for Base mainnet (optional;
+#                                mainnet job is skipped if not set)
+#
+# Variables required (Settings → Secrets and variables → Actions → Variables):
+#   TREASURY_BASE_SEPOLIA     — deployed Treasury address on Base Sepolia
+#   TREASURY_BASE             — deployed Treasury address on Base (optional)
+
+"on":
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: "Target chain"
+        required: true
+        default: "base_sepolia"
+        type: choice
+        options:
+          - base_sepolia
+          - base
+
+jobs:
+  tick-base-sepolia:
+    name: tick · Base Sepolia
+    runs-on: ubuntu-latest
+    # Skip when workflow_dispatch targets only the mainnet chain.
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.chain == 'base_sepolia'
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Tick
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          TREASURY: ${{ vars.TREASURY_BASE_SEPOLIA }}
+        run: |
+          if [ -z "$TREASURY" ]; then
+            echo "TREASURY_BASE_SEPOLIA variable not set — skipping."
+            exit 0
+          fi
+          forge script script/KeeperTick.s.sol \
+            --rpc-url "$BASE_SEPOLIA_RPC_URL" \
+            --broadcast \
+            --slow
+
+  tick-base:
+    name: tick · Base
+    runs-on: ubuntu-latest
+    # Only fire on dispatch (mainnet target) or scheduled when variable is configured.
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.chain == 'base'
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Tick
+        env:
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+          TREASURY: ${{ vars.TREASURY_BASE }}
+        run: |
+          if [ -z "$TREASURY" ]; then
+            echo "TREASURY_BASE variable not set — mainnet keeper inactive."
+            exit 0
+          fi
+          forge script script/KeeperTick.s.sol \
+            --rpc-url "$BASE_RPC_URL" \
+            --broadcast \
+            --slow

@@ -58,17 +58,38 @@ No operator actions required. Stakers deposit outside ERC-20s; rewards accrue. T
 
 Operational chores (do once at launch, then automate):
 
-### 2.1 Keep the oracle fresh
+### 2.1 Keep the epoch advancing
 
-Anyone can call `oracle.update()` and `treasury.allocateSeigniorage()`. Trustees get a pre-epoch privilege (no-op call before `nextEpochPoint`), but the practical pattern is a permissionless keeper.
+Anyone can call `treasury.allocateSeigniorage()` post-`nextEpochPoint`. The call internally invokes `oracle.update()` (wrapped in try/catch so a pre-epoch oracle revert doesn't block) so the TWAP refreshes inside the same transaction. The keeper just needs to call allocateSeigniorage on every 6h boundary.
+
+**Option A — GitHub Actions (recommended for testnet, simple for mainnet)**
+
+The repo ships `.github/workflows/keeper.yml` which runs `script/KeeperTick.s.sol` every 30 minutes on a cron. To enable:
+
+1. Generate a fresh wallet for the keeper. ETH-for-gas only — NO admin roles. The keeper wallet must be disjoint from the deployer / multisig.
+2. Fund it (a few finney is enough for months of operation on Base).
+3. In repo Settings → Secrets and variables → Actions:
+   - Secret: `KEEPER_PRIVATE_KEY` (no 0x prefix? actually with 0x — check forge syntax)
+   - Secret: `BASE_SEPOLIA_RPC_URL` (e.g. Alchemy or QuickNode endpoint)
+   - Secret: `BASE_RPC_URL` (for mainnet; can be skipped pre-launch)
+   - Variable: `TREASURY_BASE_SEPOLIA` (the deployed Treasury address from `frontend/src/lib/addresses.ts`)
+   - Variable: `TREASURY_BASE` (for mainnet; can be set later)
+4. The workflow will fire `*/30 * * * *`. Manual run via Actions tab → keeper → Run workflow.
+
+GitHub Actions cron drifts up to ~15 min during heavy scheduling windows. With a 6h epoch and a 30-min cadence, you get ~12 attempts per epoch — more than enough.
+
+**Option B — local cron / Defender / Gelato**
+
+Any setup that runs `script/KeeperTick.s.sol` every 30 minutes against the right RPC works. The script is a clean no-op when there's nothing to do.
 
 ```bash
-# Run via cron / GitHub Actions / Gelato / OpenZeppelin Defender every 6 hours, ~10 minutes after each epoch boundary
-cast send <oracle> 'update()' --rpc-url base_sepolia --private-key $KEEPER_PRIVATE_KEY
-cast send <treasury> 'allocateSeigniorage()' --rpc-url base_sepolia --private-key $KEEPER_PRIVATE_KEY
+# Manual one-off call
+export KEEPER_PRIVATE_KEY=0x...
+export TREASURY=0x928B72a3E734d6D07606d9655c55289D3a224c20
+forge script script/KeeperTick.s.sol --rpc-url base_sepolia --broadcast --slow
 ```
 
-**Why now:** `oracle.update()` doesn't auto-run. Without it, `getMoneyPrice()` reverts and the Treasury can't compute expansion/contraction. `allocateSeigniorage()` is what advances the epoch counter.
+**Why this matters:** Without the keeper, `allocateSeigniorage` never fires; the Treasury's epoch counter stalls at whatever value it had when the keeper was last on. No seigniorage flows, the Boardroom never pays out, bonds can't redeem during expansion. The keeper is the heartbeat of the protocol.
 
 ---
 
