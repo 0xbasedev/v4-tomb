@@ -5,12 +5,13 @@
  *
  * Phases per the Treasury mechanics:
  *   - Bootstrap (epoch < 28): unconditional 4.5% supply expansion to Boardroom
- *   - Expansion (price > 1.01 ETH): seigniorage minted, distributed pro-rata
+ *   - Expansion (price ≥ 1.01 ETH): seigniorage minted, distributed pro-rata
+ *   - Redemption (price ≥ premium): Trust Notes can be presented at premium
  *   - Contraction (price < 1.00 ETH): MONEY can be burned for Trust Notes
  *   - At Rest (1.00 ≤ price ≤ 1.01): no action — the dead zone
  */
 
-type Phase = "bootstrap" | "expansion" | "contraction" | "rest";
+export type Phase = "bootstrap" | "expansion" | "redemption" | "contraction" | "rest";
 
 interface PhaseBannerProps {
   phase: Phase;
@@ -34,6 +35,13 @@ const PHASE_COPY: Record<
     gloss:
       "MONEY trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Club.",
     tone: "text-deco-gold",
+  },
+  redemption: {
+    label: "Phase · Premium",
+    title: "Notes Are Redeemed",
+    gloss:
+      "MONEY trades above one and one-tenth Ether. Holders of Trust Notes may present them at the Treasury and receive MONEY at premium.",
+    tone: "text-deco-emerald",
   },
   contraction: {
     label: "Phase · Contraction",
