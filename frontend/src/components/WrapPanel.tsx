@@ -31,9 +31,15 @@ interface WrapPanelProps {
    * user's input if they're actively typing.
    */
   prefillTokenId?: bigint | null;
+  /**
+   * Called when a wrap receipt confirms with the tokenId that was wrapped.
+   * Vault uses this to propagate the same tokenId into UnwindPanel so the
+   * later unwrap/burn don't ask the user to re-enter the ID.
+   */
+  onWrapped?: (tokenId: bigint) => void;
 }
 
-export function WrapPanel({ poolName, prefillTokenId }: WrapPanelProps) {
+export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProps) {
   const deployment = useDeployment();
   const { address, isConnected } = useAccount();
   const toast = useToast();
@@ -128,6 +134,9 @@ export function WrapPanel({ poolName, prefillTokenId }: WrapPanelProps) {
         message: "Wrapper shares are now in your wallet. You may deposit below.",
         txHash: wrap.data,
       });
+      // Surface the wrapped tokenId to the parent BEFORE clearing the input,
+      // so the Vault can propagate it into UnwindPanel for the eventual exit.
+      if (pos.tokenId !== null) onWrapped?.(pos.tokenId);
       pos.refetch();
       // Reset the input so the user can wrap another or move on
       setTokenIdInput("");

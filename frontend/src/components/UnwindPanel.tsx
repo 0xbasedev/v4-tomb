@@ -28,13 +28,34 @@ import { encodeBurnPosition } from "@/lib/swap/encodeBurnPosition";
 
 interface UnwindPanelProps {
   poolName: string;
+  /**
+   * Optional: pre-fill the tokenId input. Vault wires this to the same shared
+   * `recentTokenId` state that MintPositionPanel and WrapPanel use, so the
+   * unwind step picks up whatever NFT the user has been working with —
+   * mint → wrap → stake → withdraw → unwrap → burn flows on one prefill.
+   */
+  prefillTokenId?: bigint | null;
 }
 
-export function UnwindPanel({ poolName }: UnwindPanelProps) {
+export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
   const deployment = useDeployment();
   const { address, isConnected } = useAccount();
   const toast = useToast();
   const [tokenIdInput, setTokenIdInput] = useState("");
+  const lastPrefillRef = useRef<bigint | null>(null);
+
+  // Same prefill pattern as WrapPanel — react once per new value via ref
+  // so we don't clobber edits the user is actively making.
+  useEffect(() => {
+    if (
+      prefillTokenId !== undefined &&
+      prefillTokenId !== null &&
+      prefillTokenId !== lastPrefillRef.current
+    ) {
+      lastPrefillRef.current = prefillTokenId;
+      setTokenIdInput(prefillTokenId.toString());
+    }
+  }, [prefillTokenId]);
 
   // Parse tokenId from input.
   let tokenId: bigint | null = null;

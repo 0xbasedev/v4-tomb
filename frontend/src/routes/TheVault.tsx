@@ -306,7 +306,11 @@ export function TheVault() {
               poolName={meta.formalName}
               onMinted={(tokenId) => setRecentTokenId(tokenId)}
             />
-            <WrapPanel poolName={meta.formalName} prefillTokenId={recentTokenId} />
+            <WrapPanel
+              poolName={meta.formalName}
+              prefillTokenId={recentTokenId}
+              onWrapped={(tokenId) => setRecentTokenId(tokenId)}
+            />
           </div>
         </section>
       )}
@@ -422,7 +426,7 @@ export function TheVault() {
       {(activeId === "main" || activeId === "share") && (
         <section className="px-6 pb-20 md:px-12 md:pb-28">
           <div className="mx-auto max-w-3xl">
-            <UnwindPanel poolName={meta.formalName} />
+            <UnwindPanel poolName={meta.formalName} prefillTokenId={recentTokenId} />
           </div>
         </section>
       )}
