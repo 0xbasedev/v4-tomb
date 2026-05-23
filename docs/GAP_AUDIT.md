@@ -23,10 +23,12 @@ The deploy script now deploys the wrapper bound to the full-range MONEY/WETH poo
 
 **GenesisRewardPool was never blocked on the wrapper** — it accepts outside ERC-20 tokens (WETH, USDC) directly as the mini-ICO stake.
 
-### 2. Initial V4 pool liquidity is zero
-The V4 MONEY/cbETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k MONEY allocation + team-owned cbETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn MONEY have a place to swap it.
+### 2. Initial V4 pool liquidity is zero — ✅ CLOSED 2026-05-22
+The V4 MONEY/WETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k MONEY allocation + team-owned WETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn MONEY have a place to swap it.
 
-**Status:** Manual step documented in `DEPLOY.md`. Should be automated as `script/SeedLiquidity.s.sol` before mainnet. Sprint 16b or 17.
+**Closed by Sprint 17** (`script/SeedLiquidity.s.sol` + `test/integration/BaseForkSeedLiquidity.t.sol`). The script pulls MONEY + WETH from the operator's wallet via Permit2, computes liquidity via `LiquidityAmounts.getLiquidityForAmounts`, mints a full-range V4 position via `PositionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)`. NFT lands in operator's wallet. The position's tick range matches `V4PositionWrapper`'s exact bounds so the operator can later wrap it (and stake the shares in `MainRewardPool` for protocol-owned LP rewards, or transfer it to a burn address for permanent liquidity).
+
+3 fork tests verify: seeds an empty pool, the resulting NFT is wrappable, pool depth is established at tick 0 (no price drift on parity-equal deposit).
 
 ### 3. PegDefenseHook is materially weaker than Tomb's TaxOffice on fund flow — ✅ CLOSED 2026-05-22
 Tomb's `TaxOffice` did two things during contraction:
