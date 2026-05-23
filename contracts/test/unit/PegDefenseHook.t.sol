@@ -676,6 +676,106 @@ contract PegDefenseHookTest is BaseTest {
     }
 
     // ---------------------------------------------------------------------
+    // Sprint 4b — fuzz invariants
+    // ---------------------------------------------------------------------
+
+    function testFuzz_TaxConservation_BurnPath(
+        uint256 sellAmount
+    ) public {
+        sellAmount = bound(sellAmount, 1, 1000 ether);
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        if (expectedTax == 0) return;
+
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        uint256 totalBefore = money.totalSupply();
+
+        SwapParams memory params = SwapParams({
+            zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0
+        });
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+
+        assertEq(money.totalSupply(), totalBefore - expectedTax, "supply decrease == expected tax");
+        assertEq(money.balanceOf(address(hook)), 0, "hook never holds MONEY post-beforeSwap");
+    }
+
+    function testFuzz_TaxConservation_RoutePath(
+        uint256 sellAmount
+    ) public {
+        sellAmount = bound(sellAmount, 1, 1000 ether);
+        _bind(0);
+        pm.setTick(0);
+
+        vm.prank(trustees);
+        hook.setBurnThreshold(0.5e18);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        address treasuryAddr = makeAddr("treasury_fuzz");
+        vm.prank(trustees);
+        hook.setTreasury(treasuryAddr);
+
+        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        if (expectedTax == 0) return;
+
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        uint256 totalBefore = money.totalSupply();
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+
+        SwapParams memory params = SwapParams({
+            zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0
+        });
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+
+        assertEq(money.totalSupply(), totalBefore, "supply unchanged on route");
+        assertEq(money.balanceOf(treasuryAddr), treasuryBefore + expectedTax, "treasury += expected tax");
+        assertEq(money.balanceOf(address(hook)), 0, "hook never holds MONEY post-beforeSwap");
+    }
+
+    function testFuzz_TierLookup_AlwaysReturnsValidRate(
+        uint256 price
+    ) public view {
+        uint256 rate = hook.taxRateForPrice(price);
+        assertTrue(
+            rate == 100 || rate == 200 || rate == 400 || rate == 900 || rate == 1400 || rate == 1500 || rate == 1600
+                || rate == 1700 || rate == 1800 || rate == 1900 || rate == 2000,
+            "rate must be one of the 14 Tomb tiers"
+        );
+    }
+
+    function testFuzz_BuyDirection_NeverTaxed(
+        uint256 amount
+    ) public {
+        amount = bound(amount, 1, 1000 ether);
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        SwapParams memory params =
+            SwapParams({zeroForOne: !hook.moneyIsCurrency0(), amountSpecified: -int256(amount), sqrtPriceLimitX96: 0});
+
+        uint256 supplyBefore = money.totalSupply();
+        uint256 takesBefore = pm.takeCallCount();
+
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+
+        assertEq(money.totalSupply(), supplyBefore, "buy never reduces supply");
+        assertEq(pm.takeCallCount(), takesBefore, "buy never triggers take");
+    }
+
+    // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 

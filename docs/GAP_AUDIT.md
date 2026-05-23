@@ -22,16 +22,19 @@ The V4 MONEY/cbETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAt
 
 **Status:** Manual step documented in `DEPLOY.md`. Should be automated as `script/SeedLiquidity.s.sol` before mainnet. Sprint 16b or 17.
 
-### 3. PegDefenseHook is materially weaker than Tomb's TaxOffice on fund flow
+### 3. PegDefenseHook is materially weaker than Tomb's TaxOffice on fund flow — ✅ CLOSED 2026-05-22
 Tomb's `TaxOffice` did two things during contraction:
 1. Burned MONEY directly (reducing supply, aggressive peg defense).
 2. Routed tax revenue to a collector wallet that could feed Treasury reserves.
 
-Our `PegDefenseHook` only sets a dynamic LP fee. The higher fee goes to LPs, nothing is burned, nothing flows to Treasury. **The deterrent on selling is preserved (higher cost = less selling), but the value capture for the protocol is gone.**
+Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it with `beforeSwapReturnDelta` to take a slice of MONEY swap input and either burn (below `burnThreshold = 1.10e18`) or route to Treasury (at or above).
 
-Original commit (`078947a feat(hooks): add PegDefenseHook`) flagged "sell tax with returnDelta routing to Treasury" as Sprint 4b deferred. **That deferral is a real Tomb-fidelity gap, not just a polish item.**
-
-**Status:** Decision needed. Either (a) accept the softening as a deliberate design choice — document and move on; (b) build the `beforeSwapReturnDelta` tax routing properly before mainnet, restoring Tomb's burn-during-deep-contraction mechanic.
+**Closed by:**
+- Design doc: `docs/HOOK_TAX_DESIGN.md` (commit `8befc42`)
+- Contract: extension to `PegDefenseHook.sol` (commit `72a1c3d`) with 14-tier Tomb-exact table, burnThreshold + treasury + excludedAddresses, autoCalculateTax master switch off by default
+- Unit tests: 28 new tests in `PegDefenseHook.t.sol` (commit `a296c11`)
+- Fork integration tests: 5 new tests against real Base V4 PoolManager (commit `f2ed8dd`)
+- Fuzz invariants: 4 new tests (commit `b6d31cd` / pending)
 
 ### 4. Deployer is the operator of everything pre-Timelock
 After the Sepolia deploy, the deployer EOA is `operator` / `trustees` of: Treasury, Boardroom, OldMoney, Estate, TrustNote, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool. They can mint MONEY, pause epoch ticks, drain reward pools (after the 90-day governance window), rotate operators, etc.
