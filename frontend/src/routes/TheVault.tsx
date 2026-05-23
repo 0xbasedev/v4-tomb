@@ -7,52 +7,42 @@ import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
 
+import { useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
+import { formatToken } from "@/lib/format";
+
 /**
- * The Vault — three reward pools.
+ * The Vault — three reward pools, wired to live state.
  *
- * Tabs:
- *   I.  Genesis — 24-hour window, accepts outside ERC-20s, distributes 11,000 MONEY
- *   II. Main    — 9-day distribution across 2 epochs (80k + 60k), accepts MONEY/WETH LP
- *                 wrapper, distributes 140,000 MONEY
- *   III. Share  — 370-day distribution, accepts MONEY/WETH LP wrapper (and eventually
- *                 ESTATE/WETH), distributes 59,500 ESTATE
+ * Pool-level state (allocation, time window) comes from each pool's first PID
+ * (pid=0). Genesis has no registered PIDs at deploy time — the operator must
+ * call `add(allocPoint, token, ...)` before staking opens. Until then the
+ * page renders the "no stake assets registered" empty state.
  *
- * Each pool's layout (under the tab):
- *   1. Pool overview — formal title + subtitle, 4 stat tiles (allocation, your stake,
- *      pending, status), single LockupClock for window-end countdown
- *   2. Pool entries table — registered stake tokens with PID / token / alloc / your
- *      balance / your stake
- *   3. Actions — 3-column ActionPanel grid (Make a Deposit / Withdraw / Forfeit & Withdraw)
+ * Each pool's PID 0 represents the primary stake token:
+ *   Genesis pid 0 — operator-set (likely WETH or USDC at launch)
+ *   Main    pid 0 — V4PositionWrapper (MONEY-WETH LP ERC-20 cert)
+ *   Share   pid 0 — V4PositionWrapper (same)
+ *
+ * Total allocation (rewards distributed over the window) stays as protocol
+ * constants because the on-chain GenesisRewardPool / MainRewardPool /
+ * ShareRewardPool don't expose a single "totalRewards" view — they compute it
+ * from a per-second emission rate × duration.
  */
 
 type PoolId = "genesis" | "main" | "share";
 
-interface PoolView {
-  id: PoolId;
+interface PoolMeta {
   numeral: "I" | "II" | "III";
   formalName: string;
   subtitle: string;
   gloss: string;
   totalAllocation: string;
-  rewardAsset: string;
-  windowLabel: string;
-  windowSecondsRemaining: number;
-  status: string;
-  yourStake: string;
-  pending: string;
-  entries: {
-    pid: number;
-    stakeToken: string;
-    allocPoint: number;
-    yourBalance: string;
-    yourStake: string;
-    poolBalance: string;
-  }[];
+  rewardAsset: "MONEY" | "ESTATE";
+  defaultStakeLabel: string;
 }
 
-const POOLS: Record<PoolId, PoolView> = {
+const META: Record<PoolId, PoolMeta> = {
   genesis: {
-    id: "genesis",
     numeral: "I",
     formalName: "The Genesis Window",
     subtitle: "Twenty-Four Hours · Founders Only",
@@ -60,70 +50,76 @@ const POOLS: Record<PoolId, PoolView> = {
       "Deposit your $WETH, $USDC, or other outside assets for twenty-four hours. Receive $MONEY pro-rata. The bootstrap of The Trust.",
     totalAllocation: "11,000",
     rewardAsset: "MONEY",
-    windowLabel: "Closes In",
-    windowSecondsRemaining: 86_400, // 24h placeholder
-    status: "Awaiting Operator Open",
-    yourStake: "0",
-    pending: "0",
-    entries: [
-      // Operator-set; empty until script/OpenLaunch runs.
-    ],
+    defaultStakeLabel: "Operator-Set Stake Token",
   },
   main: {
-    id: "main",
     numeral: "II",
     formalName: "The Main Pool",
     subtitle: "Nine Days · The MONEY-WETH Liquidity Provider",
     gloss:
-      "Provide MONEY-WETH liquidity on Uniswap V4. Wrap the position into an ERC-20 certificate. Stake the certificate here. Eighty thousand $MONEY across the first four days, sixty thousand across the next five.",
+      "Provide MONEY-WETH liquidity on Uniswap V4. Wrap the position into an ERC-20 certificate. Stake the certificate here.",
     totalAllocation: "140,000",
     rewardAsset: "MONEY",
-    windowLabel: "Closes In",
-    windowSecondsRemaining: 9 * 86_400, // 9 days placeholder
-    status: "Awaiting Genesis Close",
-    yourStake: "0",
-    pending: "0",
-    entries: [
-      {
-        pid: 0,
-        stakeToken: "OM · MONEY-WETH LP",
-        allocPoint: 100,
-        yourBalance: "0",
-        yourStake: "0",
-        poolBalance: "0",
-      },
-    ],
+    defaultStakeLabel: "OM · MONEY-WETH LP",
   },
   share: {
-    id: "share",
     numeral: "III",
     formalName: "The Share Distribution",
     subtitle: "Three Hundred Seventy Days · ESTATE Issuance",
     gloss:
-      "The long emission. Fifty-nine thousand five hundred $ESTATE distributed to LP stakers across three hundred seventy days. Earn the share token. Stake the share at The Club.",
+      "The long emission. Fifty-nine thousand five hundred $ESTATE distributed to LP stakers across three hundred seventy days.",
     totalAllocation: "59,500",
     rewardAsset: "ESTATE",
-    windowLabel: "Closes In",
-    windowSecondsRemaining: 370 * 86_400,
-    status: "Awaiting Genesis Close",
-    yourStake: "0",
-    pending: "0",
-    entries: [
-      {
-        pid: 0,
-        stakeToken: "OM · MONEY-WETH LP",
-        allocPoint: 100,
-        yourBalance: "0",
-        yourStake: "0",
-        poolBalance: "0",
-      },
-    ],
+    defaultStakeLabel: "OM · MONEY-WETH LP",
   },
 };
 
 export function TheVault() {
   const [activeId, setActiveId] = useState<PoolId>("genesis");
-  const pool = POOLS[activeId];
+  const deployment = useDeployment();
+  const meta = META[activeId];
+
+  const poolAddress =
+    activeId === "genesis"
+      ? deployment?.genesisRewardPool
+      : activeId === "main"
+        ? deployment?.mainRewardPool
+        : deployment?.shareRewardPool;
+
+  const reward = meta.rewardAsset === "MONEY" ? "money" : "share";
+  const pid0 = useRewardPool({ pool: poolAddress, pid: 0, reward });
+
+  // Wallet balance + allowance for the stake token (pid 0). When the pool has
+  // no PIDs yet, stakeToken is undefined; the hook returns 0 in that case.
+  const tokenStatus = useTokenStatus(pid0.stakeToken, poolAddress);
+
+  // Window-end countdown. Genesis/Main expose poolEndTime; Share extends 370d.
+  // We only render poolStartTime + a fixed window duration, since the contract
+  // doesn't expose a public end-time view for Share.
+  // For now: until-window-end is computed lazily — Sprint C polish hooks this.
+  const nowSec = BigInt(Math.floor(Date.now() / 1000));
+  const startTime = pid0.poolStartTime;
+  const windowSec =
+    activeId === "genesis"
+      ? BigInt(86_400) // 24h
+      : activeId === "main"
+        ? BigInt(9 * 86_400) // 9d
+        : BigInt(370 * 86_400); // 370d
+  const endTime = startTime > 0n ? startTime + windowSec : 0n;
+  const secondsUntilEnd = endTime > nowSec ? Number(endTime - nowSec) : 0;
+
+  // Status label
+  let status = "Loading…";
+  if (deployment) {
+    if (!pid0.exists) status = "No Stakes Registered";
+    else if (startTime > nowSec) status = "Awaiting Open";
+    else if (endTime > nowSec) status = "Open";
+    else status = "Window Closed";
+  }
+
+  const yourStakeDisplay = formatToken(pid0.yourStake, 4);
+  const pendingDisplay = formatToken(pid0.pending, 4);
+  const walletDisplay = formatToken(tokenStatus.balance, 4);
 
   return (
     <div className="bg-deco-ground">
@@ -167,42 +163,42 @@ export function TheVault() {
       {/* ===== Active Pool Overview ===== */}
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-7xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">{pool.subtitle}</div>
+          <div className="label-deco mb-3 text-deco-gold-dark">{meta.subtitle}</div>
           <h2
             className="mb-4 font-display text-3xl italic text-deco-ivory md:text-4xl"
             style={{ letterSpacing: "0.06em" }}
           >
-            {pool.formalName}
+            {meta.formalName}
           </h2>
           <div className="mx-auto mb-8 h-[2px] w-12 bg-deco-gold" aria-hidden />
           <p className="mx-auto mb-12 max-w-2xl font-body text-base text-deco-ivory-soft md:text-lg">
-            {pool.gloss}
+            {meta.gloss}
           </p>
 
           <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="Total Allocation"
-              value={pool.totalAllocation}
-              hint={`$${pool.rewardAsset} · Across The Window`}
+              value={meta.totalAllocation}
+              hint={`$${meta.rewardAsset} · Across The Window`}
             />
             <StatTile
               label="Your Stake"
-              value={pool.yourStake}
+              value={yourStakeDisplay}
               hint="Across All Entries"
             />
             <StatTile
               label="Your Pending"
-              value={pool.pending}
-              hint={`$${pool.rewardAsset} · Unclaimed`}
+              value={pendingDisplay}
+              hint={`$${meta.rewardAsset} · Unclaimed`}
             />
-            <StatTile label="Status" value={pool.status} hint="Set By Operator" />
+            <StatTile label="Status" value={status} hint="Window State" />
           </div>
 
           {/* Window countdown */}
           <div className="deco-panel mx-auto max-w-md">
             <LockupClock
-              label={pool.windowLabel}
-              secondsRemaining={pool.windowSecondsRemaining}
+              label="Closes In"
+              secondsRemaining={secondsUntilEnd}
               unlockedLabel="Window Has Closed"
             />
           </div>
@@ -217,7 +213,7 @@ export function TheVault() {
           </div>
 
           <div className="deco-panel overflow-x-auto p-0">
-            {pool.entries.length === 0 ? (
+            {!pid0.exists ? (
               <div className="py-12 text-center">
                 <p className="mx-auto max-w-md font-body text-base italic text-deco-ivory-soft">
                   No stake assets registered. The Operator must call{" "}
@@ -240,9 +236,14 @@ export function TheVault() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pool.entries.map((entry) => (
-                    <PoolEntryRow key={entry.pid} {...entry} />
-                  ))}
+                  <PoolEntryRow
+                    pid={0}
+                    stakeToken={meta.defaultStakeLabel}
+                    allocPoint={Number(pid0.allocPoint)}
+                    yourBalance={walletDisplay}
+                    yourStake={yourStakeDisplay}
+                    poolBalance="—" /* Sprint C: token.balanceOf(pool) read */
+                  />
                 </tbody>
               </table>
             )}
@@ -260,32 +261,36 @@ export function TheVault() {
             <ActionPanel
               numeral="I"
               title="Make a Deposit"
-              blurb={`Deposit your stake asset. Begin earning $${pool.rewardAsset} pro-rata.`}
-              asset={pool.entries[0]?.stakeToken ?? "—"}
-              maxAvailable={pool.entries[0]?.yourBalance ?? "0"}
+              blurb={`Deposit your stake asset. Begin earning $${meta.rewardAsset} pro-rata.`}
+              asset={meta.defaultStakeLabel}
+              maxAvailable={walletDisplay}
               cta="Authorize · Stake"
-              disabled={pool.entries.length === 0}
-              disabledReason="No stake asset registered."
+              disabled={!pid0.exists || tokenStatus.balance === 0n}
+              disabledReason={
+                !pid0.exists
+                  ? "No stake asset registered."
+                  : "No stake asset in wallet."
+              }
             />
             <ActionPanel
               numeral="II"
               title="Withdraw"
               blurb="Recall your stake. Pending rewards are claimed automatically."
-              asset={pool.entries[0]?.stakeToken ?? "—"}
-              maxAvailable={pool.entries[0]?.yourStake ?? "0"}
+              asset={meta.defaultStakeLabel}
+              maxAvailable={yourStakeDisplay}
               cta="Withdraw"
-              disabled={(pool.entries[0]?.yourStake ?? "0") === "0"}
+              disabled={pid0.yourStake === 0n}
               disabledReason="Nothing currently deposited."
             />
             <ActionPanel
               numeral="III"
               title="Forfeit & Withdraw"
               blurb="Emergency exit. Returns your stake but FORFEITS all pending rewards. Use only if compelled."
-              asset={pool.entries[0]?.stakeToken ?? "—"}
-              maxAvailable={pool.entries[0]?.yourStake ?? "0"}
+              asset={meta.defaultStakeLabel}
+              maxAvailable={yourStakeDisplay}
               cta="Forfeit · Exit"
               noInput
-              disabled={(pool.entries[0]?.yourStake ?? "0") === "0"}
+              disabled={pid0.yourStake === 0n}
               disabledReason="Nothing currently deposited."
             />
           </div>

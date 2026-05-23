@@ -1,10 +1,14 @@
 import { useState } from "react";
+import { formatUnits } from "viem";
 
 import { BondForm } from "@/components/BondForm";
 import { MarketStateBanner, type MarketState } from "@/components/MarketStateBanner";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
+
+import { useBondMarket, useMoneyMarket, useTokenSupplies } from "@/lib/hooks";
+import { formatToken, formatPrice } from "@/lib/format";
 
 /**
  * Trust Notes — the bond office.
@@ -33,31 +37,59 @@ type Tab = "acquire" | "present";
 export function TrustNotes() {
   const [tab, setTab] = useState<Tab>("acquire");
 
-  // Placeholder market state — Sprint B computes from price + thresholds.
-  // For the initial demo we render "closed" since no contraction has occurred.
-  // Cast widens the type so the comparison narrowings below typecheck.
-  const marketState = "closed" as MarketState;
-  const currentPrice = "1.0000";
-  const priceDetail = "Within The Band · 1.0000 to 1.0100 ETH";
+  const market = useMoneyMarket();
+  const bonds = useBondMarket();
+  const supplies = useTokenSupplies();
 
-  // Placeholder rates. Sprint B reads:
-  //   acquire: treasury.getBondDiscountRate() — usually 1.0 (no discount) unless
-  //            discountPercent > 0; below 1.0 ETH the rate is 1e18/price (more bonds
-  //            per MONEY burned).
-  //   present: treasury.getBondPremiumRate() — 1.0 between 1.01 and 1.10; above
-  //            1.10 it's 1 + (price - 1) * 70% / 10000.
-  const discountRate = 1.0;
-  const premiumRate = 1.0;
+  // Derive market state from price + thresholds. Pre-oracle-update price=0n
+  // surfaces "closed" so the UI explains the bond office is offline rather than
+  // showing a misleading "below par" state.
+  const closed = market.price === 0n;
+  // premiumThreshold is stored as a percent (e.g., 110) — convert to absolute price.
+  const premiumThresholdAbs =
+    market.premiumThreshold > 0n ? (market.priceOne * market.premiumThreshold) / 100n : 0n;
 
-  // Placeholder user balances + market totals.
-  const moneyInWallet = "0";
-  const notesInWallet = "0";
-  const noteSupply = "0";
-  const treasuryReserve = "0";
-  const debtRatio = "0.00%";
+  let marketState: MarketState = "closed";
+  if (!closed) {
+    if (premiumThresholdAbs > 0n && market.price >= premiumThresholdAbs) {
+      marketState = "redemption";
+    } else if (market.priceCeiling > 0n && market.price >= market.priceCeiling) {
+      marketState = "at-rest"; // within band; below premium
+    } else if (market.price < market.priceOne) {
+      marketState = "acquisition";
+    } else {
+      marketState = "at-rest";
+    }
+  }
+
+  const currentPrice = closed ? "—" : formatPrice(market.price);
+  const priceDetail = closed
+    ? "Awaiting First Oracle Observation"
+    : `Band · ${formatPrice(market.priceOne)} – ${formatPrice(market.priceCeiling)} ETH`;
+
+  // Rates are 1e18-scaled. 0n means inactive — display as 1.0× (1:1) so the
+  // BondForm's preview math doesn't multiply by zero. Real exchange happens
+  // only when the action is enabled.
+  const discountRate =
+    bonds.discountRate > 0n ? Number(formatUnits(bonds.discountRate, 18)) : 1.0;
+  const premiumRate =
+    bonds.premiumRate > 0n ? Number(formatUnits(bonds.premiumRate, 18)) : 1.0;
+
+  const moneyInWallet = formatToken(bonds.moneyInWallet, 4);
+  const notesInWallet = formatToken(bonds.trustNotesInWallet, 4);
+  const noteSupply = formatToken(supplies.trustNoteSupply, 0);
+  const treasuryReserve = formatToken(market.seigniorageSaved, 0);
+
+  // Debt ratio: TRUSTNOTE.totalSupply / MONEY.totalSupply, percent-formatted.
+  const moneyTotal = supplies.moneySupply ?? 0n;
+  const noteTotal = supplies.trustNoteSupply ?? 0n;
+  const debtRatio =
+    moneyTotal === 0n
+      ? "—"
+      : `${(Number((noteTotal * 10000n) / moneyTotal) / 100).toFixed(2)}%`;
 
   const acquireDisabled = marketState !== "acquisition";
-  const presentDisabled = marketState !== "redemption";
+  const presentDisabled = marketState !== "redemption" && marketState !== "at-rest";
 
   return (
     <div className="bg-deco-ground">
@@ -88,7 +120,7 @@ export function TrustNotes() {
       {/* ===== Market State Banner ===== */}
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <MarketStateBanner
-          state={marketState}
+          state={marketState === "at-rest" ? "at-rest" : marketState}
           price={currentPrice}
           detail={priceDetail}
         />

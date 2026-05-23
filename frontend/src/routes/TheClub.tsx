@@ -3,39 +3,57 @@ import { LockupClock } from "@/components/LockupClock";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 
+import { useBoardroom, useEpoch } from "@/lib/hooks";
+import { formatToken } from "@/lib/format";
+
 /**
- * The Club — Boardroom interface. Members stake $ESTATE, receive $MONEY each
- * expansion epoch.
+ * The Club — Boardroom interface, wired to live state.
  *
- * Layout (centered vertical axis throughout):
- *   1. Heading — "The Club" with imperial label + rule trio
- *   2. Position overview — 4 tiles + 2 lockup clocks (Withdraw / Claim)
- *   3. Actions — 3 ActionPanel cards (Make Deposit / Withdraw / Claim Returns)
- *   4. Boardroom state — 4 read-only tiles
- *   5. The Lockup Schedule — formal explanation panel
+ * Lockup remaining seconds derivation:
+ *   The Boardroom's `epochTimerStart` is the epoch index at the user's last
+ *   stake/withdraw/claim. They can withdraw when `currentEpoch - timerStart >=
+ *   withdrawLockupEpochs` and claim when `>= rewardLockupEpochs`.
  *
- * All values + actions are PLACEHOLDERS. Sprint B wires:
- *   - useReadContract → estate.balanceOf(user), boardroom.balanceOf(user),
- *     boardroom.earned(user), boardroom.canWithdraw(user), boardroom.canClaimReward(user),
- *     treasury.epoch(), treasury.nextEpochPoint(), boardroom.totalSupply()
- *   - useWriteContract → estate.approve(boardroom), boardroom.stake, boardroom.withdraw,
- *     boardroom.claimReward
+ *   Remaining-time math: (timerStart + lockupEpochs) is the epoch at which the
+ *   gate opens. Multiplied by PERIOD (6h) and added to startTime, we get the
+ *   absolute unlock timestamp. The hook can't run this multiplication because
+ *   it'd need PERIOD; we compose it here using useEpoch's period + startTime.
+ *
+ * Write actions (stake/withdraw/claim) are placeholders this turn — wired in T9.
  */
 export function TheClub() {
-  // Placeholder values — Sprint B wires live reads.
-  const positionStakedEstate = "0";
-  const pendingMoney = "0";
-  const walletEstate = "0";
-  const lifetimeClaimed = "0";
+  const epoch = useEpoch();
+  const club = useBoardroom();
 
-  // Placeholder lockup seconds — neither active yet
-  const withdrawLockupSec = 0;
-  const claimLockupSec = 0;
+  // Lockup countdown derivation. PERIOD is the Treasury epoch length (6h);
+  // each epoch nextEpochPoint = startTime + epoch * PERIOD.
+  const period = epoch.period ?? 0n;
+  const startTime = epoch.startTime ?? 0n;
+  const currentEpoch = epoch.epoch ?? 0n;
+  const timerStart = club.epochTimerStart ?? 0n;
+  const wLockup = club.withdrawLockupEpochs ?? 0n;
+  const rLockup = club.rewardLockupEpochs ?? 0n;
 
-  // Boardroom state placeholders
-  const boardroomTotalStaked = "1";
-  const lifetimeDistributed = "0";
-  const lastDistribution = "0";
+  const nowSec = BigInt(Math.floor(Date.now() / 1000));
+  function lockupSeconds(lockup: bigint): number {
+    if (currentEpoch === 0n && timerStart === 0n) return 0; // never staked
+    const unlockEpoch = timerStart + lockup;
+    if (unlockEpoch <= currentEpoch) return 0;
+    const unlockAt = startTime + unlockEpoch * period;
+    if (unlockAt <= nowSec) return 0;
+    return Number(unlockAt - nowSec);
+  }
+  const withdrawLockupSec = lockupSeconds(wLockup);
+  const claimLockupSec = lockupSeconds(rLockup);
+
+  const stakedDisplay = formatToken(club.yourStake, 4);
+  const pendingDisplay = formatToken(club.earned, 4);
+  const walletDisplay = formatToken(club.estateInWallet, 4);
+  const totalDisplay = formatToken(club.totalStaked, 2);
+
+  // Disable Withdraw/Claim when timer hasn't matured, or when nothing to act on.
+  const cantWithdraw = !club.canWithdraw || club.yourStake === 0n;
+  const cantClaim = !club.canClaimReward || club.earned === 0n;
 
   return (
     <div className="bg-deco-ground">
@@ -70,17 +88,13 @@ export function TheClub() {
             Your Position
           </div>
           <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
+            <StatTile label="Staked" value={stakedDisplay} hint="$ESTATE · in The Club" />
+            <StatTile label="Pending" value={pendingDisplay} hint="$MONEY · Unclaimed" />
+            <StatTile label="In Wallet" value={walletDisplay} hint="$ESTATE · Available" />
             <StatTile
-              label="Staked"
-              value={positionStakedEstate}
-              hint="$ESTATE · in The Club"
-            />
-            <StatTile label="Pending" value={pendingMoney} hint="$MONEY · Unclaimed" />
-            <StatTile label="In Wallet" value={walletEstate} hint="$ESTATE · Available" />
-            <StatTile
-              label="Lifetime"
-              value={lifetimeClaimed}
-              hint="$MONEY · Claimed To Date"
+              label="Last Activity"
+              value={timerStart > 0n ? `Epoch ${timerStart.toString()}` : "—"}
+              hint="Resets Each Stake or Claim"
             />
           </div>
 
@@ -110,29 +124,39 @@ export function TheClub() {
               title="Make a Deposit"
               blurb="Deposit $ESTATE into the Boardroom. Begin earning seigniorage each expansion epoch."
               asset="ESTATE"
-              maxAvailable={walletEstate}
+              maxAvailable={walletDisplay}
               cta="Authorize · Stake"
+              disabled={club.estateInWallet === 0n}
+              disabledReason="No $ESTATE in wallet."
             />
             <ActionPanel
               numeral="II"
               title="Withdraw"
               blurb="Recall your $ESTATE from the Boardroom. Six-epoch lock from your last interaction."
               asset="ESTATE"
-              maxAvailable={positionStakedEstate}
+              maxAvailable={stakedDisplay}
               cta="Withdraw"
-              disabled={positionStakedEstate === "0"}
-              disabledReason="No $ESTATE currently deposited."
+              disabled={cantWithdraw}
+              disabledReason={
+                club.yourStake === 0n
+                  ? "Nothing currently deposited."
+                  : "Withdraw lockup not yet matured."
+              }
             />
             <ActionPanel
               numeral="III"
               title="Claim Your Returns"
               blurb="Claim accrued $MONEY. Three-epoch lock from your last interaction."
               asset="MONEY"
-              maxAvailable={pendingMoney}
+              maxAvailable={pendingDisplay}
               cta="Claim Returns"
               noInput
-              disabled={pendingMoney === "0"}
-              disabledReason="No returns currently accrued."
+              disabled={cantClaim}
+              disabledReason={
+                club.earned === 0n
+                  ? "No returns currently accrued."
+                  : "Reward lockup not yet matured."
+              }
             />
           </div>
         </div>
@@ -147,20 +171,24 @@ export function TheClub() {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="Aggregate Deposited"
-              value={boardroomTotalStaked}
+              value={totalDisplay}
               hint="$ESTATE · in The Club"
             />
             <StatTile
-              label="Distributed To Date"
-              value={lifetimeDistributed}
-              hint="$MONEY · Lifetime"
+              label="Withdraw Lockup"
+              value={wLockup > 0n ? `${wLockup.toString()} Epochs` : "—"}
+              hint="From Last Interaction"
             />
             <StatTile
-              label="Last Epoch"
-              value={lastDistribution}
-              hint="$MONEY · Distributed"
+              label="Reward Lockup"
+              value={rLockup > 0n ? `${rLockup.toString()} Epochs` : "—"}
+              hint="From Last Interaction"
             />
-            <StatTile label="Member Count" value="1" hint="Including The Founder" />
+            <StatTile
+              label="Current Epoch"
+              value={currentEpoch.toString()}
+              hint="As Counted by The Treasury"
+            />
           </div>
         </div>
       </section>
@@ -184,10 +212,12 @@ export function TheClub() {
                   className="font-display text-3xl text-deco-ivory"
                   style={{ letterSpacing: "0.05em" }}
                 >
-                  6 <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
+                  {wLockup > 0n ? wLockup.toString() : "6"}{" "}
+                  <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
                 </div>
                 <p className="mt-2 font-body text-sm italic text-deco-ivory-soft">
-                  Thirty-six hours. Counted from your last interaction with the Boardroom — any stake, withdraw, or claim resets the clock.
+                  Counted from your last interaction with the Boardroom — any stake,
+                  withdraw, or claim resets the clock.
                 </p>
               </div>
               <div className="border-l border-deco-gold/40 pl-5">
@@ -196,10 +226,12 @@ export function TheClub() {
                   className="font-display text-3xl text-deco-ivory"
                   style={{ letterSpacing: "0.05em" }}
                 >
-                  3 <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
+                  {rLockup > 0n ? rLockup.toString() : "3"}{" "}
+                  <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
                 </div>
                 <p className="mt-2 font-body text-sm italic text-deco-ivory-soft">
-                  Eighteen hours. The Members do not extract on impulse. The Trust observes its own equilibrium.
+                  The Members do not extract on impulse. The Trust observes its own
+                  equilibrium.
                 </p>
               </div>
             </div>

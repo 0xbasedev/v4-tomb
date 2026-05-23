@@ -108,4 +108,32 @@ export const treasuryAbi = [
     inputs: [],
     outputs: [{ name: "", type: "bool" }],
   },
+  {
+    type: "function",
+    name: "getBondDiscountRate",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "rate", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getBondPremiumRate",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "rate", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getBurnableMoneyLeft",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "burnableLeft", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getRedeemableBonds",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "redeemable", type: "uint256" }],
+  },
 ] as const;
