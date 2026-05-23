@@ -1,10 +1,13 @@
+import { Link } from "react-router-dom";
+
 /**
  * PillarCard — large action card for the protocol's "Three Estates" (The Club /
  * The Vault / Trust Notes). Frame-within-frame, centered axis, ornament label,
  * formal voice CTA. All three pillars share the same palette — Art Deco doesn't
  * vary the palette per card; the cards are siblings, equal in weight.
  *
- * The Roman numeral acts as the ornament marker at the top.
+ * The Roman numeral acts as the ornament marker at the top. Uses react-router
+ * Link for internal route navigation.
  */
 
 interface PillarCardProps {
@@ -12,13 +15,13 @@ interface PillarCardProps {
   title: string;
   blurb: string;
   cta: string;
-  href: string;
+  to: string;
 }
 
-export function PillarCard({ numeral, title, blurb, cta, href }: PillarCardProps) {
+export function PillarCard({ numeral, title, blurb, cta, to }: PillarCardProps) {
   return (
-    <a
-      href={href}
+    <Link
+      to={to}
       className="deco-panel group flex h-full flex-col text-center transition-colors duration-300 hover:bg-deco-ground-medium"
     >
       <div
@@ -43,6 +46,6 @@ export function PillarCard({ numeral, title, blurb, cta, href }: PillarCardProps
         {cta}
         <span className="font-display text-base">→</span>
       </span>
-    </a>
+    </Link>
   );
 }

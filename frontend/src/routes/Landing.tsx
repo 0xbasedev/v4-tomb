@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import { ConnectButton } from "@/components/ConnectButton";
 import { StatTile } from "@/components/StatTile";
 import { PillarCard } from "@/components/PillarCard";
@@ -73,8 +75,12 @@ export function Landing() {
 
           {/* CTAs */}
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <button className="btn-deco btn-deco-primary">Enter The Trust</button>
-            <button className="btn-deco">Discover The Mechanism</button>
+            <Link to="/dashboard" className="btn-deco btn-deco-primary">
+              Enter The Trust
+            </Link>
+            <a href="#mechanism" className="btn-deco">
+              Discover The Mechanism
+            </a>
           </div>
         </div>
 
@@ -119,21 +125,21 @@ export function Landing() {
               title="The Club"
               blurb="Stake $ESTATE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
               cta="Take a Seat"
-              href="#club"
+              to="/club"
             />
             <PillarCard
               numeral="II"
               title="The Vault"
               blurb="Provide MONEY-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand MONEY across nine days."
               cta="Open The Vault"
-              href="#vault"
+              to="/vault"
             />
             <PillarCard
               numeral="III"
               title="Trust Notes"
               blurb="When MONEY falls below peg, redeem it for Trust Notes at a discount. When the Trust recovers above one and one-tenth, redeem for a premium."
               cta="View The Notes"
-              href="#bonds"
+              to="/notes"
             />
           </div>
         </div>
