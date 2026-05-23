@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 
 import { ConnectButton } from "@/components/ConnectButton";
 import { RuleTrio } from "@/components/RuleTrio";
+import { useIsAdmin } from "@/lib/hooks";
 
 /**
  * Layout — shared chrome across every route. Top nav with brand mark + section
@@ -32,6 +33,7 @@ export function Layout() {
 }
 
 function Nav() {
+  const admin = useIsAdmin();
   return (
     <nav className="relative z-20 border-b border-deco-gold/30 bg-deco-ground">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 md:px-12">
@@ -63,6 +65,20 @@ function Nav() {
               {item.label}
             </NavLink>
           ))}
+          {admin.isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `label-deco border px-2 py-1 transition-colors ${
+                  isActive
+                    ? "border-deco-gold bg-deco-gold/10 text-deco-gold-light"
+                    : "border-deco-gold/40 text-deco-gold hover:border-deco-gold"
+                }`
+              }
+            >
+              Admin
+            </NavLink>
+          )}
         </div>
 
         <ConnectButton />

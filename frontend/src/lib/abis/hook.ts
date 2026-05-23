@@ -46,4 +46,26 @@ export const hookAbi = [
     inputs: [],
     outputs: [{ name: "", type: "bool" }],
   },
+  {
+    type: "function",
+    name: "trustees",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "treasury",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  // ----- Writes -----
+  {
+    type: "function",
+    name: "setAutoCalculateTax",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "enabled", type: "bool" }],
+    outputs: [],
+  },
 ] as const;
