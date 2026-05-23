@@ -10,3 +10,4 @@ export { universalRouterAbi, UR_COMMANDS, V4_ACTIONS } from "./universalRouter";
 export { genesisRewardPoolAbi } from "./genesisRewardPool";
 export { ownable2StepAbi } from "./ownable";
 export { miniSwapRouterAbi } from "./miniSwapRouter";
+export { poolManagerAbi } from "./poolManager";

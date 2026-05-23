@@ -8,7 +8,7 @@ import { SwapCard } from "@/components/SwapCard";
 import { TabBar } from "@/components/TabBar";
 import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
 
-import { useDeployment, usePoolPrice, useSwap } from "@/lib/hooks";
+import { useDeployment, usePoolPrice, usePoolReserves, useSwap } from "@/lib/hooks";
 import { erc20Abi } from "@/lib/abis";
 import { useToast } from "@/components/ToastProvider";
 import { maskDecimalInput } from "@/lib/util/decimal";
@@ -110,24 +110,26 @@ export function Swap() {
   const moneyBal = balances.data?.[0] ?? 0n;
   const wethBal = balances.data?.[1] ?? 0n;
 
-  // Pool depth — what the PoolManager holds. On a chain where MONEY only
-  // lives in this one V4 pool, MONEY.balanceOf(PoolManager) equals exactly
-  // our pool's MONEY. WETH may live in other V4 pools on the same chain;
-  // on Base Sepolia our pool is currently the only WETH-bearing one so the
-  // read is accurate. Mainnet should swap to a proper getLiquidity reader
-  // via the V4 StateView contract.
-  const poolDepth = useReadContracts({
-    allowFailure: false,
-    contracts: deployment
-      ? [
-          { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [deployment.poolManager] },
-          { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [deployment.poolManager] },
-        ]
-      : [],
-    query: { enabled: !!deployment, refetchInterval: 15_000 },
-  });
-  const poolMoney = poolDepth.data?.[0] ?? 0n;
-  const poolWeth = poolDepth.data?.[1] ?? 0n;
+  // Pool depth — read from V4 PoolManager state via extsload. This gives
+  // OUR pool's reserves exactly, not all V4 pools on the chain.
+  // PoolKey for MONEY-WETH; computed live from deployment addresses.
+  const moneyWethPoolKey = deployment
+    ? (() => {
+        const wethIsToken0 =
+          (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
+        return {
+          currency0: wethIsToken0 ? deployment.weth : deployment.money,
+          currency1: wethIsToken0 ? deployment.money : deployment.weth,
+          fee: DYNAMIC_FEE_FLAG,
+          tickSpacing: MONEY_WETH_TICK_SPACING,
+          hooks: deployment.hook,
+        };
+      })()
+    : null;
+  const reserves = usePoolReserves(moneyWethPoolKey);
+  // PoolKey sorts WETH as currency0 (smaller address) on Base/Base Sepolia.
+  const poolWeth = reserves.amount0;
+  const poolMoney = reserves.amount1;
 
   // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
   // is not bound to any of our hooks, so for now we keep its spot at the

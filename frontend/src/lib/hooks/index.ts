@@ -9,6 +9,7 @@ export { useApproveAndCall, type CallState } from "./useApproveAndCall";
 export { usePoolPrice } from "./usePoolPrice";
 export { useV4Position } from "./useV4Position";
 export { useSwap } from "./useSwap";
+export { usePoolReserves, computePoolId } from "./usePoolReserves";
 export { useMintPosition } from "./useMintPosition";
 export { useTreasuryEvents, type TreasuryEventRow, type TreasuryEventKind } from "./useTreasuryEvents";
 export { useIsAdmin } from "./useIsAdmin";
