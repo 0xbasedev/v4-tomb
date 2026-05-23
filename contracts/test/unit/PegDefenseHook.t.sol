@@ -91,7 +91,9 @@ contract PegDefenseHookTest is BaseTest {
         );
 
         deployCodeTo(
-            "PegDefenseHook.sol:PegDefenseHook", abi.encode(IPoolManager(address(pm)), address(money)), hookAddr
+            "PegDefenseHook.sol:PegDefenseHook",
+            abi.encode(IPoolManager(address(pm)), address(money), address(this)),
+            hookAddr
         );
         hook = PegDefenseHook(hookAddr);
 

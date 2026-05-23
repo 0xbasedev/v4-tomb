@@ -35,7 +35,8 @@ For deploy commands and env vars, see [DEPLOY.md](DEPLOY.md).
 
 | # | Sprint | Status | What it adds |
 |---|---|---|---|
-| 4b | PegDefenseHook tax routing (Tomb burn-during-contraction) | **DONE** 2026-05-22 (`72a1c3d` + `a296c11` + `f2ed8dd` + this commit) | Tomb-faithful 14-tier tax slice on sells; burn below 1.10e18 or route to Treasury above. 28 unit + 5 fork + 4 fuzz tests. Permission bits `0x1088`. Closes gap #3 / BUG #3. |
+| 4b | PegDefenseHook tax routing (Tomb burn-during-contraction) | **DONE** 2026-05-22 (`72a1c3d` + `a296c11` + `f2ed8dd` + `06ed22a`) | Tomb-faithful 14-tier tax slice on sells; burn below 1.10e18 or route to Treasury above. 28 unit + 5 fork + 4 fuzz tests. Permission bits `0x1088`. Closes gap #3 / BUG #3. |
+| 16 | V4 LP wrapper for Main + Share reward pools | **DONE** 2026-05-22 (`d0b9f75` + `c809217` + this commit) | `V4PositionWrapper.sol` — wraps V4 position NFTs into ERC-20 shares stakeable in MasterChef pools. 15 unit + 4 fork tests. Deploy script wires it into Main + Share pools as 100-weight entry. Closes gap #1. |
 | 14 | Timelock deploy + ownership transfer ceremony | not started | `script/DeployTimelock.s.sol` + a separate `transferOwnership` script that walks every contract: token Ownable2Step transfers, hook trustees transfer, Treasury setOperator, etc. Plus a `docs/GOVERNANCE.md` checklist |
 | 15 | MainRewardPool + ShareRewardPool full test coverage | partial | Bring those two up to GenesisRewardPool's 20-test level. Multi-staker + multi-pool + pro-rata + emergency withdraw + governance recovery. Less critical but nice for audit completeness |
 | 16 | Merkle airdrop contract (OPTIONAL) | not started | If you want on-chain proof-based airdrop claims for the 9k MONEY allocation. Tomb didn't have this — purely a modernization choice |

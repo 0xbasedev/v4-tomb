@@ -184,9 +184,20 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
 
     constructor(
         IPoolManager _poolManager,
-        address _money
+        address _money,
+        address _initialTrustees
     ) BaseV4Hook(_poolManager) {
         money = _money;
+
+        // Override the Trustees() base-constructor's msg.sender assignment. Required for
+        // CREATE2-via-broadcast deploys (e.g., `new Hook{salt:}(...)` inside
+        // `vm.startBroadcast`) where msg.sender of the constructor is the canonical
+        // deployer (0x4e59...) rather than the human deployer we want as administrator.
+        // Direct-deploy callers (tests using `deployCodeTo`, inline-assembly `create2`
+        // from a test contract) should pass `msg.sender` / `address(this)` to preserve
+        // the prior default behavior.
+        _transferTrustees(_initialTrustees); // reverts on zero address (ZeroTrusteesAddress)
+        _transferOwnership(_initialTrustees);
 
         // Tomb-faithful tier table (matches Bomb.sol exactly).
         taxTiersTwaps = [

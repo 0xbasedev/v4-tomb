@@ -95,7 +95,7 @@ contract BaseForkHookTest is BaseTest {
         uint160 flags =
             uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         bytes memory hookCreationCode =
-            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money)));
+            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money), address(this)));
         (address minedAddr, bytes32 hookSalt) = HookMiner.find(address(this), flags, hookCreationCode);
 
         PegDefenseHook deployedHook;

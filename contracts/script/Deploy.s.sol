@@ -17,6 +17,10 @@ import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
 import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
 import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
+import {V4PositionWrapper} from "../src/distribution/V4PositionWrapper.sol";
+
+import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {HookMiner} from "../test/utils/HookMiner.sol";
 
@@ -68,6 +72,7 @@ contract Deploy is Script {
     GenesisRewardPool public genesisRewardPool;
     MainRewardPool public mainRewardPool;
     ShareRewardPool public shareRewardPool;
+    V4PositionWrapper public lpWrapper;
     address public wethAddress;
     PoolKey public poolKey;
 
@@ -88,12 +93,20 @@ contract Deploy is Script {
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
         _deployOracle(g);
+        _deployLpWrapper();
         _deployRewardPools(g);
         _deployCoreAndInit(g);
 
         // Genesis distributions go directly to the freshly deployed pool contracts.
         money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
         estate.distributeReward(address(shareRewardPool));
+
+        // Register the LP wrapper as the stake token in the Main + Share reward pools.
+        // Deployer is still the operator on these pools — handoff to a Timelock happens
+        // in a later sprint (Sprint 14). Sets a single 100-weight entry on each; future
+        // ops can call .set() to add more LP types or adjust weights.
+        mainRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
+        shareRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
 
         // Wire Treasury into the hook so the Sprint 4b tax can route MONEY there above
         // the burn threshold. Hook trustees defaults to the deployer at construction; the
@@ -138,7 +151,8 @@ contract Deploy is Script {
         address deployer
     ) internal {
         IPoolManager pm = IPoolManager(Addresses.poolManager());
-        bytes memory creationCode = abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money)));
+        bytes memory creationCode =
+            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
         uint160 flags =
             uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         // Mine against the canonical CREATE2 deployer — Foundry routes broadcast
@@ -147,7 +161,7 @@ contract Deploy is Script {
         deployer; // silence unused-var warning
         (address mined, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode);
 
-        PegDefenseHook deployedHook = new PegDefenseHook{salt: salt}(pm, address(money));
+        PegDefenseHook deployedHook = new PegDefenseHook{salt: salt}(pm, address(money), deployer);
         require(address(deployedHook) == mined, "Deploy: hook addr mismatch");
         hook = deployedHook;
         console2.log("PegDefenseHook:", address(hook));
@@ -177,6 +191,25 @@ contract Deploy is Script {
     ///           - GenesisRewardPool opens at epochStart (24h window).
     ///           - MainRewardPool opens at epochStart + 1 day (genesis closes first).
     ///           - ShareRewardPool opens at epochStart + 1 day (concurrent with main).
+    /// @notice Deploy the V4 position wrapper for the MONEY/WETH pool. Full-range LP
+    ///         positions on this pool wrap into ERC-20 shares that can be staked in
+    ///         MainRewardPool + ShareRewardPool.
+    function _deployLpWrapper() internal {
+        int24 tickLower = TickMath.minUsableTick(60);
+        int24 tickUpper = TickMath.maxUsableTick(60);
+        lpWrapper = new V4PositionWrapper(
+            IPositionManager(Addresses.positionManager()),
+            poolKey,
+            tickLower,
+            tickUpper,
+            "Old Money MONEY-WETH LP",
+            "om-MWLP"
+        );
+        console2.log("V4PositionWrapper (MONEY/WETH full-range):", address(lpWrapper));
+        console2.log("  tickLower:", int256(tickLower));
+        console2.log("  tickUpper:", int256(tickUpper));
+    }
+
     function _deployRewardPools(
         Genesis memory g
     ) internal {
@@ -237,8 +270,13 @@ contract Deploy is Script {
         console2.log("MainRewardPool MONEY:   ", money.balanceOf(address(mainRewardPool)));
         console2.log("airdropWallet MONEY:    ", money.balanceOf(g.airdropWallet));
         console2.log("ShareRewardPool ESTATE: ", estate.balanceOf(address(shareRewardPool)));
-        console2.log("\nNext: operator (deployer) calls .add(allocPoint, stakeToken, false, 0) on each");
-        console2.log("reward pool. Genesis pool: stake WETH (or USDC). Main+Share pools: stake");
-        console2.log("MONEY/WETH LP wrapper tokens (deploy in a separate sprint).");
+        console2.log("\nNext steps (post-deploy):");
+        console2.log("  1. operator (deployer) calls genesisRewardPool.add(allocPoint, WETH, false, 0)");
+        console2.log("     and/or .add(..., USDC, ...) to open the genesis pool for stakers.");
+        console2.log("  2. Main + Share reward pools are already wired with V4PositionWrapper as the");
+        console2.log("     LP stake token (100 weight each). LPs mint a full-range MONEY/WETH V4");
+        console2.log("     position, wrap it, and stake the ERC-20 shares.");
+        console2.log("  3. Seed initial V4 pool liquidity (manual step before genesis opens).");
+        console2.log("  4. Rotate Treasury operator to a Timelock (Sprint 14, not yet shipped).");
     }
 }

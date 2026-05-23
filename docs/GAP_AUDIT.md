@@ -8,14 +8,20 @@ For severity, "Critical" = blocks mainnet launch on a chain that holds real user
 
 ## Critical
 
-### 1. V4 position NFT → ERC-20 wrapper missing (only blocks Main + Share pools)
-**Found:** 2026-05-22, after Base Sepolia deploy. **Scope clarified:** 2026-05-22 (same day).
+### 1. V4 position NFT → ERC-20 wrapper missing — ✅ CLOSED 2026-05-22
+**Found:** 2026-05-22, after Base Sepolia deploy. **Scope clarified:** 2026-05-22 (same day). **Closed:** 2026-05-22 (commits `d0b9f75` + `c809217` + this commit).
 
-`MainRewardPool` and `ShareRewardPool` expect ERC-20 LP tokens for the MONEY/cbETH pair (or other Old-Money-paired LP tokens). V4 issues ERC-721 position NFTs via `PositionManager`. Those two pools sit empty until a wrapper exists.
+`MainRewardPool` and `ShareRewardPool` expect ERC-20 LP tokens. V4 issues ERC-721 position NFTs via `PositionManager`. Sprint 16 closed the gap with `V4PositionWrapper.sol`:
 
-**Important: GenesisRewardPool is NOT blocked on the wrapper.** The genesis pool is a "mini-ICO" — it accepts outside ERC-20 tokens (cbETH, USDC, etc.) directly as the stake token. Users stake cbETH, earn MONEY over the 24-hour window. No MONEY/cbETH LP needed at genesis time. This matches Tomb's actual mechanism.
+- Bound to one specific `(poolId, tickLower, tickUpper)` per wrapper instance
+- `wrap(tokenId)` pulls the NFT, mints ERC-20 equal to position liquidity
+- `unwrap(tokenId)` burns shares, returns NFT — gated to original wrapper
+- ERC-20 freely transferable (so it's stakeable in MasterChef pools)
+- 15 mock-based unit tests + 4 real-V4 Base-fork integration tests
 
-**Status:** Sprint 16 (designing). Building a V4 position wrapper — owns one position NFT, issues ERC-20 receipts. Multi-turn focused effort per the production quality bar. Wrapper is needed before Main + Share pools open (Day 1+ in the launch sequence), not before Genesis pool opens (Day 0).
+The deploy script now deploys the wrapper bound to the full-range MONEY/WETH pool, and registers it as a 100-weight stake entry in both Main and Share reward pools. End-to-end Sepolia dry-run completes cleanly (32M gas estimate).
+
+**GenesisRewardPool was never blocked on the wrapper** — it accepts outside ERC-20 tokens (WETH, USDC) directly as the mini-ICO stake.
 
 ### 2. Initial V4 pool liquidity is zero
 The V4 MONEY/cbETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k MONEY allocation + team-owned cbETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn MONEY have a place to swap it.
