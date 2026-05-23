@@ -7,6 +7,7 @@ import { PoolEntryRow } from "@/components/PoolEntryRow";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
+import { MintPositionPanel } from "@/components/MintPositionPanel";
 import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
@@ -270,10 +271,11 @@ export function TheVault() {
         </div>
       </section>
 
-      {/* ===== Wrap Panel (Main + Share only) ===== */}
+      {/* ===== Mint + Wrap (Main + Share only) ===== */}
       {(activeId === "main" || activeId === "share") && (
         <section className="px-6 pb-12 md:px-12 md:pb-16">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto flex max-w-3xl flex-col gap-6">
+            <MintPositionPanel poolName={meta.formalName} />
             <WrapPanel poolName={meta.formalName} />
           </div>
         </section>

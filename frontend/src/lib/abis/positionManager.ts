@@ -74,4 +74,21 @@ export const positionManagerAbi = [
     ],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "modifyLiquidities",
+    stateMutability: "payable",
+    inputs: [
+      { name: "unlockData", type: "bytes" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "nextTokenId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
