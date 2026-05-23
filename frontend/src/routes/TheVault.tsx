@@ -7,6 +7,7 @@ import { PoolEntryRow } from "@/components/PoolEntryRow";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { TabBar } from "@/components/TabBar";
+import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
 import { moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
@@ -268,6 +269,15 @@ export function TheVault() {
           </div>
         </div>
       </section>
+
+      {/* ===== Wrap Panel (Main + Share only) ===== */}
+      {(activeId === "main" || activeId === "share") && (
+        <section className="px-6 pb-12 md:px-12 md:pb-16">
+          <div className="mx-auto max-w-3xl">
+            <WrapPanel poolName={meta.formalName} />
+          </div>
+        </section>
+      )}
 
       {/* ===== Actions ===== */}
       <section className="px-6 pb-20 md:px-12 md:pb-28">

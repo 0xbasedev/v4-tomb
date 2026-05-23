@@ -7,3 +7,4 @@ export { useBondMarket } from "./useBondMarket";
 export { useRewardPool, useTokenStatus } from "./useRewardPool";
 export { useApproveAndCall, type CallState } from "./useApproveAndCall";
 export { usePoolPrice } from "./usePoolPrice";
+export { useV4Position } from "./useV4Position";
