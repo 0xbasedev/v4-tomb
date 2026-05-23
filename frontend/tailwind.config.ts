@@ -1,168 +1,84 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Old Money Tailwind config.
+ * Old Money Tailwind config — Art Deco grammar.
  *
- * Three palette modes per docs/eighties-design skill:
- *   - miami   (Miami / New Wave — Vice / Nagel / pastel editorial)
- *   - memphis (Memphis Group / postmodern furniture / design magazines)
- *   - arcade  (Dark arcade / action-movie one-sheet / album cover)
+ * Per docs/skill-art-deco.md. Three palette modes:
+ *   - Classic Black & Gold (default — warm black ground, ivory text, metallic gold)
+ *   - Cream & Gold (editorial — ivory ground, near-black text)
+ *   - Jewel & Gold (glamour — warm dark ground with one jewel-tone accent)
  *
- * Mode is selected per-screen — Miami is the default for marketing/hero zones,
- * Arcade is for live-data dashboards, Memphis is a supporting accent.
+ * "Old Money" = inherited wealth = Gatsby-era opulence. Art Deco is the natural
+ * grammar — geometry as glamour, symmetry as power, ornament as structure.
  */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // ----- Miami / New Wave -----
-        "miami-ground": "#f8f0e8",
-        "miami-ground-blush": "#fff0f0",
-        "miami-ground-lavender": "#faf0ff",
-        "miami-pink": "#ff1493",
-        "miami-pink-soft": "#ff69b4",
-        "miami-teal": "#00ced1",
-        "miami-teal-soft": "#20b2aa",
-        "miami-orange": "#ff6600",
-        "miami-yellow": "#ffe600",
-        "miami-night": "#0a0a1a",
-        "miami-night-violet": "#1a0a2e",
+        // ----- Classic Black & Gold (primary mode) -----
+        "deco-ground": "#0d0a05",        // warm near-black (NOT pure black)
+        "deco-ground-soft": "#1a1005",    // very dark warm brown
+        "deco-ground-medium": "#241608",  // mid-tone for layered depth
+        "deco-ivory": "#f5f0e0",          // antique ivory — primary text on dark
+        "deco-ivory-soft": "#ebe5d2",     // slightly darker ivory
+        "deco-cream": "#faf5e6",          // pale cream — ground for editorial mode
+        "deco-gold": "#d4af37",           // mid gold (flat fallback)
+        "deco-gold-light": "#f5e6a3",     // pale champagne (top of metallic gradient)
+        "deco-gold-deep": "#a67c00",      // deep amber (gradient middle)
+        "deco-gold-dark": "#8b6914",      // dark antique gold (secondary text)
 
-        // ----- Memphis / postmodern -----
-        "memphis-white": "#ffffff",
-        "memphis-red": "#ff0040",
-        "memphis-yellow": "#ffe600",
-        "memphis-blue": "#0066ff",
-        "memphis-orange": "#ff6600",
-        "memphis-green": "#00cc44",
-        "memphis-violet": "#cc00ff",
-        "memphis-black": "#111111",
+        // ----- Jewel accents (use sparingly — one section max) -----
+        "deco-emerald": "#1a5c3a",
+        "deco-sapphire": "#1a2a5c",
+        "deco-ruby": "#5c1a1a",
+        "deco-teal": "#1a4a5c",
 
-        // ----- Arcade / action -----
-        "arcade-ground": "#0a0510",
-        "arcade-chrome": "#e0e0e0",
-        "arcade-magenta": "#ff1493",
-        "arcade-cyan": "#00ffff",
-        "arcade-red": "#ff2200",
-        "arcade-gold": "#ffd700",
-        "arcade-purple": "#9900ff",
-
-        // ----- Supplements (gold + oxblood per memory ref) -----
-        gold: "#c5a572",
-        "gold-soft": "#e3c98c",
+        // ----- Project supplements (from memory ref_eighties — still relevant) -----
         oxblood: "#4a0d0d",
         "oxblood-deep": "#2a0606",
       },
       fontFamily: {
-        // Compressed italic grotesque — action/arcade headlines
-        headline: [
-          "Oswald",
-          "Impact",
-          "Handel Gothic",
-          "Bank Gothic",
-          "Arial Narrow",
-          "sans-serif",
-        ],
-        // Slab serif — Miami / Memphis headlines + body
-        slab: [
-          "Rockwell",
-          "Clarendon",
-          "Courier New",
-          "Georgia",
-          "serif",
-        ],
-        // Compressed italic — subheads
-        sub: [
-          "Oswald",
-          "Franklin Gothic Medium",
-          "Impact",
-          "sans-serif",
-        ],
-        // Body — same as slab; the skill says body is slab or compressed
-        body: [
-          "Rockwell",
-          "Courier New",
-          "Georgia",
-          "serif",
-        ],
+        // Per skill: display = Bodoni/Didot family; body = Cormorant Garamond
+        display: ['"Playfair Display"', '"Cormorant Garamond"', '"Bodoni MT"', '"Didot"', "serif"],
+        headline: ['"Cormorant Garamond"', '"Bodoni MT"', '"Didot"', '"GFS Didot"', '"Times New Roman"', "serif"],
+        body: ['"Cormorant Garamond"', "Garamond", "Georgia", "serif"],
+        ornament: ['"Cinzel Decorative"', '"Trajan Pro"', "serif"],
+        label: ['"Cinzel"', '"Cinzel Decorative"', '"Trajan Pro"', "serif"],
       },
       fontSize: {
-        // Per skill type scale
-        hero: ["clamp(48px, 9vw, 120px)", { lineHeight: "1.0", fontWeight: "900" }],
-        section: ["clamp(32px, 5vw, 56px)", { lineHeight: "1.05", fontWeight: "700" }],
-        subhead: ["clamp(20px, 2.5vw, 32px)", { lineHeight: "1.15", fontWeight: "600" }],
-        label: ["12px", { lineHeight: "1.2", fontWeight: "600", letterSpacing: "0.15em" }],
-      },
-      boxShadow: {
-        // Hard offset, zero blur — the canonical 80s shadow
-        "hard-pink": "6px 6px 0px #ff1493",
-        "hard-teal": "6px 6px 0px #00ced1",
-        "hard-orange": "6px 6px 0px #ff6600",
-        "hard-yellow": "6px 6px 0px #ffe600",
-        "hard-cyan": "6px 6px 0px #00ffff",
-        "hard-gold": "6px 6px 0px #ffd700",
-        "hard-magenta": "6px 6px 0px #ff1493",
-        "hard-night": "6px 6px 0px #0a0a1a",
-        "hard-oxblood": "6px 6px 0px #4a0d0d",
-        "hard-pink-sm": "3px 3px 0px #ff1493",
-        "hard-teal-sm": "3px 3px 0px #00ced1",
-      },
-      textShadow: {
-        "hard-pink": "4px 4px 0px #ff1493",
-        "hard-teal": "4px 4px 0px #00ced1",
-        "hard-orange": "4px 4px 0px #ff6600",
-        neon: "0 0 6px currentColor, 0 0 18px currentColor",
+        // Per skill: typography scale uses 1.333 perfect fourth multiplier
+        hero: ["clamp(48px, 7vw, 96px)", { lineHeight: "1.0", fontWeight: "400", letterSpacing: "0.05em" }],
+        section: ["clamp(32px, 4vw, 48px)", { lineHeight: "1.1", fontWeight: "400", letterSpacing: "0.08em" }],
+        subhead: ["clamp(18px, 2vw, 24px)", { lineHeight: "1.3", fontWeight: "400", letterSpacing: "0.15em" }],
+        label: ["11px", { lineHeight: "1.2", fontWeight: "600", letterSpacing: "0.3em" }],
       },
       keyframes: {
-        // Per skill animation grammar — neon flicker (on/off/on, steps timing)
-        "neon-flicker": {
-          "0%, 100%": {
-            opacity: "1",
-            "text-shadow": "0 0 6px currentColor, 0 0 14px currentColor",
-          },
-          "45%": { opacity: "0.9", "text-shadow": "0 0 4px currentColor" },
-          "46%": { opacity: "0.2", "text-shadow": "none" },
-          "47%": {
-            opacity: "1",
-            "text-shadow": "0 0 6px currentColor, 0 0 14px currentColor",
-          },
-          "80%": { opacity: "0.95" },
-          "81%": { opacity: "0.3", "text-shadow": "none" },
-          "82%": {
-            opacity: "1",
-            "text-shadow": "0 0 6px currentColor, 0 0 14px currentColor",
-          },
+        // Per skill: only subtle, dignified motion. Gold shimmer + rule draw.
+        "gold-shimmer": {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
         },
-        "slide-in-right": {
-          "0%": { transform: "translateX(60px)", opacity: "0" },
-          "100%": { transform: "translateX(0)", opacity: "1" },
+        "rule-draw": {
+          "0%": { transform: "scaleX(0)" },
+          "100%": { transform: "scaleX(1)" },
         },
-        "scale-pop": {
-          "0%": { transform: "scale(0.8)" },
-          "60%": { transform: "scale(1.05)" },
-          "100%": { transform: "scale(1)" },
+        "fade-in-center": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "sunburst-rotate": {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
         },
       },
       animation: {
-        // step(1) timing on the flicker is essential — it's not a smooth dimmer
-        "neon-flicker": "neon-flicker 4s steps(1) infinite",
-        "slide-in": "slide-in-right 400ms cubic-bezier(0.25, 0, 0.5, 1.5)",
-        "scale-pop": "scale-pop 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "gold-shimmer": "gold-shimmer 4s linear infinite",
+        "rule-draw": "rule-draw 800ms ease-in-out forwards",
+        "fade-in-center": "fade-in-center 800ms ease-out forwards",
+        "sunburst-rotate": "sunburst-rotate 120s linear infinite",
       },
     },
   },
-  plugins: [
-    // Custom plugin for text-shadow utilities (Tailwind doesn't ship them)
-    function ({ addUtilities, theme }: any) {
-      const textShadows = theme("textShadow", {}) as Record<string, string>;
-      const utilities = Object.fromEntries(
-        Object.entries(textShadows).map(([key, value]) => [
-          `.text-shadow-${key}`,
-          { "text-shadow": value },
-        ]),
-      );
-      addUtilities(utilities);
-    },
-  ],
+  plugins: [],
 } satisfies Config;

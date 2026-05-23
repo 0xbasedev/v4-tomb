@@ -1,9 +1,8 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 
 /**
- * Minimal connect button styled to the eighties grammar. Uses Wagmi's injected
- * connector (typically MetaMask / browser-injected wallet). Replace with RainbowKit
- * or a multi-wallet picker later.
+ * ConnectButton — Art Deco. Gold-framed, label-typography, formal voice.
+ * When connected: shows truncated address with a small gold dot indicator.
  */
 export function ConnectButton() {
   const { address, isConnected } = useAccount();
@@ -12,11 +11,11 @@ export function ConnectButton() {
 
   if (isConnected && address) {
     return (
-      <button
-        onClick={() => disconnect()}
-        className="btn-hard bg-miami-yellow text-miami-night shadow-hard-pink hover:shadow-hard-teal"
-      >
-        <span>{address.slice(0, 6)}…{address.slice(-4)}</span>
+      <button onClick={() => disconnect()} className="btn-deco">
+        <span className="inline-block h-2 w-2 rotate-45 bg-deco-gold" aria-hidden />
+        <span>
+          {address.slice(0, 6)}…{address.slice(-4)}
+        </span>
       </button>
     );
   }
@@ -26,9 +25,9 @@ export function ConnectButton() {
     <button
       onClick={() => connector && connect({ connector })}
       disabled={isPending || !connector}
-      className="btn-hard bg-miami-pink text-miami-ground shadow-hard-teal disabled:opacity-50"
+      className="btn-deco disabled:opacity-50"
     >
-      {isPending ? "CONNECTING…" : "CONNECT WALLET"}
+      {isPending ? "Awaiting…" : "Enter The Trust"}
     </button>
   );
 }

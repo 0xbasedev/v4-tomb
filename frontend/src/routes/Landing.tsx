@@ -1,279 +1,233 @@
-import { MemphisScatter } from "@/components/MemphisScatter";
 import { ConnectButton } from "@/components/ConnectButton";
 import { StatTile } from "@/components/StatTile";
 import { PillarCard } from "@/components/PillarCard";
-import { Marquee } from "@/components/Marquee";
+import { RuleTrio } from "@/components/RuleTrio";
+import { Sunburst } from "@/components/Sunburst";
 
 /**
- * Landing — Tomb-fork-style dashboard-first landing.
+ * Landing — Art Deco grammar per docs/skill-art-deco.md.
  *
- * Layout zones (top to bottom):
- *   1. Nav (light Miami ground)
- *   2. Hero: 2-column — chrome title + tagline + CTA on the left, live stats panel
- *      (Arcade mode, dark ground) on the right
- *   3. Marquee — neon ticker bridging hero to action zone
- *   4. Three pillar cards — TheClub / TheVault / TrustNotes — full-width row of
- *      large action cards
- *   5. How-it-works 3-step row (light ground, slab serif explanation)
- *   6. Footer with tagline + chain badge
+ * Anatomy (top to bottom, all centered on a vertical axis):
+ *   1. Minimal nav — brand mark + ConnectButton
+ *   2. Hero — sunburst behind metallic OLD MONEY title, rule trios above and below,
+ *      formal subhead, dual CTA. Stats panel (six tiles) directly below.
+ *   3. "The Three Estates" — three pillar cards equal in weight, framed-within-framed
+ *   4. "The Mechanism" — three formal step panels explaining the protocol
+ *   5. Footer — closing rule trio and house signature
  *
- * Stat values are placeholders for v0. Turn 2 of the frontend sprint wires wagmi
- * reads to pull live epoch / price / supply from the deployed contracts.
+ * Vertical symmetry is enforced throughout — no asymmetric/diagonal energy. Voice
+ * is formal: "Acquire," "Discover," "We Are Honoured To Present."
  */
 export function Landing() {
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-miami-ground-blush">
-      {/* Memphis scatter — sparse, in the page margins */}
-      <div className="absolute inset-0 z-0">
-        <MemphisScatter />
-      </div>
-
-      {/* === Nav === */}
+    <main className="relative min-h-screen overflow-x-hidden bg-deco-ground">
+      {/* ===== Nav ===== */}
       <nav className="relative z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6 md:px-12">
         <div className="flex items-baseline gap-4">
           <span
-            className="font-headline text-4xl font-black italic tracking-tighter text-miami-night"
-            style={{ letterSpacing: "-0.04em" }}
+            className="font-display text-3xl font-bold text-deco-gold"
+            style={{ letterSpacing: "0.15em" }}
           >
             OM
           </span>
-          <span className="hidden text-label uppercase text-miami-night/70 md:inline">
-            Old Money · Algorithmic Trust on Base
+          <span className="label-deco hidden text-deco-gold-dark md:inline">
+            The Trust · Base
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <a
-            href="#docs"
-            className="hidden text-label uppercase text-miami-night/70 hover:text-miami-pink md:inline"
-          >
-            Docs
-          </a>
-          <ConnectButton />
-        </div>
+        <ConnectButton />
       </nav>
 
-      {/* === Hero: 2-column chrome title + arcade stats panel === */}
-      <section className="relative z-10 mx-auto w-full max-w-7xl px-6 pt-10 pb-20 md:px-12 md:pt-14 md:pb-28">
-        <div className="grid items-start gap-12 md:grid-cols-12">
-          {/* Left col: chrome title + tagline + CTA */}
-          <div className="md:col-span-7">
-            <div className="text-label mb-5 uppercase text-miami-pink">
-              The Algorithmic Trust · Pegged To ETH
-            </div>
-            <h1 className="chrome-title text-hero leading-[0.95]">
-              OLD
-              <br />
-              MONEY.
-            </h1>
-            <p className="mt-8 max-w-xl font-slab text-2xl text-miami-night md:text-3xl">
-              Defended by Uniswap V4.
-              <br />
-              Earned in TheClub.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <button className="btn-hard bg-miami-pink text-miami-ground shadow-hard-teal">
-                ENTER THE CLUB
-                <span aria-hidden>→</span>
-              </button>
-              <button className="btn-hard border-miami-pink bg-miami-ground text-miami-pink shadow-hard-pink-sm">
-                READ THE DOCS
-              </button>
-            </div>
-          </div>
-
-          {/* Right col: Arcade-mode stats panel */}
-          <div className="md:col-span-5">
-            <div className="relative">
-              <div
-                aria-hidden
-                className="absolute -inset-3 z-0 bg-miami-pink"
-                style={{ transform: "rotate(-1deg)" }}
-              />
-              <div className="relative z-10 border-4 border-miami-night bg-arcade-ground p-6 shadow-[10px_10px_0px_#0a0a1a]">
-                <div className="mb-5 flex items-center justify-between">
-                  <span
-                    className="text-label uppercase text-arcade-gold neon-text"
-                    style={{ letterSpacing: "0.2em" }}
-                  >
-                    Live · Base
-                  </span>
-                  <span
-                    className="flex items-center gap-2 text-label uppercase text-arcade-magenta neon-text"
-                    style={{ letterSpacing: "0.15em" }}
-                  >
-                    <span
-                      className="inline-block h-2 w-2 bg-arcade-magenta"
-                      style={{ animation: "neon-flicker 4s steps(1) infinite" }}
-                    />
-                    EPOCH 0
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <StatTile label="MONEY Price" value="1.0000" hint="WETH · TWAP" variant="pink" />
-                  <StatTile label="Peg" value="100.00%" hint="Target Range" variant="cyan" />
-                  <StatTile label="Supply" value="160,001" hint="MONEY · Circulating" variant="gold" />
-                  <StatTile label="Treasury" value="0" hint="MONEY · Reserve" variant="purple" />
-                  <StatTile label="Next Epoch" value="06:00:00" hint="HH:MM:SS" variant="cyan" />
-                  <StatTile label="Bond Rate" value="—" hint="No Discount Active" variant="gold" />
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* ===== Hero ===== */}
+      <section className="relative px-6 pt-12 pb-20 md:px-12 md:pt-16 md:pb-28">
+        {/* Sunburst behind the hero — large, semi-transparent, slow rotation */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-[40%]">
+          <Sunburst rays={32} opacity={0.18} className="h-[800px] w-[800px] md:h-[1100px] md:w-[1100px]" />
         </div>
-      </section>
 
-      {/* === Marquee ticker === */}
-      <Marquee
-        items={[
-          "TOMB-FAITHFUL · V4-NATIVE",
-          "PEG DEFENSE · ON EVERY SWAP",
-          "BOOTSTRAP · 28 EPOCHS · 4.5% APY",
-          "BURN ON CONTRACTION · TIER 7 → 1500 BPS",
-          "TRUSTEES → TIMELOCK",
-        ]}
-        speed={40}
-      />
+        <div className="relative z-10 mx-auto max-w-4xl">
+          {/* Top rule trio */}
+          <RuleTrio className="mb-6" />
 
-      {/* === Pillars row === */}
-      <section className="relative z-10 mx-auto w-full max-w-7xl px-6 py-20 md:px-12 md:py-28">
-        <div className="mb-12 flex flex-wrap items-baseline justify-between gap-4">
-          <h2
-            className="font-headline text-4xl font-black italic text-miami-night md:text-5xl"
-            style={{ letterSpacing: "-0.02em" }}
+          {/* Imperial label */}
+          <div className="label-deco mb-4 text-deco-gold-dark">
+            An Algorithmic Trust · Pegged to Ether
+          </div>
+
+          {/* Chrome hero title */}
+          <h1 className="gold-text-shimmer font-display italic text-hero">
+            OLD MONEY
+          </h1>
+
+          {/* Subhead */}
+          <p
+            className="mt-8 font-headline text-xl text-deco-ivory md:text-2xl"
+            style={{ letterSpacing: "0.08em" }}
           >
-            THREE PILLARS.
-          </h2>
-          <p className="font-slab text-lg text-miami-night/70 md:text-xl">
-            Tomb-faithful mechanics. V4-native execution.
+            Engineered with Precision. Defended by Sovereign Code.
+            <br />
+            Earned at The Club.
           </p>
+
+          {/* Bottom rule trio with diamond */}
+          <RuleTrio className="mb-10 mt-10" />
+
+          {/* CTAs */}
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <button className="btn-deco btn-deco-primary">Enter The Trust</button>
+            <button className="btn-deco">Discover The Mechanism</button>
+          </div>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-3">
-          <PillarCard
-            number="01"
-            title="TheClub"
-            blurb="Stake $ESTATE. Earn $MONEY every expansion epoch. 6-epoch withdraw lock, 3-epoch reward lock. Patience is rewarded."
-            cta="Stake Now"
-            href="#club"
-            variant="pink"
-          />
-          <PillarCard
-            number="02"
-            title="TheVault"
-            blurb="Provide MONEY-WETH liquidity. Wrap your V4 NFT into ERC-20 shares. Stake for the 140k $MONEY main allocation + 59.5k $ESTATE share rewards."
-            cta="Open The Vault"
-            href="#vault"
-            variant="yellow"
-          />
-          <PillarCard
-            number="03"
-            title="TrustNotes"
-            blurb="When MONEY drops below peg, burn it for $TRUSTNOTE at a discount. Redeem at a premium when MONEY recovers above 1.10. The peg's last defense."
-            cta="View Bonds"
-            href="#bonds"
-            variant="orange"
-          />
-        </div>
-      </section>
-
-      {/* === How it works (night ground) === */}
-      <section className="relative z-10 bg-miami-night px-6 py-20 text-miami-ground md:px-12 md:py-28">
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="mb-12 grid items-baseline gap-4 md:grid-cols-2">
-            <h2
-              className="font-headline text-4xl font-black italic text-miami-ground md:text-5xl"
-              style={{ letterSpacing: "-0.02em" }}
-            >
-              HOW IT WORKS.
-            </h2>
-            <p className="font-slab text-lg text-miami-ground/70 md:text-xl">
-              The flywheel: peg above 1.01 → mint MONEY → reward stakers. Peg below 1.00
-              → burn MONEY for bonds → reduce supply → recover.
-            </p>
+        {/* ===== Stats panel ===== */}
+        <div className="relative z-10 mx-auto mt-20 max-w-5xl md:mt-24">
+          <div className="label-deco mb-6 text-deco-gold-dark">
+            The Ledger · Live on Base · Epoch I
           </div>
-
-          <div className="grid gap-8 md:grid-cols-3">
-            <div className="border-l-4 border-miami-teal pl-6">
-              <div className="text-label mb-3 uppercase text-miami-teal">
-                Step · 01 · Stake
-              </div>
-              <h3
-                className="font-headline text-3xl font-black italic text-miami-teal text-shadow-hard-pink md:text-4xl"
-                style={{ letterSpacing: "-0.01em" }}
-              >
-                ACQUIRE
-              </h3>
-              <p className="mt-4 font-body text-base text-miami-ground/80">
-                Earn $MONEY in the Genesis Pool by staking WETH or USDC for 24 hours.
-                Or buy on the V4 pool. Or LP MONEY-WETH and earn it in the Main Pool.
-              </p>
-            </div>
-            <div className="border-l-4 border-miami-pink pl-6">
-              <div className="text-label mb-3 uppercase text-miami-pink">
-                Step · 02 · Compound
-              </div>
-              <h3
-                className="font-headline text-3xl font-black italic text-miami-pink text-shadow-hard-teal md:text-4xl"
-                style={{ letterSpacing: "-0.01em" }}
-              >
-                MULTIPLY
-              </h3>
-              <p className="mt-4 font-body text-base text-miami-ground/80">
-                Buy $ESTATE. Stake in TheClub. Every expansion epoch, seigniorage flows
-                pro-rata. 9-tier expansion table tops out at 4.5% of circulating supply
-                per epoch.
-              </p>
-            </div>
-            <div className="border-l-4 border-miami-orange pl-6">
-              <div className="text-label mb-3 uppercase text-miami-orange">
-                Step · 03 · Defend
-              </div>
-              <h3
-                className="font-headline text-3xl font-black italic text-miami-orange text-shadow-hard-teal md:text-4xl"
-                style={{ letterSpacing: "-0.01em" }}
-              >
-                DEFEND
-              </h3>
-              <p className="mt-4 font-body text-base text-miami-ground/80">
-                When MONEY drops, the V4 hook burns 15% of every sell. Bond buyers
-                burn even more MONEY for $TRUSTNOTE. Supply contracts. Peg recovers.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-20 flex flex-wrap items-center justify-between gap-6 border-t border-miami-ground/20 pt-10">
-            <p
-              className="font-headline text-2xl font-bold italic text-miami-pink neon-text md:text-3xl"
-              style={{ letterSpacing: "0.05em" }}
-            >
-              POWER. WITHOUT COMPROMISE.
-            </p>
-            <div className="flex items-center gap-6">
-              <a
-                href="#twitter"
-                className="text-label uppercase text-miami-ground/70 hover:text-miami-pink"
-              >
-                Twitter
-              </a>
-              <a
-                href="#discord"
-                className="text-label uppercase text-miami-ground/70 hover:text-miami-pink"
-              >
-                Discord
-              </a>
-              <a
-                href="#github"
-                className="text-label uppercase text-miami-ground/70 hover:text-miami-pink"
-              >
-                Github
-              </a>
-              <span className="text-label uppercase text-miami-ground/50">
-                Base · 2026
-              </span>
-            </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <StatTile label="MONEY · Price" value="1.0000" hint="ETH · TWAP" />
+            <StatTile label="Peg" value="100.00%" hint="Within The Band" />
+            <StatTile label="Supply" value="160,001" hint="MONEY in Circulation" />
+            <StatTile label="Treasury Reserve" value="0" hint="MONEY · Held" />
+            <StatTile label="Next Epoch" value="06:00:00" hint="HH : MM : SS" />
+            <StatTile label="Bond Rate" value="—" hint="No Issuance Active" />
           </div>
         </div>
       </section>
+
+      {/* ===== The Three Estates ===== */}
+      <section className="relative px-6 py-24 md:px-12 md:py-32">
+        <div className="mx-auto max-w-4xl">
+          <div className="label-deco mb-3 text-deco-gold-dark">
+            We Present
+          </div>
+          <h2
+            className="gold-text mb-4 font-display italic text-section"
+          >
+            The Three Estates
+          </h2>
+          <p
+            className="mx-auto max-w-xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
+            style={{ letterSpacing: "0.04em" }}
+          >
+            Each performs its station. Together they preserve the Trust.
+          </p>
+          <RuleTrio className="mb-16 mt-10" />
+
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+            <PillarCard
+              numeral="I"
+              title="The Club"
+              blurb="Stake $ESTATE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
+              cta="Take a Seat"
+              href="#club"
+            />
+            <PillarCard
+              numeral="II"
+              title="The Vault"
+              blurb="Provide MONEY-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand MONEY across nine days."
+              cta="Open The Vault"
+              href="#vault"
+            />
+            <PillarCard
+              numeral="III"
+              title="Trust Notes"
+              blurb="When MONEY falls below peg, redeem it for Trust Notes at a discount. When the Trust recovers above one and one-tenth, redeem for a premium."
+              cta="View The Notes"
+              href="#bonds"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ===== The Mechanism ===== */}
+      <section className="relative bg-deco-ground-soft px-6 py-24 md:px-12 md:py-32">
+        <div className="mx-auto max-w-4xl">
+          <div className="label-deco mb-3 text-deco-gold-dark">In Brief</div>
+          <h2 className="gold-text mb-4 font-display italic text-section">
+            The Mechanism
+          </h2>
+          <p
+            className="mx-auto max-w-xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
+            style={{ letterSpacing: "0.04em" }}
+          >
+            A flywheel of supply and seigniorage. Six hours to the epoch.
+          </p>
+          <RuleTrio className="mb-16 mt-10" />
+
+          <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
+            <div className="text-center">
+              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
+                I
+              </div>
+              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
+                Acquire
+              </h3>
+              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
+              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
+                Stake your Ether in the Genesis Pool for twenty-four hours and receive $MONEY.
+                Or purchase upon the V4 pool. Or provide liquidity and earn.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
+                II
+              </div>
+              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
+                Compound
+              </h3>
+              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
+              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
+                Acquire $ESTATE. Stake at The Club. When the Trust expands above peg,
+                seigniorage is distributed to The Members. Patience is rewarded.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
+                III
+              </div>
+              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
+                Defend
+              </h3>
+              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
+              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
+                When the Trust falters below peg, the Hook burns supply on every sale.
+                Trust Notes contract circulation further. The peg is restored.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Footer ===== */}
+      <footer className="relative px-6 py-16 md:px-12 md:py-20">
+        <div className="mx-auto max-w-4xl">
+          <RuleTrio className="mb-10" />
+
+          <div className="text-center">
+            <p className="font-display text-2xl italic text-deco-ivory md:text-3xl" style={{ letterSpacing: "0.1em" }}>
+              Wealth Engineered with Precision.
+            </p>
+            <div className="mt-4 font-ornament text-sm text-deco-gold" style={{ letterSpacing: "0.3em" }}>
+              MMXXVI · The House of Old Money
+            </div>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-6">
+              <a href="#twitter" className="label-deco hover:text-deco-gold-light">
+                Correspondence
+              </a>
+              <span className="text-deco-gold-dark">·</span>
+              <a href="#docs" className="label-deco hover:text-deco-gold-light">
+                The Mechanism
+              </a>
+              <span className="text-deco-gold-dark">·</span>
+              <a href="#github" className="label-deco hover:text-deco-gold-light">
+                The Ledger
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

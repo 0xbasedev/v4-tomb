@@ -3,168 +3,219 @@
 @tailwind utilities;
 
 /*
- * Old Money base styles per docs/eighties-design skill.
+ * Old Money base styles — Art Deco grammar per docs/skill-art-deco.md.
  *
- * - Body defaults to Roboto Slab (Rockwell substitute) — slab serif for body text per
- *   the skill's "body is either chunky slab serif or compressed grotesque" rule.
- * - Italic compressed Oswald for headlines.
- * - No rounded corners (rule: border-radius above 4px is suspicious).
+ * Anatomy:
+ *   - Warm near-black ground (#0d0a05), antique ivory text (#f5f0e0)
+ *   - Metallic gold gradient on display type and section dividers
+ *   - Rule trios (thin-thick-thin) as section boundaries
+ *   - Stepped frame-within-frame borders on panels
+ *   - Vertical center axis enforced — every section text-align center
+ *   - Playfair Display for display, Cormorant Garamond for body, Cinzel for labels
  */
-
-:root {
-  /* Active palette mode is set per-section via class — these are the global defaults. */
-  --color-ground: theme(colors.miami-ground);
-  --color-text: #0a0a0a;
-  --color-text-inverse: theme(colors.miami-ground);
-
-  /* The skewed-grid spine — the diagonal angle of choice */
-  --diagonal-angle: -30deg;
-}
 
 @layer base {
   html {
-    /* Disable selection on display type — looks weird at large sizes */
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     font-family: theme(fontFamily.body);
-    color: var(--color-text);
-    background-color: var(--color-ground);
-    /* The skill: type leading 1.15-1.3 — tighter than modern comfortable */
-    line-height: 1.25;
+    color: theme(colors.deco-ivory);
+    background-color: theme(colors.deco-ground);
+    line-height: 1.5;
+    font-feature-settings: "lnum", "kern";
   }
 
   h1,
   h2,
   h3 {
-    font-family: theme(fontFamily.headline);
-    font-style: italic;
-    font-weight: 900;
-    letter-spacing: -0.01em;
-    line-height: 1;
+    font-family: theme(fontFamily.display);
+    font-weight: 400; /* high-contrast serifs look heavier than they are */
+    letter-spacing: 0.05em;
+    line-height: 1.05;
   }
 
-  /* No rounding anywhere by default — explicit opt-in if needed */
+  /* No rounding ever — Art Deco shapes are angular. */
   *,
   *::before,
   *::after {
     border-radius: 0;
   }
+
+  /* All copy zones default to centered (vertical axis enforcement). Override per-element where needed. */
+  section {
+    text-align: center;
+  }
 }
 
 @layer components {
-  /*
-   * Chrome metallic title — for the primary hero word. Stacks a multi-stop gradient
-   * inside the text fill, then adds a contrasting offset drop shadow.
-   *
-   * Per the skill:
-   *   background: linear-gradient(180deg, white -> gold -> dark orange -> orange -> white);
-   *   -webkit-background-clip: text;
-   *   filter: drop-shadow(4px 4px 0px <contrasting>);
-   */
-  .chrome-title {
-    font-family: theme(fontFamily.headline);
-    font-style: italic;
-    font-weight: 900;
+  /* ===== Metallic gold typographic fill ===== */
+
+  /* The canonical Art Deco metallic gradient. Applied to text via background-clip. */
+  .gold-text {
     color: transparent;
     background: linear-gradient(
       180deg,
-      #ffffff 0%,
-      #ffe066 20%,
-      #ff8800 45%,
-      #cc4400 65%,
-      #ff8800 80%,
-      #ffffff 100%
+      #f5e6a3 0%,
+      #d4af37 40%,
+      #a67c00 60%,
+      #d4af37 80%,
+      #f5e6a3 100%
     );
+    background-size: 100% 200%;
     background-clip: text;
     -webkit-background-clip: text;
-    -webkit-text-stroke: 1px #cc4400;
-    filter: drop-shadow(4px 4px 0px #0066ff);
-    letter-spacing: -0.02em;
+    -webkit-text-fill-color: transparent;
   }
 
-  .chrome-title-pink {
-    /* Variant: pink chrome — for secondary hero words. Hot pink stroke + teal shadow. */
-    font-family: theme(fontFamily.headline);
-    font-style: italic;
-    font-weight: 900;
+  /* Same gradient but with a subtle shimmer loop on the hero title only. */
+  .gold-text-shimmer {
     color: transparent;
     background: linear-gradient(
       180deg,
-      #ffe6f5 0%,
-      #ff9ec7 25%,
-      #ff1493 60%,
-      #b30060 85%,
-      #ff9ec7 100%
+      #f5e6a3 0%,
+      #d4af37 40%,
+      #a67c00 60%,
+      #d4af37 80%,
+      #f5e6a3 100%
     );
+    background-size: 100% 200%;
     background-clip: text;
     -webkit-background-clip: text;
-    -webkit-text-stroke: 1px #b30060;
-    filter: drop-shadow(4px 4px 0px #00ced1);
-    letter-spacing: -0.02em;
+    -webkit-text-fill-color: transparent;
+    animation: gold-shimmer 5s ease-in-out infinite;
   }
 
-  /*
-   * The Miami Vice Diagonal Band — a 30deg slash of saturated color spanning the
-   * viewport. Per the skill, the diagonal carries 70% of the 80s signal alongside
-   * shadow + font. This is the structural spine of any Miami Split layout.
-   */
-  .diagonal-band {
+  /* ===== Rule trios — the canonical Art Deco section divider ===== */
+
+  .rule-trio {
+    position: relative;
+    height: 14px;
+    width: 100%;
+    background:
+      linear-gradient(
+        180deg,
+        transparent 0,
+        transparent 1px,
+        #a67c00 1px,
+        #a67c00 2px,
+        transparent 2px,
+        transparent 5px,
+        #d4af37 5px,
+        #d4af37 9px,
+        transparent 9px,
+        transparent 12px,
+        #a67c00 12px,
+        #a67c00 13px,
+        transparent 13px
+      );
+  }
+
+  /* A rule-trio with an ornamental diamond centered between the lines. */
+  .rule-trio-diamond {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  .rule-trio-diamond::before,
+  .rule-trio-diamond::after {
+    content: "";
+    flex: 1;
+    height: 14px;
+    background:
+      linear-gradient(
+        180deg,
+        transparent 0,
+        transparent 1px,
+        #a67c00 1px,
+        #a67c00 2px,
+        transparent 2px,
+        transparent 5px,
+        #d4af37 5px,
+        #d4af37 9px,
+        transparent 9px,
+        transparent 12px,
+        #a67c00 12px,
+        #a67c00 13px,
+        transparent 13px
+      );
+  }
+
+  /* ===== Stepped frame-within-frame panel ===== */
+
+  /* Outer gold border + inset gold outline at 5px gap = the frame-within-frame */
+  .deco-panel {
+    position: relative;
+    border: 1px solid theme(colors.deco-gold);
+    padding: 28px;
+    background-color: theme(colors.deco-ground-soft);
+  }
+  .deco-panel::before {
+    content: "";
     position: absolute;
-    left: -10%;
-    width: 120%;
-    height: 80px;
-    transform: skewY(var(--diagonal-angle));
-    transform-origin: left center;
+    inset: 5px;
+    border: 1px solid theme(colors.deco-gold);
+    pointer-events: none;
   }
 
-  /*
-   * Hard-edge brutalist button — for CTAs in Miami / Memphis modes.
-   * Hover slides forward 2px and shadow tightens (the element "press" feel).
-   */
-  .btn-hard {
+  /* ===== Buttons — formal, framed, never floaty ===== */
+
+  .btn-deco {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
-    padding: 18px 32px;
-    font-family: theme(fontFamily.headline);
-    font-weight: 700;
-    font-style: italic;
+    gap: 14px;
+    padding: 16px 36px;
+    font-family: theme(fontFamily.label);
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 18px;
-    border: 3px solid theme(colors.miami-night);
-    transition:
-      transform 120ms ease-out,
-      box-shadow 120ms ease-out;
+    letter-spacing: 0.25em;
+    font-size: 12px;
+    color: theme(colors.deco-gold);
+    background-color: transparent;
+    border: 1px solid theme(colors.deco-gold);
+    transition: background-color 200ms ease-out, color 200ms ease-out;
     cursor: pointer;
+    position: relative;
   }
-  .btn-hard:hover {
-    transform: translate(-2px, -2px);
+  .btn-deco::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid theme(colors.deco-gold);
+    pointer-events: none;
+    transition: inset 200ms ease-out;
   }
-  .btn-hard:active {
-    transform: translate(2px, 2px);
-    box-shadow: none !important;
+  .btn-deco:hover {
+    background-color: theme(colors.deco-gold);
+    color: theme(colors.deco-ground);
+  }
+  .btn-deco:hover::before {
+    inset: 2px;
+    border-color: theme(colors.deco-ground);
   }
 
-  /*
-   * Neon-glow text for arcade-mode headlines on dark backgrounds.
-   * Per the skill formula: text-shadow: 0 0 6px currentColor, 0 0 18px currentColor.
-   */
-  .neon-text {
-    text-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+  .btn-deco-primary {
+    color: theme(colors.deco-ground);
+    background-color: theme(colors.deco-gold);
+  }
+  .btn-deco-primary::before {
+    border-color: theme(colors.deco-ground);
+  }
+  .btn-deco-primary:hover {
+    background-color: theme(colors.deco-gold-light);
   }
 
-  /*
-   * Grid halftone background texture — emulates 80s stat-camera reproduction.
-   */
-  .halftone-bg {
-    background-image: radial-gradient(
-      circle at 1px 1px,
-      rgba(10, 10, 26, 0.18) 1px,
-      transparent 0
-    );
-    background-size: 14px 14px;
+  /* ===== Label / ornament type ===== */
+
+  .label-deco {
+    font-family: theme(fontFamily.label);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: theme(colors.deco-gold);
   }
 }

@@ -1,85 +1,45 @@
 /**
- * PillarCard — large action card for the three protocol pillars. Used in a
- * 3-column grid directly under the hero. Each pillar has a different palette
- * color, an icon-shape badge, a one-line value proposition, and a CTA.
+ * PillarCard — large action card for the protocol's "Three Estates" (The Club /
+ * The Vault / Trust Notes). Frame-within-frame, centered axis, ornament label,
+ * formal voice CTA. All three pillars share the same palette — Art Deco doesn't
+ * vary the palette per card; the cards are siblings, equal in weight.
+ *
+ * The Roman numeral acts as the ornament marker at the top.
  */
 
 interface PillarCardProps {
-  number: string;
+  numeral: "I" | "II" | "III";
   title: string;
   blurb: string;
   cta: string;
   href: string;
-  variant: "pink" | "yellow" | "orange";
 }
 
-const VARIANTS: Record<
-  PillarCardProps["variant"],
-  {
-    bg: string;
-    border: string;
-    title: string;
-    shadow: string;
-    cta: string;
-    hover: string;
-  }
-> = {
-  pink: {
-    bg: "bg-miami-ground-blush",
-    border: "border-miami-pink",
-    title: "text-miami-pink",
-    shadow: "shadow-[8px_8px_0px_#00ced1]",
-    cta: "bg-miami-pink text-miami-ground",
-    hover: "hover:shadow-[12px_12px_0px_#00ced1]",
-  },
-  yellow: {
-    bg: "bg-miami-ground-blush",
-    border: "border-miami-yellow",
-    title: "text-miami-night",
-    shadow: "shadow-[8px_8px_0px_#ff1493]",
-    cta: "bg-miami-yellow text-miami-night",
-    hover: "hover:shadow-[12px_12px_0px_#ff1493]",
-  },
-  orange: {
-    bg: "bg-miami-ground-blush",
-    border: "border-miami-orange",
-    title: "text-miami-orange",
-    shadow: "shadow-[8px_8px_0px_#0a0a1a]",
-    cta: "bg-miami-orange text-miami-ground",
-    hover: "hover:shadow-[12px_12px_0px_#0a0a1a]",
-  },
-};
-
-export function PillarCard({ number, title, blurb, cta, href, variant }: PillarCardProps) {
-  const v = VARIANTS[variant];
+export function PillarCard({ numeral, title, blurb, cta, href }: PillarCardProps) {
   return (
     <a
       href={href}
-      className={`group relative block border-4 ${v.border} ${v.bg} ${v.shadow} ${v.hover} p-7 transition-shadow duration-150`}
+      className="deco-panel group block text-center transition-colors duration-300 hover:bg-deco-ground-medium"
     >
-      <div className="mb-4 flex items-center justify-between">
-        <span
-          className={`font-headline text-5xl font-black italic ${v.title}`}
-          style={{ letterSpacing: "-0.02em" }}
-        >
-          {number}
-        </span>
-        <span className="font-headline text-3xl text-miami-night/40 group-hover:translate-x-1 transition-transform">
-          →
-        </span>
+      <div
+        className="font-ornament mb-6 text-3xl font-bold text-deco-gold"
+        style={{ letterSpacing: "0.2em" }}
+      >
+        {numeral}
       </div>
       <h3
-        className={`mb-3 font-headline text-3xl font-black italic ${v.title} md:text-4xl`}
-        style={{ letterSpacing: "-0.01em" }}
+        className="mb-5 font-display text-3xl font-medium text-deco-ivory md:text-4xl"
+        style={{ letterSpacing: "0.06em" }}
       >
         {title}
       </h3>
-      <p className="mb-6 font-body text-sm text-miami-night/80 md:text-base">{blurb}</p>
-      <span
-        className={`inline-flex items-center gap-2 ${v.cta} px-4 py-2 font-headline text-sm font-bold italic uppercase tracking-wider`}
-        style={{ letterSpacing: "0.08em" }}
-      >
+      <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
+      <p className="mx-auto mb-7 max-w-sm font-body text-base text-deco-ivory-soft md:text-lg">
+        {blurb}
+      </p>
+      <span className="label-deco inline-flex items-center gap-3 text-deco-gold transition-colors group-hover:text-deco-gold-light">
         {cta}
+        <span className="font-display text-base">→</span>
       </span>
     </a>
   );
