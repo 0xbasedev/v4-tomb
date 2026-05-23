@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
 
+import { LaunchSequence } from "@/components/LaunchSequence";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { useToast } from "@/components/ToastProvider";
@@ -128,6 +129,7 @@ export function Admin() {
         />
       ) : (
         <>
+          <LaunchSequence />
           <StatusBoard
             epoch={epoch.epoch !== undefined ? Number(epoch.epoch) : 0}
             inBootstrap={market.phase === "bootstrap"}
