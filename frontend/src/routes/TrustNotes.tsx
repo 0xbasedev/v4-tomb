@@ -180,11 +180,18 @@ export function TrustNotes() {
                     ? "The Trust trades within the band. No Notes are issued here."
                     : "The Trust has not yet entered a contraction."
               }
-              helper="Your MONEY is permanently destroyed. The Note holds a claim against future MONEY at premium."
-              onSubmit={(s) => {
+              helper="Your MONEY is permanently destroyed. The Note holds a claim against future MONEY at premium. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your MONEY (only gas is spent). Retry if so."
+              onSubmit={async (s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
                 if (amount <= 0n) return;
+                // Fresh price read right before broadcast — shrinks the
+                // race window between your screen and the on-chain check.
+                const fresh = await market.refetch();
+                const freshPrice =
+                  fresh.data?.[0]?.status === "success"
+                    ? (fresh.data[0].result as bigint)
+                    : market.price;
                 action.submit({
                   amount,
                   currentAllowance: bonds.moneyAllowance,
@@ -194,7 +201,7 @@ export function TrustNotes() {
                     address: deployment.treasury,
                     abi: treasuryAbi,
                     functionName: "buyBonds",
-                    args: [amount, market.price],
+                    args: [amount, freshPrice],
                   },
                   label: "Acquire Trust Notes",
                   onSuccess: refetchAll,
@@ -218,11 +225,16 @@ export function TrustNotes() {
                     ? "The Trust must trade above one and one-tenth for premium. Below that, redemption is one-to-one and the Treasury must hold sufficient MONEY."
                     : "The Treasury holds no MONEY reserve to redeem against."
               }
-              helper="MONEY is drawn from the Treasury's reserve, accumulated during prior expansion epochs."
-              onSubmit={(s) => {
+              helper="MONEY is drawn from the Treasury's reserve, accumulated during prior expansion epochs. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your Notes (only gas is spent). Retry if so."
+              onSubmit={async (s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
                 if (amount <= 0n) return;
+                const fresh = await market.refetch();
+                const freshPrice =
+                  fresh.data?.[0]?.status === "success"
+                    ? (fresh.data[0].result as bigint)
+                    : market.price;
                 action.submit({
                   amount,
                   currentAllowance: bonds.trustNoteAllowance,
@@ -232,7 +244,7 @@ export function TrustNotes() {
                     address: deployment.treasury,
                     abi: treasuryAbi,
                     functionName: "redeemBonds",
-                    args: [amount, market.price],
+                    args: [amount, freshPrice],
                   },
                   label: "Present Trust Notes",
                   onSuccess: refetchAll,

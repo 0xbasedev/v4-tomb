@@ -120,7 +120,7 @@ export function Swap() {
           : "Tax Disabled";
 
   // Compose the V4 swap pipeline. MONEY-WETH only — ESTATE-WETH isn't a deployed pool yet.
-  function handleSwapSubmit(amountStr: string) {
+  function handleSwapSubmit(amountStr: string, slippageBps: number) {
     if (activeId !== "money-weth") {
       toast.push({
         variant: "info",
@@ -163,6 +163,20 @@ export function Swap() {
 
     const tokenIn: Address = zeroForOne ? currency0 : currency1;
 
+    // Compute amountOutMinimum from live spot, hook fee, current tax tier, and
+    // user's slippage tolerance. All three deductions are in bps.
+    //
+    //   netRate = rate * (10000 - hookFee - taxBps) / 10000
+    //   expectedOut_wei = amountIn * netRate (using bigint math to preserve precision)
+    //   amountOutMinimum = expectedOut * (10000 - slippageBps) / 10000
+    //
+    // We do the rate multiplication via the ETH-scaled price to stay in bigint
+    // throughout (no float drift on large amountIn values).
+    const rateBps = BigInt(Math.floor(rate * 1e6)); // micro-units for precision
+    const grossOut = (amountIn * rateBps) / 1_000_000n;
+    const netOut = (grossOut * BigInt(10_000 - poolMeta.baseFeeBps - tier.bps)) / 10_000n;
+    const amountOutMinimum = (netOut * BigInt(10_000 - slippageBps)) / 10_000n;
+
     swap.submit({
       poolKey: {
         currency0,
@@ -174,7 +188,7 @@ export function Swap() {
       zeroForOne,
       tokenIn,
       amountIn,
-      amountOutMinimum: 0n /* TODO: slippage UI lands in Sprint C polish */,
+      amountOutMinimum,
       onSuccess: () => {
         liveHook.refetch();
       },

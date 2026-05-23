@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 
 import { maskDecimalInput } from "@/lib/util/decimal";
+import { SlippageChips } from "./SlippageChips";
 
 /**
  * SwapCard — token in / token out / flip / quote / CTA.
@@ -44,8 +45,8 @@ interface SwapCardProps {
   tierLabel: string;
   /** Direction is fixed in the parent; flip swaps tokenIn/tokenOut. */
   onFlip: () => void;
-  /** Submit handler. */
-  onSubmit?: (amount: string) => void;
+  /** Submit handler — passes (amount, slippageBps) so the route can compute amountOutMinimum. */
+  onSubmit?: (amount: string, slippageBps: number) => void;
   /** Disable the CTA (wallet disconnected, no liquidity, etc.). */
   disabled?: boolean;
   /** Reason shown when disabled. */
@@ -66,21 +67,29 @@ export function SwapCard({
   disabledReason,
 }: SwapCardProps) {
   const [amount, setAmount] = useState("");
+  /** Slippage tolerance in bps. Default 0.5% — Uniswap's standard. */
+  const [slippageBps, setSlippageBps] = useState<number>(50);
 
   // Gross out = amount * rate. Net out subtracts hook fee + tax (both bps on out).
-  const { grossOut, netOut } = useMemo(() => {
+  // Min out is net out * (1 - slippageBps / 10000) — the actual amountOutMinimum
+  // that gets sent on-chain.
+  const { grossOut, netOut, minOut } = useMemo(() => {
     const num = parseFloat(amount);
-    if (!num || isNaN(num)) return { grossOut: "0.00", netOut: "0.00" };
+    if (!num || isNaN(num)) return { grossOut: "0.00", netOut: "0.00", minOut: "0.00" };
     const gross = num * rate;
     const feeMultiplier = (10000 - hookFeeBps - taxBps) / 10000;
+    const net = gross * feeMultiplier;
+    const slippageMultiplier = (10000 - slippageBps) / 10000;
     return {
       grossOut: gross.toFixed(4),
-      netOut: (gross * feeMultiplier).toFixed(4),
+      netOut: net.toFixed(4),
+      minOut: (net * slippageMultiplier).toFixed(4),
     };
-  }, [amount, rate, hookFeeBps, taxBps]);
+  }, [amount, rate, hookFeeBps, taxBps, slippageBps]);
 
   const hookFeePct = (hookFeeBps / 100).toFixed(2);
   const taxPct = (taxBps / 100).toFixed(2);
+  const slippagePct = (slippageBps / 100).toFixed(2);
 
   return (
     <div className="deco-panel mx-auto max-w-lg">
@@ -182,6 +191,13 @@ export function SwapCard({
             {tierLabel} · {taxPct}%
           </dd>
         </div>
+        <div className="flex items-baseline justify-between">
+          <dt className="label-deco text-deco-gold-dark">Slippage</dt>
+          <dd className="font-display text-base italic text-deco-ivory">{slippagePct}%</dd>
+        </div>
+        <div className="pt-2">
+          <SlippageChips valueBps={slippageBps} onChange={setSlippageBps} />
+        </div>
         <div className="border-t border-deco-gold/20 pt-3">
           <div className="flex items-baseline justify-between">
             <dt className="label-deco text-deco-gold">Gross Out</dt>
@@ -190,9 +206,15 @@ export function SwapCard({
             </dd>
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <dt className="label-deco text-deco-gold">Net Out</dt>
-            <dd className="font-display text-xl italic text-deco-ivory">
+            <dt className="label-deco text-deco-gold">Expected</dt>
+            <dd className="font-display text-base italic text-deco-ivory">
               {netOut} {tokenOut}
+            </dd>
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <dt className="label-deco text-deco-gold">Minimum</dt>
+            <dd className="font-display text-xl italic text-deco-ivory">
+              {minOut} {tokenOut}
             </dd>
           </div>
         </div>
@@ -200,7 +222,7 @@ export function SwapCard({
 
       <button
         type="button"
-        onClick={() => onSubmit?.(amount)}
+        onClick={() => onSubmit?.(amount, slippageBps)}
         disabled={disabled || !amount}
         className="btn-deco btn-deco-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
       >
