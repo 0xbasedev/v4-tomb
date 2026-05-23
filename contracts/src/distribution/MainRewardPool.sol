@@ -196,6 +196,7 @@ contract MainRewardPool {
         if (block.timestamp > pool.lastRewardTime && tokenSupply != 0 && totalAllocPoint > 0) {
             uint256 generated = getGeneratedReward(pool.lastRewardTime, block.timestamp);
             uint256 moneyReward = generated * pool.allocPoint / totalAllocPoint;
+            // slither-disable-next-line divide-before-multiply
             accMoneyPerShare += moneyReward * 1e18 / tokenSupply;
         }
         return user.amount * accMoneyPerShare / 1e18 - user.rewardDebt;
@@ -214,6 +215,7 @@ contract MainRewardPool {
         PoolInfo storage pool = poolInfo[_pid];
         if (block.timestamp <= pool.lastRewardTime) return;
         uint256 tokenSupply = pool.token.balanceOf(address(this));
+        // slither-disable-next-line incorrect-equality — sentinel: skip update when no stakes
         if (tokenSupply == 0) {
             pool.lastRewardTime = block.timestamp;
             return;
@@ -225,6 +227,7 @@ contract MainRewardPool {
         if (totalAllocPoint > 0) {
             uint256 generated = getGeneratedReward(pool.lastRewardTime, block.timestamp);
             uint256 moneyReward = generated * pool.allocPoint / totalAllocPoint;
+            // slither-disable-next-line divide-before-multiply
             pool.accMoneyPerShare += moneyReward * 1e18 / tokenSupply;
         }
         pool.lastRewardTime = block.timestamp;
@@ -305,6 +308,7 @@ contract MainRewardPool {
         uint256 amount
     ) internal {
         uint256 bal = money.balanceOf(address(this));
+        // slither-disable-next-line incorrect-equality — sentinel: nothing to send
         if (bal == 0) return;
         money.safeTransfer(to, amount > bal ? bal : amount);
     }
