@@ -161,7 +161,9 @@ contract SeedLiquidity is Script {
         );
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
 
-        positionManager.modifyLiquidities(abi.encode(actions, params), block.timestamp + 1);
+        // Deadline buffer must cover the gap between forge script simulation and broadcast.
+        // 1 hour is conservative; mainnet would tighten this.
+        positionManager.modifyLiquidities(abi.encode(actions, params), block.timestamp + 1 hours);
     }
 
     function _logHeader(
