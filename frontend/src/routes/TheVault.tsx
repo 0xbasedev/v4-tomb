@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { parseUnits } from "viem";
+import { useReadContract } from "wagmi";
 
 import { ActionPanel } from "@/components/ActionPanel";
 import { LockupClock } from "@/components/LockupClock";
@@ -11,7 +12,7 @@ import { MintPositionPanel } from "@/components/MintPositionPanel";
 import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
-import { moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
+import { erc20Abi, moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
@@ -106,6 +107,16 @@ export function TheVault() {
   // Wallet balance + allowance for the stake token (pid 0). When the pool has
   // no PIDs yet, stakeToken is undefined; the hook returns 0 in that case.
   const tokenStatus = useTokenStatus(pid0.stakeToken, poolAddress);
+
+  // Read the actual stake-token symbol so the UI labels reflect what's registered
+  // on-chain (WETH / USDC / etc.) rather than the hardcoded placeholder.
+  const symbolRead = useReadContract({
+    address: pid0.stakeToken,
+    abi: erc20Abi,
+    functionName: "symbol",
+    query: { enabled: !!pid0.stakeToken && pid0.exists },
+  });
+  const stakeLabel = pid0.exists && symbolRead.data ? symbolRead.data : meta.defaultStakeLabel;
 
   // Window-end countdown. Genesis/Main expose poolEndTime; Share extends 370d.
   // We only render poolStartTime + a fixed window duration, since the contract
@@ -258,7 +269,7 @@ export function TheVault() {
                 <tbody>
                   <PoolEntryRow
                     pid={0}
-                    stakeToken={meta.defaultStakeLabel}
+                    stakeToken={stakeLabel}
                     allocPoint={Number(pid0.allocPoint)}
                     yourBalance={walletDisplay}
                     yourStake={yourStakeDisplay}
@@ -292,7 +303,7 @@ export function TheVault() {
               numeral="I"
               title="Make a Deposit"
               blurb={`Deposit your stake asset. Begin earning $${meta.rewardAsset} pro-rata.`}
-              asset={meta.defaultStakeLabel}
+              asset={stakeLabel}
               maxAvailable={walletDisplay}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
               disabled={
@@ -329,7 +340,7 @@ export function TheVault() {
               numeral="II"
               title="Withdraw"
               blurb="Recall your stake. Pending rewards are claimed automatically."
-              asset={meta.defaultStakeLabel}
+              asset={stakeLabel}
               maxAvailable={yourStakeDisplay}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
               disabled={pid0.yourStake === 0n || action.isInFlight || !poolAddress}
@@ -358,7 +369,7 @@ export function TheVault() {
               numeral="III"
               title="Forfeit & Withdraw"
               blurb="Emergency exit. Returns your stake but FORFEITS all pending rewards. Use only if compelled."
-              asset={meta.defaultStakeLabel}
+              asset={stakeLabel}
               maxAvailable={yourStakeDisplay}
               cta={action.isInFlight ? "Awaiting…" : "Forfeit · Exit"}
               noInput
