@@ -36,11 +36,11 @@ export function Layout() {
 function Nav() {
   const admin = useIsAdmin();
   return (
-    <nav className="sticky top-0 z-30 border-b border-deco-gold/30 bg-deco-ground/95 backdrop-blur supports-[backdrop-filter]:bg-deco-ground/80">
-      <div className="mx-auto flex w-full max-w-7xl items-center gap-4 px-4 py-4 md:gap-6 md:px-12 md:py-5">
-        <Link to="/" className="flex shrink-0 items-baseline gap-3">
+    <nav className="sticky top-0 z-30 border-b border-deco-gold/30 bg-deco-ground">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 md:px-12">
+        <Link to="/" className="flex items-baseline gap-4">
           <span
-            className="font-display text-2xl font-bold text-deco-gold md:text-3xl"
+            className="font-display text-3xl font-bold text-deco-gold"
             style={{ letterSpacing: "0.15em" }}
           >
             OM
@@ -50,15 +50,13 @@ function Nav() {
           </span>
         </Link>
 
-        {/* Nav links — horizontal scroll on narrow viewports so all routes
-            stay reachable on mobile, instead of being hidden entirely. */}
-        <div className="flex flex-1 items-center gap-5 overflow-x-auto md:gap-6 md:overflow-visible">
+        <div className="hidden items-center gap-7 md:flex">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `label-deco shrink-0 transition-colors ${
+                `label-deco transition-colors ${
                   isActive
                     ? "text-deco-gold-light"
                     : "text-deco-gold-dark hover:text-deco-gold"
@@ -72,7 +70,7 @@ function Nav() {
             <NavLink
               to="/admin"
               className={({ isActive }) =>
-                `label-deco shrink-0 border px-2 py-1 transition-colors ${
+                `label-deco border px-2 py-1 transition-colors ${
                   isActive
                     ? "border-deco-gold bg-deco-gold/10 text-deco-gold-light"
                     : "border-deco-gold/40 text-deco-gold hover:border-deco-gold"
@@ -84,9 +82,7 @@ function Nav() {
           )}
         </div>
 
-        <div className="shrink-0">
-          <ConnectButton />
-        </div>
+        <ConnectButton />
       </div>
     </nav>
   );
