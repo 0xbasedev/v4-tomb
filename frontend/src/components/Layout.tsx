@@ -36,7 +36,7 @@ export function Layout() {
 function Nav() {
   const admin = useIsAdmin();
   return (
-    <nav className="sticky top-0 z-30 border-b border-deco-gold/30 bg-deco-ground">
+    <nav className="relative z-20 border-b border-deco-gold/30 bg-deco-ground">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 md:px-12">
         <Link to="/" className="flex items-baseline gap-4">
           <span
@@ -45,7 +45,7 @@ function Nav() {
           >
             OM
           </span>
-          <span className="label-deco hidden text-deco-gold-dark lg:inline">
+          <span className="label-deco hidden text-deco-gold-dark md:inline">
             The Trust · Base
           </span>
         </Link>
