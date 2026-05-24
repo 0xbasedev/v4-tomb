@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0d0a05"/>
+
+  <!-- Frame -->
+  <rect x="40" y="40" width="1120" height="550" fill="none" stroke="#d4af37" stroke-width="2"/>
+  <rect x="56" y="56" width="1088" height="518" fill="none" stroke="#d4af37" stroke-width="0.5"/>
+
+  <!-- Sunburst -->
+  <g transform="translate(600 240)" stroke="#d4af37" stroke-width="2" stroke-linecap="round" opacity="0.85">
+    <line x1="0" y1="0" x2="0" y2="-110"/>
+    <line x1="0" y1="0" x2="78" y2="-78"/>
+    <line x1="0" y1="0" x2="110" y2="0"/>
+    <line x1="0" y1="0" x2="78" y2="78"/>
+    <line x1="0" y1="0" x2="0" y2="110"/>
+    <line x1="0" y1="0" x2="-78" y2="78"/>
+    <line x1="0" y1="0" x2="-110" y2="0"/>
+    <line x1="0" y1="0" x2="-78" y2="-78"/>
+  </g>
+  <circle cx="600" cy="240" r="14" fill="#d4af37"/>
+
+  <!-- Wordmark -->
+  <text x="600" y="430" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="#f5f0e0">Old Money</text>
+  <text x="600" y="490" text-anchor="middle" font-family="'Cinzel', serif" font-weight="600" font-size="22" letter-spacing="12" fill="#d4af37">A N   A L G O R I T H M I C   T R U S T</text>
+  <text x="600" y="540" text-anchor="middle" font-family="'Cormorant Garamond', Georgia, serif" font-style="italic" font-size="26" fill="#a89060">Wealth Engineered with Precision · Base · MMXXVI</text>
+</svg>

@@ -145,8 +145,15 @@ contract MiniSwapRouter is IUnlockCallback {
         // V4's settle pattern: sync() snapshots the manager's pre-transfer balance,
         // we transfer, then settle() credits the delta-difference against the
         // open deficit. (Mirror of v4-core/src/test/PoolTestBase.sol pattern.)
+        // s.payer is the original swapExactIn caller, paying their own funds via
+        // their own pre-set allowance. unlockCallback is gated to PoolManager-only.
+        // Canonical V4 router pattern, same as UniversalRouter / PoolSwapTest.
         poolManager.sync(currencyIn);
+        // slither-disable-next-line arbitrary-send-erc20
         IERC20(Currency.unwrap(currencyIn)).safeTransferFrom(s.payer, address(poolManager), amountOwed);
+        // settle() returns the amount paid (informational); the load-bearing
+        // effect is clearing the open negative delta, which always fires.
+        // slither-disable-next-line unused-return
         poolManager.settle();
 
         // Take the output side to the recipient.

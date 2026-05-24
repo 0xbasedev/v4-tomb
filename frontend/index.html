@@ -2,13 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Identity -->
+    <title>Old Money — The Trust</title>
     <meta
       name="description"
-      content="Old Money — An Algorithmic Trust on Base. $MONEY pegged to Ether. $ESTATE earns seigniorage at The Club. Engineered with precision."
+      content="Old Money is an algorithmic stable protocol on Base. $MONEY pegged 1:1 to Ether, defended by a Uniswap V4 hook and a seigniorage Treasury. $ESTATE stakers earn each expansion epoch; $TRUSTNOTE bondholders speculate on recovery."
     />
-    <title>Old Money — The Trust</title>
+    <meta name="theme-color" content="#0d0a05" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://oldmoney.xyz/" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#d4af37" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Old Money" />
+    <meta property="og:title" content="Old Money — The Trust" />
+    <meta
+      property="og:description"
+      content="Algorithmic stable on Base. $MONEY pegged to Ether, defended by a V4 hook + seigniorage Treasury. Stake $ESTATE at The Club, bond $TRUSTNOTE for premium, swap on the Exchange."
+    />
+    <meta property="og:url" content="https://oldmoney.xyz/" />
+    <meta property="og:image" content="https://oldmoney.xyz/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Old Money — A house monogram with Art Deco sunburst on a near-black ground" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Old Money — The Trust" />
+    <meta
+      name="twitter:description"
+      content="An algorithmic stable on Base. $MONEY pegged to Ether, defended by a V4 hook + seigniorage Treasury."
+    />
+    <meta name="twitter:image" content="https://oldmoney.xyz/og-image.svg" />
+    <meta name="twitter:image:alt" content="Old Money — Art Deco sunburst monogram on near-black ground" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Art Deco type stack: Playfair Display (Bodoni substitute) + Cormorant Garamond (Didot substitute) + Cinzel (Trajan substitute, for labels) -->
@@ -18,6 +55,11 @@
     />
   </head>
   <body class="bg-deco-ground">
+    <noscript>
+      <p style="color: #f5f0e0; background: #0d0a05; padding: 24px; font-family: Georgia, serif; text-align: center;">
+        Old Money is an on-chain protocol with a browser-based interface. Please enable JavaScript to use the site, or interact with the contracts directly on Base via your preferred wallet.
+      </p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
