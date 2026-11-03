@@ -16,4 +16,22 @@ export default defineConfig({
     port: 5173,
     open: false,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes("node_modules/viem/") ||
+            id.includes("node_modules/ox/") ||
+            id.includes("node_modules/abitype/")
+          ) {
+            return "viem";
+          }
+          if (id.includes("node_modules/wagmi/") || id.includes("node_modules/@wagmi/")) {
+            return "wagmi";
+          }
+        },
+      },
+    },
+  },
 });

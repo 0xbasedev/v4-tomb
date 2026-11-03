@@ -1,6 +1,6 @@
 import { http, createConfig } from "wagmi";
 import { defineChain, type Chain } from "viem";
-import { injected } from "wagmi/connectors";
+import { injected } from "wagmi/connectors/injected";
 import { networks } from "./networks";
 
 const toChain = (network: (typeof networks)[number]) => defineChain({

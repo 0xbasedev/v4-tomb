@@ -47,11 +47,16 @@ The new deployment tests initialize a real local V4 PoolManager on chain IDs 777
 
 The browser suite uses an isolated unconfigured local manifest and a mock injected wallet. It does not execute funded live-wallet transactions or simulate every approval pipeline against a deployed target instance.
 
+## Dependency follow-up
+
+1. Frontend production dependencies now audit clean: `cd frontend && npm audit` reports 0 vulnerabilities. Wagmi 3 keeps wallet-connector SDKs optional, and the app imports only `wagmi/connectors/injected`, so the Coinbase, WalletConnect, and MetaMask SDK trees are not installed. Vite 7 and React Router 7 replace the previously flagged releases. Zod is overridden to 4.6.7 because abitype's optional peer otherwise installs a vulnerable 3.x release; application code does not import Zod. Re-run the audit after any dependency change.
+2. Routes load on demand, and the production build splits Viem and Wagmi into their own chunks. The largest chunk is Viem at about 283 kB uncompressed, under Vite's 500 kB warning. The previous single chunk was about 718 kB.
+
+Follow-up checks: TypeScript and the Vite production build passed, schema tests passed (29), and the four Playwright tests passed, including both viewport widths and the mock-wallet network switch.
+
 ## Remaining release work and limitations
 
-1. The final npm audit reports **32 advisories: 18 high and 14 moderate**, after compatible dependency updates reduced the initial total from 45. Remaining affected dependency paths include Wagmi's optional wallet connector ecosystem, React Router, and Vite. Suggested npm fixes include major-version migrations; these were not forced into the portability change. The raw audit is reproducible with `cd frontend && npm audit --json`. Resolve and review applicable advisory paths before production release.
-2. Vite warns about the main JavaScript chunk exceeding 500 kB (about 718 kB uncompressed). Route splitting is an optimization opportunity, not a failed build.
-3. Foundry emits runtime/test lint warnings inherited from the source. This work did not run a new Slither campaign or exhaustively re-audit the economic contracts. All pre-existing security/audit documents remain historical context.
-4. Select and review the actual target chain, compatible third-party dependency bytecode, recipient/admin wallets, launch timestamps, Genesis stake tokens, seed liquidity, and governance rotation. The manifest code checks establish basic compatibility, not trustworthiness of arbitrary infrastructure.
-5. Run a full target-chain simulation and an independent security review before deployment. No funded deployment, governance rotation, keeper activation, frontend hosting deployment, or PR merge was performed.
-6. Scope is compatible Cancun EVM chains with an 18-decimal WETH peg asset and the existing V4 design. Different virtual machines, assets, tokenomics, NFT tiers, or AMMs are separate design changes. The upstream unavailable ESTATE/WETH tab remains unavailable.
+1. Foundry emits runtime/test lint warnings inherited from the source. This work did not run a new Slither campaign or exhaustively re-audit the economic contracts. All pre-existing security/audit documents remain historical context.
+2. Select and review the actual target chain, compatible third-party dependency bytecode, recipient/admin wallets, launch timestamps, Genesis stake tokens, seed liquidity, and governance rotation. The manifest code checks establish basic compatibility, not trustworthiness of arbitrary infrastructure.
+3. Run a full target-chain simulation and an independent security review before deployment. No funded deployment, governance rotation, keeper activation, frontend hosting deployment, or PR merge was performed.
+4. Scope is compatible Cancun EVM chains with an 18-decimal WETH peg asset and the existing V4 design. Different virtual machines, assets, tokenomics, NFT tiers, or AMMs are separate design changes. The upstream unavailable ESTATE/WETH tab remains unavailable.
