@@ -41,7 +41,7 @@ interface WrapPanelProps {
 
 export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProps) {
   const deployment = useDeployment();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const toast = useToast();
   const [tokenIdInput, setTokenIdInput] = useState("");
   const lastPrefillRef = useRef<bigint | null>(null);
@@ -75,8 +75,8 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
   // own writeContract since the targets differ.
   const approve = useWriteContract();
   const wrap = useWriteContract();
-  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data });
-  const wrapReceipt = useWaitForTransactionReceipt({ hash: wrap.data });
+  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data, chainId: approve.variables?.chainId });
+  const wrapReceipt = useWaitForTransactionReceipt({ hash: wrap.data, chainId: wrap.variables?.chainId });
 
   // Surface tx outcomes as toasts. Tracked refs prevent re-toasting on rerender.
   const [approveToastId, setApproveToastId] = useState<string | null>(null);
@@ -206,7 +206,7 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
       <div className="mb-6 flex items-center justify-center gap-3 border border-deco-gold/30 bg-deco-ground-soft px-4 py-2">
         {!isConnected ? (
           <span className="label-deco text-deco-gold-dark">
-            Connect a wallet on Base Sepolia to inspect your positions
+            Connect a wallet on a configured network to inspect your positions
           </span>
         ) : (
           <>
@@ -249,6 +249,8 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
           onClick={() => {
             if (!deployment || pos.tokenId === null) return;
             approve.writeContract({
+              chainId,
+              account: address,
               address: deployment.positionManager,
               abi: positionManagerAbi,
               functionName: "approve",
@@ -266,6 +268,8 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
             if (!deployment || pos.tokenId === null) return;
             setWrapToastId(null);
             wrap.writeContract({
+              chainId,
+              account: address,
               address: deployment.lpWrapper,
               abi: lpWrapperAbi,
               functionName: "wrap",

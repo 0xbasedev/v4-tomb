@@ -7,17 +7,22 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "predev": "node ../scripts/protocol.mjs validate",
+    "prebuild": "node ../scripts/protocol.mjs validate",
+    "test": "node --test ../config/schema.test.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",
-    "wagmi": "^2.13.0",
     "viem": "^2.21.0",
-    "@tanstack/react-query": "^5.59.0"
+    "wagmi": "^2.13.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

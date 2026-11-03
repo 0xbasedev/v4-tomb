@@ -1,3 +1,4 @@
+import { useTransactionSession } from "./useTransactionSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { zeroAddress, type Address } from "viem";
@@ -37,9 +38,10 @@ export interface SwapSubmitArgs {
   onSuccess?: () => void;
 }
 
-type SwapState = "idle" | "approving" | "swapping" | "done" | "error";
+type SwapState = "idle" | "checking" | "approving" | "swapping" | "done" | "error";
 
 export function useSwap() {
+  const session = useTransactionSession();
   const deployment = useDeployment();
   const { address } = useAccount();
   const user = address ?? zeroAddress;
@@ -50,8 +52,8 @@ export function useSwap() {
 
   const approve = useWriteContract();
   const exec = useWriteContract();
-  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data });
-  const execReceipt = useWaitForTransactionReceipt({ hash: exec.data });
+  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data, chainId: session.chainId });
+  const execReceipt = useWaitForTransactionReceipt({ hash: exec.data, chainId: session.chainId });
 
   // Track tokenIn allowance for the MiniSwapRouter so submit() can fast-path
   // past approve when the allowance already covers the swap.
@@ -119,6 +121,10 @@ export function useSwap() {
   }
 
   function submitSwapCall() {
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     const args = pendingRef.current;
     if (!args || !deployment) return;
     toastIdRef.current &&
@@ -127,7 +133,13 @@ export function useSwap() {
         title: "Submit Swap",
         message: "Awaiting your signature.",
       });
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     exec.writeContract({
+      chainId: session.chainId,
+      account: session.account,
       address: deployment.miniSwapRouter,
       abi: miniSwapRouterAbi,
       functionName: "swapExactIn",
@@ -151,8 +163,12 @@ export function useSwap() {
   const submit = useCallback(
     async (args: SwapSubmitArgs) => {
       if (!deployment) return;
+      session.begin();
+      if (!session.valid()) return;
+      approve.reset();
+      exec.reset();
       pendingRef.current = args;
-      setState("idle");
+      setState("checking");
       toastIdRef.current = toast.push({
         variant: "pending",
         title: "Initiating Swap",
@@ -169,7 +185,13 @@ export function useSwap() {
             title: "Authorize Token",
             message: "Approving the router to spend your input token.",
           });
+        if (!session.valid()) {
+          handleError("Wallet or network changed. Start the action again.");
+          return;
+        }
         approve.writeContract({
+          chainId: session.chainId,
+          account: session.account,
           address: args.tokenIn,
           abi: erc20Abi,
           functionName: "approve",
@@ -183,7 +205,7 @@ export function useSwap() {
     [deployment, allowanceRead, approve, toast],
   );
 
-  const isInFlight = state === "approving" || state === "swapping";
+  const isInFlight = state === "checking" || state === "approving" || state === "swapping";
 
   return { state, submit, isInFlight };
 }

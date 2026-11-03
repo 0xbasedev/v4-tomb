@@ -33,7 +33,7 @@ export function Landing() {
             OM
           </span>
           <span className="label-deco hidden text-deco-gold-dark md:inline">
-            The Trust · Base
+            The Trust
           </span>
         </div>
         <ConnectButton />
@@ -87,7 +87,7 @@ export function Landing() {
         {/* ===== Stats panel ===== */}
         <div className="relative z-10 mx-auto mt-20 max-w-5xl md:mt-24">
           <div className="label-deco mb-6 text-deco-gold-dark">
-            The Ledger · Live on Base · Epoch I
+            The Ledger · The Protocol at a Glance
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             <StatTile label="MONEY · Price" value="1.0000" hint="ETH · TWAP" />

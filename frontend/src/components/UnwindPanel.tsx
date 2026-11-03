@@ -39,7 +39,7 @@ interface UnwindPanelProps {
 
 export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
   const deployment = useDeployment();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const toast = useToast();
   const [tokenIdInput, setTokenIdInput] = useState("");
   const lastPrefillRef = useRef<bigint | null>(null);
@@ -99,8 +99,8 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
   // contracts. Each has its own receipt watcher.
   const unwrap = useWriteContract();
   const burn = useWriteContract();
-  const unwrapReceipt = useWaitForTransactionReceipt({ hash: unwrap.data });
-  const burnReceipt = useWaitForTransactionReceipt({ hash: burn.data });
+  const unwrapReceipt = useWaitForTransactionReceipt({ hash: unwrap.data, chainId: unwrap.variables?.chainId });
+  const burnReceipt = useWaitForTransactionReceipt({ hash: burn.data, chainId: burn.variables?.chainId });
   const unwrapToastId = useRef<string | null>(null);
   const burnToastId = useRef<string | null>(null);
 
@@ -201,6 +201,8 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
     if (!deployment || tokenId === null) return;
     unwrapToastId.current = null;
     unwrap.writeContract({
+      chainId,
+      account: address,
       address: deployment.lpWrapper,
       abi: lpWrapperAbi,
       functionName: "unwrap",
@@ -225,6 +227,8 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
     });
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
     burn.writeContract({
+      chainId,
+      account: address,
       address: deployment.positionManager,
       abi: positionManagerAbi,
       functionName: "modifyLiquidities",

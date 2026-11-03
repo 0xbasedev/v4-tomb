@@ -1,3 +1,4 @@
+import { useTransactionSession } from "./useTransactionSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { maxUint160, parseAbiItem, parseEventLogs, zeroAddress, type Address } from "viem";
@@ -55,6 +56,7 @@ export interface MintSubmitArgs {
 
 type MintState =
   | "idle"
+  | "checking"
   | "approvingErc20A"
   | "approvingErc20B"
   | "approvingPermit2A"
@@ -64,6 +66,7 @@ type MintState =
   | "error";
 
 export function useMintPosition() {
+  const session = useTransactionSession();
   const deployment = useDeployment();
   const { address } = useAccount();
   const user = address ?? zeroAddress;
@@ -78,11 +81,11 @@ export function useMintPosition() {
   const permit2ApproveB = useWriteContract();
   const mintExec = useWriteContract();
 
-  const r1 = useWaitForTransactionReceipt({ hash: erc20ApproveA.data });
-  const r2 = useWaitForTransactionReceipt({ hash: erc20ApproveB.data });
-  const r3 = useWaitForTransactionReceipt({ hash: permit2ApproveA.data });
-  const r4 = useWaitForTransactionReceipt({ hash: permit2ApproveB.data });
-  const r5 = useWaitForTransactionReceipt({ hash: mintExec.data });
+  const r1 = useWaitForTransactionReceipt({ hash: erc20ApproveA.data, chainId: session.chainId });
+  const r2 = useWaitForTransactionReceipt({ hash: erc20ApproveB.data, chainId: session.chainId });
+  const r3 = useWaitForTransactionReceipt({ hash: permit2ApproveA.data, chainId: session.chainId });
+  const r4 = useWaitForTransactionReceipt({ hash: permit2ApproveB.data, chainId: session.chainId });
+  const r5 = useWaitForTransactionReceipt({ hash: mintExec.data, chainId: session.chainId });
 
   const checkRead = useReadContracts({
     allowFailure: false,
@@ -216,6 +219,10 @@ export function useMintPosition() {
   }
 
   async function advanceErc20BOrPermit2OrMint() {
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     if (!deployment || !pendingRef.current) return;
     const args = pendingRef.current;
     const fresh = await checkRead.refetch();
@@ -227,7 +234,13 @@ export function useMintPosition() {
           title: "Authorize Token (2/2)",
           message: "Approving Permit2 on the other token.",
         });
+      if (!session.valid()) {
+        handleError("Wallet or network changed. Start the action again.");
+        return;
+      }
       erc20ApproveB.writeContract({
+        chainId: session.chainId,
+        account: session.account,
         address: args.token1,
         abi: erc20Abi,
         functionName: "approve",
@@ -240,6 +253,10 @@ export function useMintPosition() {
   }
 
   async function advancePermit2OrMint() {
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     if (!deployment || !pendingRef.current) return;
     const args = pendingRef.current;
     const fresh = await checkRead.refetch();
@@ -253,7 +270,13 @@ export function useMintPosition() {
           message: "Approving PositionManager on token0.",
         });
       const exp = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+      if (!session.valid()) {
+        handleError("Wallet or network changed. Start the action again.");
+        return;
+      }
       permit2ApproveA.writeContract({
+        chainId: session.chainId,
+        account: session.account,
         address: deployment.permit2,
         abi: permit2Abi,
         functionName: "approve",
@@ -266,6 +289,10 @@ export function useMintPosition() {
   }
 
   async function advancePermit2BOrMint() {
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     if (!deployment || !pendingRef.current) return;
     const args = pendingRef.current;
     const fresh = await checkRead.refetch();
@@ -279,7 +306,13 @@ export function useMintPosition() {
           message: "Approving PositionManager on token1.",
         });
       const exp = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+      if (!session.valid()) {
+        handleError("Wallet or network changed. Start the action again.");
+        return;
+      }
       permit2ApproveB.writeContract({
+        chainId: session.chainId,
+        account: session.account,
         address: deployment.permit2,
         abi: permit2Abi,
         functionName: "approve",
@@ -292,6 +325,10 @@ export function useMintPosition() {
   }
 
   function submitMintCall() {
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     if (!deployment || !pendingRef.current) return;
     const args = pendingRef.current;
     toastIdRef.current &&
@@ -310,7 +347,13 @@ export function useMintPosition() {
       recipient: args.recipient,
     });
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
+    if (!session.valid()) {
+      handleError("Wallet or network changed. Start the action again.");
+      return;
+    }
     mintExec.writeContract({
+      chainId: session.chainId,
+      account: session.account,
       address: deployment.positionManager,
       abi: positionManagerAbi,
       functionName: "modifyLiquidities",
@@ -322,8 +365,15 @@ export function useMintPosition() {
   const submit = useCallback(
     async (args: MintSubmitArgs) => {
       if (!deployment) return;
+      session.begin();
+      if (!session.valid()) return;
+      erc20ApproveA.reset();
+      erc20ApproveB.reset();
+      permit2ApproveA.reset();
+      permit2ApproveB.reset();
+      mintExec.reset();
       pendingRef.current = args;
-      setState("idle");
+      setState("checking");
       toastIdRef.current = toast.push({
         variant: "pending",
         title: "Initiating Mint",
@@ -338,7 +388,13 @@ export function useMintPosition() {
             title: "Authorize Token (1/2)",
             message: "Approving Permit2 on the first token.",
           });
+        if (!session.valid()) {
+          handleError("Wallet or network changed. Start the action again.");
+          return;
+        }
         erc20ApproveA.writeContract({
+          chainId: session.chainId,
+          account: session.account,
           address: args.token0,
           abi: erc20Abi,
           functionName: "approve",
@@ -353,6 +409,7 @@ export function useMintPosition() {
   );
 
   const isInFlight =
+    state === "checking" ||
     state === "approvingErc20A" ||
     state === "approvingErc20B" ||
     state === "approvingPermit2A" ||

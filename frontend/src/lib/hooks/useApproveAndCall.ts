@@ -1,3 +1,4 @@
+import { useTransactionSession } from "./useTransactionSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import type { Address, Abi } from "viem";
@@ -49,6 +50,7 @@ export interface SubmitArgs {
 }
 
 export function useApproveAndCall() {
+  const session = useTransactionSession();
   const [state, setState] = useState<CallState>("idle");
   const toast = useToast();
   const toastIdRef = useRef<string | null>(null);
@@ -58,8 +60,8 @@ export function useApproveAndCall() {
   const approve = useWriteContract();
   const exec = useWriteContract();
 
-  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data });
-  const execReceipt = useWaitForTransactionReceipt({ hash: exec.data });
+  const approveReceipt = useWaitForTransactionReceipt({ hash: approve.data, chainId: session.chainId });
+  const execReceipt = useWaitForTransactionReceipt({ hash: exec.data, chainId: session.chainId });
 
   useEffect(() => {
     if (state === "approving" && approve.data) setState("awaitApprove");
@@ -83,7 +85,11 @@ export function useApproveAndCall() {
           title: args.label,
           message: "Awaiting your signature for the second step.",
         });
-      exec.writeContract(args.call);
+      if (!session.valid()) {
+        handleError("Wallet or network changed. Start the action again.");
+        return;
+      }
+      exec.writeContract({ ...args.call, chainId: session.chainId, account: session.account });
       setState("calling");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +144,10 @@ export function useApproveAndCall() {
 
   const submit = useCallback(
     (args: SubmitArgs) => {
+      session.begin();
+      if (!session.valid()) return;
+      approve.reset();
+      exec.reset();
       pendingRef.current = args;
       setState("idle");
       toastIdRef.current = toast.push({
@@ -149,7 +159,13 @@ export function useApproveAndCall() {
       const needsApprove =
         args.token !== null && args.spender !== null && args.currentAllowance < args.amount;
       if (needsApprove && args.token && args.spender) {
+        if (!session.valid()) {
+          handleError("Wallet or network changed. Start the action again.");
+          return;
+        }
         approve.writeContract({
+          chainId: session.chainId,
+          account: session.account,
           address: args.token,
           abi: erc20Abi,
           functionName: "approve",
@@ -157,7 +173,11 @@ export function useApproveAndCall() {
         });
         setState("approving");
       } else {
-        exec.writeContract(args.call);
+        if (!session.valid()) {
+          handleError("Wallet or network changed. Start the action again.");
+          return;
+        }
+        exec.writeContract({ ...args.call, chainId: session.chainId, account: session.account });
         setState("calling");
       }
     },

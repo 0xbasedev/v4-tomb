@@ -1,3 +1,5 @@
+import { useChainId } from "wagmi";
+import { explorerTransactionUrl } from "@/lib/networks";
 import { StatTile } from "@/components/StatTile";
 import { FeaturedTile } from "@/components/FeaturedTile";
 import { PhaseBanner } from "@/components/PhaseBanner";
@@ -68,6 +70,7 @@ function formatRelativeTime(secondsAgo: number): string {
 }
 
 export function Dashboard() {
+  const chainId = useChainId();
   const deployment = useDeployment();
   const { epoch, secondsUntilNextEpoch } = useEpoch();
   const market = useMoneyMarket();
@@ -120,7 +123,7 @@ export function Dashboard() {
           <RuleTrio className="mb-2 mt-8" />
           {noDeployment && (
             <p className="mt-6 font-body text-sm italic text-deco-gold-dark">
-              Connect a wallet on Base Sepolia to observe live state.
+              Connect a wallet on a configured network to observe live state.
             </p>
           )}
         </div>
@@ -307,12 +310,12 @@ export function Dashboard() {
                         </td>
                         <td className="px-5 py-4 text-right">
                           <a
-                            href={`https://sepolia.basescan.org/tx/${row.transactionHash}`}
+                            href={explorerTransactionUrl(chainId, row.transactionHash)}
                             target="_blank"
                             rel="noreferrer"
                             className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold"
                           >
-                            View →
+                            {explorerTransactionUrl(chainId, row.transactionHash) ? "View →" : "—"}
                           </a>
                         </td>
                       </tr>
