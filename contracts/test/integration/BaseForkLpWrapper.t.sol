@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
-import {Addresses} from "../../src/libs/Addresses.sol";
+import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
+
+import {console2} from "forge-std/Script.sol";
 
 import {Treasury} from "../src/core/Treasury.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
@@ -24,8 +26,8 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  *
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY  — operator signer
- *           TREASURY              — deployed Treasury address
- *           HOOK                  — deployed PegDefenseHook address
+ *           TREASURY address is resolved from the selected manifest deployment.
+ *           HOOK address is resolved from the selected manifest deployment.
  *           DAO_FUND              — daoFund recipient address (Treasury.setExtraFunds requires non-zero)
  *           DEV_FUND              — devFund recipient address (Treasury.setExtraFunds requires non-zero)
  *           DAO_FUND_PERCENT      — basis points, 0-3000 (0%, max 30%)
@@ -35,23 +37,23 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  *           ENABLE_HOOK_TAX       — "1" enables, anything else skips. Default "1".
  *
  *         Example:
- *           export TREASURY=0x928B...
  *           export HOOK=0x8FF8...
  *           export DAO_FUND=0x...
  *           export DEV_FUND=0x...
  *           export DAO_FUND_PERCENT=3000   # 30%
  *           export DEV_FUND_PERCENT=1000   # 10%
- *           forge script script/PostBootstrap.s.sol --rpc-url base --broadcast
+ *           forge script script/PostBootstrap.s.sol --rpc-url "$RPC_URL" --broadcast
  *
  *         Reversibility: every lever this script touches is reversible by the operator
  *         (or post-Sprint-14 the Timelock) by calling the same setter with different
  *         values. Re-run the script with new env vars to update.
  */
-contract PostBootstrap is Script {
+contract PostBootstrap is NetworkConfig {
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        address treasuryAddr = vm.envAddress("TREASURY");
-        address hookAddr = vm.envAddress("HOOK");
+        address treasuryAddr = _deployment("treasury");
+        address hookAddr = _deployment("hook");
         address daoFund = vm.envAddress("DAO_FUND");
         address devFund = vm.envAddress("DEV_FUND");
         uint256 daoPercent = vm.envUint("DAO_FUND_PERCENT");

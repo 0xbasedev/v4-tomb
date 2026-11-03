@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "networks": [
+    {
+      "id": 31337,
+      "name": "Local EVM",
+      "nativeCurrency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "rpcUrl": "http://127.0.0.1:8545",
+      "explorerUrl": null,
+      "testnet": true,
+      "infrastructure": {
+        "weth": null,
+        "poolManager": null,
+        "positionManager": null,
+        "permit2": null,
+        "universalRouter": null,
+        "create2Deployer": null
+      },
+      "deployment": null
+    }
+  ]
+}

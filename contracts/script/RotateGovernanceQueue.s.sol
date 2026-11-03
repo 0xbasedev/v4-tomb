@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
+
+import {console2} from "forge-std/Script.sol";
 
 import {OldMoney} from "../src/tokens/OldMoney.sol";
 import {Estate} from "../src/tokens/Estate.sol";
@@ -37,34 +39,35 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  *
  *         Required env vars (every address comes from the prior deploy logs / DEPLOYED.md):
  *           DEPLOYER_PRIVATE_KEY
- *           TIMELOCK
- *           MONEY
- *           ESTATE
- *           TRUSTNOTE
- *           HOOK
- *           TREASURY
- *           GENESIS_REWARD_POOL
- *           MAIN_REWARD_POOL
- *           SHARE_REWARD_POOL
+ *           TIMELOCK address is resolved from the selected manifest deployment.
+ *           MONEY address is resolved from the selected manifest deployment.
+ *           ESTATE address is resolved from the selected manifest deployment.
+ *           TRUSTNOTE address is resolved from the selected manifest deployment.
+ *           HOOK address is resolved from the selected manifest deployment.
+ *           TREASURY address is resolved from the selected manifest deployment.
+ *           GENESIS_REWARD_POOL address is resolved from the selected manifest deployment.
+ *           MAIN_REWARD_POOL address is resolved from the selected manifest deployment.
+ *           SHARE_REWARD_POOL address is resolved from the selected manifest deployment.
  *
  *         Optional:
  *           ETA — Unix timestamp for the queued acceptOwnership transactions. Must be
  *                 ≥ block.timestamp + timelock.delay(). Defaults to
  *                 block.timestamp + timelock.delay() + 60 seconds.
  */
-contract RotateGovernanceQueue is Script {
+contract RotateGovernanceQueue is NetworkConfig {
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
-        Timelock timelock = Timelock(payable(vm.envAddress("TIMELOCK")));
-        OldMoney money = OldMoney(vm.envAddress("MONEY"));
-        Estate estate = Estate(vm.envAddress("ESTATE"));
-        TrustNote trustnote = TrustNote(vm.envAddress("TRUSTNOTE"));
-        PegDefenseHook hook = PegDefenseHook(vm.envAddress("HOOK"));
-        Treasury treasury = Treasury(vm.envAddress("TREASURY"));
-        GenesisRewardPool gp = GenesisRewardPool(vm.envAddress("GENESIS_REWARD_POOL"));
-        MainRewardPool mp = MainRewardPool(vm.envAddress("MAIN_REWARD_POOL"));
-        ShareRewardPool sp = ShareRewardPool(vm.envAddress("SHARE_REWARD_POOL"));
+        Timelock timelock = Timelock(payable(_deployment("timelock")));
+        OldMoney money = OldMoney(_deployment("money"));
+        Estate estate = Estate(_deployment("estate"));
+        TrustNote trustnote = TrustNote(_deployment("trustNote"));
+        PegDefenseHook hook = PegDefenseHook(_deployment("hook"));
+        Treasury treasury = Treasury(_deployment("treasury"));
+        GenesisRewardPool gp = GenesisRewardPool(_deployment("genesisRewardPool"));
+        MainRewardPool mp = MainRewardPool(_deployment("mainRewardPool"));
+        ShareRewardPool sp = ShareRewardPool(_deployment("shareRewardPool"));
 
         uint256 defaultEta = block.timestamp + timelock.delay() + 60;
         uint256 eta = vm.envOr("ETA", defaultEta);

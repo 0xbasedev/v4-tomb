@@ -1,0 +1,181 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity 0.8.26;
+
+import {Test} from "forge-std/Test.sol";
+import {NetworkConfig} from "../../script/NetworkConfig.s.sol";
+import {Deploy} from "../../script/Deploy.s.sol";
+import {PoolManager} from "v4-core/src/PoolManager.sol";
+
+contract ConfigHarness is NetworkConfig {
+    uint256 public index;
+
+    function selectIndex(
+        uint256 value
+    ) external {
+        index = value;
+    }
+
+    function _networkIndex() internal view override returns (uint256) {
+        return index;
+    }
+
+    function infrastructure(
+        string memory key
+    ) external view returns (address) {
+        return _infrastructure(key);
+    }
+
+    function deployment(
+        string memory key
+    ) external view returns (address) {
+        return _deployment(key);
+    }
+
+    function preflight() external view {
+        _preflight();
+    }
+}
+
+contract ConfigDeployHarness is Deploy {
+    uint256 internal index;
+    address internal manager;
+
+    constructor(
+        uint256 index_,
+        address manager_
+    ) {
+        index = index_;
+        manager = manager_;
+    }
+
+    function _networkIndex() internal view override returns (uint256) {
+        return index;
+    }
+
+    function _infrastructure(
+        string memory key
+    ) internal view override returns (address) {
+        if (keccak256(bytes(key)) == keccak256("poolManager")) return manager;
+        return super._infrastructure(key);
+    }
+}
+
+/// @dev Test factory implementing the salt || initCode interface required by Deploy.
+contract ConfigTestFactory {
+    fallback() external {
+        bytes memory initCode = msg.data[32:];
+        bytes32 salt = bytes32(msg.data[:32]);
+        address created;
+        assembly {
+            created := create2(0, add(initCode, 32), mload(initCode), salt)
+        }
+        require(created != address(0), "factory failed");
+    }
+}
+
+contract NetworkConfigTest is Test {
+    ConfigHarness internal config;
+    address internal constant WETH = address(0x1111);
+    address internal constant MANAGER = address(0x1112);
+    address internal constant POSITIONS = address(0x1113);
+    address internal constant PERMIT = address(0x1114);
+    address internal constant FACTORY = address(0x1116);
+
+    function setUp() public {
+        vm.setEnv("PROTOCOL_CONFIG", "./test/fixtures/networks.json");
+        vm.chainId(777);
+        vm.warp(1_700_000_000);
+        config = new ConfigHarness();
+        for (uint160 i = 0x1111; i <= 0x1116; ++i) {
+            vm.etch(address(i), hex"00");
+        }
+        vm.mockCall(WETH, abi.encodeWithSignature("decimals()"), abi.encode(uint8(18)));
+        vm.mockCall(POSITIONS, abi.encodeWithSignature("poolManager()"), abi.encode(MANAGER));
+        vm.mockCall(POSITIONS, abi.encodeWithSignature("permit2()"), abi.encode(PERMIT));
+    }
+
+    function test_ArbitraryConfiguredChain() public view {
+        assertEq(config.infrastructure("weth"), WETH);
+        assertEq(config.deployment("treasury"), MANAGER);
+        config.preflight();
+    }
+
+    function test_RejectsWrongChain() public {
+        vm.chainId(1);
+        vm.expectRevert(abi.encodeWithSelector(NetworkConfig.WrongChain.selector, 777, 1));
+        config.preflight();
+    }
+
+    function test_SelectsSecondChain() public {
+        config.selectIndex(1);
+        vm.chainId(888);
+        config.preflight();
+    }
+
+    function test_RejectsMissingDependencyCode() public {
+        vm.etch(MANAGER, hex"");
+        vm.expectRevert(abi.encodeWithSelector(NetworkConfig.InvalidInfrastructure.selector, "poolManager", MANAGER));
+        config.preflight();
+    }
+
+    function test_RejectsNon18DecimalPeg() public {
+        vm.mockCall(WETH, abi.encodeWithSignature("decimals()"), abi.encode(uint8(6)));
+        vm.expectRevert(abi.encodeWithSelector(NetworkConfig.InvalidPegDecimals.selector, 6));
+        config.preflight();
+    }
+
+    function test_RejectsWrongPoolManagerBinding() public {
+        vm.mockCall(POSITIONS, abi.encodeWithSignature("poolManager()"), abi.encode(address(99)));
+        vm.expectRevert(NetworkConfig.IncompatiblePositionManager.selector);
+        config.preflight();
+    }
+
+    function test_RejectsWrongPermitBinding() public {
+        vm.mockCall(POSITIONS, abi.encodeWithSignature("permit2()"), abi.encode(address(99)));
+        vm.expectRevert(NetworkConfig.IncompatiblePositionManager.selector);
+        config.preflight();
+    }
+
+    function test_RejectsDeploymentWithoutCode() public {
+        vm.etch(MANAGER, hex"");
+        vm.expectRevert("Config: invalid deployment address");
+        config.deployment("treasury");
+    }
+
+    function test_FullDeployOnArbitraryChain() public {
+        _deployAndAssert();
+    }
+
+    function test_FullDeployOnSecondArbitraryChain() public {
+        vm.chainId(888);
+        _deployAndAssert();
+    }
+
+    function _deployAndAssert() internal {
+        // Real V4 pool initialization and hook binding; peripheral views are mocked.
+        address realManager = address(new PoolManager(address(this)));
+        vm.mockCall(POSITIONS, abi.encodeWithSignature("poolManager()"), abi.encode(realManager));
+        vm.etch(FACTORY, address(new ConfigTestFactory()).code);
+        vm.setEnv("DEPLOYER_PRIVATE_KEY", "1");
+        vm.setEnv("AIRDROP_WALLET", vm.toString(address(0xBEEF)));
+        vm.setEnv("COMMUNITY_FUND", vm.toString(address(0xCAFE)));
+        vm.setEnv("DEV_FUND", vm.toString(address(0xF00D)));
+        vm.setEnv("TIMELOCK_ADMIN", vm.toString(address(0xABCD)));
+        vm.deal(vm.addr(1), 100 ether);
+        Deploy deploy = new ConfigDeployHarness(block.chainid == 777 ? 0 : 1, realManager);
+        deploy.run();
+        assertTrue(deploy.hook().bound());
+        assertEq(deploy.hook().trustees(), vm.addr(1));
+        assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x1088);
+        assertEq(deploy.money().operator(), address(deploy.treasury()));
+        assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
+        assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
+        assertEq(deploy.timelock().admin(), address(0xABCD));
+        assertEq(address(deploy.miniSwapRouter().poolManager()), realManager);
+        string memory file = string.concat("./deployment-output/", vm.toString(block.chainid), ".json");
+        string memory output = vm.readFile(file);
+        assertEq(vm.parseJsonUint(output, ".chainId"), block.chainid);
+        assertEq(vm.parseJsonAddress(output, ".hook"), address(deploy.hook()));
+        vm.removeFile(file);
+    }
+}

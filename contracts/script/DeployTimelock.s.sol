@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
+
+import {console2} from "forge-std/Script.sol";
 
 import {Timelock} from "../src/governance/Timelock.sol";
 
@@ -27,13 +29,14 @@ import {Timelock} from "../src/governance/Timelock.sol";
  *                            rejected by the Timelock constructor.
  *
  *         Commands:
- *           forge script script/DeployTimelock.s.sol --rpc-url base_sepolia --broadcast --verify
- *           forge script script/DeployTimelock.s.sol --rpc-url base --broadcast --verify
+ *           forge script script/DeployTimelock.s.sol --rpc-url "$RPC_URL" --broadcast --verify
+ *           forge script script/DeployTimelock.s.sol --rpc-url "$RPC_URL" --broadcast --verify
  */
-contract DeployTimelock is Script {
+contract DeployTimelock is NetworkConfig {
     Timelock public timelock;
 
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address admin = vm.envAddress("TIMELOCK_ADMIN");
         uint256 delay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));

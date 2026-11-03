@@ -15,7 +15,10 @@ contract MockPriceSource is IPriceSource {
     int56 public cumulative;
     uint32 public ts;
 
-    function set(int56 _c, uint32 _ts) external {
+    function set(
+        int56 _c,
+        uint32 _ts
+    ) external {
         cumulative = _c;
         ts = _ts;
     }
@@ -35,14 +38,20 @@ contract OracleHandler is Test {
     /// @notice Captures whether a successful (timeElapsed > 0) update has ever been done.
     bool public ghost_everUpdated;
 
-    constructor(Oracle _oracle, MockPriceSource _source) {
+    constructor(
+        Oracle _oracle,
+        MockPriceSource _source
+    ) {
         oracle = _oracle;
         source = _source;
     }
 
     /// @notice Push the mock source forward, then call update. The fuzzer chooses tick
     ///         delta (bounded) and time delta (bounded).
-    function advanceAndUpdate(int56 tickDelta, uint32 timeDelta) external {
+    function advanceAndUpdate(
+        int56 tickDelta,
+        uint32 timeDelta
+    ) external {
         // Bound tick delta to a sane range — ticks are bounded by TickMath.MIN/MAX but
         // the per-update delta in real swaps would be much smaller.
         if (tickDelta > int56(1_000_000)) tickDelta = int56(1_000_000);

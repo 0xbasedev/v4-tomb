@@ -11,7 +11,10 @@ import {Epoch} from "../../src/libs/Epoch.sol";
  *         so the invariant handler can drive epoch advancement.
  */
 contract EpochHarness is Epoch {
-    constructor(uint256 period_, uint256 startTime_) Epoch(period_, startTime_, 0) {}
+    constructor(
+        uint256 period_,
+        uint256 startTime_
+    ) Epoch(period_, startTime_, 0) {}
 
     /// @notice Trustees-pre-epoch + permissionless-post-epoch — same modifier semantics as
     ///         every real Epoch consumer (Treasury, Oracle).
@@ -28,7 +31,9 @@ contract EpochHandler is Test {
     uint256 public ghost_tickCalls;
     uint256 public ghost_lastEpochSeen;
 
-    constructor(EpochHarness _harness) {
+    constructor(
+        EpochHarness _harness
+    ) {
         harness = _harness;
         ghost_lastEpochSeen = _harness.getCurrentEpoch();
     }
@@ -36,7 +41,9 @@ contract EpochHandler is Test {
     /// @notice Advance block time by a fuzzer-chosen delta (bounded 1s..2 days), then attempt
     ///         a tick. Some ticks will be pre-epoch (trustees-only) and succeed silently;
     ///         others will be post-epoch and advance the counter by 1+.
-    function advanceAndTick(uint256 deltaSec) external {
+    function advanceAndTick(
+        uint256 deltaSec
+    ) external {
         deltaSec = bound(deltaSec, 1, 2 days);
         vm.warp(block.timestamp + deltaSec);
 
@@ -49,7 +56,9 @@ contract EpochHandler is Test {
 
     /// @notice Re-set the period within the allowed range to test that the new period
     ///         is honored on the next nextEpochPoint() calculation.
-    function setPeriod(uint256 newPeriod) external {
+    function setPeriod(
+        uint256 newPeriod
+    ) external {
         newPeriod = bound(newPeriod, 1 hours, 48 hours);
         harness.setPeriod(newPeriod);
     }

@@ -28,11 +28,16 @@ contract StubPM {}
 contract PegDefenseHookHandler is Test {
     PegDefenseHook public hook;
 
-    constructor(PegDefenseHook _hook) {
+    constructor(
+        PegDefenseHook _hook
+    ) {
         hook = _hook;
     }
 
-    function setTaxTiersTwap(uint256 idx, uint256 newTwap) external {
+    function setTaxTiersTwap(
+        uint256 idx,
+        uint256 newTwap
+    ) external {
         idx = bound(idx, 0, hook.getTaxTiersTwapsCount() - 1);
         // Generous bound — the tier-table validation in the hook will reject non-monotonic
         // values. The fuzzer benefits from seeing both valid and invalid cases.
@@ -40,7 +45,10 @@ contract PegDefenseHookHandler is Test {
         hook.setTaxTiersTwap(idx, newTwap);
     }
 
-    function setTaxTiersRate(uint256 idx, uint256 newRate) external {
+    function setTaxTiersRate(
+        uint256 idx,
+        uint256 newRate
+    ) external {
         idx = bound(idx, 0, hook.getTaxTiersRatesCount() - 1);
         // Bound across the validation boundary so we get both accepted (<=10000) and
         // rejected (>10000) inputs.
@@ -48,16 +56,23 @@ contract PegDefenseHookHandler is Test {
         hook.setTaxTiersRate(idx, newRate);
     }
 
-    function setBurnThreshold(uint256 newThreshold) external {
+    function setBurnThreshold(
+        uint256 newThreshold
+    ) external {
         newThreshold = bound(newThreshold, 1, 100e18);
         hook.setBurnThreshold(newThreshold);
     }
 
-    function setAutoCalculateTax(bool enabled) external {
+    function setAutoCalculateTax(
+        bool enabled
+    ) external {
         hook.setAutoCalculateTax(enabled);
     }
 
-    function setExcludedAddress(uint256 addrSeed, bool excluded) external {
+    function setExcludedAddress(
+        uint256 addrSeed,
+        bool excluded
+    ) external {
         address a = address(uint160(uint256(keccak256(abi.encode(addrSeed)))));
         hook.setExcludedAddress(a, excluded);
     }
@@ -138,8 +153,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     /// @notice taxRateForPrice(price) always returns a value present in the rates table.
     ///         Fuzzed via the active price the invariant runner reaches.
     function invariant_TaxRateAlwaysInTable() public view {
-        uint256[7] memory probes =
-            [uint256(0), 0.25e18, 0.5e18, 0.75e18, 1.0e18, 1.5e18, 100e18];
+        uint256[7] memory probes = [uint256(0), 0.25e18, 0.5e18, 0.75e18, 1.0e18, 1.5e18, 100e18];
         for (uint256 i = 0; i < probes.length; ++i) {
             uint256 rate = hook.taxRateForPrice(probes[i]);
             bool found = false;

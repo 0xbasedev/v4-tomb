@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
+
+import {console2} from "forge-std/Script.sol";
 
 import {Treasury} from "../src/core/Treasury.sol";
 
@@ -25,17 +27,17 @@ import {Treasury} from "../src/core/Treasury.sol";
  *         Required env vars:
  *           KEEPER_PRIVATE_KEY  — wallet that signs the tick. Needs ETH for gas only.
  *                                  Should NOT have any admin role on protocol contracts.
- *           TREASURY            — deployed Treasury address (per docs/DEPLOYED.md).
+ *           TREASURY address is resolved from the selected manifest deployment.
  *
  *         Example:
  *           export KEEPER_PRIVATE_KEY=0x...
- *           export TREASURY=0x928B72a3E734d6D07606d9655c55289D3a224c20
- *           forge script script/KeeperTick.s.sol --rpc-url base_sepolia --broadcast --slow
+ *           forge script script/KeeperTick.s.sol --rpc-url "$RPC_URL" --broadcast --slow
  */
-contract KeeperTick is Script {
+contract KeeperTick is NetworkConfig {
     function run() external {
+        _network();
         uint256 pk = vm.envUint("KEEPER_PRIVATE_KEY");
-        address treasuryAddr = vm.envAddress("TREASURY");
+        address treasuryAddr = _deployment("treasury");
         Treasury t = Treasury(treasuryAddr);
 
         uint256 currentEpoch = t.epoch();

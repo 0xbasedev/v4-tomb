@@ -22,76 +22,108 @@ contract TreasuryParamHandler is Test {
     address public daoFund = makeAddr("dao");
     address public devFund = makeAddr("dev");
 
-    constructor(Treasury _treasury) {
+    constructor(
+        Treasury _treasury
+    ) {
         treasury = _treasury;
     }
 
-    function setMoneyPriceCeiling(uint256 v) external {
+    function setMoneyPriceCeiling(
+        uint256 v
+    ) external {
         // moneyPriceOne is 1e18. Setter accepts [1e18, 1.2e18]. Bound generously to cover
         // both accept and reject.
         v = bound(v, 0.5e18, 2e18);
         treasury.setMoneyPriceCeiling(v);
     }
 
-    function setMaxSupplyExpansionPercents(uint256 v) external {
+    function setMaxSupplyExpansionPercents(
+        uint256 v
+    ) external {
         v = bound(v, 0, 2000);
         treasury.setMaxSupplyExpansionPercents(v);
     }
 
-    function setBondDepletionFloorPercent(uint256 v) external {
+    function setBondDepletionFloorPercent(
+        uint256 v
+    ) external {
         v = bound(v, 0, 15_000);
         treasury.setBondDepletionFloorPercent(v);
     }
 
-    function setMaxSupplyContractionPercent(uint256 v) external {
+    function setMaxSupplyContractionPercent(
+        uint256 v
+    ) external {
         v = bound(v, 0, 2000);
         treasury.setMaxSupplyContractionPercent(v);
     }
 
-    function setMaxDebtRatioPercent(uint256 v) external {
+    function setMaxDebtRatioPercent(
+        uint256 v
+    ) external {
         v = bound(v, 0, 15_000);
         treasury.setMaxDebtRatioPercent(v);
     }
 
-    function setBootstrap(uint256 e, uint256 p) external {
+    function setBootstrap(
+        uint256 e,
+        uint256 p
+    ) external {
         e = bound(e, 0, 200);
         p = bound(p, 0, 2000);
         treasury.setBootstrap(e, p);
     }
 
-    function setExtraFunds(uint256 dao, uint256 dev) external {
+    function setExtraFunds(
+        uint256 dao,
+        uint256 dev
+    ) external {
         dao = bound(dao, 0, 5000);
         dev = bound(dev, 0, 2000);
         treasury.setExtraFunds(daoFund, dao, devFund, dev);
     }
 
-    function setDiscountPercent(uint256 v) external {
+    function setDiscountPercent(
+        uint256 v
+    ) external {
         v = bound(v, 0, 30_000);
         treasury.setDiscountPercent(v);
     }
 
-    function setPremiumThreshold(uint256 v) external {
+    function setPremiumThreshold(
+        uint256 v
+    ) external {
         v = bound(v, 0, 300);
         treasury.setPremiumThreshold(v);
     }
 
-    function setPremiumPercent(uint256 v) external {
+    function setPremiumPercent(
+        uint256 v
+    ) external {
         v = bound(v, 0, 30_000);
         treasury.setPremiumPercent(v);
     }
 
-    function setMintingFactorForPayingDebt(uint256 v) external {
+    function setMintingFactorForPayingDebt(
+        uint256 v
+    ) external {
         v = bound(v, 0, 30_000);
         treasury.setMintingFactorForPayingDebt(v);
     }
 
-    function setSupplyTiersEntry(uint8 idx, uint256 v) external {
+    function setSupplyTiersEntry(
+        uint8 idx,
+        uint256 v
+    ) external {
         idx = uint8(bound(idx, 0, 8));
         v = bound(v, 1, 100_000_000 ether);
         treasury.setSupplyTiersEntry(idx, v);
     }
 
-    function setMaxExpansionTiersEntry(uint8 idx, uint256 v) external {
+    function setMaxExpansionTiersEntry(
+        uint8 idx,
+        uint256 v
+    ) external {
         idx = uint8(bound(idx, 0, 8));
         v = bound(v, 0, 2000);
         treasury.setMaxExpansionTiersEntry(idx, v);
