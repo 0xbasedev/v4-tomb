@@ -82,3 +82,21 @@ test('Genesis burn execution caps must be positive uint256 decimal strings', () 
   }
   assert.equal(validateMasonryLaunch(complete()).squareCap, 33333);
 });
+
+test('confirmed Genesis rules are fixed launch invariants', () => {
+  for (const [key, value] of Object.entries({
+    genesisDurationSeconds: 86400,
+    genesisLpOpenDelaySeconds: 0,
+    genesisLevelSellMinimumBps: 1200,
+    genesisLevelSellBurnShareBps: 0,
+    genesisNftRequired: false,
+    genesisNftPriceUsdc: 0,
+    genesisProNftPriceUsdc: 50,
+    genesisUltraNftPriceUsdc: 100,
+    genesisUltraMultiplier: 4,
+  })) {
+    const cfg = complete();
+    cfg.policy[key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), new RegExp(key));
+  }
+});

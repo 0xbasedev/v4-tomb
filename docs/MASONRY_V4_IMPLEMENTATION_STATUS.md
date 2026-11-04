@@ -1,9 +1,16 @@
-# Masonry v4 integration status — Decision 83 tranche
+# Masonry v4 integration status
 
 **Branch:** `merge`, based on `feat/chain-agnostic-config`  
-**Status:** isolated backend code committed; **not production ready**.  
-**Frontend:** intentionally untouched.  
+**Status:** Genesis contracts and LEVEL hook tested locally. Production adapters and deployment wiring remain open.
 **Governance:** no new timelock or owner-activated trading pause.
+
+## Genesis contracts
+
+- The hook and staking deployment must share one immutable Genesis clock. Rewards and the LEVEL sell tax window begin at the start timestamp and end exactly seven days later. The official LP staking and compounding entry points open at start + 24 hours and close at Genesis end. Accrued claims and principal withdrawals remain callable after Genesis. Ultra may pre-stake in the standard pool during the 24 hours before Genesis, with rewards starting at the same time and rate for every tier.
+- Genesis, Pro and Ultra passes are soulbound and cost 50, 100 and 500 USDC respectively. Treasury receives the USDC directly. All staking and reward entry points require membership. Pro and Ultra can opt in to a chosen keeper with a minimum net LP output. Manual and keeper compounding share the same per-beneficiary, per-source-pool three-hour clock. All tiers use the same reward formula and position accounting.
+- The staking implementation accepts one standard stake asset plus the LP vault shares. It allocates 75% of scheduled emissions from Day 2 onward to LP, using the master spec's emission split. It credits only net shares after one 50-bps fee on each deposit or compound. The external settlement adapter handles vesting, conversion and liquidity minting.
+- `MasonryLevelHook` binds to one static-fee LEVEL/USDC v4 pool. Every sell selects the maximum of the ordinary TWAP target, projected execution target, recovery floor and (during Genesis) 300 bps. The ceiling is 1,200 bps. A single LEVEL debit is burned immediately during Genesis. Outside Genesis, the ordinary tax goes to the immutable fee recipient. Genesis floor activation never changes the ordinary recovery state. Buys and wallet transfers incur zero LEVEL tax.
+- The hook previews the sale in the actual PoolManager and rolls the preview back. For exact input it projects using the largest net input possible at the applicable tax floor, which can be more conservative than the final fill. Exact output uses the simulated LEVEL input to gross up the debit. Partial previews revert. Genesis dust that cannot satisfy both integer fee bounds also reverts. The hook rejects sells when the oracle adapter cannot supply a valid price. Pools created independently without this hook are outside its enforcement.
 
 ## Committed source and behavior
 
@@ -12,7 +19,7 @@
 | `src/masonry/MasonryGenesisLPBurnFee.sol` | Receives exactly 50 bps of LEVEL/USDC LP vault shares from an authorized Genesis caller; redeems a bounded amount, burns LEVEL immediately, attempts bounded USDC->LEVEL buyback/burn via the existing v4 exact-input router; failed optional operations leave accounted shares/USDC for the **next authorized Genesis call only** | Requires a correct fungible v4 LP vault with proportional redemption, hardened validated oracle/executable-impact guard, and Genesis staking+auto-compound integration. Legacy wrapper cannot be used. |
 | `src/masonry/MasonryFeeAllocation.sol` | Pure collection-time SQUARE tax buckets: normal 12% earmarked SQUARE for SQUARE/USDC POL, 20% earmarked SQUARE to convert into USDC reserve, 68% native SQUARE retained. Critical Defense routes 100% of **new eligible** fee revenue into SQUARE -> USDC -> LEVEL buy-and-burn | Not yet attached to an actual Uniswap v4 hook fee collector or vault. Existing earmarks must not be reallocated. |
 | `src/masonry/MasonryCriticalDefense.sol` | Permissionless lazy mode: enter at fresh TWAP <=0.90, exit after two consecutive real six-hour checkpoints each with fresh TWAP strictly >1.01; stale data never ends defense | Needs audited fresh-TWAP adapter. Must synchronize on fee collection and maintain conservative allocations during oracle outage. |
-| `src/masonry/MasonryRules.sol` | Existing pure SQUARE allocation, maximum 12% nonlinear Fire Tax and strict fresh >1.01 expansion predicates | Not yet enforcing executed v4 swap or mint path. |
+| `src/masonry/MasonryRules.sol` | Existing pure SQUARE allocation, maximum 12% nonlinear Fire Tax and strict fresh >1.01 expansion predicates | LEVEL hook uses the tax rules. Mint and SQUARE enforcement remain open. |
 | `src/masonry/MasonryCompoundGate.sol` | Existing per-user per-pool three-hour Genesis/Farm compounding cooldown | Not yet called by the actual Genesis auto-compounder. |
 
 The LP burn module has no public `processFees()` entrypoint. Only an authorized Genesis deposit/compound can invoke `collectAndProcess()`. Nested helper functions are callable only by the module itself; optional external failures are caught so the deposit can continue. Explicit owner updates are immediate. Deferred burn reserves have **no owner sweep or Treasury reassignment path**.
@@ -21,9 +28,9 @@ The LP burn module has no public `processFees()` entrypoint. Only an authorized 
 
 1. Replace existing `V4PositionWrapper` with a **real fungible position vault** with proportional ERC20-share redemption. `wrappedBy[tokenId]` in the inherited wrapper prevents fungible redemption by a non-original depositor. The vault must actually remove proportional Uniswap v4 liquidity through the PositionManager, settle exact token balances and prevent donation/fee dilution.
 2. Add a correct validated LEVEL/USDC TWAP feed and **execution guard**. `minimumLevelOut(usdcAmount)` MUST independently validate freshness, price manipulation, maximum swap impact, tick crossing, amount out and slippage, not trust only a router quote or untrusted caller input. Neither token/USDC decimal normalization nor v4 multi-tick simulation is implemented in this tranche.
-3. Implement the **Masonry-specific LEVEL/USDC and SQUARE/USDC hooks**. The inherited `PegDefenseHook` is Old Money/WETH, has mutable legacy 100% tax tiers, and is NOT a Masonry hook. Enforce on-chain <=12% Fire Tax, sell-only, simulated price *after* the user's trade and seven-hour tax recovery. Exact-input and exact-output swaps, alternative routers, spoofed hook data and fee delta signs require adversarial integration tests.
+3. Complete the production LEVEL oracle adapter and fee recipient. Bind deployment to the same official pool, LEVEL token, USDC, schedule and vault used by Genesis and fee buybacks. Validate oracle startup/liveness, warmup and guarded spot fallback policy, miner/deployer wiring, initialization price, alternate routers, gas across sparse tick ranges, sell limits and bypass via unofficial pools. Deploy the separate SQUARE hook.
 4. Implement SQUARE fee collector: collection-time 12/20/68 earmarks, optional same-user-transaction routing on official v4 pools, safe fallback of already earmarked assets without blocking valid trades, and 100% eligible new revenue buy-and-burn in Critical Defense. No standalone `processFees()` or trading pause. Do not sell Treasury LEVEL for USDC.
-5. Wire the Genesis deposit path: transfer gross vault shares, invoke `collectAndProcess(gross)`, credit **only net shares**, and have auto-compound call it on every successful eligible 3-hour compound. Prevent a second conversion-route fee on zap-to-Genesis. Do not modify the user's six-hour stake cooldown during authorized auto-compound.
+5. Implement and audit the Genesis reward settlement adapter and production vault. Enforce reward vesting, claim/deposit fee and tier terms, the stake/claim cooldowns, slippage, the separate 0.5% conversion fee exclusion on Genesis LP routes, and keeper performance-fee accounting. Complete multi-pool support, Harvest All, Compound All, Robot Arms and migration to Farm. Finalize the funding allocation and disposition of unused emissions and rounding dust. Wire LP fee authorization and test real redemption and buyback within the staking transaction.
 6. Wire correct token burn accounting (the new LEVEL token must expose cumulative total burned; Genesis's LP-fee counter is a subset, never added twice).
 7. Fork-test **actual** v4 PoolManager/PositionManager actions, USDC six decimals, tick crossing, malicious hooks, zero/dust fees, exact LP redeem costs, dead zones and unsafe oracle transitions. Existing unit tests use explicit mocks and **do not prove deployed AMM behavior**.
 
@@ -40,22 +47,15 @@ The LP burn module has no public `processFees()` entrypoint. Only an authorized 
 
 ## Testing status
 
-Foundry unit tests added:
-- `test/unit/MasonryGenesisLPBurnFee.t.sol`: immediate fee burning, defer-on-swap-failure, defer-on-redemption-failure, retry, bounded execution, authorization, low-value rounding.
-- `test/unit/MasonryFeeAllocation.t.sol`: exact normal and critical splits, conserved token balances including rounding.
-- `test/unit/MasonryCriticalDefense.t.sol`: trigger, two-epoch recovery, stale/missed checkpoints, re-entry.
+The Foundry suite covers the Genesis window, Day 2 boundary, tier prices and nontransferability, equal reward weight, keeper authorization and cooldown, one LP fee, and post-end claims and withdrawals. Genesis settlement and LP redemption in these tests use mocks.
 
-**These tests are committed but have not been executed successfully in this session**: the local environment has no Foundry compiler, and GitHub reported no CI workflow runs on `merge` at inspection time. Do not describe them as passing without verification.
+The LEVEL hook suite uses a locally deployed Uniswap v4 PoolManager, six-decimal USDC and a mock TWAP. It covers exact-input and exact-output sells, tick crossing, the same-sale ceiling, recovery across Genesis end, immediate burn, buys, transfers and partial-fill rejection. The existing Base fork tests require `BASE_RPC_URL`.
 
-To validate in a Foundry-equipped working tree:
+To reproduce locally:
 
 ```sh
 node scripts/install-contract-deps.mjs
+node --test config/*.test.mjs
 cd contracts
-forge fmt --check
-forge build
-forge test --match-path 'test/unit/Masonry*' -vv
-forge test -vv
+forge test
 ```
-
-The next deliverable must integrate **real Uniswap v4** settlement and proportional LP redemption, then get passing CI/integration tests before merging to main.

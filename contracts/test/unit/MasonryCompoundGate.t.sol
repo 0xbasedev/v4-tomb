@@ -18,7 +18,7 @@ contract MasonryCompoundGateTest is Test {
     function test_PerPoolIndependenceWithSameWallet() public {
         gate.consume(USER, POOL_A);
         gate.consume(USER, POOL_B);
-        vm.expectRevert(MasonryCompoundGate.CooldownActive.selector);
+        vm.expectRevert(abi.encodeWithSelector(MasonryCompoundGate.CooldownActive.selector, block.timestamp + 3 hours));
         gate.consume(USER, POOL_A);
         vm.warp(block.timestamp + 3 hours);
         gate.consume(USER, POOL_A);
@@ -28,7 +28,7 @@ contract MasonryCompoundGateTest is Test {
     function test_DifferentWalletsHaveDifferentTimers() public {
         gate.consume(USER, POOL_A);
         gate.consume(address(0xCAFE), POOL_A);
-        vm.expectRevert(MasonryCompoundGate.CooldownActive.selector);
+        vm.expectRevert(abi.encodeWithSelector(MasonryCompoundGate.CooldownActive.selector, block.timestamp + 3 hours));
         gate.consume(USER, POOL_A);
     }
 

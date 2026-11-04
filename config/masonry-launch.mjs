@@ -59,6 +59,16 @@ export function validateMasonryLaunch(doc) {
 
   for (const [key, value] of Object.entries({
     fireTaxHardCapBps: 1200,
+    genesisDurationSeconds: 604800,
+    genesisLpOpenDelaySeconds: 86400,
+    genesisLevelSellMinimumBps: 300,
+    genesisLevelSellBurnShareBps: 10000,
+    genesisNftRequired: true,
+    genesisNftPriceUsdc: 50,
+    genesisProNftPriceUsdc: 100,
+    genesisUltraNftPriceUsdc: 500,
+    genesisUltraMultiplier: 1,
+    fireTaxBaselineBps: 100,
     fireTaxRecoverySeconds: 25200,
     maximumExpansionPerEpochBps: 200,
     requiresFreshTwapStrictlyAbovePegBps: 10100,
@@ -79,9 +89,6 @@ export function validateMasonryLaunch(doc) {
     ownerTradingPauseEnabled: false,
   })) {
     if (policy[key] !== value) throw new Error(`policy.${key}: Masonry release invariant must equal ${value}`);
-  }
-  if (nonnegative(policy.fireTaxBaselineBps, 'policy.fireTaxBaselineBps') > policy.fireTaxHardCapBps) {
-    throw new Error('baseline Fire Tax exceeds 12% cap');
   }
   if (policy.fullTaxAtOrBelowPegBps !== 8500) throw new Error('full Fire Tax threshold must be 0.85 of peg');
 
