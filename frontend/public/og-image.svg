@@ -23,7 +23,7 @@
     <path d="M160 225 240 300H80Z" fill="url(#e)"/>
   </g>
   <text x="540" y="330" font-family="Unbounded, Arial Black, sans-serif" font-weight="700" font-size="150" letter-spacing="-6" fill="url(#t)">xTOMB</text>
-  <text x="546" y="400" font-family="JetBrains Mono, monospace" font-size="26" letter-spacing="6" fill="#7c7a74">PEGGED TO ETH · DEFENDED ON BASE</text>
+  <text x="546" y="400" font-family="JetBrains Mono, monospace" font-size="26" letter-spacing="6" fill="#7c7a74">PEGGED TO $1 USDC · UNISWAP V4</text>
   <g font-family="JetBrains Mono, monospace" font-size="24" letter-spacing="3">
     <text x="546" y="470" fill="#ffb547">xTOMB</text>
     <text x="680" y="470" fill="#3ee7ff">xSHARE</text>
