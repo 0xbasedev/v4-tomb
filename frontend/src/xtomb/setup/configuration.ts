@@ -26,17 +26,49 @@ export const supplyFields = [
   ["vestArbitrage", "xSHARE arbitrage vesting"],
 ] as const;
 
-export const infrastructureFields = [
+const requiredInfrastructureFields = [
   ["usdc", "USDC"], ["poolManager", "Uniswap V4 PoolManager"],
   ["positionManager", "V4 PositionManager"], ["permit2", "Permit2"],
 ] as const;
+const universalRouterField = ["universalRouter", "Uniswap V4 Universal Router"] as const;
+export const infrastructureFields = [...requiredInfrastructureFields, universalRouterField] as const;
+
+type InfrastructureField = typeof infrastructureFields[number][0];
+const permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+// https://developers.uniswap.org/docs/protocols/v4/deployments
+// https://developers.circle.com/stablecoins/usdc-contract-addresses
+// Permit2 runtime and signing domains also checked on Sonic and PulseChain.
+export const chainInfrastructure: Partial<Record<number, Partial<Record<InfrastructureField, string>>>> = {
+  8453: {
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    poolManager: "0x498581ff718922c3f8e6a244956af099b2652b2b",
+    positionManager: "0x7c5f5a4bbd8fd63184577525326123b519429bdc",
+    universalRouter: "0x6ff5693b99212da76ad316178a184ab56d299b43",
+    permit2,
+  },
+  4663: {
+    poolManager: "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    positionManager: "0x58daec3116aae6d93017baaea7749052e8a04fa7",
+    universalRouter: "0x8876789976decbfcbbbe364623c63652db8c0904",
+    permit2,
+  },
+  56: {
+    poolManager: "0x28e2ea090877bf75740558f6bfb36a5ffee9e9df",
+    positionManager: "0x7a4a5c919ae2541aed11041a1aeee68f1287f95b",
+    universalRouter: "0x1906c1d672b88cd1b9ac7593301ca990f94eae07",
+    permit2,
+  },
+  369: { permit2 },
+  146: { usdc: "0x29219dd400f2Bf60E5a23d13Be72B486D4038894", permit2 },
+};
+
 export const identityFields = [
   ["deployer", "Deployment signer"], ["governance", "Governance owner"], ["treasury", "Treasury recipient"],
 ] as const;
 
 export const defaultFields = {
   network: "", chainId: "", chainName: "", rpcUrl: "", nativeSymbol: "",
-  usdc: "", poolManager: "", positionManager: "", permit2: "",
+  usdc: "", poolManager: "", positionManager: "", permit2: "", universalRouter: "",
   releaseId: "", deployer: "", governance: "", treasury: "", genesisStart: "",
   pegSupply: "", pegTeam: String(launchTemplate.level.initial.ownerTeamDeveloper),
   pegTreasury: String(launchTemplate.level.initial.treasury), pegArbitrage: String(launchTemplate.level.initial.arbitrage),
@@ -126,9 +158,10 @@ export function networkFrom(fields: Fields) {
     throw new Error("Use an HTTPS RPC URL or a local development RPC.");
   }
   if (rpc.username || rpc.password || rpc.search || rpc.hash) throw new Error("Use a public RPC URL without embedded credentials or query parameters.");
+  const entries = fields.universalRouter.trim() ? infrastructureFields : requiredInfrastructureFields;
   return {
     id, name, nativeSymbol, rpcUrl: rpc.toString(),
-    infrastructure: Object.fromEntries(infrastructureFields.map(([field, label]) => [field, address(fields[field], label)])),
+    infrastructure: Object.fromEntries(entries.map(([field, label]) => [field, address(fields[field], label)])),
   };
 }
 

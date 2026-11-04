@@ -4,7 +4,7 @@ import { bytesToHex } from "viem";
 import { masonryRoles } from "../../../../config/create3-plan.mjs";
 import { durationDays, lpDay, percent, policy } from "../policy";
 import {
-  bridgeNetworks, download, importDraft, infrastructureFields, launchFrom, loadDraft,
+  bridgeNetworks, chainInfrastructure, download, importDraft, infrastructureFields, launchFrom, loadDraft,
   makeDraft, networkFrom, saveDraft, supplyFields, identityFields, type Fields, type LaunchPlan,
 } from "./configuration";
 import { verifyLaunch, type Verification } from "./verifyLaunch";
@@ -140,10 +140,11 @@ export function WizardPage() {
   function update(key: string, value: string) { replace({ ...fields, [key]: value }); }
   function selectNetwork(value: string) {
     const selected = bridgeNetworks.find(({ id }) => String(id) === value);
+    const defaults = selected && chainInfrastructure[selected.id];
     replace({
       ...fields, network: value, chainId: selected ? String(selected.id) : "", chainName: selected?.name ?? "",
       rpcUrl: selected?.rpcUrl ?? "", nativeSymbol: selected?.nativeCurrency.symbol ?? "",
-      usdc: "", poolManager: "", positionManager: "", permit2: "",
+      ...Object.fromEntries(infrastructureFields.map(([field]) => [field, defaults?.[field] ?? ""])),
       ...(value === "custom" ? { bridge: "off" } : {}),
     });
   }
@@ -160,6 +161,8 @@ export function WizardPage() {
   }
 
   const selectedNetwork = bridgeNetworks.find(({ id }) => String(id) === fields.network);
+  const missingDefaults = Object.entries(selectedNetwork ? chainInfrastructure[selectedNetwork.id] ?? {} : {})
+    .filter(([field]) => !fields[field].trim());
   return <>
     <OperatorHeading title="Setup Wizard">Choose the home chain, configure the launch, and calculate the addresses for your release.</OperatorHeading>
     <SetupNav />
@@ -173,7 +176,7 @@ export function WizardPage() {
           <span className="chip ember">Release draft</span></div>
         <form onSubmit={(event) => { event.preventDefault(); if (step < 3) advance(); }}>
           {step === 0 && <>
-            <p>Choose the network that holds the original xTOMB and xSHARE. Enter the verified infrastructure addresses for that chain.</p>
+            <p>Choose the network that holds the original xTOMB and xSHARE. The Wizard fills in known addresses for that chain. Review the defaults and enter any missing addresses.</p>
             <label className="ops-field">Home network
               <select value={fields.network} onChange={(event) => selectNetwork(event.target.value)}>
                 <option value="">Select a network</option>{bridgeNetworks.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
@@ -183,7 +186,10 @@ export function WizardPage() {
             {fields.network === "custom" && <FieldsGroup fields={fields} update={update}
               entries={[[ "chainName", "Network name" ], [ "chainId", "Chain ID" ], [ "nativeSymbol", "Native currency symbol" ]]} />}
             {selectedNetwork && <p className="ops-meta">{selectedNetwork.name} · Chain {selectedNetwork.id} · {selectedNetwork.nativeCurrency.symbol}</p>}
+            {missingDefaults.length > 0 && <button className="button" type="button"
+              onClick={() => replace({ ...fields, ...Object.fromEntries(missingDefaults) })}>Fill missing addresses</button>}
             <FieldsGroup fields={fields} update={update} entries={[[ "rpcUrl", "Public RPC URL" ], ...infrastructureFields]} />
+            <p className="ops-meta">The Uniswap Universal Router is optional. The Wizard calculates the xTOMB router address separately.</p>
           </>}
           {step === 1 && <>
             <p>Set the release identity, operator addresses, and token allocations. Amounts in the supply table are whole tokens.</p>

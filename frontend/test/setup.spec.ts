@@ -11,9 +11,6 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
 
   await page.getByLabel('Home network').selectOption('8453');
   await page.getByLabel('Public RPC URL').fill('https://rpc.example.test/');
-  for (const label of ['USDC', 'Uniswap V4 PoolManager', 'V4 PositionManager', 'Permit2']) {
-    await page.getByRole('textbox', { name: label, exact: true }).fill(account);
-  }
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByLabel('Release ID', { exact: true }).fill(releaseId);
   for (const label of ['Deployment signer', 'Governance owner', 'Treasury recipient']) {
@@ -48,6 +45,8 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   };
   const masonry = await getDownload('Download address plan');
   const bridge = await getDownload('Download bridge plan');
+  const launch = await getDownload('Download launch settings');
+  expect(launch.network.infrastructure.universalRouter.toLowerCase()).toBe('0x6ff5693b99212da76ad316178a184ab56d299b43');
   expect(masonry.chainId).toBe(8453);
   expect(masonry.releaseId).toBe(releaseId);
   expect(masonry.addresses.masonrySwapRouter).toMatch(/^0x[0-9a-f]{40}$/i);
@@ -86,6 +85,43 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   await page.getByRole('button', { name: 'Check on-chain code' }).click();
   await expect(results).toContainText('Chain 369 · Block 291');
   await expect(results.getByText('Wrapped xSHARE')).toBeVisible();
+});
+
+test('Wizard prefills only the selected chain and preserves overrides when filling blanks', async ({ page }) => {
+  await page.goto('/wizard');
+  const network = page.getByLabel('Home network');
+  const usdc = page.getByLabel('USDC', { exact: true });
+  const poolManager = page.getByLabel('Uniswap V4 PoolManager', { exact: true });
+  const positionManager = page.getByLabel('V4 PositionManager', { exact: true });
+  const router = page.getByLabel('Uniswap V4 Universal Router', { exact: true });
+  const permit2 = page.getByLabel('Permit2', { exact: true });
+
+  await network.selectOption('8453');
+  await expect(usdc).toHaveValue('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+  await usdc.fill(account);
+  await permit2.clear();
+  await page.reload();
+  await page.getByRole('button', { name: 'Fill missing addresses' }).click();
+  await expect(usdc).toHaveValue(account);
+  await expect(permit2).toHaveValue('0x000000000022D473030F116dDEE9F6B43aC78BA3');
+
+  for (const [id, expectedPositionManager] of [
+    ['4663', '0x58daec3116aae6d93017baaea7749052e8a04fa7'],
+    ['56', '0x7a4a5c919ae2541aed11041a1aeee68f1287f95b'],
+  ]) {
+    await network.selectOption(id);
+    await expect(usdc).toHaveValue('');
+    await expect(positionManager).toHaveValue(expectedPositionManager);
+    await expect(router).toHaveValue(/^0x[\da-f]{40}$/i);
+  }
+  await network.selectOption('146');
+  await expect(usdc).toHaveValue('0x29219dd400f2Bf60E5a23d13Be72B486D4038894');
+  for (const field of [poolManager, positionManager, router]) await expect(field).toHaveValue('');
+  await network.selectOption('369');
+  await expect(usdc).toHaveValue('');
+  await expect(permit2).toHaveValue('0x000000000022D473030F116dDEE9F6B43aC78BA3');
+  await network.selectOption('custom');
+  for (const field of [usdc, poolManager, positionManager, router, permit2]) await expect(field).toHaveValue('');
 });
 
 test('Bridge presents all five networks with transfers disabled', async ({ page }) => {
