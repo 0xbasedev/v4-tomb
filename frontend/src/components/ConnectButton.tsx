@@ -1,67 +1,88 @@
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 
+import { PREVIEW_ADDRESS, usePreview } from "@/lib/preview";
+
 /**
- * ConnectButton — Art Deco.
+ * Wallet control.
  *
- * Two visually distinct states (intentional — the disconnected state is a
- * primary CTA, the connected state is a status pill, not something we want
- * to draw the eye to):
- *
- *   Disconnected:  big btn-deco "Enter The Trust" — formal CTA, gold-framed,
- *                   fills on hover. This is the action.
- *   Connected:     compact chip — gold dot + truncated address inside a small
- *                   gold-outlined box. Stays outlined on hover (no fill).
- *                   Clicking disconnects. This is just an indicator.
- *
- * Earlier version used the same btn-deco for both states. After connecting,
- * mouse remained over the button → hover fill activated → the connected pill
- * appeared dramatically larger than the disconnected CTA. Splitting the
- * styles fixes the perceived size jump.
+ *   Real wallet connected → network picker (supported chains only) + address
+ *                           chip; the chip disconnects.
+ *   Preview, sample wallet → "Sample" chip; clicking it hides the sample
+ *                           wallet so the disconnected state can be reviewed.
+ *   Otherwise             → "Connect wallet" (injected). Connecting asks for
+ *                           accounts only — never a transaction.
  */
-export function ConnectButton() {
+export function ConnectButton({ compact = false }: { compact?: boolean }) {
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
+  const { connect, connectors, isPending, isError } = useConnect();
   const { disconnect } = useDisconnect();
-  const { chains, switchChain, isPending: isSwitching, error } = useSwitchChain();
+  const { chains, switchChain, isPending: switching } = useSwitchChain();
+  const preview = usePreview();
 
   if (isConnected && address) {
+    const known = chains.some((c) => c.id === chainId);
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="sr-only" htmlFor="protocol-network">Network</label>
+      <div className="flex items-center gap-1.5">
         <select
-          id="protocol-network"
           aria-label="Network"
-          className="bg-deco-ground border border-deco-gold/50 px-2 py-2 text-deco-gold"
-          value={chains.some((chain) => chain.id === chainId) ? chainId : ""}
-          disabled={isSwitching}
-          onChange={(event) => switchChain({ chainId: Number(event.target.value) })}
+          value={known ? chainId : ""}
+          disabled={switching}
+          onChange={(e) => switchChain({ chainId: Number(e.target.value) })}
+          className={`hidden h-9 max-w-[150px] rounded-full border bg-white/[0.03] px-3 font-mono text-[11.5px] outline-none sm:block ${known ? "border-white/10 text-bone-dim" : "border-bad/50 text-bad"}`}
         >
-          <option value="" disabled>Select network</option>
-          {chains.map((chain) => <option key={chain.id} value={chain.id}>{chain.name}</option>)}
+          <option value="" disabled>
+            Unsupported network
+          </option>
+          {chains.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
         </select>
-        {error && <span role="alert">Network switch failed. Try again in your wallet.</span>}
         <button
+          type="button"
           onClick={() => disconnect()}
-          title="Click to disconnect"
-          className="label-deco flex items-center gap-2 border border-deco-gold/50 bg-deco-ground px-3 py-2 text-deco-gold transition-colors hover:border-deco-gold hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deco-gold"
+          aria-label="Disconnect wallet"
+          className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] pl-2.5 pr-3 font-mono text-[12px] text-bone-dim hover:border-white/20 hover:text-bone"
         >
-          <span className="inline-block h-2 w-2 rotate-45 bg-deco-gold" aria-hidden />
-          <span>
-            {address.slice(0, 6)}…{address.slice(-4)}
-          </span>
+          <span className={`h-2 w-2 rounded-full ${known ? "bg-ok" : "bg-bad"}`} />
+          {address.slice(0, 6)}…{address.slice(-4)}
         </button>
       </div>
     );
   }
 
+  if (preview.enabled && preview.sampleWallet) {
+    return (
+      <button
+        type="button"
+        onClick={() => preview.setSampleWallet(false)}
+        title="Sample wallet with simulated balances — click to view the disconnected state"
+        className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-warn/35 bg-warn/[0.06] pl-2.5 pr-3 font-mono text-[12px] text-warn hover:border-warn/60"
+      >
+        <span className="h-2 w-2 rounded-full bg-warn" />
+        Sample {PREVIEW_ADDRESS.slice(0, 6)}…{PREVIEW_ADDRESS.slice(-4)}
+      </button>
+    );
+  }
+
   const connector = connectors[0];
   return (
-    <button
-      onClick={() => connector && connect({ connector })}
-      disabled={isPending || !connector}
-      className="btn-deco disabled:opacity-50"
-    >
-      {isPending ? "Awaiting…" : "Enter The Trust"}
-    </button>
+    <div className="flex items-center gap-2">
+      {preview.enabled && (
+        <button type="button" onClick={() => preview.setSampleWallet(true)} className="hidden font-mono text-[11px] text-ash hover:text-bone sm:inline">
+          use sample
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => connector && connect({ connector })}
+        disabled={isPending || !connector}
+        className={`btn btn-primary ${compact ? "h-9 px-4 text-[13px]" : "h-10 px-5"}`}
+      >
+        {isPending ? "Confirm in wallet…" : !connector ? "No wallet found" : "Connect wallet"}
+      </button>
+      {isError && <span className="sr-only" role="alert">Check your wallet and try again.</span>}
+    </div>
   );
 }

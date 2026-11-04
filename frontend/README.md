@@ -1,14 +1,70 @@
-# xTOMB frontend
+# xTomb frontend
 
-React, TypeScript, Vite, Wagmi and Viem. The xTOMB application entry point is `src/main.tsx`. Its Obsidian Crypt theme is based on the supplied xTOMB-UX preview. The React source and styling live in `src/xtomb/`, and the theme’s three local font assets live in `public/fonts/`.
+Vite · React 18 · TypeScript · Tailwind · wagmi 2 / viem 2 · GSAP 3.13. Theme: **Obsidian Crypt**. Package manager: **pnpm**.
 
-```sh
-npm ci
-npm run dev
-npm run build
-npm run test:browser
+Built against the `merge` branch contracts (`7e3115f`) and the validated launch configuration. Naming: LEVEL = xTOMB, SQUARE = xSHARE.
+
+## Run
+
+```bash
+pnpm install
+pnpm dev              # http://localhost:5173
+pnpm typecheck
+pnpm build            # → dist/
+pnpm build:demo       # → dist-demo/  static Preview build (MemoryRouter, relative base)
+pnpm test:browser     # Playwright: model + desktop + mobile projects
+pnpm gen:abis <dir>   # regenerate src/lib/abis/masonry from a compiler ABI handoff
 ```
 
-The app includes the dashboard, Genesis, Farm, Masonry, Swap and the protocol guide. The dashboard and Fire Tax tools use explicitly labeled sample values. Genesis membership prices, timing, fees and routing percentages are derived from `../config/masonry-launch.template.json`.
+Env (`.env.local`): `VITE_RPC_<chainId>` per-chain RPC overrides (for example `VITE_RPC_8453`), `VITE_PREVIEW=1`, `VITE_ROUTER=hash|memory`.
 
-Wagmi uses the existing network manifest for injected-wallet connection and switching. This interface does not use legacy deployment addresses for xTOMB transactions. A verified xTOMB deployment manifest and contract bindings are required before enabling live prices, balances, NFT minting, staking or swaps. Farm staking and migration remain pending on the backend.
+## Where the numbers come from
+
+Nothing protocol-specific is hard-coded in the UI. Everything is imported from `../config`:
+
+| File | What |
+|---|---|
+| `config/masonry-launch.template.json` | Launch policy: Fire Tax (1% baseline, 12% cap at 0.85 × reference, 7h recovery), Genesis (7 days, LP pool from Day 2 at 75%, 50/50 liquid/vested, 16 × 6h installments, 2% wallet and automation fees, 0.5% LP burn fee, 3h cooldown), passes (50 / 100 / 500 USDC), expansion gate ($1.01 fresh TWAP, 2% cap per 6h epoch), Critical Defense ($0.90 entry, 2 checkpoints above $1.01), xSHARE routing (12 / 20 / 68), supply (xSHARE cap 33,333) |
+| `config/official-infrastructure.json` | Chains with an official Uniswap v4 PoolManager and Circle-issued USDC. Wallets on anything else are "unsupported" |
+| `config/masonry-deployments.json` | Verified deployments (empty → Preview mode). Parsed by `config/masonry-deployment.mjs`, which checks addresses, PoolManager/USDC against the registry, and pool keys (USDC pair, bound hook, static fee) |
+
+`src/lib/launch.ts` is the only module that reads those files; the rest of the app imports from it.
+
+## Modes
+
+| Status | When | What works |
+|---|---|---|
+| `preview` | No verified deployment, or `?preview=1` | Simulated chain. Every action updates in-memory state and toasts "Simulated". **Zero wallet transaction requests** — tested |
+| `disconnected` | Live, no wallet | Nothing is read until a wallet is on a supported chain; actions say "Connect a wallet" |
+| `unsupported` | Wallet on a chain outside the registry | Note under the header; actions say "Switch to a supported network" |
+| `undeployed` | Supported chain, no verified deployment | Actions say so |
+| `ready` | Verified deployment on the wallet's chain | Every write is simulated with `simulateContract` first, then sent; reverts are decoded |
+
+Preview URL overrides: `?genesis=pre|early|day1|day2|ended` or `?t=<seconds since start>`, `?price=0.96`, `?oracle=stale`, `?defense=1`, `?pass=genesis|pro|ultra|none`, `?wallet=0` (no sample wallet), `?owner=0` (view as a non-owner), `?preview=0` (force live). The dock (bottom-left) scrubs the same state, including one-second boundary jumps (D2 −1s / +0, End −1s / +0).
+
+## Screens
+
+| Route | Contract binding | Notes |
+|---|---|---|
+| `/` | — | Landing, peg gauge, Genesis strip |
+| `/dashboard` | Oracle, hooks, Critical Defense, staking | Peg gauge, next move, state facts, expansion rule (planned), Critical Defense, normal vs defense routing, xSHARE supply |
+| `/genesis` | Schedule, Pass, Staking, Settlement, LP burn fee, vaults | Pass picker (folds once held), two pools, claim/compound sheets, keeper (Pro/Ultra), vesting tranches |
+| `/swap` | MiniSwapRouter, both hooks, both vaults | Official pairs only; one sell tax per sell leg; pool fees itemised; unsupported routes say why; Add / remove liquidity |
+| `/farm`, `/masonry` | **Pending** | No production Farm/Masonry ABI in the handoff — actions disabled with the reason |
+| `/bonds` | **Planned** | xBOND preview; issuance and redemption disabled |
+| `/bridge` | **Planned** | Monthly-Genesis cadence animation, candidate chains, disabled bridge form |
+| `/docs` | — | Interactive field guide; every number from config |
+| `/wizard` | Registry + validator | Chain, Uniswap v4 / USDC validation, allocations, pools, review, export |
+| `/admin` | Owner roles only | Deployed values with Fixed / Deployment-bound / Settable labels; only actions the connected contracts and role support, each with a disabled reason. Invisible to non-owners |
+
+## ABIs
+
+`src/lib/abis/masonry/*.ts` are generated by `scripts/gen-abis.mjs` from the handoff (`current/`, `shared/`, `legacy-reference/`) as `as const` arrays, so viem infers argument and return types. Legacy Treasury and TrustNote ABIs are kept for reference only and are not wired.
+
+## Tests
+
+`test/model.spec.ts` checks the protocol model at the exact second each rule flips (Day 2 opening, Genesis end, Ultra early access), the Fire Tax rules, routes (buy vs sell, LP → USDC taxes only the sold half, stale oracle, unsupported routes), expansion and defense.
+
+`test/ui.spec.ts` (desktop and phone) drives the screens with a recording EIP-1193 wallet that refuses to sign and aborts all external requests: Genesis boundaries, buy vs sell tax, LP removal with a sell leg, stale oracle, unsupported routes, disconnected wallet, unsupported chain, undeployed chain, non-owner Admin, and a full Preview flow (mint, stake, claim, swap) that must end with zero signing or sending calls.
+
+`test/mobile.spec.ts` checks every screen at 412px and 320px for sideways overflow, the thumb bar, and that the next move sits near the top on a phone.

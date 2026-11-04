@@ -1,394 +1,172 @@
-import { pegReserves } from "../../../config/schema.mjs";
-import { useState } from "react";
-import { formatUnits, parseUnits, type Address } from "viem";
-import { useAccount, useReadContracts } from "wagmi";
+import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { RuleTrio } from "@/components/RuleTrio";
-import { StatTile } from "@/components/StatTile";
-import { SwapCard } from "@/components/SwapCard";
-import { TabBar } from "@/components/TabBar";
-import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
+import { AnySwap, type SwapPair } from "@/components/AnySwap";
+import { FireTaxChart } from "@/components/FireTaxChart";
+import { LiquidityPanel } from "@/components/LiquidityPanel";
+import { PageHeader, SectionTitle } from "@/components/PageHeader";
+import { Segmented } from "@/components/docs/kit";
+import { SimBadge } from "@/components/Status";
+import { DRIVER_LABEL, recoveryFloorBps, sellTax, targetBps, type TaxedAsset } from "@/lib/fireTax";
+import { useProtocol } from "@/lib/hooks";
+import { FIRE, pct } from "@/lib/launch";
+import { useReveal } from "@/lib/motion/useReveal";
 
-import { useDeployment, usePoolPrice, usePoolReserves, useSwap } from "@/lib/hooks";
-import { erc20Abi } from "@/lib/abis";
-import { useToast } from "@/components/ToastProvider";
-import { maskDecimalInput } from "@/lib/util/decimal";
-import { formatToken, formatTokenAuto } from "@/lib/format";
-
-/** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
-const DYNAMIC_FEE_FLAG = 0x800000;
-const MONEY_WETH_TICK_SPACING = 60;
+/** One-tap starting points — each is just a pair in the same card. */
+const PRESETS: { title: string; detail: string; pair: SwapPair }[] = [
+  { title: "Buy xTOMB", detail: "USDC → xTOMB · never taxed", pair: { input: "USDC", output: "xTOMB" } },
+  { title: "Sell xTOMB", detail: "xTOMB → USDC · one Fire Tax", pair: { input: "xTOMB", output: "USDC" } },
+  { title: "Exit LP to USDC", detail: "redeem, then sell the xTOMB half", pair: { input: "xTOMB-USDC", output: "USDC" } },
+  { title: "Exit LP to xTOMB", detail: "redeem, then buy with the USDC half", pair: { input: "xTOMB-USDC", output: "xTOMB" } },
+];
 
 /**
- * The Exchange — V4 swap with PegDefenseHook tax surface.
- *
- * Two pools available (both anchored to WETH):
- *   I.  MONEY-WETH — peg pool, PegDefenseHook attached, 0.30% base fee +
- *       dynamic tax (0–30%) when MONEY trades below par
- *   II. ESTATE-WETH — share pool, no hook, plain 0.30% fee
- *
- * Layout:
- *   1. Heading — Roman IV, "The Exchange" title
- *   2. Pool tabs — MONEY/WETH | ESTATE/WETH
- *   3. SwapCard — directional input → output with flip button + quote rows.
- *      Tax tier badge shows current schedule entry when MONEY-out (sells)
- *      below peg.
- *   4. Pool state — 4 tiles (Spot, Liquidity, 24h Volume, Hook State)
- *   5. TaxScheduleTable — visible only when MONEY-WETH selected; highlights
- *      active tier from current price
- *   6. The Mechanism — explanatory panel
+ * Swap — the official pools (xTOMB/USDC and xSHARE/USDC through
+ * MiniSwapRouter and their Fire Tax hooks) plus the two LP vaults. The Fire
+ * Tax panel shows the one rate a sell would pay and why.
  */
-
-type PoolId = "money-weth" | "estate-weth";
-
-interface PoolView {
-  id: PoolId;
-  numeral: "I" | "II";
-  base: string;
-  quote: string;
-  /** Current spot price (quote per 1 base, e.g. 1 MONEY = 0.97 WETH). */
-  spotPrice: number;
-  /** Pool liquidity in WETH-equivalent terms (placeholder). */
-  liquidity: string;
-  /** 24h volume in WETH-equivalent terms (placeholder). */
-  volume24h: string;
-  /** Hook state label. */
-  hookState: string;
-  /** Base fee bps. 30 = 0.30% — V4 LP fee, separate from hook tax. */
-  baseFeeBps: number;
-}
-
-const POOLS: Record<PoolId, PoolView> = {
-  "money-weth": {
-    id: "money-weth",
-    numeral: "I",
-    base: "MONEY",
-    quote: "WETH",
-    spotPrice: 1.0,
-    liquidity: "0",
-    volume24h: "0",
-    hookState: "Active · Above Peg",
-    baseFeeBps: 30,
-  },
-  "estate-weth": {
-    id: "estate-weth",
-    numeral: "II",
-    base: "ESTATE",
-    quote: "WETH",
-    spotPrice: 0.001,
-    liquidity: "0",
-    volume24h: "0",
-    hookState: "—",
-    baseFeeBps: 30,
-  },
-};
-
 export function Swap() {
-  const [activeId, setActiveId] = useState<PoolId>("money-weth");
-  // Direction: when true, base → quote (sell). When false, quote → base (buy).
-  const [sellingBase, setSellingBase] = useState(true);
+  const root = useRef<HTMLDivElement>(null);
+  const p = useProtocol();
+  const [params, setParams] = useSearchParams();
+  const [pair, setPair] = useState<SwapPair>({ input: "USDC", output: "xTOMB" });
+  const [asset, setAsset] = useState<TaxedAsset>("xTOMB");
+  const mode = params.get("mode") === "liquidity" ? "liquidity" : "swap";
+  useReveal(root);
 
-  const poolMeta = POOLS[activeId];
-  const liveHook = usePoolPrice();
-  const deployment = useDeployment();
-  const { address } = useAccount();
-  const swap = useSwap();
-  const toast = useToast();
-
-  // Read MONEY + WETH balances so the SwapCard's MAX has something to fill
-  // and the disabled state can gate on actual funds.
-  const balances = useReadContracts({
-    allowFailure: false,
-    contracts:
-      deployment && address
-        ? [
-            { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [address] },
-            { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [address] },
-          ]
-        : [],
-    query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
-  });
-  const moneyBal = balances.data?.[0] ?? 0n;
-  const wethBal = balances.data?.[1] ?? 0n;
-
-  // Pool depth — read from V4 PoolManager state via extsload. This gives
-  // OUR pool's reserves exactly, not all V4 pools on the chain.
-  // PoolKey for MONEY-WETH; computed live from deployment addresses.
-  const moneyWethPoolKey = deployment
-    ? (() => {
-        const wethIsToken0 =
-          (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
-        return {
-          currency0: wethIsToken0 ? deployment.weth : deployment.money,
-          currency1: wethIsToken0 ? deployment.money : deployment.weth,
-          fee: DYNAMIC_FEE_FLAG,
-          tickSpacing: MONEY_WETH_TICK_SPACING,
-          hooks: deployment.hook,
-        };
-      })()
-    : null;
-  const reserves = usePoolReserves(moneyWethPoolKey);
-  const orderedReserves = deployment
-    ? pegReserves(deployment.money, deployment.weth, reserves.amount0, reserves.amount1)
-    : { weth: 0n, money: 0n };
-  const poolWeth = orderedReserves.weth;
-  const poolMoney = orderedReserves.money;
-
-  // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
-  // is not bound to any of our hooks, so for now we keep its spot at the
-  // hardcoded placeholder — a future turn ships a generic V4 PoolManager
-  // getSlot0 reader for non-hooked pools.
-  const liveSpot =
-    activeId === "money-weth" && liveHook.bound && liveHook.price > 0n
-      ? Number(formatUnits(liveHook.price, 18))
-      : poolMeta.spotPrice;
-
-  const tokenIn = sellingBase ? poolMeta.base : poolMeta.quote;
-  const tokenOut = sellingBase ? poolMeta.quote : poolMeta.base;
-  const rate = sellingBase ? liveSpot : 1 / liveSpot;
-
-  // Active-direction tokenIn balance — drives the MAX button and the
-  // disabled state. Only MONEY-WETH is wired; ESTATE-WETH tokenIn is
-  // currently ESTATE which we don't read here (the panel is disabled
-  // for ESTATE-WETH anyway).
-  const tokenInBalance =
-    activeId === "money-weth" ? (sellingBase ? moneyBal : wethBal) : 0n;
-  const maxInDisplay = formatToken(tokenInBalance, 6);
-
-  // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
-  // hook actually has autoCalculateTax enabled. The schedule itself still
-  // renders below — it's informational regardless of the on/off state.
-  const taxActive =
-    activeId === "money-weth" && sellingBase && liveHook.taxOn && liveSpot < 1.0;
-  const tier = taxActive ? tierAt(liveSpot) : { label: "No Tax", bps: 0 };
-
-  const hookStateLabel =
-    activeId !== "money-weth"
-      ? "—"
-      : !liveHook.bound
-        ? "Awaiting Pool Init"
-        : liveHook.taxOn
-          ? `Tax Active · ${tier.label}`
-          : "Tax Disabled";
-
-  // Compose the V4 swap pipeline. MONEY-WETH only — ESTATE-WETH isn't a deployed pool yet.
-  function handleSwapSubmit(amountStr: string, slippageBps: number) {
-    if (activeId !== "money-weth") {
-      toast.push({
-        variant: "info",
-        title: "Pool not yet live",
-        message: "ESTATE-WETH is not deployed. Trade MONEY-WETH on the I tab instead.",
-        durationMs: 6_000,
-      });
-      return;
-    }
-    if (!deployment) {
-      toast.push({
-        variant: "error",
-        title: "Wallet not connected",
-        message: "Connect on a configured network to swap.",
-      });
-      return;
-    }
-
-    const clean = maskDecimalInput(amountStr);
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(clean || "0", 18);
-    } catch {
-      return;
-    }
-    if (amountIn <= 0n) return;
-
-    // V4 sorts currencies by address on every chain.
-    const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
-    const currency0: Address = wethIsToken0 ? deployment.weth : deployment.money;
-    const currency1: Address = wethIsToken0 ? deployment.money : deployment.weth;
-
-    // zeroForOne: are we swapping currency0 → currency1?
-    // sellingBase = true → selling MONEY → we want MONEY -> WETH.
-    //   If MONEY is currency1, then currency1 -> currency0, so zeroForOne = false.
-    const sellingMoney = sellingBase;
-    const zeroForOne = wethIsToken0 ? !sellingMoney : sellingMoney;
-
-    const tokenIn: Address = zeroForOne ? currency0 : currency1;
-
-    // Compute amountOutMinimum from live spot, hook fee, current tax tier, and
-    // user's slippage tolerance. All three deductions are in bps.
-    //
-    //   netRate = rate * (10000 - hookFee - taxBps) / 10000
-    //   expectedOut_wei = amountIn * netRate (using bigint math to preserve precision)
-    //   amountOutMinimum = expectedOut * (10000 - slippageBps) / 10000
-    //
-    // We do the rate multiplication via the ETH-scaled price to stay in bigint
-    // throughout (no float drift on large amountIn values).
-    const rateBps = BigInt(Math.floor(rate * 1e6)); // micro-units for precision
-    const grossOut = (amountIn * rateBps) / 1_000_000n;
-    const netOut = (grossOut * BigInt(10_000 - poolMeta.baseFeeBps - tier.bps)) / 10_000n;
-    const amountOutMinimum = (netOut * BigInt(10_000 - slippageBps)) / 10_000n;
-
-    swap.submit({
-      poolKey: {
-        currency0,
-        currency1,
-        fee: DYNAMIC_FEE_FLAG,
-        tickSpacing: MONEY_WETH_TICK_SPACING,
-        hooks: deployment.hook,
-      },
-      zeroForOne,
-      tokenIn: tokenIn as Address,
-      amountIn,
-      amountOutMinimum,
-      onSuccess: () => {
-        liveHook.refetch();
-      },
-    });
-  }
+  const ratio = asset === "xTOMB" ? p.market.twap : p.market.twap !== null ? (p.prices.xSHARE ?? 0) / (p.hooks.xSHARE.reference ?? 1) : null;
+  const quote = p.taxFor(asset, 1_000);
 
   return (
-    <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            A Pavilion of The Trust · The Trading Floor
-          </div>
-          <div
-            className="font-ornament mb-4 text-3xl font-bold text-deco-gold"
-            style={{ letterSpacing: "0.2em" }}
-          >
-            IV
-          </div>
-          <h1 className="gold-text font-display italic text-section">The Exchange</h1>
-          <RuleTrio className="mb-6 mt-8" />
-          <p
-            className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
-            style={{ letterSpacing: "0.04em" }}
-          >
-            Trade upon the Uniswap V4 venue. The Hook defends the peg with a
-            fourteen-tier tax. Above par, you pay only the base fee.
-          </p>
-        </div>
-      </section>
-
-      {/* ===== Pool Tabs ===== */}
-      <section className="px-6 pb-10 md:px-12 md:pb-10">
-        <TabBar
-          active={activeId}
-          onChange={(id) => setActiveId(id as PoolId)}
-          items={[
-            { id: "money-weth", numeral: "I", label: "MONEY · WETH", sublabel: "Peg Pool" },
-            {
-              id: "estate-weth",
-              numeral: "II",
-              label: "ESTATE · WETH",
-              sublabel: "Share Pool",
-            },
-          ]}
-        />
-      </section>
-
-      {/* ===== Swap Card ===== */}
-      <section className="px-6 pb-14 md:px-12 md:pb-16">
-        <SwapCard
-          tokenIn={tokenIn}
-          tokenOut={tokenOut}
-          maxIn={maxInDisplay}
-          rate={rate}
-          hookFeeBps={poolMeta.baseFeeBps}
-          taxBps={tier.bps}
-          tierLabel={tier.label}
-          onFlip={() => setSellingBase((b) => !b)}
-          onSubmit={handleSwapSubmit}
-          disabled={
-            swap.isInFlight ||
-            activeId !== "money-weth" ||
-            (activeId === "money-weth" && tokenInBalance === 0n)
-          }
-          disabledReason={
-            activeId !== "money-weth"
-              ? "ESTATE-WETH pool is not yet deployed."
-              : swap.isInFlight
-                ? "Swap in flight…"
-                : tokenInBalance === 0n
-                  ? `No ${tokenIn} in your wallet.`
-                  : undefined
-          }
-        />
-      </section>
-
-      {/* ===== Pool State ===== */}
-      <section className="px-6 pb-14 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The State of The Pool
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile
-              label="Spot Quotation"
-              value={liveSpot.toFixed(4)}
-              hint={`WETH per 1 ${poolMeta.base}`}
-            />
-            <StatTile
-              label="Pool · MONEY"
-              value={activeId === "money-weth" ? formatTokenAuto(poolMoney) : "—"}
-              hint="$MONEY held by V4 PoolManager"
-            />
-            <StatTile
-              label="Pool · WETH"
-              value={activeId === "money-weth" ? formatTokenAuto(poolWeth) : "—"}
-              hint="$WETH held by V4 PoolManager"
-            />
-            <StatTile
-              label="Hook State"
-              value={hookStateLabel}
-              hint={activeId === "money-weth" ? "PegDefenseHook" : "No Hook Attached"}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ===== Tax Schedule (MONEY-WETH only) ===== */}
-      {activeId === "money-weth" && (
-        <section className="px-6 pb-14 md:px-12 md:pb-16">
-          <div className="mx-auto max-w-3xl">
-            <TaxScheduleTable activePriceEth={liveSpot} />
-          </div>
-        </section>
-      )}
-
-      {/* ===== The Mechanism ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="deco-panel">
-            <div className="label-deco mb-3 text-deco-gold-dark">The Mechanism</div>
-            <h2
-              className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
-              style={{ letterSpacing: "0.06em" }}
-            >
-              The Hook and The Fee
-            </h2>
-            <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
-            <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Base Fee</div>
-                <p className="font-body text-sm italic text-deco-ivory-soft">
-                  Three-tenths of one per cent on every swap. Paid to providers of
-                  liquidity. The standard rate of the Uniswap venue.
-                </p>
-              </div>
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Peg Defense</div>
-                <p className="font-body text-sm italic text-deco-ivory-soft">
-                  When MONEY trades below par, the Hook intercepts each outgoing sale
-                  and levies the schedule's tax. During contraction, the proceeds are
-                  burned outright; otherwise they accrue to The Treasury.
-                </p>
-              </div>
+    <div ref={root}>
+      <PageHeader
+        eyebrow={p.sim ? "Swap · simulated" : "Swap"}
+        title="Official pools only"
+        lede="xTOMB/USDC and xSHARE/USDC on Uniswap v4. Buys and wallet transfers pay no Fire Tax; every sell pays one rate, shown before you sign, with pool fees itemized separately."
+      />
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Segmented
+            options={[
+              { id: "swap", label: "Swap" },
+              { id: "liquidity", label: "Add / remove liquidity" },
+            ]}
+            value={mode}
+            onChange={(m) => setParams(m === "liquidity" ? { mode: "liquidity" } : {}, { replace: true })}
+          />
+          {mode === "swap" ? <AnySwap pair={pair} onPair={setPair} onLiquidity={() => setParams({ mode: "liquidity" }, { replace: true })} /> : <LiquidityPanel />}
+          {mode === "swap" && (
+            <div className="grid grid-cols-2 gap-2">
+              {PRESETS.map((x) => (
+                <button key={x.title} type="button" onClick={() => setPair(x.pair)} className="rounded-xl border border-white/[0.07] bg-black/20 p-3 text-left transition-colors hover:border-white/20">
+                  <div className="text-[13px] font-semibold text-bone">{x.title}</div>
+                  <div className="text-[11.5px] text-ash">{x.detail}</div>
+                </button>
+              ))}
             </div>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <section data-reveal className="panel p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="label">Fire Tax now</span>
+                {p.sim && <SimBadge />}
+              </div>
+              <Segmented options={[{ id: "xTOMB", label: "xTOMB" }, { id: "xSHARE", label: "xSHARE" }]} value={asset} onChange={setAsset} />
+            </div>
+            <FireTaxChart asset={asset} ratio={p.market.fresh ? ratio : null} quote={quote} genesisActive={!!p.clock?.active} simulated={p.sim} />
+          </section>
+          <TaxExplorer />
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-7xl px-4 pb-12 md:px-8">
+        <SectionTitle kicker="Rules" title="How one sell tax is chosen" />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          {[
+            ["TWAP target", `${pct(FIRE.baselineBps)} at or above the reference, rising to ${pct(FIRE.capBps)} at ${FIRE.fullTaxAt.toFixed(2)} of it.`],
+            ["Projected price", "The hook previews your sale in the real pool and applies the target at the post-sale price."],
+            ["Recovery floor", `After a higher rate is observed, the floor decays back to ${pct(FIRE.baselineBps)} over ${FIRE.recoverySeconds / 3600} hours.`],
+            ["Genesis floor", `${pct(FIRE.genesisFloorBps.xTOMB)} on xTOMB (burned in full) and ${pct(FIRE.genesisFloorBps.xSHARE)} on xSHARE for the seven days.`],
+          ].map(([k, v]) => (
+            <div key={k} data-reveal className="panel p-4">
+              <div className="label mb-1">{k}</div>
+              <p className="text-[12.5px] leading-relaxed text-bone-dim">{v}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-[12px] text-ash">The highest of the four applies, capped at {pct(FIRE.capBps)}. If the oracle has no valid TWAP the hook rejects the sell; buys still go through.</p>
+      </div>
+    </div>
+  );
+}
+
+/** What-if: set the inputs and read the one rate the hook would choose. */
+function TaxExplorer() {
+  const [asset, setAsset] = useState<TaxedAsset>("xTOMB");
+  const [direction, setDirection] = useState<"sell" | "buy">("sell");
+  const [genesis, setGenesis] = useState(true);
+  const [twap, setTwap] = useState("1.0000");
+  const [projected, setProjected] = useState("1.0000");
+  const [recovery, setRecovery] = useState("1");
+  const rec = parseFloat(recovery);
+  const invalid = !(rec >= 1 && rec <= FIRE.capBps / 100) || !(parseFloat(twap) > 0) || !(parseFloat(projected) > 0);
+  const q = sellTax({ asset, twap: parseFloat(twap), projected: parseFloat(projected), raisedBps: Math.round(rec * 100), raisedAt: 0, now: 0, genesisActive: genesis });
+  const rate = direction === "buy" ? 0 : invalid ? null : q.rateBps;
+  return (
+    <section data-reveal className="panel p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="label">Fire Tax explorer</span>
+        <span className="font-mono text-[10.5px] text-ash">what-if · not a quote</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+        <label className="flex flex-col gap-1">
+          <span className="text-ash">Asset</span>
+          <select aria-label="Asset" value={asset} onChange={(e) => setAsset(e.target.value as TaxedAsset)} className="well px-2 py-1.5 text-bone">
+            <option value="xTOMB">xTOMB</option>
+            <option value="xSHARE">xSHARE</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-ash">Direction</span>
+          <select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as "sell" | "buy")} className="well px-2 py-1.5 text-bone">
+            <option value="sell">Sell</option>
+            <option value="buy">Buy</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-ash">TWAP / reference</span>
+          <input aria-label="TWAP / reference" value={twap} onChange={(e) => setTwap(e.target.value)} inputMode="decimal" className="well px-2 py-1.5 font-mono text-bone" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-ash">Projected price / reference</span>
+          <input aria-label="Projected price / reference" value={projected} onChange={(e) => setProjected(e.target.value)} inputMode="decimal" className="well px-2 py-1.5 font-mono text-bone" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-ash">Recovery floor (%)</span>
+          <input aria-label="Recovery floor (%)" value={recovery} onChange={(e) => setRecovery(e.target.value)} inputMode="decimal" className="well px-2 py-1.5 font-mono text-bone" />
+        </label>
+        <label className="flex items-center gap-2 self-end pb-1.5">
+          <input type="checkbox" aria-label="During Genesis" checked={genesis} onChange={(e) => setGenesis(e.target.checked)} />
+          <span className="text-bone-dim">During Genesis</span>
+        </label>
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-3 border-t border-white/5 pt-3">
+        <div>
+          <div className="label mb-1">Estimated Fire Tax</div>
+          <div aria-label="Estimated Fire Tax" className="num text-3xl text-bone">
+            {rate === null ? "—" : pct(rate)}
           </div>
         </div>
-      </section>
-    </div>
+        <div className="text-right text-[11.5px] text-ash">
+          {direction === "buy"
+            ? "Buys are never taxed."
+            : invalid
+              ? `Recovery floor must be 1–${FIRE.capBps / 100}%.`
+              : `${DRIVER_LABEL[q.driver!]} · TWAP ${pct(targetBps(parseFloat(twap)))}, projected ${pct(targetBps(parseFloat(projected)))}, recovery ${pct(recoveryFloorBps(Math.round(rec * 100), 0, 0))}`}
+        </div>
+      </div>
+    </section>
   );
 }
