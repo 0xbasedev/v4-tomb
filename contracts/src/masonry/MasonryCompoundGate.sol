@@ -12,7 +12,7 @@ contract MasonryCompoundGate is Ownable {
     uint256 public constant COOLDOWN = 3 hours;
 
     mapping(address executor => bool enabled) public authorizedExecutors;
-    mapping(address beneficiary => mapping(bytes32 poolKey => uint256 nextEligibleAt)) public nextEligibleAt;
+    mapping(address beneficiary => mapping(bytes32 poolKey => uint256 unlockTimestamp)) public nextEligibleAt;
 
     error NotExecutor();
     error InvalidPool();
