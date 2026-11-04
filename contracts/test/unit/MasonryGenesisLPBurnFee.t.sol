@@ -144,7 +144,7 @@ contract MasonryGenesisLPBurnFeeTest is Test {
             key,
             address(this),
             100e18,
-            100e6
+            100e6, address(this)
         );
 
         vault.mintShares(address(this), 10_000e18);

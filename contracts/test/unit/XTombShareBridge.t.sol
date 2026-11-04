@@ -150,7 +150,14 @@ contract XTombShareBridgeTest is Test {
         vm.chainId(home);
         share = new BridgeTestShare();
         homeMailbox = new BridgeTestMailbox(home);
-        canonical = new XTombShareBridge(address(homeMailbox), address(ism), home, address(share), address(this));
+        canonical = new XTombShareBridge(
+            address(homeMailbox),
+            address(ism),
+            home,
+            address(share),
+            address(this),
+            new XTombShareBridge.PeerConfig[](0)
+        );
 
         share.mint(alice, INITIAL_SHARES);
         vm.prank(alice);
@@ -440,10 +447,14 @@ contract XTombShareBridgeTest is Test {
     ) private {
         vm.chainId(domain);
         BridgeTestMailbox remoteMailbox = new BridgeTestMailbox(domain);
+        address expected = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        XTombBridgedShare token = new XTombBridgedShare(expected);
+        XTombShareBridge.PeerConfig[] memory peers = new XTombShareBridge.PeerConfig[](1);
+        peers[0] = XTombShareBridge.PeerConfig(home, address(canonical), ROUTE_LIMIT);
         XTombShareBridge remote =
-            new XTombShareBridge(address(remoteMailbox), address(ism), home, address(0), address(this));
+            new XTombShareBridge(address(remoteMailbox), address(ism), home, address(token), address(this), peers);
+        assertEq(address(remote), expected);
 
-        remote.registerPeer(home, address(canonical), ROUTE_LIMIT);
         satellite[domain] = remote;
         mailbox[domain] = remoteMailbox;
 

@@ -64,16 +64,16 @@ contract BaseForkTest is BaseTest {
 
         // Standard deploy sequence — same dance as EpochCycle.t.sol setUp.
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(owner);
+        estate = new Estate(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         vm.stopPrank();
 
         oracle = new MockOracle(1e18);
 
         vm.startPrank(owner);
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);

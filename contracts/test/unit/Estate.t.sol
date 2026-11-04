@@ -42,7 +42,7 @@ contract EstateTest is BaseTest {
         vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(vestingStart, communityFund, devFund);
+        estate = new Estate(vestingStart, communityFund, devFund, owner);
 
         // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -95,13 +95,13 @@ contract EstateTest is BaseTest {
     function test_Constructor_RejectsZeroCommunityFund() public {
         vm.prank(owner);
         vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, address(0), devFund);
+        new Estate(vestingStart, address(0), devFund, address(this));
     }
 
     function test_Constructor_RejectsZeroDevFund() public {
         vm.prank(owner);
         vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, communityFund, address(0));
+        new Estate(vestingStart, communityFund, address(0), address(this));
     }
 
     // ---------------------------------------------------------------------

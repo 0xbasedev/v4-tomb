@@ -28,7 +28,13 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     uint16 private constant BASE_TAX = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
     uint256 private constant BPS = 10_000;
 
+    struct OracleConfig {
+        MasonryLevelOracle oracle;
+        address initializer;
+    }
+
     MasonryLevelOracle public immutable oracle;
+    address private immutable _initializer;
     uint160 private recordedSqrtPrice;
     address public immutable asset;
     PoolId public immutable officialPool;
@@ -39,6 +45,7 @@ abstract contract MasonryTaxHook is BaseV4Hook {
 
     error InvalidConfiguration();
     error UnknownPool();
+    error UnauthorizedInitializer();
     error OnlySelf();
     error PartialSell();
     error UnrepresentableTax();
@@ -48,7 +55,7 @@ abstract contract MasonryTaxHook is BaseV4Hook {
 
     constructor(
         IPoolManager manager,
-        uint128 minOracleLiquidity,
+        OracleConfig memory config,
         address asset_,
         address usdc,
         uint24 lpFee,
@@ -67,7 +74,14 @@ abstract contract MasonryTaxHook is BaseV4Hook {
             tickSpacing: tickSpacing,
             hooks: IHooks(address(this))
         }).toId();
-        oracle = new MasonryLevelOracle(officialPool, assetIsCurrency0, minOracleLiquidity);
+        if (
+            config.initializer == address(0) || address(config.oracle).code.length == 0
+                || config.oracle.hook() != address(this)
+                || PoolId.unwrap(config.oracle.officialPool()) != PoolId.unwrap(officialPool)
+                || config.oracle.levelIsCurrency0() != assetIsCurrency0
+        ) revert InvalidConfiguration();
+        oracle = config.oracle;
+        _initializer = config.initializer;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory permissions) {
@@ -81,10 +95,11 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     }
 
     function beforeInitialize(
-        address,
+        address sender,
         PoolKey calldata key,
         uint160
     ) external view override onlyPoolManager returns (bytes4) {
+        if (sender != _initializer) revert UnauthorizedInitializer();
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(officialPool)) revert UnknownPool();
         return IHooks.beforeInitialize.selector;
     }

@@ -21,15 +21,23 @@ contract MasonryCompoundGate is Ownable {
     event ExecutorAuthorization(address indexed executor, bool enabled);
     event CompoundRecorded(address indexed beneficiary, bytes32 indexed poolKey, uint256 nextEligibleAt);
 
-    constructor() Ownable(msg.sender) {}
+    constructor(
+        address owner_
+    ) Ownable(owner_) {}
 
-    function setExecutor(address executor, bool enabled) external onlyOwner {
+    function setExecutor(
+        address executor,
+        bool enabled
+    ) external onlyOwner {
         if (enabled && executor.code.length == 0) revert NotExecutor();
         authorizedExecutors[executor] = enabled;
         emit ExecutorAuthorization(executor, enabled);
     }
 
-    function consume(address beneficiary, bytes32 poolKey) external {
+    function consume(
+        address beneficiary,
+        bytes32 poolKey
+    ) external {
         if (!authorizedExecutors[msg.sender]) revert NotExecutor();
         if (beneficiary == address(0) || poolKey == bytes32(0)) revert InvalidPool();
         uint256 earliest = nextEligibleAt[beneficiary][poolKey];
@@ -39,7 +47,10 @@ contract MasonryCompoundGate is Ownable {
         emit CompoundRecorded(beneficiary, poolKey, next);
     }
 
-    function canCompound(address beneficiary, bytes32 poolKey) external view returns (bool) {
+    function canCompound(
+        address beneficiary,
+        bytes32 poolKey
+    ) external view returns (bool) {
         if (beneficiary == address(0) || poolKey == bytes32(0)) return false;
         return block.timestamp >= nextEligibleAt[beneficiary][poolKey];
     }

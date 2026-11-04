@@ -75,14 +75,16 @@ contract ShareRewardPool {
 
     constructor(
         address _share,
-        uint256 _poolStartTime
+        uint256 _poolStartTime,
+        address initialOperator
     ) {
         if (block.timestamp >= _poolStartTime) revert StartTimeInPast();
         share = IERC20(_share);
         poolStartTime = _poolStartTime;
         poolEndTime = _poolStartTime + RUNNING_TIME;
-        operator = msg.sender;
-        emit OperatorTransferred(address(0), msg.sender);
+        if (initialOperator == address(0)) revert NotOperator();
+        operator = initialOperator;
+        emit OperatorTransferred(address(0), initialOperator);
     }
 
     function checkPoolDuplicate(

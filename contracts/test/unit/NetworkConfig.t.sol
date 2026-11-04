@@ -52,6 +52,10 @@ contract ConfigDeployHarness is Deploy {
         return index;
     }
 
+    function _createXCodeHash() internal pure override returns (bytes32) {
+        return keccak256(type(ConfigTestFactory).runtimeCode);
+    }
+
     function _infrastructure(
         string memory key
     ) internal view override returns (address) {
@@ -60,16 +64,38 @@ contract ConfigDeployHarness is Deploy {
     }
 }
 
-/// @dev Test factory implementing the salt || initCode interface required by Deploy.
+/// @dev Minimal CREATE3 double. The bridge fork suite exercises the actual CreateX factory.
 contract ConfigTestFactory {
-    fallback() external {
-        bytes memory initCode = msg.data[32:];
-        bytes32 salt = bytes32(msg.data[:32]);
-        address created;
-        assembly {
-            created := create2(0, add(initCode, 32), mload(initCode), salt)
+    function computeCreate3Address(
+        bytes32 salt
+    ) public view returns (address) {
+        address proxy = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(hex"ff", address(this), salt, keccak256(hex"67363d3d37363d34f03d5260086018f3"))
+                    )
+                )
+            )
+        );
+        return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", proxy, hex"01")))));
+    }
+
+    function deployCreate3(
+        bytes32 rawSalt,
+        bytes calldata initCode
+    ) external returns (address deployed) {
+        require(address(bytes20(rawSalt)) == msg.sender && rawSalt[20] == 0, "invalid sender salt");
+        bytes32 salt = keccak256(abi.encode(msg.sender, rawSalt));
+        bytes memory proxyInit = hex"67363d3d37363d34f03d5260086018f3";
+        address proxy;
+        assembly ("memory-safe") {
+            proxy := create2(0, add(proxyInit, 32), mload(proxyInit), salt)
         }
-        require(created != address(0), "factory failed");
+        require(proxy != address(0), "proxy deployment failed");
+        (bool success,) = proxy.call(initCode);
+        deployed = computeCreate3Address(salt);
+        require(success && deployed.code.length != 0, "factory failed");
     }
 }
 
@@ -79,7 +105,7 @@ contract NetworkConfigTest is Test {
     address internal constant MANAGER = address(0x1112);
     address internal constant POSITIONS = address(0x1113);
     address internal constant PERMIT = address(0x1114);
-    address internal constant FACTORY = address(0x1116);
+    address internal constant FACTORY = 0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed;
 
     function setUp() public {
         vm.setEnv("PROTOCOL_CONFIG", "./test/fixtures/networks.json");
@@ -157,6 +183,8 @@ contract NetworkConfigTest is Test {
         vm.mockCall(POSITIONS, abi.encodeWithSignature("poolManager()"), abi.encode(realManager));
         vm.etch(FACTORY, address(new ConfigTestFactory()).code);
         vm.setEnv("DEPLOYER_PRIVATE_KEY", "1");
+        vm.setEnv("VESTING_START", vm.toString(block.timestamp + 1 hours));
+        vm.setEnv("EPOCH_START", vm.toString(block.timestamp + 1 hours));
         vm.setEnv("AIRDROP_WALLET", vm.toString(address(0xBEEF)));
         vm.setEnv("COMMUNITY_FUND", vm.toString(address(0xCAFE)));
         vm.setEnv("DEV_FUND", vm.toString(address(0xF00D)));
@@ -168,6 +196,10 @@ contract NetworkConfigTest is Test {
         assertEq(deploy.hook().trustees(), vm.addr(1));
         assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x1088);
         assertEq(deploy.money().operator(), address(deploy.treasury()));
+        assertEq(deploy.money().owner(), vm.addr(1));
+        assertEq(deploy.estate().owner(), vm.addr(1));
+        assertEq(deploy.oracle().owner(), vm.addr(1));
+        assertEq(deploy.genesisRewardPool().operator(), vm.addr(1));
         assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
         assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
         assertEq(deploy.timelock().admin(), address(0xABCD));

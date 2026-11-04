@@ -40,10 +40,10 @@ contract ShareRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(poolStart, communityFund, devFund);
+        estate = new Estate(poolStart, communityFund, devFund, owner);
 
         vm.prank(owner);
-        pool = new ShareRewardPool(address(estate), poolStart);
+        pool = new ShareRewardPool(address(estate), poolStart, owner);
 
         lp = new MockLp("LP", "LP");
 

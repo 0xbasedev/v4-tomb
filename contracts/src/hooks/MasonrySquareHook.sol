@@ -40,6 +40,7 @@ contract MasonrySquareHook is MasonryTaxHook {
         uint256 squareReferencePrice;
         uint128 maxSquarePerRoute;
         uint16 maxDeviationBps;
+        MasonryCriticalDefense defense;
     }
 
     MasonryGenesisSchedule public immutable schedule;
@@ -74,13 +75,13 @@ contract MasonrySquareHook is MasonryTaxHook {
 
     constructor(
         IPoolManager manager,
-        uint128 minLiquidity,
+        OracleConfig memory oracleConfig,
         address square,
         address usdc,
         uint24 lpFee,
         int24 spacing,
         RoutingConfig memory config
-    ) MasonryTaxHook(manager, minLiquidity, square, usdc, lpFee, spacing) {
+    ) MasonryTaxHook(manager, oracleConfig, square, usdc, lpFee, spacing) {
         MasonryLevelHook hook = MasonryLevelHook(address(config.levelPool.hooks));
         if (
             address(hook).code.length == 0 || hook.poolManager() != manager || hook.level() == square
@@ -95,7 +96,10 @@ contract MasonrySquareHook is MasonryTaxHook {
         levelPool = config.levelPool;
         levelHook = hook;
         schedule = hook.schedule();
-        defense = new MasonryCriticalDefense(hook.oracle());
+        if (address(config.defense).code.length == 0 || address(config.defense.oracle()) != address(hook.oracle())) {
+            revert InvalidConfiguration();
+        }
+        defense = config.defense;
         treasury = config.treasury;
         squareReferencePrice = config.squareReferencePrice;
         maxSquarePerRoute = config.maxSquarePerRoute;

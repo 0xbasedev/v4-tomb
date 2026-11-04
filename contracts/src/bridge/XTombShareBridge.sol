@@ -20,6 +20,12 @@ contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
         uint256 limit;
     }
 
+    struct PeerConfig {
+        uint32 domain;
+        address peer;
+        uint256 limit;
+    }
+
     uint256 public constant DESTINATION_GAS = 200_000;
 
     IHyperlaneMailbox public immutable mailbox;
@@ -67,8 +73,9 @@ contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
         address mailbox_,
         address ism_,
         uint32 canonicalDomain_,
-        address canonicalToken_,
-        address owner_
+        address asset_,
+        address owner_,
+        PeerConfig[] memory initialPeers
     ) Ownable(owner_) {
         if (mailbox_.code.length == 0 || ism_.code.length == 0) revert InvalidConfiguration();
         uint32 domain = IHyperlaneMailbox(mailbox_).localDomain();
@@ -81,14 +88,13 @@ contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
         canonicalDomain = canonicalDomain_;
         isCanonical = domain == canonicalDomain_;
 
-        if (isCanonical) {
-            if (canonicalToken_.code.length == 0 || IERC20Metadata(canonicalToken_).decimals() != 18) {
-                revert InvalidConfiguration();
-            }
-            asset = canonicalToken_;
-        } else {
-            if (canonicalToken_ != address(0)) revert InvalidConfiguration();
-            asset = address(new XTombBridgedShare());
+        if (asset_.code.length == 0 || IERC20Metadata(asset_).decimals() != 18) revert InvalidConfiguration();
+        if (!isCanonical && XTombBridgedShare(asset_).bridge() != address(this)) revert InvalidConfiguration();
+        asset = asset_;
+
+        for (uint256 i; i < initialPeers.length; ++i) {
+            PeerConfig memory peer = initialPeers[i];
+            _registerPeer(peer.domain, peer.peer, peer.limit);
         }
     }
 
@@ -99,6 +105,14 @@ contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
         address peer,
         uint256 limit
     ) external onlyOwner {
+        _registerPeer(domain, peer, limit);
+    }
+
+    function _registerPeer(
+        uint32 domain,
+        address peer,
+        uint256 limit
+    ) private {
         if (
             !_supported(domain) || domain == localDomain || (!isCanonical && domain != canonicalDomain)
                 || peer == address(0) || limit == 0 || routes[domain].peer != address(0)

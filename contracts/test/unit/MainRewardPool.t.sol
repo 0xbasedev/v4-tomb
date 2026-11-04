@@ -36,10 +36,10 @@ contract MainRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney();
+        money = new OldMoney(owner);
 
         vm.prank(owner);
-        pool = new MainRewardPool(address(money), poolStart);
+        pool = new MainRewardPool(address(money), poolStart, owner);
 
         lp = new MockLp("LP", "LP");
 

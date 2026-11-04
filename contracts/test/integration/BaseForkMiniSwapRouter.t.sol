@@ -85,7 +85,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
 
         // Deploy MONEY (test contract holds trustees role; no Treasury needed for swap tests).
         vm.prank(owner);
-        money = new OldMoney();
+        money = new OldMoney(owner);
 
         // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
         // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2

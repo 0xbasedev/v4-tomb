@@ -104,9 +104,9 @@ contract BaseForkHookTaxTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(address(this));
+        estate = new Estate(startTime, communityFund, devFund, address(this));
+        trustnote = new TrustNote(address(this));
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
         uint160 flags =
@@ -137,11 +137,11 @@ contract BaseForkHookTaxTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime, address(this));
 
         // Deploy Treasury + Boardroom, init, hand off operator.
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(address(this));
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);

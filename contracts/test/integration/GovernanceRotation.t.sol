@@ -88,19 +88,19 @@ contract GovernanceRotationTest is BaseTest {
 
         // Deploy tokens (owner deploys → owner is Ownable2Step.owner).
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(owner);
+        estate = new Estate(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         oracle = new MockOracle(1e18);
 
         // Deploy reward pools (deployer = owner = operator of each).
-        genesisRewardPool = new GenesisRewardPool(address(money), startTime);
-        mainRewardPool = new MainRewardPool(address(money), startTime + 1 days);
-        shareRewardPool = new ShareRewardPool(address(estate), startTime + 1 days);
+        genesisRewardPool = new GenesisRewardPool(address(money), startTime, owner);
+        mainRewardPool = new MainRewardPool(address(money), startTime + 1 days, owner);
+        shareRewardPool = new ShareRewardPool(address(estate), startTime + 1 days, owner);
 
         // Deploy Treasury + Boardroom and wire.
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);

@@ -11,7 +11,7 @@ contract MasonryCompoundGateTest is Test {
     bytes32 internal constant POOL_B = keccak256("genesis:pool:2");
 
     function setUp() public {
-        gate = new MasonryCompoundGate();
+        gate = new MasonryCompoundGate(address(this));
         gate.setExecutor(address(this), true);
     }
 

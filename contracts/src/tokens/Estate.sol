@@ -85,13 +85,14 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
     constructor(
         uint256 _startTime,
         address _communityFund,
-        address _devFund
-    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Trustees() {
+        address _devFund,
+        address initialTrustees
+    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Trustees(initialTrustees) {
         if (_communityFund == address(0)) revert ZeroAddress();
         if (_devFund == address(0)) revert ZeroAddress();
 
         // Tomb-faithful: mint 1 unit to deployer for initial pool setup / sanity check.
-        _mint(msg.sender, 1 ether);
+        _mint(initialTrustees, 1 ether);
 
         startTime = _startTime;
         endTime = _startTime + VESTING_DURATION;

@@ -37,10 +37,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: node scripts/protocol.mjs validate
-      - run: node --test config/schema.test.mjs config/masonry-launch.test.mjs
       - run: npm ci
         working-directory: frontend
+      - run: node scripts/protocol.mjs validate
+      - run: node --test config/schema.test.mjs config/masonry-launch.test.mjs config/create3.test.mjs
       - run: npm run build
         working-directory: frontend
       - run: npx playwright install --with-deps chromium

@@ -7,7 +7,11 @@ import {MasonryLinearVesting} from "../../src/masonry/MasonryLinearVesting.sol";
 
 contract MasonryTestToken is ERC20 {
     constructor() ERC20("Test LEVEL", "tLEVEL") {}
-    function mint(address to, uint256 amount) external {
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         _mint(to, amount);
     }
 }
@@ -21,10 +25,10 @@ contract MasonryLinearVestingTest is Test {
 
     function setUp() public {
         token = new MasonryTestToken();
-        token.mint(address(this), 1_000e18);
+        token.mint(address(this), 1000e18);
         vestingStart = uint64(block.timestamp + 1 days);
-        vesting = new MasonryLinearVesting(token, beneficiary, vestingStart, DURATION);
-        token.approve(address(vesting), 1_000e18);
+        vesting = new MasonryLinearVesting(token, beneficiary, vestingStart, DURATION, address(this));
+        token.approve(address(vesting), 1000e18);
     }
 
     function test_InitialReleaseAndSixMonthLinearVesting() public {
@@ -41,7 +45,7 @@ contract MasonryLinearVestingTest is Test {
 
         vm.warp(vestingStart + DURATION);
         vesting.release();
-        assertEq(token.balanceOf(beneficiary), 1_000e18);
+        assertEq(token.balanceOf(beneficiary), 1000e18);
         assertEq(token.balanceOf(address(vesting)), 0);
     }
 

@@ -5,11 +5,17 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @notice The destination-chain representation of xSHARE. The bridge alone can mint or burn it.
 contract XTombBridgedShare is ERC20 {
-    address public immutable bridge = msg.sender;
+    address public immutable bridge;
 
     error OnlyBridge();
+    error InvalidBridge();
 
-    constructor() ERC20("Bridged xSHARE", "xSHARE") {}
+    constructor(
+        address bridge_
+    ) ERC20("Bridged xSHARE", "xSHARE") {
+        if (bridge_ == address(0)) revert InvalidBridge();
+        bridge = bridge_;
+    }
 
     function bridgeMint(
         address recipient,

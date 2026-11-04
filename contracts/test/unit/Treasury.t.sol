@@ -39,9 +39,9 @@ contract TreasuryTest is BaseTest {
 
         // 1. Deploy tokens (deployer = owner becomes trustees on each).
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(owner);
+        estate = new Estate(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         vm.stopPrank();
 
         // 2. Deploy oracle (mocked) — initialize at parity.
@@ -49,8 +49,8 @@ contract TreasuryTest is BaseTest {
 
         // 3. Deploy Treasury and Boardroom.
         vm.startPrank(owner);
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
 
         // 4. Initialize Boardroom (owner becomes operator).
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));

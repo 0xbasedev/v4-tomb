@@ -10,7 +10,7 @@ The xSHARE bridge moves original xSHARE between the Wizard-selected home chain a
 | PulseChain | 369 | PLS |
 | Sonic | 146 | S |
 
-The manifest starts with five disabled networks and blank project addresses. The Mailboxes in it are infrastructure addresses. Configure the final home chain from the Wizard and populate each chain's bridge, token, and approved message verifier after deployment. Bridge support does not certify a chain for the separate Masonry protocol launch.
+The manifest starts with five disabled networks and blank project addresses. The Mailboxes in it are infrastructure addresses. Use the Wizard-selected home chain to generate predicted bridge and token addresses before deployment. Publish addresses for use by live actions after verification. Bridge support does not certify a chain for the separate Masonry protocol launch.
 
 ## UI integration for Claude
 
@@ -25,18 +25,24 @@ The ABI bundle contains `XTombShareBridge.json`, `XTombBridgedShare.json`, and `
 
 ## Deploy and verify
 
-- Set the Wizard-selected `canonicalDomain` in a release copy of the manifest and enter the approved per-chain `bridgeIsm` addresses. An ISM is Hyperlane's message verifier. The checked-in observed default ISMs are for reference. Confirm the verifier's source domains, signer threshold, independent operators, checkpoint availability, and finality settings. [Hyperlane modular security](https://docs.hyperlane.xyz/docs/protocol/ISM/modular-security)
-- Confirm the original token address and policy on the home chain. The home bridge expects an existing standard 18-decimal ERC-20 that transfers the exact amount. Deploy one bridge per chain. Pass the canonical token address on the home chain and the zero address on each satellite. Use the designated governance owner on each chain.
-- From `contracts/`, simulate the deploy script against each intended RPC. The positional network index is the entry's index in the release manifest. The script checks the chain and confirms that the Mailbox resolves the selected verifier for the deployed bridge.
+- Fill a release JSON from `config/create3-release.template.json`. Use the same `releaseId` and deployment signer as the home token plan. Set the Wizard-selected `canonicalDomain`, choose `estate` for the legacy core token or `masonryShare` for the modern launch, and provide each satellite cap in 18-decimal base units. In `bridgeOperators`, each chain ID maps to an approved `owner` and `ism` address. The checked-in observed default ISMs are reference data. [Hyperlane modular security](https://docs.hyperlane.xyz/docs/protocol/ISM/modular-security)
+- Generate and review the release manifest before deploying. Its addresses are predictions, and its routes stay disabled.
+
+  ```sh
+  npm --prefix frontend ci
+  node scripts/create3.mjs bridge config/xshare-bridge.json config/release.json config/xshare-bridge.release.json
+  ```
+
+- Confirm the original, exact-transfer 18-decimal xSHARE token is deployed at the planned home address. Simulate deployment per chain from `contracts/`. The script deploys the satellite token to its own CREATE3 address and installs reciprocal peers and caps in the bridge constructor. The two contracts bind to each other's predicted address. Use the same release manifest on each chain.
 
   ```sh
   XSHARE_BRIDGE_CONFIG=../config/xshare-bridge.release.json \
     forge script script/DeployXTombShareBridge.s.sol:DeployXTombShareBridge \
     --rpc-url "$CHAIN_RPC_URL" --account "$DEPLOYER_ACCOUNT" \
-    --sig 'run(uint256,address,address)' "$NETWORK_INDEX" "$BRIDGE_OWNER" "$TOKEN_ARGUMENT"
+    --sig 'run(uint256)' "$NETWORK_INDEX"
   ```
 
-- After a reviewed deployment, verify code, owner, home domain, token, Mailbox, and verifier on each chain. Register reciprocal peer addresses with the same approved cap in token base units. The peer, cap, home domain, and verifier address are permanent in each bridge instance. Read back both sides before activating either direction. Review how the chosen ISM can be maintained or migrated if its validator set changes.
+- After a reviewed deployment, check deployed code, both token roles, owners, home domain, Mailboxes, verifiers and reciprocal routes against the plan before activation. Confirm the verifier's source domains, signer threshold, checkpoint availability and finality. The peer, cap, home domain and verifier address are permanent in each bridge instance.
 - Run a small two-way canary with production validators and relayer coverage before publishing a route as enabled. Confirm source fee collection, destination delivery, token balances, and escrow recovery. Sonic's public Abacus Works validators and relayer were wound down on August 10, 2026. A Sonic Mailbox and fee quote still respond. Provide a verified Sonic validator and relayer path, such as a project-operated Hyperlane setup, and repeat the same canary before enabling Sonic. [Hyperlane deprecation schedule](https://docs.hyperlane.xyz/docs/reference/deprecated-chains) · [Hyperlane relayer](https://docs.hyperlane.xyz/docs/protocol/agents/relayer) · [Hyperlane validator](https://docs.hyperlane.xyz/docs/protocol/agents/validators)
 - For a deposit-only halt, disable outbound on the home chain for the affected route and preserve the return path. During a verifier incident, governance can pause inbound settlement and disable new sends on both sides. In-flight transfers remain pending while settlement is paused. Governance should monitor escrow, pending messages, and the age of undelivered transfers. There is no administrator mint, escrow withdrawal, or independent source refund.
 
@@ -48,6 +54,6 @@ forge test --match-contract XTombShareBridgeTest
 XSHARE_BRIDGE_FORKS=true forge test --match-contract XTombShareBridgeForkTest
 ```
 
-The unit suite uses mock Mailboxes to exercise all five possible home-chain selections. The opt-in fork test runs four two-way routes through the deployed Hyperlane Mailboxes and fee hooks across all five chains, using a test verifier to exercise both rejection and delivery. The fork test sends no live messages and provides no evidence about production validator or relayer liveness.
+The unit suite uses mock Mailboxes to exercise all five possible home-chain selections. The opt-in fork test runs four two-way routes using the official CreateX factories and deployed Hyperlane Mailboxes across all five chains, using a test verifier to exercise both rejection and delivery. The fork test sends no live messages and provides no evidence about production validator or relayer liveness.
 
 The bridge compiles with Solidity 0.8.26 and the Shanghai EVM target because PulseChain rejects Cancun opcodes used by the compiler. The other Masonry and Uniswap V4 contracts retain their Cancun target.

@@ -158,11 +158,21 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
     /* ========== GOVERNANCE ========== */
 
+    address private immutable _initializer;
+
+    constructor(
+        address initializer
+    ) {
+        if (initializer == address(0)) revert NotOperator();
+        _initializer = initializer;
+    }
+
     function initialize(
         IERC20 _money,
         IERC20 _share,
         ITreasury _treasury
     ) public notInitialized {
+        if (msg.sender != _initializer) revert NotOperator();
         money = _money;
         share = _share;
         treasury = _treasury;

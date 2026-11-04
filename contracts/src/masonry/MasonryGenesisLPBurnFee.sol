@@ -119,8 +119,9 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         PoolKey memory buybackPoolKey_,
         address genesis_,
         uint256 maxFeeSharesPerCall_,
-        uint256 maxUsdcPerCall_
-    ) Ownable(msg.sender) {
+        uint256 maxUsdcPerCall_,
+        address owner_
+    ) Ownable(owner_) {
         if (
             address(lpVault_).code.length == 0 || address(level_).code.length == 0
                 || address(usdc_).code.length == 0 || address(router_).code.length == 0

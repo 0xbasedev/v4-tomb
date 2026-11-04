@@ -22,13 +22,13 @@ contract MasonryLevelHook is MasonryTaxHook {
     constructor(
         IPoolManager manager,
         MasonryGenesisSchedule schedule_,
-        uint128 minOracleLiquidity,
+        OracleConfig memory oracleConfig,
         address level_,
         address usdc,
         address recipient,
         uint24 lpFee,
         int24 tickSpacing
-    ) MasonryTaxHook(manager, minOracleLiquidity, level_, usdc, lpFee, tickSpacing) {
+    ) MasonryTaxHook(manager, oracleConfig, level_, usdc, lpFee, tickSpacing) {
         if (address(schedule_).code.length == 0 || recipient == address(0)) revert InvalidConfiguration();
         schedule = schedule_;
         taxRecipient = recipient;

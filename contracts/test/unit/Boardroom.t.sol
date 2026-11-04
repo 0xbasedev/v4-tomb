@@ -77,15 +77,15 @@ contract BoardroomTest is BaseTest {
 
         // Deploy tokens with owner as initial trustees.
         vm.prank(owner);
-        money = new OldMoney();
+        money = new OldMoney(owner);
         vm.prank(owner);
-        estate = new Estate(block.timestamp, communityFund, devFund);
+        estate = new Estate(block.timestamp, communityFund, devFund, owner);
 
         treasuryMock = new MockTreasury();
         treasuryMock.setStartTime(block.timestamp);
 
         vm.prank(owner);
-        boardroom = new Boardroom();
+        boardroom = new Boardroom(owner);
         vm.prank(owner);
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
 

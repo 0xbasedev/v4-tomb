@@ -85,7 +85,8 @@ contract MasonryGenesisStakingTest is Test {
             key,
             address(this),
             10_000e18,
-            10_000e6
+            10_000e6,
+            address(this)
         );
         staking = new MasonryGenesisStaking(pass, fee, new MockGenesisSettlement(level, vault), usdc, 7000e18);
         fee.setGenesis(address(staking));

@@ -152,8 +152,8 @@ contract TreasuryParamInvariants is StdInvariant, Test {
 
     function setUp() public {
         vm.warp(1_700_000_000);
-        treasury = new Treasury();
-        money = new OldMoney(); // needed for initialize()'s balanceOf snapshot
+        treasury = new Treasury(address(this));
+        money = new OldMoney(address(this)); // needed for initialize()'s balanceOf snapshot
 
         address[] memory excluded = new address[](0);
         treasury.initialize(address(money), TRUSTNOTE, ESTATE, ORACLE, BOARDROOM, block.timestamp + 1 hours, excluded);

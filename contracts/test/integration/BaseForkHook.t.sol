@@ -86,9 +86,9 @@ contract BaseForkHookTest is BaseTest {
         weth = Addresses.weth();
 
         // 1. Deploy tokens.
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(address(this));
+        estate = new Estate(startTime, communityFund, devFund, address(this));
+        trustnote = new TrustNote(address(this));
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right
         //    permission bits (AFTER_INITIALIZE | BEFORE_SWAP).
@@ -122,11 +122,11 @@ contract BaseForkHookTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // 4. Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime, address(this));
 
         // 5. Deploy Treasury + Boardroom, init, hand off operator.
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(address(this));
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);

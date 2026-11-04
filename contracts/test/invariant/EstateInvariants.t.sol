@@ -132,7 +132,7 @@ contract EstateInvariants is StdInvariant, Test {
         communityFund = makeAddr("communityFund");
         devFund = makeAddr("devFund");
 
-        estate = new Estate(startTime, communityFund, devFund);
+        estate = new Estate(startTime, communityFund, devFund, address(this));
         handler = new EstateHandler(estate, farmingPool, communityFund, devFund);
 
         // Hand trustees to the handler so it can call distributeReward.

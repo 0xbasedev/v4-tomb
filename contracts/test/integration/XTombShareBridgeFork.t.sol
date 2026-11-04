@@ -3,6 +3,8 @@ pragma solidity 0.8.26;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {XTombBridgedShare} from "../../src/bridge/XTombBridgedShare.sol";
+import {Create3Config} from "../../script/Create3Config.s.sol";
 import {XTombShareBridge} from "../../src/bridge/XTombShareBridge.sol";
 
 interface IForkMailbox {
@@ -40,55 +42,104 @@ contract BridgeForkShare is ERC20 {
     }
 }
 
-contract XTombShareBridgeForkTest is Test {
+contract XTombShareBridgeForkTest is Test, Create3Config {
     uint32 private constant BASE = 8453;
     bytes32 private constant DISPATCH = keccak256("Dispatch(address,uint32,bytes32,bytes)");
+
+    struct Home {
+        uint256 forkId;
+        XTombShareBridge bridge;
+        BridgeForkShare token;
+    }
 
     function testForkRealMailboxesAcrossFiveChains() external {
         vm.skip(!vm.envOr("XSHARE_BRIDGE_FORKS", false));
 
         string memory config = vm.readFile("../config/xshare-bridge.json");
-        address baseMailbox = vm.parseJsonAddress(config, ".networks[0].mailbox");
-        uint256 baseFork = vm.createSelectFork(vm.parseJsonString(config, ".networks[0].rpcUrl"));
-        BridgeForkShare share = new BridgeForkShare();
-        XTombShareBridge home =
-            new XTombShareBridge(baseMailbox, address(new BridgeForkISM()), BASE, address(share), address(this));
-        share.approve(address(home), type(uint256).max);
+        Create3Plan memory plan = Create3Plan(CREATEX, address(this), keccak256("xshare-fork"));
+        Home memory home;
+        home.forkId = vm.createSelectFork(vm.parseJsonString(config, ".networks[0].rpcUrl"));
+        home.token = new BridgeForkShare();
+        home.bridge = _deployBridge(
+            plan,
+            vm.parseJsonAddress(config, ".networks[0].mailbox"),
+            new BridgeForkISM(),
+            address(home.token),
+            new XTombShareBridge.PeerConfig[](0)
+        );
+        home.token.approve(address(home.bridge), type(uint256).max);
         vm.deal(address(this), 10 ether);
 
         for (uint256 i = 1; i < 5; ++i) {
-            string memory network = string.concat(".networks[", vm.toString(i), "]");
-            address remoteMailbox = vm.parseJsonAddress(config, string.concat(network, ".mailbox"));
-            uint256 remoteFork = vm.createSelectFork(vm.parseJsonString(config, string.concat(network, ".rpcUrl")));
-            BridgeForkISM verifier = new BridgeForkISM();
-            XTombShareBridge remote =
-                new XTombShareBridge(remoteMailbox, address(verifier), BASE, address(0), address(this));
-            uint32 domain = remote.localDomain();
-            remote.registerPeer(BASE, address(home), 10 ether);
-            remote.setOutboundEnabled(BASE, true);
-            vm.deal(address(this), 1_000_000 ether);
-
-            vm.selectFork(baseFork);
-            home.registerPeer(domain, address(remote), 10 ether);
-            home.setOutboundEnabled(domain, true);
-            bytes memory outward = _send(home, domain);
-            assertEq(home.lockedFor(domain), 1 ether);
-
-            vm.selectFork(remoteFork);
-            verifier.setAccept(false);
-            vm.expectRevert();
-            IForkMailbox(remoteMailbox).process("", outward);
-            verifier.setAccept(true);
-            IForkMailbox(remoteMailbox).process("", outward);
-            assertEq(ERC20(remote.asset()).balanceOf(address(this)), 1 ether);
-            bytes memory returning = _send(remote, BASE);
-            assertEq(ERC20(remote.asset()).totalSupply(), 0);
-
-            vm.selectFork(baseFork);
-            IForkMailbox(baseMailbox).process("", returning);
-            assertEq(home.lockedFor(domain), 0);
-            assertEq(share.balanceOf(address(this)), 100 ether);
+            _roundTrip(plan, config, string.concat(".networks[", vm.toString(i), "]"), home);
         }
+    }
+
+    function _roundTrip(
+        Create3Plan memory plan,
+        string memory config,
+        string memory path,
+        Home memory home
+    ) private {
+        address mailbox = vm.parseJsonAddress(config, string.concat(path, ".mailbox"));
+        uint256 forkId = vm.createSelectFork(vm.parseJsonString(config, string.concat(path, ".rpcUrl")));
+        BridgeForkISM verifier = new BridgeForkISM();
+        address token = _deployCreate3(
+            plan,
+            "bridgedShare",
+            0,
+            _create3Address(plan, "bridgedShare", 0),
+            abi.encodePacked(type(XTombBridgedShare).creationCode, abi.encode(address(home.bridge)))
+        );
+        XTombShareBridge.PeerConfig[] memory peers = new XTombShareBridge.PeerConfig[](1);
+        peers[0] = XTombShareBridge.PeerConfig(BASE, address(home.bridge), 10 ether);
+        XTombShareBridge remote = _deployBridge(plan, mailbox, verifier, token, peers);
+        remote.setOutboundEnabled(BASE, true);
+        vm.deal(address(this), 1_000_000 ether);
+
+        vm.selectFork(home.forkId);
+        uint32 domain = uint32(vm.parseJsonUint(config, string.concat(path, ".domain")));
+        home.bridge.registerPeer(domain, address(remote), 10 ether);
+        home.bridge.setOutboundEnabled(domain, true);
+        bytes memory outward = _send(home.bridge, domain);
+        assertEq(home.bridge.lockedFor(domain), 1 ether);
+
+        vm.selectFork(forkId);
+        verifier.setAccept(false);
+        vm.expectRevert();
+        IForkMailbox(mailbox).process("", outward);
+        verifier.setAccept(true);
+        IForkMailbox(mailbox).process("", outward);
+        assertEq(ERC20(token).balanceOf(address(this)), 1 ether);
+        bytes memory returning = _send(remote, BASE);
+        assertEq(ERC20(token).totalSupply(), 0);
+
+        vm.selectFork(home.forkId);
+        IForkMailbox(address(home.bridge.mailbox())).process("", returning);
+        assertEq(home.bridge.lockedFor(domain), 0);
+        assertEq(home.token.balanceOf(address(this)), 100 ether);
+    }
+
+    function _deployBridge(
+        Create3Plan memory plan,
+        address mailbox,
+        BridgeForkISM verifier,
+        address token,
+        XTombShareBridge.PeerConfig[] memory peers
+    ) private returns (XTombShareBridge) {
+        assertEq(plan.factory.codehash, CREATEX_CODE_HASH);
+        return XTombShareBridge(
+            _deployCreate3(
+                plan,
+                "xshareBridge",
+                0,
+                _create3Address(plan, "xshareBridge", 0),
+                abi.encodePacked(
+                    type(XTombShareBridge).creationCode,
+                    abi.encode(mailbox, verifier, BASE, token, address(this), peers)
+                )
+            )
+        );
     }
 
     function _send(

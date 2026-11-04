@@ -11,6 +11,7 @@ import {Boardroom} from "../src/core/Boardroom.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
 import {NetworkConfig} from "./NetworkConfig.s.sol";
+import {Create3Config} from "./Create3Config.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
@@ -24,8 +25,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {MiniSwapRouter} from "../src/swap/MiniSwapRouter.sol";
 import {Timelock} from "../src/governance/Timelock.sol";
-
-import {HookMiner} from "../test/utils/HookMiner.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
@@ -46,7 +45,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
  *
  *         See docs/DEPLOY.md for env-var setup and per-chain commands.
  */
-contract Deploy is NetworkConfig {
+contract Deploy is NetworkConfig, Create3Config {
     using PoolIdLibrary for PoolKey;
 
     struct Genesis {
@@ -58,6 +57,10 @@ contract Deploy is NetworkConfig {
         address timelockAdmin;
         uint256 timelockDelay;
     }
+
+    Create3Plan private _plan;
+    mapping(string role => address expected) private _expected;
+    uint256 private _hookNonce;
 
     OldMoney public money;
     Estate public estate;
@@ -76,12 +79,13 @@ contract Deploy is NetworkConfig {
     PoolKey public poolKey;
 
     function run() external {
-        _network();
+        (string memory json, string memory path) = _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(pk);
 
         Genesis memory g = _readGenesis();
         _preflight();
+        _loadPlan(json, string.concat(path, ".create3"), deployer);
 
         console2.log("=== Old Money deploy ===");
         console2.log("chain id:", block.chainid);
@@ -97,8 +101,18 @@ contract Deploy is NetworkConfig {
         _deployLpWrapper();
         _deployRewardPools(g);
         _deployCoreAndInit(g);
-        miniSwapRouter = new MiniSwapRouter(IPoolManager(_infrastructure("poolManager")));
-        timelock = new Timelock(g.timelockAdmin, g.timelockDelay);
+        miniSwapRouter = MiniSwapRouter(
+            payable(_deploy(
+                    "miniSwapRouter",
+                    abi.encodePacked(type(MiniSwapRouter).creationCode, abi.encode(_infrastructure("poolManager")))
+                ))
+        );
+        timelock = Timelock(
+            payable(_deploy(
+                    "timelock",
+                    abi.encodePacked(type(Timelock).creationCode, abi.encode(g.timelockAdmin, g.timelockDelay))
+                ))
+        );
 
         // Genesis distributions go directly to the freshly deployed pool contracts.
         money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
@@ -128,6 +142,55 @@ contract Deploy is NetworkConfig {
         _exportDeployment();
     }
 
+    function _loadPlan(
+        string memory json,
+        string memory path,
+        address deployer
+    ) private {
+        _plan = _readCreate3(json, path);
+        if (_plan.deployer != deployer) revert InvalidCreate3Plan();
+        _hookNonce = vm.parseJsonUint(json, string.concat(path, ".hookNonce"));
+        string[13] memory roles = [
+            "money",
+            "estate",
+            "trustNote",
+            "treasury",
+            "boardroom",
+            "oracle",
+            "hook",
+            "lpWrapper",
+            "genesisRewardPool",
+            "mainRewardPool",
+            "shareRewardPool",
+            "miniSwapRouter",
+            "timelock"
+        ];
+        for (uint256 i; i < roles.length; ++i) {
+            string memory role = roles[i];
+            address expected = vm.parseJsonAddress(json, string.concat(path, ".addresses.", role));
+            address predicted = _create3Address(_plan, role, _deploymentNonce(role));
+            if (expected != predicted) revert UnexpectedCreate3Address(role, expected, predicted);
+            if (expected.code.length != 0 || vm.getNonce(expected) != 0) revert Create3AddressOccupied(expected);
+            _expected[role] = expected;
+        }
+        uint160 flags =
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        if (uint160(_expected["hook"]) & Hooks.ALL_HOOK_MASK != flags) revert InvalidCreate3Plan();
+    }
+
+    function _deploymentNonce(
+        string memory role
+    ) private view returns (uint256) {
+        return keccak256(bytes(role)) == keccak256("hook") ? _hookNonce : 0;
+    }
+
+    function _deploy(
+        string memory role,
+        bytes memory initcode
+    ) private returns (address) {
+        return _deployCreate3(_plan, role, _deploymentNonce(role), _expected[role], initcode);
+    }
+
     // ------------------------------------------------------------------
     // Steps
     // ------------------------------------------------------------------
@@ -136,8 +199,8 @@ contract Deploy is NetworkConfig {
         g.airdropWallet = vm.envAddress("AIRDROP_WALLET");
         g.communityFund = vm.envAddress("COMMUNITY_FUND");
         g.devFund = vm.envAddress("DEV_FUND");
-        g.vestingStart = vm.envOr("VESTING_START", block.timestamp + 1 hours);
-        g.epochStart = vm.envOr("EPOCH_START", g.vestingStart);
+        g.vestingStart = vm.envUint("VESTING_START");
+        g.epochStart = vm.envUint("EPOCH_START");
         g.timelockAdmin = vm.envAddress("TIMELOCK_ADMIN");
         g.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
         require(
@@ -152,9 +215,17 @@ contract Deploy is NetworkConfig {
     function _deployTokens(
         Genesis memory g
     ) internal {
-        money = new OldMoney();
-        estate = new Estate(g.vestingStart, g.communityFund, g.devFund);
-        trustnote = new TrustNote();
+        money = OldMoney(_deploy("money", abi.encodePacked(type(OldMoney).creationCode, abi.encode(_plan.deployer))));
+        estate = Estate(
+            _deploy(
+                "estate",
+                abi.encodePacked(
+                    type(Estate).creationCode, abi.encode(g.vestingStart, g.communityFund, g.devFund, _plan.deployer)
+                )
+            )
+        );
+        trustnote =
+            TrustNote(_deploy("trustNote", abi.encodePacked(type(TrustNote).creationCode, abi.encode(_plan.deployer))));
         console2.log("$MONEY:    ", address(money));
         console2.log("$ESTATE:   ", address(estate));
         console2.log("$TRUSTNOTE:", address(trustnote));
@@ -166,15 +237,7 @@ contract Deploy is NetworkConfig {
         IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
         bytes memory creationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
-        (address mined, bytes32 salt) = HookMiner.find(_infrastructure("create2Deployer"), flags, creationCode);
-
-        // Call the selected factory directly so Foundry's default CREATE2 address
-        // cannot disagree with the address used for mining hook permission bits.
-        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
-        require(success && mined.code.length > 0, "Deploy: hook deployment failed");
-        hook = PegDefenseHook(mined);
+        hook = PegDefenseHook(_deploy("hook", creationCode));
         console2.log("PegDefenseHook:", address(hook));
 
         (Currency c0, Currency c1) = address(money) < wethAddress
@@ -193,7 +256,15 @@ contract Deploy is NetworkConfig {
     function _deployOracle(
         Genesis memory g
     ) internal {
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), wethAddress, 6 hours, g.epochStart);
+        oracle = Oracle(
+            _deploy(
+                "oracle",
+                abi.encodePacked(
+                    type(Oracle).creationCode,
+                    abi.encode(address(hook), address(money), wethAddress, 6 hours, g.epochStart, _plan.deployer)
+                )
+            )
+        );
         console2.log("Oracle:", address(oracle));
     }
 
@@ -208,13 +279,21 @@ contract Deploy is NetworkConfig {
     function _deployLpWrapper() internal {
         int24 tickLower = TickMath.minUsableTick(60);
         int24 tickUpper = TickMath.maxUsableTick(60);
-        lpWrapper = new V4PositionWrapper(
-            IPositionManager(_infrastructure("positionManager")),
-            poolKey,
-            tickLower,
-            tickUpper,
-            "Old Money MONEY-WETH LP",
-            "om-MWLP"
+        lpWrapper = V4PositionWrapper(
+            _deploy(
+                "lpWrapper",
+                abi.encodePacked(
+                    type(V4PositionWrapper).creationCode,
+                    abi.encode(
+                        _infrastructure("positionManager"),
+                        poolKey,
+                        tickLower,
+                        tickUpper,
+                        "Old Money MONEY-WETH LP",
+                        "om-MWLP"
+                    )
+                )
+            )
         );
         console2.log("V4PositionWrapper (MONEY/WETH full-range):", address(lpWrapper));
         console2.log("  tickLower:", int256(tickLower));
@@ -224,9 +303,31 @@ contract Deploy is NetworkConfig {
     function _deployRewardPools(
         Genesis memory g
     ) internal {
-        genesisRewardPool = new GenesisRewardPool(address(money), g.epochStart);
-        mainRewardPool = new MainRewardPool(address(money), g.epochStart + 1 days);
-        shareRewardPool = new ShareRewardPool(address(estate), g.epochStart + 1 days);
+        genesisRewardPool = GenesisRewardPool(
+            _deploy(
+                "genesisRewardPool",
+                abi.encodePacked(
+                    type(GenesisRewardPool).creationCode, abi.encode(address(money), g.epochStart, _plan.deployer)
+                )
+            )
+        );
+        mainRewardPool = MainRewardPool(
+            _deploy(
+                "mainRewardPool",
+                abi.encodePacked(
+                    type(MainRewardPool).creationCode, abi.encode(address(money), g.epochStart + 1 days, _plan.deployer)
+                )
+            )
+        );
+        shareRewardPool = ShareRewardPool(
+            _deploy(
+                "shareRewardPool",
+                abi.encodePacked(
+                    type(ShareRewardPool).creationCode,
+                    abi.encode(address(estate), g.epochStart + 1 days, _plan.deployer)
+                )
+            )
+        );
         console2.log("GenesisRewardPool:", address(genesisRewardPool));
         console2.log("MainRewardPool:   ", address(mainRewardPool));
         console2.log("ShareRewardPool:  ", address(shareRewardPool));
@@ -235,8 +336,10 @@ contract Deploy is NetworkConfig {
     function _deployCoreAndInit(
         Genesis memory g
     ) internal {
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury =
+            Treasury(_deploy("treasury", abi.encodePacked(type(Treasury).creationCode, abi.encode(_plan.deployer))));
+        boardroom =
+            Boardroom(_deploy("boardroom", abi.encodePacked(type(Boardroom).creationCode, abi.encode(_plan.deployer))));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         // Pools + airdrop wallet are the addresses that hold un-emitted MONEY; they

@@ -86,7 +86,7 @@ contract OldMoneyInvariants is StdInvariant, Test {
     OldMoneyHandler public handler;
 
     function setUp() public {
-        money = new OldMoney();
+        money = new OldMoney(address(this));
         handler = new OldMoneyHandler(money);
         money.transferTrustees(address(handler));
 

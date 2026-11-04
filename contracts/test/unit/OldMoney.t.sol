@@ -42,7 +42,7 @@ contract OldMoneyTest is BaseTest {
 
         // Deploy from `owner` so owner is initial owner + initial trustees.
         vm.prank(owner);
-        money = new OldMoney();
+        money = new OldMoney(owner);
 
         // Rotate trustees to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -62,7 +62,7 @@ contract OldMoneyTest is BaseTest {
     function test_Constructor_OwnerAndInitialDeployerMint() public {
         // Re-deploy fresh to inspect the constructor effects directly.
         vm.prank(alice);
-        OldMoney fresh = new OldMoney();
+        OldMoney fresh = new OldMoney(alice);
         assertEq(fresh.owner(), alice);
         // 1 unit minted to the deployer for initial LP / sanity.
         assertEq(fresh.balanceOf(alice), 1 ether);

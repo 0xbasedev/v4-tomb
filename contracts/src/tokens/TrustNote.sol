@@ -33,7 +33,9 @@ import {Trustees} from "../governance/Trustees.sol";
  *           - `burnFrom(account, amount)` — trustees-only (not general allowance-based).
  */
 contract TrustNote is ERC20Burnable, Trustees {
-    constructor() ERC20("Trust Note", "TRUSTNOTE") Trustees() {}
+    constructor(
+        address initialTrustees
+    ) ERC20("Trust Note", "TRUSTNOTE") Trustees(initialTrustees) {}
 
     /// @notice Mint $TRUSTNOTE to a recipient. Returns true if balance actually increased.
     function mint(

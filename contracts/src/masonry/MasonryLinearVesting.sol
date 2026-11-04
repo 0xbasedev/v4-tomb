@@ -33,9 +33,13 @@ contract MasonryLinearVesting is Ownable, ReentrancyGuard {
     event Funded(uint256 upfront, uint256 vested);
     event VestedReleased(address indexed beneficiary, uint256 amount);
 
-    constructor(IERC20 asset_, address beneficiary_, uint64 start_, uint64 duration_)
-        Ownable(msg.sender)
-    {
+    constructor(
+        IERC20 asset_,
+        address beneficiary_,
+        uint64 start_,
+        uint64 duration_,
+        address owner_
+    ) Ownable(owner_) {
         if (
             address(asset_) == address(0) || beneficiary_ == address(0) || duration_ == 0
                 || uint256(start_) < block.timestamp
@@ -48,7 +52,10 @@ contract MasonryLinearVesting is Ownable, ReentrancyGuard {
 
     /// @notice Fund exactly once before vesting starts. Upfront tokens are
     /// paid to beneficiary now. Remaining tokens stay fully escrowed.
-    function fund(uint256 upfront, uint256 vestedAmount) external onlyOwner nonReentrant {
+    function fund(
+        uint256 upfront,
+        uint256 vestedAmount
+    ) external onlyOwner nonReentrant {
         if (funded) revert AlreadyFunded();
         if (block.timestamp > start || upfront + vestedAmount == 0) revert InvalidSchedule();
         funded = true;

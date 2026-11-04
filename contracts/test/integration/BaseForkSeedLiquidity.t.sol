@@ -77,7 +77,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy MONEY (we mint for tests).
-        money = new OldMoney();
+        money = new OldMoney(address(this));
         money.mint(address(this), MONEY_BAL);
 
         // Acquire WETH from real ETH via OP-stack predeploy deposit.

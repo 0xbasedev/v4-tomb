@@ -11,8 +11,16 @@ export interface Network {
   testnet: boolean;
   infrastructure: Record<InfrastructureKey, Address | null>;
   deployment: Deployment | null;
+  create3?: {
+    factory: Address;
+    deployer: Address;
+    releaseId: `0x${string}`;
+    hookNonce: number;
+    addresses: Record<Exclude<DeploymentKey, InfrastructureKey>, Address>;
+  } | null;
 }
 export const infrastructureKeys: InfrastructureKey[];
+export const projectDeploymentKeys: Exclude<DeploymentKey, InfrastructureKey>[];
 export const deploymentKeys: DeploymentKey[];
 export function parseNetworks(document: unknown): Network[];
 export function transactionUrl(networks: Network[], chainId: number, hash?: string): string | undefined;

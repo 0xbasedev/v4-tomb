@@ -82,7 +82,7 @@ contract BaseForkLpWrapperTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy MONEY and pre-fund the test contract.
-        money = new OldMoney();
+        money = new OldMoney(address(this));
         money.mint(address(this), MONEY_BAL);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.

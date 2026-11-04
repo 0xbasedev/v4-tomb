@@ -9,6 +9,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
@@ -17,6 +18,8 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
 import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {MasonryCriticalDefense} from "../../src/masonry/MasonryCriticalDefense.sol";
+import {MasonryLevelOracle} from "../../src/masonry/MasonryLevelOracle.sol";
 import {MasonryTaxHook} from "../../src/hooks/MasonryTaxHook.sol";
 import {MasonrySquareHook} from "../../src/hooks/MasonrySquareHook.sol";
 import {MasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisSettlement.sol";
@@ -44,13 +47,13 @@ contract MockTwapLevelHook is MasonryLevelHook {
     constructor(
         IPoolManager manager,
         MasonryGenesisSchedule schedule,
-        uint128 minLiquidity,
+        OracleConfig memory oracleConfig,
         address level,
         address usdc,
         address recipient,
         uint24 fee,
         int24 spacing
-    ) MasonryLevelHook(manager, schedule, minLiquidity, level, usdc, recipient, fee, spacing) {}
+    ) MasonryLevelHook(manager, schedule, oracleConfig, level, usdc, recipient, fee, spacing) {}
 
     function _validatedTwap() internal view override returns (uint256) {
         (uint256 price, bool enabled) = IMockLevelTwap(testHarness).mockTwapSettings();
@@ -62,6 +65,7 @@ contract MockTwapLevelHook is MasonryLevelHook {
 
 contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
     MockMasonryLevel private level;
     MockMasonryUSDC private usdc;
     MasonryGenesisSchedule private schedule;
@@ -89,20 +93,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
             | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG
             | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG;
-        bytes memory args = abi.encode(manager, schedule, uint128(1e15), level, usdc, TREASURY, uint24(3000), int24(60));
-        (, bytes32 salt) =
+        MasonryTaxHook.OracleConfig memory oracleConfig = _nextOracle();
+        bytes memory args = abi.encode(manager, schedule, oracleConfig, level, usdc, TREASURY, uint24(3000), int24(60));
+        (address expected, bytes32 salt) =
             HookMiner.find(address(this), flags, bytes.concat(type(MockTwapLevelHook).creationCode, args));
+        key = _deployOracle(oracleConfig, expected, address(level));
         hook = new MockTwapLevelHook{salt: salt}(
-            manager, schedule, 1e15, address(level), address(usdc), TREASURY, 3000, 60
+            manager, schedule, oracleConfig, address(level), address(usdc), TREASURY, 3000, 60
         );
         level0 = address(level) < address(usdc);
-        key = PoolKey(
-            Currency.wrap(level0 ? address(level) : address(usdc)),
-            Currency.wrap(level0 ? address(usdc) : address(level)),
-            3000,
-            60,
-            IHooks(address(hook))
-        );
         uint160 peg = uint160(level0 ? (uint256(1) << 96) / 1e6 : (uint256(1) << 96) * 1e6);
         manager.initialize(key, peg);
         level.mint(address(this), 1_000_000e18);
@@ -287,7 +286,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             wrong,
             address(this),
             1e16,
-            10_000e6
+            10_000e6,
+            address(this)
         );
     }
 
@@ -309,7 +309,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             key,
             address(this),
             1e16,
-            10_000e6
+            10_000e6,
+            address(this)
         );
     }
 
@@ -325,7 +326,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             key,
             address(this),
             1e16,
-            10_000e6
+            10_000e6,
+            address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         MasonryGenesisStaking staking =
@@ -704,7 +706,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             key,
             address(this),
             1e16,
-            10_000e6
+            10_000e6,
+            address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         settlement = new MasonryGenesisSettlement(vault, guard, router, TREASURY, address(this));
@@ -741,27 +744,45 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertTrue(vm.revertToState(snapshot));
     }
 
+    function _nextOracle() private view returns (MasonryTaxHook.OracleConfig memory) {
+        address expected = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        return MasonryTaxHook.OracleConfig(MasonryLevelOracle(expected), address(this));
+    }
+
+    function _deployOracle(
+        MasonryTaxHook.OracleConfig memory config,
+        address hookAddress,
+        address token
+    ) private returns (PoolKey memory pool) {
+        bool token0 = token < address(usdc);
+        pool = PoolKey(
+            Currency.wrap(token0 ? token : address(usdc)),
+            Currency.wrap(token0 ? address(usdc) : token),
+            3000,
+            60,
+            IHooks(hookAddress)
+        );
+        assertEq(address(new MasonryLevelOracle(pool.toId(), token0, 1e15, hookAddress)), address(config.oracle));
+    }
+
     function _squarePool()
         private
         returns (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey)
     {
         square = new MockMasonryLevel();
+        MasonryCriticalDefense defense = new MasonryCriticalDefense(hook.oracle());
         MasonrySquareHook.RoutingConfig memory config =
-            MasonrySquareHook.RoutingConfig(key, TREASURY, address(this), 1e18, 100e18, 300);
+            MasonrySquareHook.RoutingConfig(key, TREASURY, address(this), 1e18, 100e18, 300, defense);
         IPoolManager manager = hook.poolManager();
         uint160 flags = uint160(address(hook)) & HookMiner.FLAG_MASK;
-        bytes memory args = abi.encode(manager, uint128(1e15), square, usdc, uint24(3000), int24(60), config);
-        (, bytes32 salt) =
+        MasonryTaxHook.OracleConfig memory oracleConfig = _nextOracle();
+        bytes memory args = abi.encode(manager, oracleConfig, square, usdc, uint24(3000), int24(60), config);
+        (address expected, bytes32 salt) =
             HookMiner.find(address(this), flags, bytes.concat(type(MasonrySquareHook).creationCode, args));
-        squareHook = new MasonrySquareHook{salt: salt}(manager, 1e15, address(square), address(usdc), 3000, 60, config);
+        squareKey = _deployOracle(oracleConfig, expected, address(square));
+        squareHook =
+            new MasonrySquareHook{salt: salt}(manager, oracleConfig, address(square), address(usdc), 3000, 60, config);
         bool square0 = squareHook.assetIsCurrency0();
-        squareKey = PoolKey(
-            Currency.wrap(square0 ? address(square) : address(usdc)),
-            Currency.wrap(square0 ? address(usdc) : address(square)),
-            3000,
-            60,
-            IHooks(address(squareHook))
-        );
         uint160 peg = uint160(square0 ? (uint256(1) << 96) / 1e6 : (uint256(1) << 96) * 1e6);
         manager.initialize(squareKey, peg);
         square.mint(address(this), 1_000_000e18);

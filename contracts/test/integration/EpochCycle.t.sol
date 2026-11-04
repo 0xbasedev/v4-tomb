@@ -57,9 +57,9 @@ contract EpochCycleTest is BaseTest {
 
         // 1. Deploy tokens — owner becomes initial trustees on each.
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new OldMoney(owner);
+        estate = new Estate(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         vm.stopPrank();
 
         // 2. Mock oracle at parity (1 MONEY = 1 WETH).
@@ -67,8 +67,8 @@ contract EpochCycleTest is BaseTest {
 
         // 3. Deploy core contracts.
         vm.startPrank(owner);
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
 
         // 4. Initialize boardroom + treasury. owner becomes operator on both.
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));

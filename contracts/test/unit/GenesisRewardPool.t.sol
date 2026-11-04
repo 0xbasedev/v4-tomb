@@ -38,10 +38,10 @@ contract GenesisRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney();
+        money = new OldMoney(owner);
 
         vm.prank(owner);
-        pool = new GenesisRewardPool(address(money), poolStart);
+        pool = new GenesisRewardPool(address(money), poolStart, owner);
 
         lp = new MockLp("LP token", "LP");
         lp2 = new MockLp("LP token 2", "LP2");
@@ -72,7 +72,7 @@ contract GenesisRewardPoolTest is BaseTest {
 
     function test_Constructor_RejectsPastStart() public {
         vm.expectRevert(GenesisRewardPool.StartTimeInPast.selector);
-        new GenesisRewardPool(address(money), block.timestamp - 1);
+        new GenesisRewardPool(address(money), block.timestamp - 1, address(this));
     }
 
     // ---------------------------------------------------------------------

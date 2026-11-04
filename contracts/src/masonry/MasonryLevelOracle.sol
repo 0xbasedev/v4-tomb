@@ -41,10 +41,12 @@ contract MasonryLevelOracle is IMasonryValidatedLevelTwap {
     constructor(
         PoolId pool,
         bool level0,
-        uint128 minLiquidity_
+        uint128 minLiquidity_,
+        address hook_
     ) {
         if (minLiquidity_ == 0) revert InvalidLiquidity();
-        hook = msg.sender;
+        if (hook_ == address(0)) revert OnlyHook();
+        hook = hook_;
         officialPool = pool;
         levelIsCurrency0 = level0;
         minLiquidity = minLiquidity_;

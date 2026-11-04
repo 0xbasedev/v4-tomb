@@ -153,14 +153,14 @@ contract BoardroomInvariants is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         // 1. Deploy tokens (deployer = trustees of each).
-        money = new OldMoney();
-        estate = new Estate(block.timestamp + 1 hours, communityFund, devFund);
+        money = new OldMoney(address(this));
+        estate = new Estate(block.timestamp + 1 hours, communityFund, devFund, address(this));
 
         // 2. Mock treasury.
         treasury = new MockTreasury();
 
         // 3. Boardroom (deployer is the initial operator).
-        boardroom = new Boardroom();
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         // 4. Mint ESTATE supply via distributeReward, then push to test actors.

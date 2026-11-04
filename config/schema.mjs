@@ -1,9 +1,12 @@
 export const infrastructureKeys = [
   'weth', 'poolManager', 'positionManager', 'permit2', 'universalRouter', 'create2Deployer',
 ];
-export const deploymentKeys = [
+export const projectDeploymentKeys = [
   'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'lpWrapper',
   'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'timelock', 'miniSwapRouter',
+];
+export const deploymentKeys = [
+  ...projectDeploymentKeys,
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
 ];
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -39,11 +42,31 @@ export function parseNetworks(document) {
     for (const key of infrastructureKeys) {
       if (infrastructure[key] !== null && !address(infrastructure[key])) fail(`invalid infrastructure.${key}`);
     }
+    const create3 = network.create3;
+    if (create3 != null) {
+      if (!object(create3) || !address(create3.factory) || !address(create3.deployer)
+        || typeof create3.releaseId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(create3.releaseId)
+        || BigInt(create3.releaseId) === 0n || !Number.isSafeInteger(create3.hookNonce) || create3.hookNonce < 0
+        || !object(create3.addresses)) fail('invalid CREATE3 plan');
+      for (const key of projectDeploymentKeys) {
+        if (!address(create3.addresses[key])) fail(`invalid create3.addresses.${key}`);
+      }
+      const planned = projectDeploymentKeys.map((key) => create3.addresses[key].toLowerCase());
+      if (new Set(planned).size !== planned.length) fail('CREATE3 addresses must be unique');
+      if ((BigInt(create3.addresses.hook) & 0x3fffn) !== 0x1088n) fail('planned hook permission bits must be 0x1088');
+    }
     if (deployment === null) continue;
     if (!object(deployment)) fail('deployment must be complete or null');
-    if (!address(infrastructure.create2Deployer)) fail('a deployed network requires create2Deployer');
+    if (create3 == null && !address(infrastructure.create2Deployer)) fail('a deployed network requires create2Deployer');
     for (const key of deploymentKeys) {
       if (!address(deployment[key])) fail(`invalid deployment.${key}`);
+    }
+    if (create3 != null) {
+      for (const key of projectDeploymentKeys) {
+        if (deployment[key].toLowerCase() !== create3.addresses[key].toLowerCase()) {
+          fail(`deployment.${key} disagrees with CREATE3 plan`);
+        }
+      }
     }
     if (typeof deployment.deployBlock !== 'string' || !/^(0|[1-9][0-9]*)$/.test(deployment.deployBlock)) {
       fail('deployBlock must be a nonnegative decimal string');

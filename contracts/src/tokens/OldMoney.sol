@@ -64,9 +64,11 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
     error AlreadyDistributed();
     error ZeroAddress();
 
-    constructor() ERC20("Old Money", "MONEY") ERC20Permit("Old Money") Trustees() {
+    constructor(
+        address initialTrustees
+    ) ERC20("Old Money", "MONEY") ERC20Permit("Old Money") Trustees(initialTrustees) {
         // Tomb-faithful: mint 1 unit to the deployer for initial pool setup / sanity check.
-        _mint(msg.sender, 1 ether);
+        _mint(initialTrustees, 1 ether);
     }
 
     // ---------------------------------------------------------------------
