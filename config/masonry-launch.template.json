@@ -37,6 +37,21 @@
     "farmsCompoundCooldownSeconds": 10800,
     "genesisCompoundCooldownSeconds": 10800,
     "farmEmissionDays": 365,
-    "operationalVestingDays": 180
+    "operationalVestingDays": 180,
+    "genesisLevelUsdcLpBurnFeeBps": 50,
+    "squareTaxPolBps": 1200,
+    "squareTaxUsdcReserveBps": 2000,
+    "squareTaxSquareReserveBps": 6800,
+    "criticalDefenseEntryBps": 9000,
+    "criticalDefenseExitBps": 10100,
+    "criticalRecoveryEpochs": 2,
+    "epochSeconds": 21600,
+    "criticalOracleMaxAgeSeconds": 1800,
+    "governanceTimelocksEnabled": false,
+    "ownerTradingPauseEnabled": false
+  },
+  "genesisBurnExecution": {
+    "maxFeeSharesPerCallBaseUnits": "1000000000000000000000",
+    "maxUsdcPerCallBaseUnits": "1000000000"
   }
 }
