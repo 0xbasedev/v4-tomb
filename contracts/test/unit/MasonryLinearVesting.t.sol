@@ -60,8 +60,8 @@ contract MasonryLinearVestingTest is Test {
     }
 
     function test_OnlyOwnerMayFund() public {
-        vm.prank(beneficiary);
         vm.expectRevert();
+        vm.prank(beneficiary);
         vesting.fund(100e18, 900e18);
     }
 }
