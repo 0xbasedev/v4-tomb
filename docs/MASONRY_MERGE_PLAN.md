@@ -24,6 +24,9 @@ Current implementation here:
   hard 1,200-bps Fire Tax rate calculations, nonlinear peg-sensitive target,
   projected-trade/recovery combination, fixed seven-hour recovery floor, and
   strict fresh-TWAP-above-1.01 expansion eligibility with a 2% epoch ceiling.
+- `contracts/src/masonry/MasonryCompoundGate.sol`: hard-coded three-hour cooldown
+  keyed by beneficiary and unique Genesis/Farm pool; both manual and automatic
+  execution adapters must consume the same gate before compounding.
 - `contracts/src/masonry/MasonryLinearVesting.sol`: separately funded upfront
   and non-revocable linear vesting (one immutable beneficiary/asset per vault),
   permissionless beneficiary-only release, no admin sweep and exact funding checks.
