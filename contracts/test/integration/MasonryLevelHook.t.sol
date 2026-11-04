@@ -2,20 +2,23 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {PoolId} from "v4-core/src/types/PoolId.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
-import {MasonryLevelHook, IMasonryLevelTwap} from "../../src/hooks/MasonryLevelHook.sol";
+import {MasonryLevelHook} from "../../src/hooks/MasonryLevelHook.sol";
 import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
 import {MockMasonryLevel, MockMasonryUSDC, MockMasonryBurnGuard} from "../unit/MasonryGenesisLPBurnFee.t.sol";
+import {MasonryBuybackGuard} from "../../src/masonry/MasonryBuybackGuard.sol";
 import {MasonryLevelUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
 import {MasonryGenesisPass} from "../../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisStaking.sol";
@@ -27,22 +30,47 @@ import {
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
-contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
+interface IMockLevelTwap {
+    function mockTwapSettings() external view returns (uint256 price, bool enabled);
+}
+
+contract MockTwapLevelHook is MasonryLevelHook {
+    constructor(
+        IPoolManager manager,
+        MasonryGenesisSchedule schedule,
+        uint128 minLiquidity,
+        address level,
+        address usdc,
+        address recipient,
+        uint24 fee,
+        int24 spacing
+    ) MasonryLevelHook(manager, schedule, minLiquidity, level, usdc, recipient, fee, spacing) {}
+
+    function _validatedTwap() internal view override returns (uint256) {
+        (uint256 price, bool enabled) = IMockLevelTwap(testHarness).mockTwapSettings();
+        return enabled ? price : super._validatedTwap();
+    }
+
+    address private immutable testHarness = msg.sender;
+}
+
+contract MasonryLevelHookTest is Test, IMockLevelTwap {
+    using StateLibrary for IPoolManager;
     MockMasonryLevel private level;
     MockMasonryUSDC private usdc;
     MasonryGenesisSchedule private schedule;
     MasonryLevelHook private hook;
     PoolSwapTest private swaps;
+    PoolModifyLiquidityTest private liquidity;
     PoolKey private key;
     bool private level0;
     int24 private center;
     uint256 private twap = 1e18;
+    bool private mockTwap = true;
     address private constant TREASURY = address(0x777);
 
-    function validatedPrice(
-        PoolId
-    ) external view returns (uint256) {
-        return twap;
+    function mockTwapSettings() external view returns (uint256, bool) {
+        return (twap, mockTwap);
     }
 
     function setUp() public {
@@ -51,12 +79,15 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         schedule = new MasonryGenesisSchedule(block.timestamp + 1 days);
         PoolManager manager = new PoolManager(address(this));
         swaps = new PoolSwapTest(manager);
-        PoolModifyLiquidityTest liquidity = new PoolModifyLiquidityTest(manager);
-        uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG;
-        bytes memory args = abi.encode(manager, schedule, this, level, usdc, TREASURY, uint24(3000), int24(60));
-        (, bytes32 salt) = HookMiner.find(address(this), flags, bytes.concat(type(MasonryLevelHook).creationCode, args));
-        hook = new MasonryLevelHook{salt: salt}(
-            manager, schedule, this, address(level), address(usdc), TREASURY, 3000, 60
+        liquidity = new PoolModifyLiquidityTest(manager);
+        uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
+            | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG
+            | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG;
+        bytes memory args = abi.encode(manager, schedule, uint128(1e15), level, usdc, TREASURY, uint24(3000), int24(60));
+        (, bytes32 salt) =
+            HookMiner.find(address(this), flags, bytes.concat(type(MockTwapLevelHook).creationCode, args));
+        hook = new MockTwapLevelHook{salt: salt}(
+            manager, schedule, 1e15, address(level), address(usdc), TREASURY, 3000, 60
         );
         level0 = address(level) < address(usdc);
         key = PoolKey(
@@ -254,10 +285,31 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         );
     }
 
-    function testGenesisDepositRedeemsRealVaultFeeAndRetriesUsdcBuyback() public {
+    function testCollectorRejectsMismatchedGuardPool() public {
         MasonryLevelUsdcVault vault = _vault();
         MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
-        guard.setSafe(false);
+        PoolKey memory wrong = key;
+        wrong.fee = 1000;
+        guard.setPoolKey(wrong);
+        MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
+
+        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidPool.selector);
+        new MasonryGenesisLPBurnFee(
+            vault,
+            IMasonryBurnableLevel(address(level)),
+            usdc,
+            IMasonryExactInputV4Router(address(router)),
+            guard,
+            key,
+            address(this),
+            1e16,
+            10_000e6
+        );
+    }
+
+    function testGenesisDepositRedeemsRealVaultFeeAndRetriesUsdcBuyback() public {
+        MasonryLevelUsdcVault vault = _vault();
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
         MasonryGenesisLPBurnFee collector = new MasonryGenesisLPBurnFee(
             vault,
             IMasonryBurnableLevel(address(level)),
@@ -286,6 +338,8 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
 
         uint256 gross = 1e16;
         vault.deposit(gross * 2, type(uint256).max, type(uint256).max, member);
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        hook.checkpoint();
         vm.warp(schedule.lpOpens());
         vm.prank(member);
         staking.deposit(1, gross);
@@ -296,7 +350,7 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         assertGt(collector.pendingBurnUSDC(), 0);
         assertEq(collector.pendingFeeShares(), 0);
 
-        guard.setSafe(true);
+        _swap(!level0, -1e6);
         vm.prank(member);
         staking.deposit(1, gross);
         assertEq(collector.pendingBurnUSDC(), 0);
@@ -307,6 +361,119 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         (uint256 shares,,) = staking.positions(1, member);
         assertEq(shares, gross * 2 - gross / 100);
         assertEq(vault.balanceOf(address(staking)), shares);
+    }
+
+    function testOracleWarmupSellAndSameTimestampPriceMove() public {
+        mockTwap = false;
+        _swap(!level0, -1e6);
+        (,, bool valid) = hook.oracle().latestValidatedTwap();
+        assertFalse(valid);
+        vm.expectRevert();
+        _swap(level0, -10e18);
+
+        vm.warp(schedule.start() - 30 minutes);
+        _warmOracle();
+        (uint256 beforePrice,, bool ready) = hook.oracle().latestValidatedTwap();
+        assertTrue(ready);
+        assertApproxEqAbs(beforePrice, 1e18, 0.0002e18);
+        _swap(level0, -10e18);
+        assertEq(level.totalBurned(), 0.3e18);
+
+        _swap(!level0, -1000e6);
+        (uint256 afterPrice, uint256 observedAt, bool stillReady) = hook.oracle().latestValidatedTwap();
+        assertTrue(stillReady);
+        assertEq(afterPrice, beforePrice);
+        assertEq(observedAt, block.timestamp);
+
+        vm.warp(observedAt + 30 minutes + 1);
+        hook.checkpoint();
+        (,, valid) = hook.oracle().latestValidatedTwap();
+        assertFalse(valid);
+        assertEq(hook.oracle().lastPriceChange(), observedAt);
+    }
+
+    function testOracleRejectsWindowContainingThinLiquidity() public {
+        vm.warp(schedule.start());
+        hook.checkpoint();
+        vm.warp(schedule.start() + 10 minutes);
+        liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, -1e16, 0), "");
+        liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 120, center + 120, -1e16, 0), "");
+        vm.warp(schedule.start() + 11 minutes);
+        liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
+        vm.warp(schedule.start() + 30 minutes);
+        _swap(!level0, -1e6);
+        (,, bool valid) = hook.oracle().latestValidatedTwap();
+        assertFalse(valid);
+
+        vm.warp(schedule.start() + 41 minutes);
+        _swap(!level0, -1e6);
+        (,, valid) = hook.oracle().latestValidatedTwap();
+        assertTrue(valid);
+    }
+
+    function testBuybackPreviewDoesNotMovePoolOrRefreshOracle() public {
+        vm.warp(schedule.start());
+        _warmOracle();
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
+        vm.warp(schedule.start() + 31 minutes);
+        (uint160 sqrtBefore,,,) = hook.poolManager().getSlot0(hook.officialPool());
+        uint256 lastPriceChange = hook.oracle().lastPriceChange();
+        uint256 quoted = guard.minimumLevelOut(10e6);
+        (uint160 sqrtAfter,,,) = hook.poolManager().getSlot0(hook.officialPool());
+        assertEq(sqrtAfter, sqrtBefore);
+        assertEq(hook.oracle().lastPriceChange(), lastPriceChange);
+
+        uint256 levelBefore = level.balanceOf(address(this));
+        _swap(!level0, -10e6);
+        assertEq(level.balanceOf(address(this)) - levelBefore, quoted);
+    }
+
+    function testBuybackGuardRejectsExcessiveImpactAndSpotDeviation() public {
+        vm.warp(schedule.start());
+        _warmOracle();
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
+        vm.expectRevert(MasonryBuybackGuard.UnsafePrice.selector);
+        guard.minimumLevelOut(500e6);
+        _swap(!level0, -1000e6);
+        vm.expectRevert(MasonryBuybackGuard.UnsafePrice.selector);
+        guard.minimumLevelOut(1e6);
+    }
+
+    function testBuybackPreviewMatchesExecutionAcrossInitializedTick() public {
+        vm.warp(schedule.start());
+        _warmOracle();
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 300, 300, 300);
+        IPoolManager manager = hook.poolManager();
+        (uint160 sqrtBefore,,,) = manager.getSlot0(hook.officialPool());
+        uint128 liquidityBefore = manager.getLiquidity(hook.officialPool());
+        uint160 nextBoundary = TickMath.getSqrtPriceAtTick(level0 ? center + 120 : center - 120);
+        uint256 netInput = level0
+            ? SqrtPriceMath.getAmount1Delta(sqrtBefore, nextBoundary, liquidityBefore, true)
+            : SqrtPriceMath.getAmount0Delta(nextBoundary, sqrtBefore, liquidityBefore, true);
+        uint256 usdcInput = netInput * 1000 / 997 + 1e6;
+        uint256 quote = guard.minimumLevelOut(usdcInput);
+        assertEq(manager.getLiquidity(hook.officialPool()), liquidityBefore);
+
+        uint256 levelBefore = level.balanceOf(address(this));
+        _swap(!level0, -int256(usdcInput));
+        assertLt(manager.getLiquidity(hook.officialPool()), liquidityBefore);
+        assertEq(level.balanceOf(address(this)) - levelBefore, quote);
+    }
+
+    function testBuybackGuardRejectsTwapExecutionLossWithinImpactLimit() public {
+        vm.warp(schedule.start());
+        _warmOracle();
+        // A 0.01% execution tolerance is smaller than the pool's 0.3% LP fee.
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 1);
+        vm.expectRevert(MasonryBuybackGuard.UnsafePrice.selector);
+        guard.minimumLevelOut(1e6);
+    }
+
+    function _warmOracle() private {
+        uint256 start = block.timestamp;
+        hook.checkpoint();
+        vm.warp(start + 30 minutes);
+        _swap(!level0, -1e6);
     }
 
     function _vault() private returns (MasonryLevelUsdcVault vault) {

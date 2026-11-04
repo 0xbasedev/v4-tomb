@@ -40,7 +40,9 @@ interface IMasonryExactInputV4Router {
 /// a positive min output is the explicit authorization for this buyback.
 /// Implementations MUST NOT rely only on the current manipulable spot tick.
 interface IMasonryBuybackExecutionGuard {
-    function minimumLevelOut(uint256 usdcAmount) external view returns (uint256);
+    function officialPool() external view returns (PoolId);
+
+    function minimumLevelOut(uint256 usdcAmount) external returns (uint256);
 }
 
 /// @notice Genesis LEVEL/USDC LP deposit/auto-compound fee: collect exactly
@@ -134,7 +136,9 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         ) revert InvalidPool();
         if (c0 >= c1) revert InvalidPool();
 
-        if (PoolId.unwrap(lpVault_.poolKey().toId()) != PoolId.unwrap(buybackPoolKey_.toId())) revert InvalidPool();
+        PoolId pool = buybackPoolKey_.toId();
+        if (PoolId.unwrap(lpVault_.poolKey().toId()) != PoolId.unwrap(pool)
+            || PoolId.unwrap(guard_.officialPool()) != PoolId.unwrap(pool)) revert InvalidPool();
 
         lpVault = lpVault_;
         level = level_;

@@ -12,20 +12,15 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {MasonryGenesisSchedule} from "../masonry/MasonryGenesisSchedule.sol";
+import {MasonryLevelOracle} from "../masonry/MasonryLevelOracle.sol";
+import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
 import {MasonryRules} from "../masonry/MasonryRules.sol";
 import {IMasonryBurnableLevel} from "../masonry/MasonryGenesisLPBurnFee.sol";
-
-/// @notice Adapter must validate TWAP freshness and manipulation resistance for this exact pool.
-interface IMasonryLevelTwap {
-    function validatedPrice(
-        PoolId pool
-    ) external view returns (uint256 usdcPerLevelWad);
-}
 
 /// @notice LEVEL sell tax on the canonical, static-fee LEVEL/USDC v4 pool.
 contract MasonryLevelHook is BaseV4Hook {
@@ -37,10 +32,10 @@ contract MasonryLevelHook is BaseV4Hook {
     uint16 public constant MAX_TAX_BPS = MasonryRules.HARD_MAX_FIRE_TAX_BPS;
     uint16 private constant BASE_TAX = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
     uint256 private constant BPS = 10_000;
-    uint256 private constant Q96 = 1 << 96;
 
     MasonryGenesisSchedule public immutable schedule;
-    IMasonryLevelTwap public immutable oracle;
+    MasonryLevelOracle public immutable oracle;
+    uint160 private recordedSqrtPrice;
     address public immutable level;
     address public immutable taxRecipient;
     PoolId public immutable officialPool;
@@ -64,7 +59,7 @@ contract MasonryLevelHook is BaseV4Hook {
     constructor(
         IPoolManager manager,
         MasonryGenesisSchedule schedule_,
-        IMasonryLevelTwap oracle_,
+        uint128 minOracleLiquidity,
         address level_,
         address usdc,
         address recipient,
@@ -72,12 +67,11 @@ contract MasonryLevelHook is BaseV4Hook {
         int24 tickSpacing
     ) BaseV4Hook(manager) {
         if (
-            address(schedule_).code.length == 0 || address(oracle_).code.length == 0 || level_ == usdc
-                || recipient == address(0) || lpFee >= LPFeeLibrary.MAX_LP_FEE
-                || IERC20Metadata(level_).decimals() != 18 || IERC20Metadata(usdc).decimals() != 6
+            address(schedule_).code.length == 0 || level_ == usdc || recipient == address(0)
+                || lpFee >= LPFeeLibrary.MAX_LP_FEE || IERC20Metadata(level_).decimals() != 18
+                || IERC20Metadata(usdc).decimals() != 6
         ) revert InvalidConfiguration();
         schedule = schedule_;
-        oracle = oracle_;
         level = level_;
         taxRecipient = recipient;
         levelIsCurrency0 = level_ < usdc;
@@ -88,10 +82,15 @@ contract MasonryLevelHook is BaseV4Hook {
             tickSpacing: tickSpacing,
             hooks: IHooks(address(this))
         }).toId();
+        oracle = new MasonryLevelOracle(officialPool, levelIsCurrency0, minOracleLiquidity);
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory permissions) {
         permissions.beforeInitialize = true;
+        permissions.afterInitialize = true;
+        permissions.afterSwap = true;
+        permissions.afterAddLiquidity = true;
+        permissions.afterRemoveLiquidity = true;
         permissions.beforeSwap = true;
         permissions.beforeSwapReturnDelta = true;
     }
@@ -103,6 +102,67 @@ contract MasonryLevelHook is BaseV4Hook {
     ) external view override onlyPoolManager returns (bytes4) {
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(officialPool)) revert UnknownPool();
         return IHooks.beforeInitialize.selector;
+    }
+
+    function afterInitialize(
+        address,
+        PoolKey calldata,
+        uint160 sqrtPrice,
+        int24 tick
+    ) external override onlyPoolManager returns (bytes4) {
+        recordedSqrtPrice = sqrtPrice;
+        oracle.record(tick, 0, false);
+        return IHooks.afterInitialize.selector;
+    }
+
+    function afterAddLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external override onlyPoolManager returns (bytes4, BalanceDelta) {
+        _recordPool(false);
+        return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
+    function afterRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external override onlyPoolManager returns (bytes4, BalanceDelta) {
+        _recordPool(false);
+        return (IHooks.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
+    function afterSwap(
+        address,
+        PoolKey calldata,
+        SwapParams calldata,
+        BalanceDelta,
+        bytes calldata
+    ) external override onlyPoolManager returns (bytes4, int128) {
+        _recordPool(true);
+        return (IHooks.afterSwap.selector, 0);
+    }
+
+    /// @notice Saves a history checkpoint without refreshing the last-price-change time.
+    function checkpoint() external {
+        _recordPool(false);
+    }
+
+    function _recordPool(
+        bool swap
+    ) private {
+        (uint160 sqrtPrice, int24 tick,,) = poolManager.getSlot0(officialPool);
+        if (sqrtPrice == 0) revert UnknownPool();
+        bool priceChanged = swap && sqrtPrice != recordedSqrtPrice;
+        recordedSqrtPrice = sqrtPrice;
+        oracle.record(tick, poolManager.getLiquidity(officialPool), priceChanged);
     }
 
     function beforeSwap(
@@ -145,7 +205,7 @@ contract MasonryLevelHook is BaseV4Hook {
     ) private returns (uint256 fee, uint16 rate) {
         bool exactInput = params.amountSpecified < 0;
         uint16 recovery = MasonryRules.recoveryFloorBps(raisedBps, BASE_TAX, raisedAt, block.timestamp);
-        uint256 twap = oracle.validatedPrice(officialPool);
+        uint256 twap = _validatedTwap();
         if (twap == 0) revert InvalidOraclePrice();
         uint16 ordinaryFloor = MasonryRules.effectiveSellTaxBps(_target(twap), recovery, BASE_TAX);
         uint16 minimum = genesis && ordinaryFloor < GENESIS_MIN_TAX_BPS ? GENESIS_MIN_TAX_BPS : ordinaryFloor;
@@ -158,7 +218,9 @@ contract MasonryLevelHook is BaseV4Hook {
             preview.amountSpecified += int256(FullMath.mulDiv(gross, minimum, BPS));
         }
         (uint256 input, uint160 sqrtPrice) = _project(key, preview);
-        uint16 target = MasonryRules.effectiveSellTaxBps(_target(twap), _target(_price(sqrtPrice)), BASE_TAX);
+        uint16 target = MasonryRules.effectiveSellTaxBps(
+            _target(twap), _target(MasonryLevelPrice.fromSqrtPrice(sqrtPrice, levelIsCurrency0)), BASE_TAX
+        );
         if (target > raisedBps || (block.timestamp - raisedAt >= MasonryRules.FIRE_TAX_RECOVERY && target > BASE_TAX)) {
             raisedBps = target;
             raisedAt = block.timestamp;
@@ -209,12 +271,8 @@ contract MasonryLevelHook is BaseV4Hook {
         }
     }
 
-    function _price(
-        uint160 sqrtPrice
-    ) private view returns (uint256) {
-        // Pool prices use raw units. Normalize 18-decimal LEVEL against 6-decimal USDC.
-        if (levelIsCurrency0) return FullMath.mulDiv(FullMath.mulDiv(sqrtPrice, sqrtPrice, Q96), 1e30, Q96);
-        return FullMath.mulDiv(FullMath.mulDiv(Q96, 1e30, sqrtPrice), Q96, sqrtPrice);
+    function _validatedTwap() internal view virtual returns (uint256) {
+        return oracle.validatedPrice(officialPool);
     }
 
     function _target(

@@ -6,6 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -66,6 +67,9 @@ contract MockMasonryRedeemableVault is ERC20 {
 
 contract MockMasonryBurnGuard is IMasonryBuybackExecutionGuard {
     bool public safeToTrade = true;
+    PoolId public officialPool;
+
+    function setPoolKey(PoolKey memory key_) external { officialPool = PoolIdLibrary.toId(key_); }
 
     function setSafe(bool value) external { safeToTrade = value; }
     function minimumLevelOut(uint256 usdcAmount) external view returns (uint256) {
@@ -130,6 +134,7 @@ contract MasonryGenesisLPBurnFeeTest is Test {
         });
 
         vault.setPoolKey(key);
+        guard.setPoolKey(key);
         collector = new MasonryGenesisLPBurnFee(
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(level)),
