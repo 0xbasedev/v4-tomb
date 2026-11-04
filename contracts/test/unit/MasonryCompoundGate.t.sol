@@ -33,8 +33,8 @@ contract MasonryCompoundGateTest is Test {
     }
 
     function test_UnauthorizedExecutorIsRejected() public {
-        vm.prank(USER);
         vm.expectRevert(MasonryCompoundGate.NotExecutor.selector);
+        vm.prank(USER);
         gate.consume(USER, POOL_A);
     }
 
