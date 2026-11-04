@@ -3,11 +3,12 @@ import { Link, NavLink, Navigate, Outlet, Route, Routes, useLocation } from "rea
 import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { networks } from "../lib/networks";
 import { Gauge } from "./Gauge";
+import { AdminPage, BridgePage, WizardPage } from "./setup/SetupPages";
 import { durationDays, lpDay, percent, policy, sampleTargetBps, tiers } from "./policy";
 
 const routes = [
   ["/dashboard", "Dashboard"], ["/genesis", "Genesis"], ["/farm", "Farm"],
-  ["/masonry", "Masonry"], ["/swap", "Swap"], ["/docs", "Docs"],
+  ["/masonry", "Masonry"], ["/swap", "Swap"], ["/bridge", "Bridge"], ["/docs", "Docs"], ["/admin", "Admin"],
 ] as const;
 
 function Wallet() {
@@ -45,7 +46,7 @@ function Layout() {
   const account = useAccount();
   const network = networks.find(({ id }) => id === (account.isConnected ? account.chainId : activeChain));
   useEffect(() => {
-    const title = routes.find(([path]) => path === pathname)?.[1];
+    const title = pathname === "/wizard" ? "Setup Wizard" : routes.find(([path]) => path === pathname)?.[1];
     document.title = title ? `${title} · xTOMB` : "xTOMB";
   }, [pathname]);
   return (
@@ -233,7 +234,9 @@ export function XTombApp() {
     <Route path="vault" element={<Navigate to="/genesis" replace />} />
     <Route path="club" element={<Navigate to="/masonry" replace />} />
     <Route path="notes" element={<Navigate to="/docs" replace />} />
-    <Route path="admin" element={<Navigate to="/dashboard" replace />} />
+    <Route path="wizard" element={<WizardPage />} />
+    <Route path="admin" element={<AdminPage />} />
+    <Route path="bridge" element={<BridgePage />} />
     <Route path="*" element={<Heading title="Page unavailable"><Link to="/">Return home</Link></Heading>} />
   </Route></Routes>;
 }

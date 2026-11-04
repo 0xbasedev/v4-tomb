@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { sameWalletSession } from '../src/lib/walletSession';
 
-const routes = ['/', '/dashboard', '/genesis', '/farm', '/masonry', '/swap', '/docs', '/club', '/vault', '/notes', '/admin'];
+const routes = ['/', '/dashboard', '/genesis', '/farm', '/masonry', '/swap', '/docs', '/club', '/vault', '/notes', '/admin', '/wizard', '/bridge'];
 for (const width of [1280, 390, 320]) {
   test(`all routes render without errors or overflow at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
