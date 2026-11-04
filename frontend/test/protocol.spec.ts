@@ -11,7 +11,11 @@ for (const width of [1280, 390, 320]) {
       await page.goto(route);
       await expect(page.locator('h1')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-      if (route !== '/') await expect(page.getByRole('status')).toContainText('no protocol deployment configured');
+      if (route === '/wizard' || route === '/admin') {
+        await expect(page.getByRole('status')).toContainText('Admin can check deployed contracts and schedule Genesis');
+      } else if (route !== '/') {
+        await expect(page.getByRole('status')).toContainText('no protocol deployment configured');
+      }
     }
     expect(errors).toEqual([]);
   });

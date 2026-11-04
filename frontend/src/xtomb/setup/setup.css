@@ -25,7 +25,7 @@
 .ops-section-head .label { letter-spacing: .14em; }
 .ops-workspace p { font-size: .9rem; }
 .ops-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-block: 16px; }
-.ops-fields label, .ops-field { display: grid; gap: 7px; min-width: 0; color: var(--ash); font-size: .83rem; }
+.ops-input-group, .ops-field { display: grid; align-content: start; gap: 7px; min-width: 0; color: var(--ash); font-size: .83rem; }
 .ops-field { max-width: 540px; margin-block: 16px; }
 .ops-fields input, .ops-field input {
   width: 100%;
@@ -39,6 +39,9 @@
   font: .83rem var(--mono);
 }
 .ops-meta { color: var(--muted); font-size: .8rem !important; }
+.ops-help { color: var(--ash); font-size: .83rem !important; line-height: 1.55; overflow-wrap: anywhere; }
+.ops-explainer { padding-left: 20px; color: var(--ash); font-size: .9rem; line-height: 1.55; }
+.ops-explainer li + li { margin-top: 5px; }
 .ops-detail { margin-block: 13px; padding: 13px 0; border-top: 1px solid var(--line); }
 .ops-detail summary { color: var(--bone); font-weight: 650; font-size: .92rem; }
 .ops-detail p { margin-top: 10px; }

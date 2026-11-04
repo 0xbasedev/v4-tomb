@@ -169,8 +169,8 @@ export function launchFrom(fields: Fields, requireFuture = true) {
   const addresses = Object.fromEntries(identityFields.map(([field, label]) => [field, address(fields[field], label)]));
   const releaseId = fields.releaseId.trim();
   if (!/^0x[\da-f]{64}$/i.test(releaseId) || BigInt(releaseId) === 0n) throw new Error("Enter a 32-byte release ID or generate one.");
-  const start = Math.floor(Date.parse(fields.genesisStart) / 1000);
-  if (!Number.isSafeInteger(start) || start <= 0 || (requireFuture && start * 1000 <= Date.now())) {
+  const start = fields.genesisStart ? Math.floor(Date.parse(fields.genesisStart) / 1000) : 0;
+  if (fields.genesisStart && (!Number.isSafeInteger(start) || start <= 0 || (requireFuture && start * 1000 <= Date.now()))) {
     throw new Error(requireFuture ? "Choose a future Genesis start time." : "Enter the configured Genesis start time.");
   }
   const amounts = Object.fromEntries(supplyFields.map(([field, label]) => [field, whole(fields, field, label)]));

@@ -68,7 +68,16 @@ contract MasonryGenesisStakingTest is Test {
         level = new MockMasonryLevel();
         usdc = new MockMasonryUSDC();
         vault = new MockMasonryRedeemableVault(level, usdc);
-        schedule = new MasonryGenesisSchedule(block.timestamp + 2 days);
+        _setupGenesis(block.timestamp + 2 days);
+        _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 50e6);
+        _buy(PRO, MasonryGenesisPass.Tier.Pro, 100e6);
+        _buy(ULTRA, MasonryGenesisPass.Tier.Ultra, 500e6);
+    }
+
+    function _setupGenesis(
+        uint256 start
+    ) private {
+        schedule = new MasonryGenesisSchedule(start, address(this));
         pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         address c0 = address(level) < address(usdc) ? address(level) : address(usdc);
         address c1 = address(level) < address(usdc) ? address(usdc) : address(level);
@@ -93,9 +102,40 @@ contract MasonryGenesisStakingTest is Test {
         level.mint(address(this), 7000e18);
         level.approve(address(staking), 7000e18);
         staking.fund();
+    }
+
+    function testDeferredGenesisCanBeFundedAndScheduledExactlyOnce() public {
+        _setupGenesis(0);
+        assertTrue(staking.funded());
+        assertFalse(schedule.active());
+        assertFalse(schedule.lpOpen());
+        assertEq(schedule.end(), 0);
+        vm.prank(BASIC);
+        vm.expectRevert(MasonryGenesisPass.InvalidPurchase.selector);
+        pass.purchase(MasonryGenesisPass.Tier.Genesis);
+
+        uint256 start = block.timestamp + 2 days;
+        vm.prank(BASIC);
+        vm.expectRevert(MasonryGenesisSchedule.Unauthorized.selector);
+        schedule.schedule(start);
+        vm.expectRevert(MasonryGenesisSchedule.InvalidStart.selector);
+        schedule.schedule(block.timestamp);
+        schedule.schedule(start);
+        vm.expectRevert(MasonryGenesisSchedule.AlreadyScheduled.selector);
+        schedule.schedule(start + 1 days);
+
         _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 50e6);
-        _buy(PRO, MasonryGenesisPass.Tier.Pro, 100e6);
-        _buy(ULTRA, MasonryGenesisPass.Tier.Ultra, 500e6);
+        vm.warp(start - 1);
+        assertFalse(schedule.active());
+        vm.warp(start);
+        assertTrue(schedule.active());
+        vm.warp(start + 1 days - 1);
+        assertFalse(schedule.lpOpen());
+        vm.warp(start + 1 days);
+        assertTrue(schedule.lpOpen());
+        vm.warp(start + 7 days);
+        assertFalse(schedule.active());
+        assertFalse(schedule.lpOpen());
     }
 
     function testMembershipPricesAndSoulboundAccess() public {

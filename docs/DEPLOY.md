@@ -91,6 +91,8 @@ node scripts/create3.mjs masonry - config/release.json config/masonry.release.js
 
 Review the compiled creation bytecode plus encoded constructor arguments for each intended component. Record the Keccak-256 of those bytes in `masonryInitCodeHashes` by role in the release JSON and generate a reviewed plan in a new output file. `DeployMasonryComponent.s.sol` requires the hash, expected address and chain before it will deploy that component. Configure and dry-run the complete dependency order, token economics, pool initialization, and role wiring for the chosen launch before broadcasting. The component deployer is not a one-shot launch orchestrator.
 
+For the Genesis schedule constructor, use `MasonryGenesisSchedule(genesisStart, governance)` from the launch settings. A start of `0` defers scheduling. After deploying and wiring the Genesis contracts and funding the staking contract, use Admin to check readiness and submit `schedule(uint256)` from the governance wallet. A governance contract can execute the same call through its own transaction flow. The start can be set once and must be in the future. A nonzero constructor date sets the clock at deployment. The constructor changed, so regenerate and review the schedule's creation-code hash before deploying.
+
 ```sh
 MASONRY_CREATE3_CONFIG=../config/masonry.release.json \
   forge script script/DeployMasonryComponent.s.sol --rpc-url "$RPC_URL" --account "$DEPLOYER_ACCOUNT" \

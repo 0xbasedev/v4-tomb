@@ -99,7 +99,8 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     }
 
     function fund() external nonReentrant {
-        if (funded || block.timestamp >= schedule.start()) revert InvalidConfiguration();
+        uint256 start = schedule.start();
+        if (funded || (start != 0 && block.timestamp >= start)) revert InvalidConfiguration();
         _receive(level, rewardBudget);
         funded = true;
     }
@@ -243,7 +244,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
         uint256 pool
     ) private view returns (uint256) {
         uint256 start = schedule.start();
-        if (block.timestamp <= start) return 0;
+        if (start == 0 || block.timestamp <= start) return 0;
         uint256 end = schedule.end();
         uint256 elapsed = Math.min(block.timestamp, end) - start;
         uint256 total = Math.mulDiv(rewardBudget, elapsed, end - start);

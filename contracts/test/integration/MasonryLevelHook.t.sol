@@ -84,9 +84,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     }
 
     function setUp() public {
+        _setUpPool(block.timestamp + 1 days);
+    }
+
+    function _setUpPool(
+        uint256 genesisStart
+    ) private {
         level = new MockMasonryLevel();
         usdc = new MockMasonryUSDC();
-        schedule = new MasonryGenesisSchedule(block.timestamp + 1 days);
+        schedule = new MasonryGenesisSchedule(genesisStart, address(this));
         PoolManager manager = new PoolManager(address(this));
         swaps = new PoolSwapTest(manager);
         liquidity = new PoolModifyLiquidityTest(manager);
@@ -478,6 +484,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     }
 
     function testRealGenesisClaimEscrowsHalfAndReleasesOneInstallment() public {
+        _assertGenesisClaimAndRelease();
+    }
+
+    function testDeferredGenesisSettlementUsesTheDateSetAfterDeployment() public {
+        _setUpPool(0);
+        _assertGenesisClaimAndRelease();
+    }
+
+    function _assertGenesisClaimAndRelease() private {
         (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement,) = _realGenesis();
         vm.warp(schedule.lpOpens());
         uint256 levelBefore = level.balanceOf(address(this));
@@ -716,6 +731,11 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         settlement.bind(staking);
         level.approve(address(staking), 70e18);
         staking.fund();
+        if (schedule.start() == 0) {
+            assertEq(settlement.genesisEnd(), 0);
+            schedule.schedule(block.timestamp + 1 days);
+        }
+        assertEq(settlement.genesisEnd(), schedule.end());
         usdc.approve(address(pass), 100e6);
         pass.purchase(MasonryGenesisPass.Tier.Pro);
         usdc.approve(address(staking), 100e6);

@@ -10,6 +10,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {MasonryLevelHook} from "../hooks/MasonryLevelHook.sol";
 import {MiniSwapRouter} from "../swap/MiniSwapRouter.sol";
 import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "./MasonryGenesisStaking.sol";
+import {MasonryGenesisSchedule} from "./MasonryGenesisSchedule.sol";
 import {MasonryLevelUsdcVault} from "./MasonryLevelUsdcVault.sol";
 import {MasonryBuybackGuard} from "./MasonryBuybackGuard.sol";
 
@@ -39,7 +40,7 @@ contract MasonryGenesisSettlement is ReentrancyGuard, IMasonryGenesisSettlement 
     IERC20 public immutable level;
     IERC20 public immutable usdc;
     address public immutable treasury;
-    uint256 public immutable genesisEnd;
+    MasonryGenesisSchedule private immutable schedule;
     uint256 public totalEscrowed;
     mapping(address => Tranche[]) public tranches;
 
@@ -73,9 +74,13 @@ contract MasonryGenesisSettlement is ReentrancyGuard, IMasonryGenesisSettlement 
         router = router_;
         level = IERC20(hook.level());
         usdc = IERC20(Currency.unwrap(vault_.levelIsCurrency0() ? key.currency1 : key.currency0));
-        genesisEnd = hook.schedule().end();
+        schedule = hook.schedule();
         treasury = treasury_;
         binder = binder_;
+    }
+
+    function genesisEnd() public view returns (uint256) {
+        return schedule.end();
     }
 
     function bind(
@@ -104,7 +109,7 @@ contract MasonryGenesisSettlement is ReentrancyGuard, IMasonryGenesisSettlement 
         if (level.balanceOf(address(this)) < totalEscrowed + reward) revert InvalidSettlement();
         totalEscrowed += vested;
         uint256 index = tranches[beneficiary].length;
-        tranches[beneficiary].push(Tranche(vested, uint64(genesisEnd + RELEASE_INTERVAL), 0));
+        tranches[beneficiary].push(Tranche(vested, uint64(genesisEnd() + RELEASE_INTERVAL), 0));
         emit Escrowed(beneficiary, index, vested);
 
         if (compound) {

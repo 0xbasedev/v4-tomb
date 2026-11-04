@@ -62,7 +62,9 @@ function Layout() {
         </div>
       </header>
       <main id="main" tabIndex={-1} className="shell content">
-        <div className="network-note" role="status"><span aria-hidden="true" />{network
+        <div className="network-note" role="status"><span aria-hidden="true" />{pathname === "/wizard" || pathname === "/admin"
+          ? "The Wizard prepares your release. Admin can check deployed contracts and schedule Genesis with the governance wallet."
+          : network
           ? `${network.name} has no protocol deployment configured for xTOMB. Transactions are unavailable.`
           : "Your wallet is on an unsupported network. Select a configured network to continue."}</div>
         <Outlet />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { bytesToHex } from "viem";
 import { masonryRoles } from "../../../../config/create3-plan.mjs";
@@ -8,13 +8,21 @@ import {
   makeDraft, networkFrom, saveDraft, supplyFields, identityFields, type Fields, type LaunchPlan,
 } from "./configuration";
 import { verifyLaunch, type Verification } from "./verifyLaunch";
+import { fieldHelp } from "./fieldHelp";
+import { GenesisScheduling } from "./GenesisScheduling";
 import "./setup.css";
 
 const roleNames: Record<string, string> = {
   masonryPeg: "xTOMB", masonryShare: "xSHARE", masonryGenesisPass: "Genesis pass",
   masonryTaxHook: "xTOMB Fire Tax hook", masonryShareTaxHook: "xSHARE Fire Tax hook",
   masonryLevelOracle: "xTOMB price oracle", masonryShareOracle: "xSHARE price oracle",
-  masonrySwapRouter: "xTOMB swap router",
+  masonrySwapRouter: "xTOMB swap router", masonryGenesisSchedule: "Genesis clock",
+  masonryGenesisStaking: "Genesis staking", masonryGenesisSettlement: "Genesis reward payouts and vesting",
+  masonryGenesisLPBurnFee: "Genesis liquidity fee and burn", masonryLevelUsdcVault: "xTOMB/USDC liquidity vault",
+  masonrySquareUsdcVault: "xSHARE/USDC liquidity vault", masonryBuybackGuard: "Buyback price safeguards",
+  masonryCompoundGate: "Compounding permissions", masonryCriticalDefense: "Peg defense controls",
+  masonryVestingTeam: "Team vesting", masonryVestingDeveloper: "Developer vesting",
+  masonryVestingTreasury: "Treasury vesting", masonryVestingArbitrage: "Arbitrage vesting",
 };
 const roleName = (role: string) => roleNames[role] ?? (role.startsWith("masonry")
   ? role.slice("masonry".length).replace(/([a-z])([A-Z])/g, "$1 $2") : role);
@@ -94,22 +102,32 @@ function usePlanner() {
 
 function FieldsGroup({ fields, update, entries, numeric = false }: {
   fields: Fields; update: (key: string, value: string) => void;
-  entries: ReadonlyArray<readonly [string, string]>; numeric?: boolean;
+  entries: ReadonlyArray<readonly [string, string, string?]>; numeric?: boolean;
 }) {
-  return <div className="ops-fields">{entries.map(([key, label]) => <label key={key}>{label}
-    <input value={fields[key]} inputMode={numeric ? "numeric" : undefined}
-      autoComplete="off" spellCheck={false} onChange={(event) => update(key, event.target.value)} />
-  </label>)}</div>;
+  const id = useId();
+  return <div className="ops-fields">{entries.map(([key, label, description]) => {
+    const help = description ?? fieldHelp[key];
+    const fieldId = id + key;
+    return <div className="ops-input-group" key={key}>
+      <label htmlFor={fieldId}>{label}</label>
+      <input id={fieldId} aria-describedby={help ? fieldId + "-help" : undefined} value={fields[key]}
+        inputMode={numeric ? "numeric" : undefined} autoComplete="off" spellCheck={false}
+        onChange={(event) => update(key, event.target.value)} />
+      {help && <small className="ops-help" id={fieldId + "-help"}>{help}</small>}
+    </div>;
+  })}</div>;
 }
 
 function PlanDetails({ plan }: { plan: LaunchPlan }) {
   return <>
     <dl className="ops-facts">
       <div><dt>Home network</dt><dd>{plan.network.name} · {plan.network.id}</dd></div>
-      <div><dt>Genesis start</dt><dd>{new Date(plan.launch.genesisStart * 1000).toLocaleString()}</dd></div>
+      <div><dt>Genesis start in this plan</dt><dd>{plan.launch.genesisStart
+        ? new Date(plan.launch.genesisStart * 1000).toLocaleString() : "Set later in Admin"}</dd></div>
       <div><dt>Approved component hashes</dt><dd>{Object.keys(plan.masonry.initCodeHashes).length} / {masonryRoles.length}</dd></div>
     </dl>
     <details className="ops-detail" open><summary>Predicted contract addresses</summary>
+      <p>CreateX uses CREATE3 to calculate where your contracts will live before they are deployed. Share this list with the person handling deployment.</p>
       <dl className="address-list">{Object.entries(plan.masonry.addresses).map(([role, address]) =>
         <div key={role}><dt>{roleName(role)}</dt><dd><code>{address}</code></dd></div>)}</dl>
     </details>
@@ -118,6 +136,14 @@ function PlanDetails({ plan }: { plan: LaunchPlan }) {
         <dt>{network.name}</dt><dd><code>{network.bridge}</code><small>Token</small><code>{network.token}</code></dd>
       </div>)}</dl>
     </details>}
+    <details className="ops-detail" open><summary>Which files should I download?</summary>
+      <ul className="ops-explainer">
+        <li><strong>Address plan</strong> lists the predicted contract addresses and any approved build fingerprints.</li>
+        <li><strong>Release inputs</strong> lets a developer regenerate the same plan from the Release ID, signer and chain.</li>
+        <li><strong>Launch settings</strong> records the network, token amounts, roles and Genesis timing.</li>
+        {plan.bridge && <li><strong>Bridge plan</strong> records addresses and limits for the optional xSHARE bridge.</li>}
+      </ul>
+    </details>
     <div className="actions ops-actions">
       <button className="button primary" type="button" onClick={() => download("masonry.release.json", plan.masonry)}>Download address plan</button>
       <button className="button" type="button" onClick={() => download("release.json", plan.release)}>Download release inputs</button>
@@ -131,6 +157,7 @@ const steps = ["Network", "Launch settings", "Bridge", "Review"] as const;
 
 export function WizardPage() {
   const [fields, setFields] = useState(loadDraft);
+  const [chooseStart, setChooseStart] = useState(() => !!fields.genesisStart);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
   const planner = usePlanner();
@@ -151,7 +178,10 @@ export function WizardPage() {
   function advance() {
     try {
       if (step === 0) networkFrom(fields);
-      if (step === 1) launchFrom(fields);
+      if (step === 1) {
+        if (chooseStart && !fields.genesisStart) throw new Error("Choose a Genesis date and time, or select Set later in Admin.");
+        launchFrom(fields);
+      }
       setError("");
       setStep(step + 1);
       if (step === 2) planner.generate(fields);
@@ -164,7 +194,7 @@ export function WizardPage() {
   const missingDefaults = Object.entries(selectedNetwork ? chainInfrastructure[selectedNetwork.id] ?? {} : {})
     .filter(([field]) => !fields[field].trim());
   return <>
-    <OperatorHeading title="Setup Wizard">Choose the home chain, configure the launch, and calculate the addresses for your release.</OperatorHeading>
+    <OperatorHeading title="Setup Wizard">Build your xTOMB launch plan in four steps. The Wizard saves your work in this browser and calculates contract addresses before deployment. You can plan without connecting a wallet.</OperatorHeading>
     <SetupNav />
     <div className="ops-layout">
       <aside aria-label="Setup steps" className="ops-steps">
@@ -176,45 +206,60 @@ export function WizardPage() {
           <span className="chip ember">Release draft</span></div>
         <form onSubmit={(event) => { event.preventDefault(); if (step < 3) advance(); }}>
           {step === 0 && <>
-            <p>Choose the network that holds the original xTOMB and xSHARE. The Wizard fills in known addresses for that chain. Review the defaults and enter any missing addresses.</p>
+            <p>Your home network is where the original xTOMB and xSHARE will live. If you use the optional bridge later, the other chains will hold wrapped copies of xSHARE.</p>
             <label className="ops-field">Home network
-              <select value={fields.network} onChange={(event) => selectNetwork(event.target.value)}>
+              <select aria-describedby="home-network-help" value={fields.network} onChange={(event) => selectNetwork(event.target.value)}>
                 <option value="">Select a network</option>{bridgeNetworks.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
                 <option value="custom">Custom EVM network</option>
               </select>
             </label>
+            <p className="ops-help" id="home-network-help">Base has every address filled in. Other networks may need additional addresses from your deployment team. Switching networks replaces the address fields with that network’s defaults.</p>
             {fields.network === "custom" && <FieldsGroup fields={fields} update={update}
               entries={[[ "chainName", "Network name" ], [ "chainId", "Chain ID" ], [ "nativeSymbol", "Native currency symbol" ]]} />}
             {selectedNetwork && <p className="ops-meta">{selectedNetwork.name} · Chain {selectedNetwork.id} · {selectedNetwork.nativeCurrency.symbol}</p>}
             {missingDefaults.length > 0 && <button className="button" type="button"
               onClick={() => replace({ ...fields, ...Object.fromEntries(missingDefaults) })}>Fill missing addresses</button>}
             <FieldsGroup fields={fields} update={update} entries={[[ "rpcUrl", "Public RPC URL" ], ...infrastructureFields]} />
-            <p className="ops-meta">The Uniswap Universal Router is optional. The Wizard calculates the xTOMB router address separately.</p>
           </>}
           {step === 1 && <>
-            <p>Set the release identity, operator addresses, and token allocations. Amounts in the supply table are whole tokens.</p>
-            <label className="ops-field">Release ID<input value={fields.releaseId} autoComplete="off" spellCheck={false}
+            <p>Identify this launch, choose who controls it, and decide where the initial tokens go. Use public wallet addresses for the roles below. Keep recovery phrases and private keys in your wallet.</p>
+            <label className="ops-field">Release ID<input aria-describedby="release-id-help" value={fields.releaseId} autoComplete="off" spellCheck={false}
               onChange={(event) => update("releaseId", event.target.value)} /></label>
-            <button className="button" type="button" onClick={() => update("releaseId", bytesToHex(crypto.getRandomValues(new Uint8Array(32))))}>Generate release ID</button>
+            <p className="ops-help" id="release-id-help">A public identifier for this deployment. For a new launch, click Generate release ID. For an existing plan, paste its original ID. The ID and deployment signer determine the contract addresses, so keep both the same once you share or deploy the plan.</p>
+            <button className="button ops-actions" type="button" disabled={!!fields.releaseId.trim()}
+              onClick={() => update("releaseId", bytesToHex(crypto.getRandomValues(new Uint8Array(32))))}>Generate release ID</button>
             <FieldsGroup fields={fields} update={update} entries={identityFields} />
-            <label className="ops-field">Genesis start (local time)<input type="datetime-local" value={fields.genesisStart}
-              onChange={(event) => update("genesisStart", event.target.value)} /></label>
+            <label className="ops-field">When should Genesis start?
+              <select aria-describedby="genesis-timing-help" value={chooseStart ? "now" : "later"} onChange={(event) => {
+                setChooseStart(event.target.value === "now");
+                if (event.target.value === "later") update("genesisStart", "");
+                else setError("");
+              }}>
+                <option value="later">Set later in Admin</option>
+                <option value="now">Choose a date for deployment</option>
+              </select>
+            </label>
+            <p id="genesis-timing-help" className="ops-help">If the launch date is undecided, deploy with Genesis unscheduled. Once the staking contract is funded and connected, use the governance wallet in Admin to set a future start. The date is permanent once saved on-chain.</p>
+            {chooseStart && <label className="ops-field">Genesis start (local time)<input type="datetime-local" value={fields.genesisStart}
+              aria-describedby="genesis-timing-help" onChange={(event) => update("genesisStart", event.target.value)} /></label>}
             <details className="ops-detail" open><summary>Supply and vesting</summary>
+              <p>Enter whole tokens, without commas or decimals. Vesting means tokens unlock over time. Enter 0 for each unused allocation. For xSHARE, the farm, sale, signer, initial and vesting amounts must add up to the maximum supply.</p>
               <FieldsGroup fields={fields} update={update} entries={supplyFields} numeric />
             </details>
-            <details className="ops-detail"><summary>Buyback execution limits</summary>
+            <details className="ops-detail"><summary>Advanced · Buyback limits</summary>
+              <p>These caps limit how much a single transaction can use to buy and burn xTOMB. Keep the filled-in values unless you have reviewed replacements.</p>
               <FieldsGroup fields={fields} update={update} numeric entries={[
                 ["burnShares", "Maximum LP fee shares per call (base units)"], ["burnUsdc", "Maximum USDC per call (base units)"],
               ]} />
             </details>
-            <details className="ops-detail"><summary>Contract rules</summary><p>Genesis runs for {durationDays} days and requires a pass. The official LP opens Day {lpDay}. The xTOMB Genesis sell tax starts at {percent(policy.genesisLevelSellMinimumBps)} and can rise to {percent(policy.fireTaxHardCapBps)} on the same sale. Buys have zero Fire Tax.</p></details>
-            <details className="ops-detail"><summary>Approved constructor hashes</summary>
-              <p>Add a reviewed creation-code hash to authorize the corresponding component in the exported address plan.</p>
-              <FieldsGroup fields={fields} update={update} entries={masonryRoles.map((role) => ["hash-" + role, roleName(role)])} />
+            <details className="ops-detail"><summary>Fixed Genesis rules</summary><p>Genesis runs for {durationDays} days and requires a pass. The official xTOMB/USDC liquidity pool opens on Day {lpDay}. Each xTOMB sell during Genesis pays one tax from {percent(policy.genesisLevelSellMinimumBps)} to {percent(policy.fireTaxHardCapBps)}, burned in the same transaction. Buys and wallet transfers pay zero Fire Tax.</p></details>
+            <details className="ops-detail"><summary>Advanced · Approved contract builds</summary>
+              <p>A constructor hash is the fingerprint of a compiled contract and its setup inputs. Your developer provides it after reviewing the build. Leave these blank while planning addresses. Deployment requires the approved fingerprint for each contract.</p>
+              <FieldsGroup fields={fields} update={update} entries={masonryRoles.map((role) => ["hash-" + role, roleName(role), "Paste the developer-provided fingerprint for this contract. It starts with 0x and contains 64 hexadecimal characters after that."])} />
             </details>
           </>}
           {step === 2 && <>
-            <p>Optionally plan xSHARE bridge deployments. All routes start disabled.</p>
+            <p>A bridge lets users move xSHARE between chains. Leave this off for a single-chain launch or if you do not have the bridge owner addresses, message verifiers and limits ready. Exporting a bridge plan leaves all transfers disabled.</p>
             <label className="ops-check"><input type="checkbox" checked={fields.bridge === "on"} disabled={!selectedNetwork}
               onChange={(event) => update("bridge", event.target.checked ? "on" : "off")} />Include xSHARE bridge in this release</label>
             {!selectedNetwork && <p className="ops-meta">Bridge planning is available for the five supported home networks.</p>}
@@ -222,13 +267,14 @@ export function WizardPage() {
               <summary>{name}{String(id) === fields.network ? " · Home" : ""}</summary>
               {registryAvailability?.status === "disabled" && <p className="ops-meta">Requires a verified Sonic validator and relayer setup before activation.</p>}
               <FieldsGroup fields={fields} update={update} entries={[
-                ["owner" + id, name + " bridge owner"], ["ism" + id, name + " message verifier"],
-                ...(String(id) === fields.network ? [] : [["cap" + id, name + " route cap (base units)"] as const]),
+                ["owner" + id, name + " bridge owner", "Public address that manages this bridge deployment and can enable routes."],
+                ["ism" + id, name + " message verifier", "Address of the Hyperlane contract that verifies messages coming from other chains. Get it from the bridge deployment team."],
+                ...(String(id) === fields.network ? [] : [["cap" + id, name + " route cap (base units)", "Maximum xSHARE that can be backed on this chain at one time. For 1 xSHARE, enter 1000000000000000000."] as const]),
               ]} />
             </details>)}
           </>}
           {step === 3 && <>
-            <p>Review the CREATE3 predictions and export the release files for deployment review. Predicted addresses can be recorded before the contracts are deployed.</p>
+            <p>Check your settings and download the files for whoever is deploying the contracts. After deployment, open Admin to check the on-chain addresses and set the Genesis date if you deferred it.</p>
             {planner.busy && <p role="status">Calculating deterministic addresses…</p>}
             {planner.plan && <PlanDetails plan={planner.plan} />}
             {planner.error && <p className="callout" role="alert">{planner.error}</p>}
@@ -244,9 +290,10 @@ export function WizardPage() {
       </section>
     </div>
     <div className="actions ops-actions">
-      <ImportDraft onImport={(next) => { replace(next); setStep(0); }} onError={setError} />
+      <ImportDraft onImport={(next) => { replace(next); setChooseStart(!!next.genesisStart); setStep(0); }} onError={setError} />
       <button className="button" type="button" onClick={() => download("xtomb-release-draft.json", makeDraft(fields))}>Download draft</button>
     </div>
+    <p className="ops-help">Download a draft to back up your answers or continue in another browser. Importing a draft replaces the answers currently saved here.</p>
   </>;
 }
 
@@ -282,7 +329,7 @@ export function AdminPage() {
     <SetupNav />
     <section className="panel ops-workspace">
       <div className="ops-section-head"><div><span className="label">RELEASE MANAGEMENT</span><h2>Deployment review</h2></div>
-        <span className="chip">Read-only checks</span></div>
+        <span className="chip">Launch review</span></div>
       <p>{fields.chainName ? `Local draft · ${fields.chainName} · Chain ${fields.chainId}` : "Choose a home network in the Wizard or import a saved draft."}</p>
       <div className="actions ops-actions">
         <Link className="button primary" to="/wizard">Configure release</Link>
@@ -295,6 +342,7 @@ export function AdminPage() {
       </div>
       {planner.busy && <p role="status">Calculating deterministic addresses…</p>}
       {planner.plan && <PlanDetails plan={planner.plan} />}
+      {planner.plan && <GenesisScheduling key={planner.plan.masonry.addresses.masonryGenesisSchedule} plan={planner.plan} />}
       {planner.plan?.bridge && <label className="ops-field">Verification network
         <select value={checkNetwork ?? planner.plan.network.id} disabled={checking} onChange={(event) => {
           setCheckNetwork(Number(event.target.value)); setVerification(undefined); setError("");
