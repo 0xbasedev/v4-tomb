@@ -10,7 +10,7 @@ import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {MasonryLevelHook} from "../hooks/MasonryLevelHook.sol";
+import {MasonryTaxHook} from "../hooks/MasonryTaxHook.sol";
 import {MasonryLevelOracle} from "./MasonryLevelOracle.sol";
 import {MasonryLevelPrice} from "./MasonryLevelPrice.sol";
 import {IMasonryBuybackExecutionGuard} from "./MasonryGenesisLPBurnFee.sol";
@@ -49,7 +49,7 @@ contract MasonryBuybackGuard is IMasonryBuybackExecutionGuard, IUnlockCallback {
         uint16 impactBps,
         uint16 lossBps
     ) {
-        MasonryLevelHook hook = MasonryLevelHook(address(pool.hooks));
+        MasonryTaxHook hook = MasonryTaxHook(address(pool.hooks));
         if (
             address(hook).code.length == 0 || PoolId.unwrap(pool.toId()) != PoolId.unwrap(hook.officialPool())
                 || spotBps == 0 || impactBps == 0 || lossBps == 0 || spotBps > MAX_TOLERANCE_BPS
@@ -59,7 +59,7 @@ contract MasonryBuybackGuard is IMasonryBuybackExecutionGuard, IUnlockCallback {
         manager = hook.poolManager();
         oracle = hook.oracle();
         officialPool = pool.toId();
-        levelIsCurrency0 = hook.levelIsCurrency0();
+        levelIsCurrency0 = hook.assetIsCurrency0();
         minLiquidity = oracle.minLiquidity();
         maxSpotDeviationBps = spotBps;
         maxPriceImpactBps = impactBps;
@@ -69,49 +69,71 @@ contract MasonryBuybackGuard is IMasonryBuybackExecutionGuard, IUnlockCallback {
     function minimumLevelOut(
         uint256 usdcAmount
     ) external returns (uint256) {
-        if (usdcAmount == 0 || usdcAmount > uint256(uint128(type(int128).max))) revert PreviewFailed();
-        uint256 twap = oracle.validatedPrice(officialPool);
+        return _minimumOut(usdcAmount, false);
+    }
+
+    /// @notice Quote a sale through the ordinary tax path. Includes up to
+    /// the immutable Fire Tax ceiling in the allowed execution-cost budget.
+    function minimumAssetSaleOut(
+        uint256 amount
+    ) external returns (uint256) {
+        return _minimumOut(amount, true);
+    }
+
+    function _minimumOut(
+        uint256 amount,
+        bool sell
+    ) private returns (uint256) {
+        if (amount == 0 || amount > uint256(uint128(type(int128).max))) revert PreviewFailed();
+        (uint256 spot, uint256 twap) = validatedSpot();
+
+        (uint256 output, uint160 sqrtAfter, uint128 liquidityAfter) = _preview(amount, sell);
+        if (liquidityAfter < minLiquidity) revert InsufficientLiquidity();
+        uint256 priceAfter = MasonryLevelPrice.fromSqrtPrice(sqrtAfter, levelIsCurrency0);
+        uint256 impact = priceAfter > spot ? priceAfter - spot : spot - priceAfter;
+        if (impact > FullMath.mulDiv(spot, maxPriceImpactBps, BPS)) revert UnsafePrice();
+
+        uint256 expected = sell ? FullMath.mulDiv(amount, twap, 1e30) : FullMath.mulDiv(amount, 1e30, twap);
+        if (sell) expected = FullMath.mulDiv(expected, BPS - MasonryTaxHook(address(key.hooks)).MAX_TAX_BPS(), BPS);
+        uint256 minimum = FullMath.mulDivRoundingUp(expected, BPS - maxExecutionLossBps, BPS);
+        if (output < minimum) revert UnsafePrice();
+        return output;
+    }
+
+    function validatedSpot() public view returns (uint256 spot, uint256 twap) {
+        twap = oracle.validatedPrice(officialPool);
         (uint160 sqrtBefore,,,) = manager.getSlot0(officialPool);
-        uint256 spot = MasonryLevelPrice.fromSqrtPrice(sqrtBefore, levelIsCurrency0);
+        spot = MasonryLevelPrice.fromSqrtPrice(sqrtBefore, levelIsCurrency0);
         uint256 deviation = spot > twap ? spot - twap : twap - spot;
         if (deviation > FullMath.mulDiv(twap, maxSpotDeviationBps, BPS)) revert UnsafePrice();
         if (manager.getLiquidity(officialPool) < minLiquidity) revert InsufficientLiquidity();
-
-        (uint256 levelOut, uint160 sqrtAfter, uint128 liquidityAfter) = _preview(usdcAmount);
-        if (liquidityAfter < minLiquidity) revert InsufficientLiquidity();
-        uint256 priceAfter = MasonryLevelPrice.fromSqrtPrice(sqrtAfter, levelIsCurrency0);
-        if (priceAfter > spot + FullMath.mulDiv(spot, maxPriceImpactBps, BPS)) revert UnsafePrice();
-
-        uint256 expected = FullMath.mulDiv(usdcAmount, 1e30, twap);
-        uint256 minFromTwap = FullMath.mulDivRoundingUp(expected, BPS - maxExecutionLossBps, BPS);
-        if (levelOut < minFromTwap) revert UnsafePrice();
-        return levelOut;
     }
 
     function unlockCallback(
         bytes calldata data
     ) external returns (bytes memory) {
         if (msg.sender != address(manager)) revert NotPoolManager();
-        uint256 usdcAmount = abi.decode(data, (uint256));
-        bool zeroForOne = !levelIsCurrency0;
+        (uint256 amount, bool sell) = abi.decode(data, (uint256, bool));
+        bool zeroForOne = sell == levelIsCurrency0;
         BalanceDelta delta = manager.swap(
             key,
             SwapParams(
-                zeroForOne, -int256(usdcAmount), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+                zeroForOne, -int256(amount), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
             ),
             ""
         );
         int128 paid = zeroForOne ? delta.amount0() : delta.amount1();
         int128 received = zeroForOne ? delta.amount1() : delta.amount0();
-        if (paid != -int256(usdcAmount) || received <= 0) revert PreviewFailed();
+        if (paid != -int256(amount) || received <= 0) revert PreviewFailed();
         (uint160 sqrtPrice,,,) = manager.getSlot0(officialPool);
         revert Preview(uint256(uint128(received)), sqrtPrice, manager.getLiquidity(officialPool));
     }
 
     function _preview(
-        uint256 usdcAmount
+        uint256 amount,
+        bool sell
     ) private returns (uint256 levelOut, uint160 sqrtPrice, uint128 liquidity) {
-        try manager.unlock{gas: PREVIEW_GAS}(abi.encode(usdcAmount)) returns (bytes memory) {
+        try manager.unlock{gas: PREVIEW_GAS}(abi.encode(amount, sell)) returns (bytes memory) {
             revert PreviewFailed();
         } catch (bytes memory result) {
             if (result.length != 100 || bytes4(result) != Preview.selector) revert PreviewFailed();

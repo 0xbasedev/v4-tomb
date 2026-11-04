@@ -12,11 +12,17 @@ import {MasonryGenesisLPBurnFee} from "./MasonryGenesisLPBurnFee.sol";
 /// @notice Trusted settlement adapter. Must enforce the configured vesting, fees,
 /// cooldowns and executable-price limits before settling rewards or minting LP.
 interface IMasonryGenesisSettlement {
+    struct CompoundPlan {
+        uint256 levelToSell;
+        uint256 grossShares;
+    }
+
     function settle(
         address beneficiary,
         uint256 reward,
         bool compound,
-        bool automated
+        bool automated,
+        CompoundPlan calldata plan
     ) external;
 }
 
@@ -147,16 +153,18 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     function claim(
         uint256 pool
     ) external nonReentrant {
+        _consumeCooldown(pool, msg.sender);
         uint256 reward = _takeReward(pool, msg.sender);
         level.safeTransfer(address(settlement), reward);
-        settlement.settle(msg.sender, reward, false, false);
+        settlement.settle(msg.sender, reward, false, false, IMasonryGenesisSettlement.CompoundPlan(0, 0));
         emit Settled(msg.sender, pool, reward, false);
     }
 
     function compoundToLP(
         uint256 sourcePool,
         address beneficiary,
-        uint256 minNetShares
+        uint256 minNetShares,
+        IMasonryGenesisSettlement.CompoundPlan calldata plan
     ) external nonReentrant {
         if (!schedule.lpOpen()) revert PoolClosed();
         MasonryGenesisPass.Tier tier = _member(beneficiary);
@@ -166,17 +174,24 @@ contract MasonryGenesisStaking is ReentrancyGuard {
             minNetShares = Math.max(minNetShares, minimumNetCompoundShares[beneficiary]);
         }
         if (minNetShares == 0) revert InvalidAmount();
-        if (block.timestamp < nextCompoundAt[sourcePool][beneficiary]) revert Cooldown();
+        _consumeCooldown(sourcePool, beneficiary);
         uint256 reward = _takeReward(sourcePool, beneficiary);
-        nextCompoundAt[sourcePool][beneficiary] = block.timestamp + COMPOUND_COOLDOWN;
 
         _checkpoint(1, beneficiary);
         uint256 beforeShares = lpAsset.balanceOf(address(this));
         level.safeTransfer(address(settlement), reward);
-        settlement.settle(beneficiary, reward, true, automated);
+        settlement.settle(beneficiary, reward, true, automated, plan);
         uint256 minted = lpAsset.balanceOf(address(this)) - beforeShares;
         if (_credit(1, beneficiary, minted) < minNetShares) revert InvalidAmount();
         emit Settled(beneficiary, sourcePool, reward, true);
+    }
+
+    function _consumeCooldown(
+        uint256 pool,
+        address beneficiary
+    ) private {
+        if (block.timestamp < nextCompoundAt[pool][beneficiary]) revert Cooldown();
+        nextCompoundAt[pool][beneficiary] = block.timestamp + COMPOUND_COOLDOWN;
     }
 
     function _credit(

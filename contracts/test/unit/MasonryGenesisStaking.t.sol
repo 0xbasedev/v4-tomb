@@ -38,7 +38,8 @@ contract MockGenesisSettlement is IMasonryGenesisSettlement {
         address beneficiary,
         uint256 reward,
         bool compound,
-        bool
+        bool,
+        CompoundPlan calldata
     ) external {
         if (compound) {
             level.burn(reward);
@@ -159,25 +160,25 @@ contract MasonryGenesisStakingTest is Test {
         vm.warp(schedule.lpOpens() - 1);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.PoolClosed.selector);
-        staking.compoundToLP(0, PRO, 1);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
         vm.warp(schedule.lpOpens());
         vm.expectRevert(MasonryGenesisStaking.NotEligible.selector);
-        staking.compoundToLP(0, PRO, 1);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
         vm.prank(KEEPER);
-        staking.compoundToLP(0, PRO, 1);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
         (uint256 shares,,) = staking.positions(1, PRO);
         assertEq(shares, 995e18);
         assertEq(fee.totalFeeSharesCollected(), 5e18);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
-        staking.compoundToLP(0, PRO, 1);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
         vm.prank(PRO);
         staking.setKeeper(KEEPER, 1);
         vm.warp(schedule.lpOpens() + 3 hours);
         vm.prank(KEEPER);
-        staking.compoundToLP(0, PRO, 1);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
         assertEq(fee.totalFeeSharesCollected(), 5.15625e18);
     }
 

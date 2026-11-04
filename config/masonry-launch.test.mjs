@@ -94,6 +94,12 @@ test('confirmed Genesis rules are fixed launch invariants', () => {
     genesisProNftPriceUsdc: 50,
     genesisUltraNftPriceUsdc: 100,
     genesisUltraMultiplier: 4,
+    genesisLiquidRewardBps: 10_000,
+    genesisVestingInstallments: 1,
+    genesisVestingIntervalSeconds: 0,
+    genesisWalletClaimFeeBps: 0,
+    genesisAutomationFeeBps: 1000,
+    squareGenesisSellMinimumBps: 1200,
   })) {
     const cfg = complete();
     cfg.policy[key] = value;

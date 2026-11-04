@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
+import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -15,11 +16,16 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
+import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {MasonryTaxHook} from "../../src/hooks/MasonryTaxHook.sol";
+import {MasonrySquareHook} from "../../src/hooks/MasonrySquareHook.sol";
+import {MasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisSettlement.sol";
 import {MasonryLevelHook} from "../../src/hooks/MasonryLevelHook.sol";
 import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
 import {MockMasonryLevel, MockMasonryUSDC, MockMasonryBurnGuard} from "../unit/MasonryGenesisLPBurnFee.t.sol";
 import {MasonryBuybackGuard} from "../../src/masonry/MasonryBuybackGuard.sol";
-import {MasonryLevelUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
+import {MasonrySquareUsdcVault} from "../../src/masonry/MasonrySquareUsdcVault.sol";
+import {MasonryLevelUsdcVault, MasonryUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
 import {MasonryGenesisPass} from "../../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisStaking.sol";
 import {
@@ -54,7 +60,7 @@ contract MockTwapLevelHook is MasonryLevelHook {
     address private immutable testHarness = msg.sender;
 }
 
-contract MasonryLevelHookTest is Test, IMockLevelTwap {
+contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     using StateLibrary for IPoolManager;
     MockMasonryLevel private level;
     MockMasonryUSDC private usdc;
@@ -265,7 +271,7 @@ contract MasonryLevelHookTest is Test, IMockLevelTwap {
         wrong.fee = 1000;
         int24 lower = center - 6000;
         int24 upper = center + 6000;
-        vm.expectRevert(MasonryLevelUsdcVault.InvalidConfiguration.selector);
+        vm.expectRevert(MasonryUsdcVault.InvalidConfiguration.selector);
         new MasonryLevelUsdcVault(wrong, lower, upper);
 
         MasonryLevelUsdcVault vault = _vault();
@@ -469,6 +475,302 @@ contract MasonryLevelHookTest is Test, IMockLevelTwap {
         guard.minimumLevelOut(1e6);
     }
 
+    function testRealGenesisClaimEscrowsHalfAndReleasesOneInstallment() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement,) = _realGenesis();
+        vm.warp(schedule.lpOpens());
+        uint256 levelBefore = level.balanceOf(address(this));
+        staking.claim(0);
+        assertEq(level.balanceOf(address(this)) - levelBefore, 4.9e18);
+        assertEq(level.balanceOf(TREASURY), 0.1e18);
+        assertEq(settlement.totalEscrowed(), 5e18);
+        assertEq(settlement.trancheCount(address(this)), 1);
+
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.claim(0);
+        vm.warp(schedule.end() + 6 hours - 1);
+        vm.expectRevert(MasonryGenesisSettlement.VestingLocked.selector);
+        settlement.release(0);
+        vm.warp(schedule.end() + 6 hours);
+        assertEq(settlement.release(0), 0.3125e18);
+        assertEq(settlement.totalEscrowed(), 4.6875e18);
+        vm.expectRevert(MasonryGenesisSettlement.VestingLocked.selector);
+        settlement.release(0);
+        assertEq(level.balanceOf(address(settlement)), settlement.totalEscrowed());
+    }
+
+    function testRealKeeperCompoundUsesLiquidHalfAndOneLpFee() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement, MasonryGenesisLPBurnFee collector) =
+            _realGenesis();
+        address keeper = makeAddr("keeper");
+        staking.setKeeper(keeper, 1);
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        uint256 swapLevel = 2.49e18;
+        uint256 gross = _estimateShares(settlement.vault(), 4.9e18, swapLevel);
+        IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(swapLevel, gross);
+
+        vm.prank(keeper);
+        vm.expectRevert(MasonryGenesisStaking.InvalidAmount.selector);
+        staking.compoundToLP(0, address(this), gross, plan);
+        assertEq(settlement.totalEscrowed(), 0);
+        assertEq(level.totalBurned(), 0);
+
+        vm.prank(keeper);
+        staking.compoundToLP(0, address(this), 1, plan);
+        (uint256 net,,) = staking.positions(1, address(this));
+        assertEq(net, gross - gross * 50 / 10_000);
+        assertEq(collector.totalFeeSharesCollected(), gross - net);
+        assertEq(settlement.totalEscrowed(), 5e18);
+        assertGe(level.balanceOf(TREASURY), 0.1e18);
+        assertGt(hook.genesisLevelBurned(), 0);
+        assertGt(collector.totalLevelBurnedFromLPFees(), 0);
+        assertEq(level.balanceOf(keeper), 0);
+
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.claim(0);
+    }
+
+    function testRealManualCompoundChargesNoPerformanceFee() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement, MasonryGenesisLPBurnFee collector) =
+            _realGenesis();
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        uint256 swapLevel = 2.54e18;
+        uint256 gross = _estimateShares(settlement.vault(), 5e18, swapLevel);
+        staking.compoundToLP(0, address(this), 1, IMasonryGenesisSettlement.CompoundPlan(swapLevel, gross));
+        assertEq(settlement.totalEscrowed(), 5e18);
+        assertEq(collector.totalFeeSharesCollected(), gross * 50 / 10_000);
+        // Only the small wallet refund can incur a claim fee.
+        assertLt(level.balanceOf(TREASURY), 0.003e18);
+    }
+
+    function testSquareNormalAndCriticalRoutingPreserveEarlierEarmarks() public {
+        (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
+        vm.warp(schedule.start());
+        hook.checkpoint();
+        squareHook.checkpoint();
+        vm.warp(schedule.start() + 30 minutes);
+        _swap(!level0, -1e6);
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -1e6);
+        uint256 treasuryUsdc = usdc.balanceOf(TREASURY);
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
+
+        assertEq(squareHook.polSquare(), 0.72e18);
+        assertEq(squareHook.retainedSquare(), 4.08e18);
+        assertEq(square.balanceOf(TREASURY), 4.08e18);
+        assertEq(squareHook.usdcReserveSquare(), 0);
+        assertGt(usdc.balanceOf(TREASURY), treasuryUsdc);
+        assertEq(squareHook.criticalSquare(), 0);
+
+        _swap(level0, -1200e18);
+        vm.warp(schedule.start() + 1 hours);
+        _swap(!level0, -1e6);
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -1e6);
+        uint256 burnBefore = level.totalBurned();
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
+        assertTrue(squareHook.defense().active());
+        assertEq(squareHook.polSquare(), 0.72e18);
+        assertEq(squareHook.retainedSquare(), 4.08e18);
+        assertEq(squareHook.criticalSquare(), 0);
+        assertGt(squareHook.levelBurned(), 0);
+        assertEq(level.totalBurned() - burnBefore, squareHook.levelBurned());
+    }
+
+    function testSquarePolVaultMintsRedeemableSharesToTreasury() public {
+        (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
+        (, int24 tick,,) = hook.poolManager().getSlot0(squareHook.officialPool());
+        int24 midpoint = tick / 60 * 60;
+        MasonrySquareUsdcVault pol = new MasonrySquareUsdcVault(squareKey, midpoint - 6000, midpoint + 6000);
+        vm.prank(makeAddr("not deployer"));
+        vm.expectRevert(MasonryTaxHook.InvalidConfiguration.selector);
+        squareHook.bindPolVault(pol);
+        squareHook.bindPolVault(pol);
+
+        vm.warp(schedule.start());
+        squareHook.checkpoint();
+        vm.warp(schedule.start() + 30 minutes);
+        bool square0 = squareHook.assetIsCurrency0();
+        _swapOn(squareKey, !square0, -1e6);
+        _swapOn(squareKey, square0, -100e18);
+        uint256 initialShares = pol.balanceOf(TREASURY);
+        assertGt(initialShares, 0);
+        assertEq(pol.totalSupply(), initialShares);
+
+        _swapOn(squareKey, !square0, -75e6);
+        _swapOn(squareKey, square0, -50e18);
+        uint256 shares = pol.balanceOf(TREASURY);
+        assertGt(shares, initialShares);
+        assertEq(square.balanceOf(address(squareHook)), squareHook.polSquare());
+        assertEq(usdc.balanceOf(address(squareHook)), squareHook.polUsdc());
+
+        vm.prank(TREASURY);
+        (uint256 squareOut, uint256 usdcOut) = pol.redeem(shares, TREASURY);
+        assertGt(squareOut, 0);
+        assertGt(usdcOut, 0);
+        assertEq(pol.totalSupply(), 0);
+    }
+
+    function testSquarePrepaidRouterPreservesSettlementAndKeepsTaxEarmarks() public {
+        (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
+        vm.warp(schedule.start());
+        squareHook.checkpoint();
+        vm.warp(schedule.start() + 30 minutes);
+        bool square0 = squareHook.assetIsCurrency0();
+        _swapOn(squareKey, !square0, -1e6);
+
+        uint256 before = square.balanceOf(address(this));
+        hook.poolManager().unlock(abi.encode(squareKey, square0, uint256(100e18)));
+        assertEq(before - square.balanceOf(address(this)), 100e18);
+        assertEq(squareHook.deferredSquareClaims(), 1.92e18);
+        assertEq(hook.poolManager().balanceOf(TREASURY, Currency.wrap(address(square)).toId()), 4.08e18);
+
+        _swapOn(squareKey, !square0, -75e6);
+        _swapOn(squareKey, square0, -50e18);
+        assertEq(squareHook.deferredSquareClaims(), 0);
+        assertGt(squareHook.usdcRouted(), 0);
+        assertEq(square.balanceOf(address(squareHook)), squareHook.polSquare() + squareHook.usdcReserveSquare());
+    }
+
+    // A router that transfers its ERC20 input before calling swap and settles
+    // afterward. SQUARE fees must not alter its synced reserve snapshot.
+    function unlockCallback(
+        bytes calldata data
+    ) external returns (bytes memory) {
+        assertEq(msg.sender, address(hook.poolManager()));
+        (PoolKey memory pool, bool zeroForOne, uint256 amount) = abi.decode(data, (PoolKey, bool, uint256));
+        IPoolManager manager = IPoolManager(msg.sender);
+        Currency input = zeroForOne ? pool.currency0 : pool.currency1;
+        Currency output = zeroForOne ? pool.currency1 : pool.currency0;
+        manager.sync(input);
+        MockMasonryLevel(Currency.unwrap(input)).transfer(address(manager), amount);
+        BalanceDelta delta = manager.swap(
+            pool,
+            SwapParams(
+                zeroForOne, -int256(amount), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            ),
+            ""
+        );
+        assertEq(manager.settle(), amount);
+        int128 received = zeroForOne ? delta.amount1() : delta.amount0();
+        manager.take(output, address(this), uint256(uint128(received)));
+        return "";
+    }
+
+    function testOracleRingRemainsValidAfterCheckpointChurn() public {
+        vm.warp(schedule.start());
+        uint256 start = block.timestamp;
+        hook.checkpoint();
+        for (uint256 i = 1; i <= 24; ++i) {
+            vm.warp(start + i * 5 minutes);
+            hook.checkpoint();
+            hook.checkpoint();
+        }
+        _swap(!level0, -1e6);
+        (uint256 price,, bool valid) = hook.oracle().latestValidatedTwap();
+        assertTrue(valid);
+        assertApproxEqAbs(price, 1e18, 0.0002e18);
+    }
+
+    function testSquareUnsafeConversionDefersWithoutBlockingSell() public {
+        (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
+        vm.warp(schedule.start());
+        squareHook.checkpoint();
+        vm.warp(schedule.start() + 30 minutes);
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -1e6);
+        // This user trade is valid but leaves spot outside the optional route's guard.
+        uint256 before = square.balanceOf(address(this));
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -1000e18);
+        assertEq(before - square.balanceOf(address(this)), 1000e18);
+        assertGt(squareHook.usdcReserveSquare(), 0);
+        assertEq(squareHook.usdcRouted(), 0);
+        assertEq(square.balanceOf(address(squareHook)), squareHook.polSquare() + squareHook.usdcReserveSquare());
+    }
+
+    function _realGenesis()
+        private
+        returns (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement, MasonryGenesisLPBurnFee collector)
+    {
+        MasonryLevelUsdcVault vault = _vault();
+        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
+        MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
+        collector = new MasonryGenesisLPBurnFee(
+            vault,
+            IMasonryBurnableLevel(address(level)),
+            usdc,
+            IMasonryExactInputV4Router(address(router)),
+            guard,
+            key,
+            address(this),
+            1e16,
+            10_000e6
+        );
+        MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        settlement = new MasonryGenesisSettlement(vault, guard, router, TREASURY, address(this));
+        staking = new MasonryGenesisStaking(pass, collector, settlement, usdc, 70e18);
+        collector.setGenesis(address(staking));
+        settlement.bind(staking);
+        level.approve(address(staking), 70e18);
+        staking.fund();
+        usdc.approve(address(pass), 100e6);
+        pass.purchase(MasonryGenesisPass.Tier.Pro);
+        usdc.approve(address(staking), 100e6);
+        vm.warp(schedule.start());
+        staking.deposit(0, 100e6);
+    }
+
+    function _estimateShares(
+        MasonryLevelUsdcVault vault,
+        uint256 budget,
+        uint256 swapLevel
+    ) private returns (uint256 shares) {
+        uint256 snapshot = vm.snapshotState();
+        uint256 usdcBefore = usdc.balanceOf(address(this));
+        _swap(level0, -int256(swapLevel));
+        uint256 usdcAvailable = usdc.balanceOf(address(this)) - usdcBefore;
+        (uint160 sqrtPrice,,,) = hook.poolManager().getSlot0(hook.officialPool());
+        uint256 levelAvailable = budget - swapLevel;
+        shares = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPrice,
+            TickMath.getSqrtPriceAtTick(vault.tickLower()),
+            TickMath.getSqrtPriceAtTick(vault.tickUpper()),
+            level0 ? levelAvailable : usdcAvailable,
+            level0 ? usdcAvailable : levelAvailable
+        );
+        assertTrue(vm.revertToState(snapshot));
+    }
+
+    function _squarePool()
+        private
+        returns (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey)
+    {
+        square = new MockMasonryLevel();
+        MasonrySquareHook.RoutingConfig memory config =
+            MasonrySquareHook.RoutingConfig(key, TREASURY, address(this), 1e18, 100e18, 300);
+        IPoolManager manager = hook.poolManager();
+        uint160 flags = uint160(address(hook)) & HookMiner.FLAG_MASK;
+        bytes memory args = abi.encode(manager, uint128(1e15), square, usdc, uint24(3000), int24(60), config);
+        (, bytes32 salt) =
+            HookMiner.find(address(this), flags, bytes.concat(type(MasonrySquareHook).creationCode, args));
+        squareHook = new MasonrySquareHook{salt: salt}(manager, 1e15, address(square), address(usdc), 3000, 60, config);
+        bool square0 = squareHook.assetIsCurrency0();
+        squareKey = PoolKey(
+            Currency.wrap(square0 ? address(square) : address(usdc)),
+            Currency.wrap(square0 ? address(usdc) : address(square)),
+            3000,
+            60,
+            IHooks(address(squareHook))
+        );
+        uint160 peg = uint160(square0 ? (uint256(1) << 96) / 1e6 : (uint256(1) << 96) * 1e6);
+        manager.initialize(squareKey, peg);
+        square.mint(address(this), 1_000_000e18);
+        square.approve(address(liquidity), type(uint256).max);
+        square.approve(address(swaps), type(uint256).max);
+        int24 midpoint = TickMath.getTickAtSqrtPrice(peg) / 60 * 60;
+        liquidity.modifyLiquidity(squareKey, ModifyLiquidityParams(midpoint - 6000, midpoint + 6000, 1e16, 0), "");
+    }
+
     function _warmOracle() private {
         uint256 start = block.timestamp;
         hook.checkpoint();
@@ -486,8 +788,16 @@ contract MasonryLevelHookTest is Test, IMockLevelTwap {
         bool zeroForOne,
         int256 amount
     ) private returns (BalanceDelta) {
+        return _swapOn(key, zeroForOne, amount);
+    }
+
+    function _swapOn(
+        PoolKey memory pool,
+        bool zeroForOne,
+        int256 amount
+    ) private returns (BalanceDelta) {
         return swaps.swap(
-            key,
+            pool,
             SwapParams(zeroForOne, amount, zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1),
             PoolSwapTest.TestSettings(false, false),
             abi.encode("untrusted router data")
