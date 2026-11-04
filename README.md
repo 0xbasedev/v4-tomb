@@ -1,4 +1,8 @@
-# Old Money — configurable V4 Tomb protocol
+# xTOMB and xSHARE
+
+The `merge` branch contains the xTOMB and xSHARE frontend preview and the in-progress Masonry contracts. See the [frontend guide](frontend/README.md) and [integration status](docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) for the active work. The deployment runbook and legacy network manifests below still target the inherited Old Money contracts.
+
+## Inherited Old Money tooling
 
 A full-stack fork of [0xbasedev/v4-tomb](https://github.com/0xbasedev/v4-tomb) at `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6`. It preserves MONEY / ESTATE / TRUSTNOTE, WETH peg, Treasury seigniorage and bonds, Boardroom staking, Genesis / Main / Share reward pools, the fourteen-tier Uniswap V4 hook, swaps, LP wrapping, governance tooling, and the Art Deco React interface.
 
@@ -16,7 +20,7 @@ node --test config/schema.test.mjs
 (cd frontend && npm ci && npm run build && npm run dev)
 ```
 
-The default profile is a local chain with no deployment. The interface remains browsable and protocol actions stay unavailable until a complete deployment is configured. All existing application routes remain present. Injected browser wallets are supported, including switching among configured chains. No Multicall3 address is assumed.
+The default profile is a local chain with no deployment. The xTOMB frontend is browsable and supports injected-wallet connection and switching among configured networks. It needs a verified xTOMB deployment and its own contract bindings before it can submit transactions.
 
 ## Deploy a new instance
 

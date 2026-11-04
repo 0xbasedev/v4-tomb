@@ -4,6 +4,10 @@
 **Status:** Genesis settlement and compounding, both official v4 hooks, native TWAP, and fee routing are integrated and tested locally. Target-chain calibration and deployment wiring remain open.
 **Governance:** no new timelock or owner-activated trading pause.
 
+## xTOMB frontend
+
+The Obsidian Crypt theme supplied in `xTOMB-UX.zip` is now represented by editable React and CSS source in the frontend. The interface calls the peg and share assets **xTOMB** and **xSHARE**. Contract identifiers elsewhere in this document refer to the corresponding implementation code. The current UI is a preview. Its sample peg and tax values are explicitly labeled, and the wallet connector does not enable minting, staking, or swaps against the legacy deployment manifest. Live bindings require a verified xTOMB deployment.
+
 ## Genesis contracts
 
 - The hook and staking deployment must share one immutable Genesis clock. Rewards and the LEVEL sell tax window begin at the start timestamp and end exactly seven days later. The official LP staking and compounding entry points open at start + 24 hours and close at Genesis end. Accrued claims and principal withdrawals remain callable after Genesis. Ultra may pre-stake in the standard pool during the 24 hours before Genesis, with rewards starting at the same time and rate for every tier.

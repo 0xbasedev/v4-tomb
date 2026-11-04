@@ -1,16 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" fill="#0d0a05"/>
-  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#d4af37" stroke-width="1"/>
-  <rect x="3" y="3" width="26" height="26" fill="none" stroke="#d4af37" stroke-width="0.4"/>
-  <g stroke="#d4af37" stroke-width="0.9" stroke-linecap="round">
-    <line x1="16" y1="16" x2="16" y2="6"/>
-    <line x1="16" y1="16" x2="23.07" y2="8.93"/>
-    <line x1="16" y1="16" x2="26" y2="16"/>
-    <line x1="16" y1="16" x2="23.07" y2="23.07"/>
-    <line x1="16" y1="16" x2="16" y2="26"/>
-    <line x1="16" y1="16" x2="8.93" y2="23.07"/>
-    <line x1="16" y1="16" x2="6" y2="16"/>
-    <line x1="16" y1="16" x2="8.93" y2="8.93"/>
-  </g>
-  <circle cx="16" cy="16" r="1.8" fill="#d4af37"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <rect width="40" height="40" rx="10" fill="#0b0c10"/>
+  <path d="M20 4 36 20 20 36 4 20Z" fill="#1e120d" stroke="#ff6a2b" stroke-width="1.5"/>
+  <path d="M13 13 27 27m0-14L13 27" stroke="#ffb547" stroke-width="3"/>
 </svg>
