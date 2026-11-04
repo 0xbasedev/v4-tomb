@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "protocol": "masonry",
+  "note": "INCOMPLETE TEMPLATE: select all vesting amounts and authorized LEVEL launch supply before deployment. Never deploy from null fields.",
+  "square": {
+    "maxSupply": 33333,
+    "farming": 25641,
+    "saleEscrow": 100,
+    "deployer": 1,
+    "initial": {
+      "ownerTeamDeveloper": 100,
+      "treasury": 500,
+      "arbitrage": 50
+    },
+    "vesting": {
+      "team": null,
+      "developer": null,
+      "treasury": null,
+      "arbitrage": null
+    }
+  },
+  "level": {
+    "authorizedLaunchSupply": null,
+    "initial": {
+      "ownerTeamDeveloper": 5000,
+      "treasury": 5000,
+      "arbitrage": 1000
+    }
+  },
+  "policy": {
+    "fireTaxHardCapBps": 1200,
+    "fireTaxBaselineBps": 100,
+    "fullTaxAtOrBelowPegBps": 8500,
+    "fireTaxRecoverySeconds": 25200,
+    "maximumExpansionPerEpochBps": 200,
+    "requiresFreshTwapStrictlyAbovePegBps": 10100,
+    "farmsCompoundCooldownSeconds": 10800,
+    "genesisCompoundCooldownSeconds": 10800,
+    "farmEmissionDays": 365,
+    "operationalVestingDays": 180
+  }
+}
