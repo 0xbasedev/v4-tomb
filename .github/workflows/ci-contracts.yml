@@ -1,7 +1,7 @@
 name: protocol checks
 "on":
   push:
-    branches: [main, 'feat/**']
+    branches: [main, merge, 'feat/**']
   pull_request:
   workflow_dispatch:
   schedule:
@@ -38,7 +38,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: node scripts/protocol.mjs validate
-      - run: node --test config/schema.test.mjs
+      - run: node --test config/schema.test.mjs config/masonry-launch.test.mjs
       - run: npm ci
         working-directory: frontend
       - run: npm run build
