@@ -28,6 +28,7 @@ contract MasonryLinearVesting is Ownable, ReentrancyGuard {
     error AlreadyFunded();
     error NotFunded();
     error NothingToRelease();
+    error UnderfundedEscrow();
 
     event Funded(uint256 upfront, uint256 vested);
     event VestedReleased(address indexed beneficiary, uint256 amount);
@@ -53,7 +54,9 @@ contract MasonryLinearVesting is Ownable, ReentrancyGuard {
         funded = true;
         upfrontReleased = upfront;
         vestingTotal = vestedAmount;
+        uint256 previous = asset.balanceOf(address(this));
         asset.safeTransferFrom(msg.sender, address(this), upfront + vestedAmount);
+        if (asset.balanceOf(address(this)) - previous != upfront + vestedAmount) revert UnderfundedEscrow();
         if (upfront > 0) asset.safeTransfer(beneficiary, upfront);
         emit Funded(upfront, vestedAmount);
     }
