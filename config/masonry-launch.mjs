@@ -14,6 +14,12 @@ const obj = (x, path) => {
   return x;
 };
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
+const positiveRawAmount = (n, path) => {
+  if (typeof n !== 'string' || !/^[1-9][0-9]*$/.test(n) || BigInt(n) > (1n << 256n) - 1n) {
+    throw new Error(`${path}: expected a positive uint256 decimal string`);
+  }
+  return n;
+};
 
 /**
  * Reject incomplete configs and inconsistent allocations before deploy.
@@ -29,6 +35,9 @@ export function validateMasonryLaunch(doc) {
   const source = obj(d.level, 'level');
   const levelInitial = obj(source.initial, 'level.initial');
   const policy = obj(d.policy, 'policy');
+  const genesisBurn = obj(d.genesisBurnExecution, 'genesisBurnExecution');
+  positiveRawAmount(genesisBurn.maxFeeSharesPerCallBaseUnits, 'genesisBurnExecution.maxFeeSharesPerCallBaseUnits');
+  positiveRawAmount(genesisBurn.maxUsdcPerCallBaseUnits, 'genesisBurnExecution.maxUsdcPerCallBaseUnits');
 
   const squareCap = positive(s.maxSupply, 'square.maxSupply');
   const farms = nonnegative(s.farming, 'square.farming');
@@ -57,6 +66,17 @@ export function validateMasonryLaunch(doc) {
     genesisCompoundCooldownSeconds: 10800,
     farmEmissionDays: 365,
     operationalVestingDays: 180,
+    genesisLevelUsdcLpBurnFeeBps: 50,
+    squareTaxPolBps: 1200,
+    squareTaxUsdcReserveBps: 2000,
+    squareTaxSquareReserveBps: 6800,
+    criticalDefenseEntryBps: 9000,
+    criticalDefenseExitBps: 10100,
+    criticalRecoveryEpochs: 2,
+    epochSeconds: 21600,
+    criticalOracleMaxAgeSeconds: 1800,
+    governanceTimelocksEnabled: false,
+    ownerTradingPauseEnabled: false,
   })) {
     if (policy[key] !== value) throw new Error(`policy.${key}: Masonry release invariant must equal ${value}`);
   }
