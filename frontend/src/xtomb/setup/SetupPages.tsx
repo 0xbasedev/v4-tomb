@@ -3,6 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 import { bytesToHex } from "viem";
 import { masonryRoles } from "../../../../config/create3-plan.mjs";
 import { durationDays, lpDay, percent, policy } from "../policy";
+import { TokenIcon } from "../TokenIcon";
 import {
   bridgeNetworks, chainInfrastructure, download, importDraft, infrastructureFields, launchFrom, loadDraft,
   makeDraft, networkFrom, saveDraft, supplyFields, identityFields, type Fields, type LaunchPlan,
@@ -216,7 +217,11 @@ export function WizardPage() {
             <p className="ops-help" id="home-network-help">Base has every address filled in. Other networks may need additional addresses from your deployment team. Switching networks replaces the address fields with that network’s defaults.</p>
             {fields.network === "custom" && <FieldsGroup fields={fields} update={update}
               entries={[[ "chainName", "Network name" ], [ "chainId", "Chain ID" ], [ "nativeSymbol", "Native currency symbol" ]]} />}
-            {selectedNetwork && <p className="ops-meta">{selectedNetwork.name} · Chain {selectedNetwork.id} · {selectedNetwork.nativeCurrency.symbol}</p>}
+            {selectedNetwork && <p className="ops-meta token-line">
+              <span>{selectedNetwork.name} · Chain {selectedNetwork.id}</span>
+              <span className="token-line">{selectedNetwork.nativeCurrency.symbol === "ETH" && <TokenIcon token="ETH" />}
+                {selectedNetwork.nativeCurrency.symbol} for network fees</span>
+            </p>}
             {missingDefaults.length > 0 && <button className="button" type="button"
               onClick={() => replace({ ...fields, ...Object.fromEntries(missingDefaults) })}>Fill missing addresses</button>}
             <FieldsGroup fields={fields} update={update} entries={[[ "rpcUrl", "Public RPC URL" ], ...infrastructureFields]} />

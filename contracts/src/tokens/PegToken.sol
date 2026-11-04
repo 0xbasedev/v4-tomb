@@ -10,8 +10,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Trustees} from "../governance/Trustees.sol";
 
 /**
- * @title OldMoney
- * @notice $MONEY — the algorithmic stable side of the Old Money trust. Pegged to 1 WETH TWAP on Base.
+ * @title PegToken
+ * @notice Peg token for the inherited WETH-based protocol, with the historical MONEY metadata.
  * @dev    Direct port of Tomb Finance's BOMB token (Bomb.sol in bombmoney/bomb-contracts),
  *         with one deliberate omission: the in-contract tax mechanism (TaxOffice / TaxOracle /
  *         taxTiers / `_transferWithTax` override of `transferFrom`) is REMOVED. Peg defense and
@@ -37,7 +37,7 @@ import {Trustees} from "../governance/Trustees.sol";
  *         Trustees ( = Tomb's operator) has unilateral mint and burnFrom authority. Wallet-level
  *         self-burn (`burn`) is public.
  */
-contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
+contract PegToken is ERC20Burnable, ERC20Permit, Trustees {
     using SafeERC20 for IERC20;
 
     /// @notice Initial mint to the genesis pool (24h zero-LP boot).

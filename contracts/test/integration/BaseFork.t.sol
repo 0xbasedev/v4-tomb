@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -30,8 +30,8 @@ contract BaseForkTest is BaseTest {
     /// @notice Uniswap V4 PoolManager on Base mainnet.
     address internal constant V4_POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
 
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -64,8 +64,8 @@ contract BaseForkTest is BaseTest {
 
         // Standard deploy sequence — same dance as EpochCycle.t.sol setUp.
         vm.startPrank(owner);
-        money = new OldMoney(owner);
-        estate = new Estate(startTime, communityFund, devFund, owner);
+        money = new PegToken(owner);
+        estate = new ShareToken(startTime, communityFund, devFund, owner);
         trustnote = new TrustNote(owner);
         vm.stopPrank();
 
@@ -103,7 +103,7 @@ contract BaseForkTest is BaseTest {
         boardroom.setOperator(address(treasury));
 
         // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
-        // owner holds 1 ESTATE from Estate's constructor mint. Stake a tiny
+        // owner holds 1 ESTATE from ShareToken's constructor mint. Stake a tiny
         // amount so allocateSeigniorage's bootstrap branch can credit Boardroom
         // without reverting CannotAllocateWhenTotalSupplyZero.
         estate.approve(address(boardroom), 1);

@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -81,7 +81,7 @@ contract PegDefenseHookHandler is Test {
 contract PegDefenseHookInvariants is StdInvariant, Test {
     PegDefenseHook public hook;
     PegDefenseHookHandler public handler;
-    OldMoney public money;
+    PegToken public money;
     StubPM public pm;
 
     address internal hookAddr;
@@ -89,7 +89,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     function setUp() public {
         vm.warp(1_700_000_000);
 
-        money = new OldMoney(address(this));
+        money = new PegToken(address(this));
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions

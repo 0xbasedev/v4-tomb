@@ -21,7 +21,7 @@ import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {IPriceSource} from "../interfaces/IPriceSource.sol";
 import {Trustees} from "../governance/Trustees.sol";
 
-/// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (OldMoney).
+/// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (PegToken).
 ///      Defined inline so this hook doesn't take a hard import dependency on the token.
 interface IBurnable {
     function burn(

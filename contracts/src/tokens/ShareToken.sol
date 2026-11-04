@@ -10,9 +10,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Trustees} from "../governance/Trustees.sol";
 
 /**
- * @title Estate
- * @notice $ESTATE — the share / governance side of the Old Money trust. Holders stake $ESTATE
- *         in TheClub (the Boardroom) to earn $MONEY seigniorage during expansion epochs.
+ * @title ShareToken
+ * @notice Share token for the inherited WETH-based protocol, with the historical ESTATE metadata.
+ *         Holders stake in the Boardroom to earn seigniorage during expansion epochs.
  * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
  *
  *         Supply (Tomb-exact):
@@ -31,7 +31,7 @@ import {Trustees} from "../governance/Trustees.sol";
  *         Quirk preserved from Tomb: `setTreasuryFund` and `setDevFund` are both gated to the
  *         `devFund` address, not to owner or trustees. This is Tomb's chosen pattern.
  */
-contract Estate is ERC20Burnable, ERC20Permit, Trustees {
+contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     using SafeERC20 for IERC20;
 
     /// @notice 59,500 ESTATE — farming pool allocation, minted one-shot via `distributeReward`.

@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -21,8 +21,8 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract OldMoneyTest is BaseTest {
-    OldMoney internal money;
+contract PegTokenTest is BaseTest {
+    PegToken internal money;
 
     address internal genesisPool = makeAddr("genesisPool");
     address internal mainPool = makeAddr("mainPool");
@@ -42,7 +42,7 @@ contract OldMoneyTest is BaseTest {
 
         // Deploy from `owner` so owner is initial owner + initial trustees.
         vm.prank(owner);
-        money = new OldMoney(owner);
+        money = new PegToken(owner);
 
         // Rotate trustees to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -62,7 +62,7 @@ contract OldMoneyTest is BaseTest {
     function test_Constructor_OwnerAndInitialDeployerMint() public {
         // Re-deploy fresh to inspect the constructor effects directly.
         vm.prank(alice);
-        OldMoney fresh = new OldMoney(alice);
+        PegToken fresh = new PegToken(alice);
         assertEq(fresh.owner(), alice);
         // 1 unit minted to the deployer for initial LP / sanity.
         assertEq(fresh.balanceOf(alice), 1 ether);
@@ -199,19 +199,19 @@ contract OldMoneyTest is BaseTest {
 
     function test_DistributeReward_RejectsZeroGenesis() public {
         vm.prank(trustees);
-        vm.expectRevert(OldMoney.ZeroAddress.selector);
+        vm.expectRevert(PegToken.ZeroAddress.selector);
         money.distributeReward(address(0), mainPool, airdropWallet);
     }
 
     function test_DistributeReward_RejectsZeroMain() public {
         vm.prank(trustees);
-        vm.expectRevert(OldMoney.ZeroAddress.selector);
+        vm.expectRevert(PegToken.ZeroAddress.selector);
         money.distributeReward(genesisPool, address(0), airdropWallet);
     }
 
     function test_DistributeReward_RejectsZeroAirdrop() public {
         vm.prank(trustees);
-        vm.expectRevert(OldMoney.ZeroAddress.selector);
+        vm.expectRevert(PegToken.ZeroAddress.selector);
         money.distributeReward(genesisPool, mainPool, address(0));
     }
 
@@ -241,7 +241,7 @@ contract OldMoneyTest is BaseTest {
         money.distributeReward(genesisPool, mainPool, airdropWallet);
 
         vm.prank(trustees);
-        vm.expectRevert(OldMoney.AlreadyDistributed.selector);
+        vm.expectRevert(PegToken.AlreadyDistributed.selector);
         money.distributeReward(genesisPool, mainPool, airdropWallet);
     }
 

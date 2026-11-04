@@ -65,13 +65,16 @@ export async function publishDeployment(document, artifact, broadcast, index, rp
     await verifyCreate3Receipts(network.create3, deployment, receipts);
   } else {
     const names = {
-      OldMoney: 'money', Estate: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
+      PegToken: 'money', ShareToken: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
       Boardroom: 'boardroom', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
       GenesisRewardPool: 'genesisRewardPool', MainRewardPool: 'mainRewardPool',
       ShareRewardPool: 'shareRewardPool', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',
     };
+    // Older Foundry broadcasts recorded the original Solidity names.
+    const legacyNames = { PegToken: 'OldMoney', ShareToken: 'Estate' };
     for (const [name, key] of Object.entries(names)) {
-      const txIndex = transactions.findIndex((tx) => tx.contractName === name && tx.transactionType === 'CREATE');
+      const acceptedNames = [name, ...(legacyNames[name] ? [legacyNames[name]] : [])];
+      const txIndex = transactions.findIndex((tx) => acceptedNames.includes(tx.contractName) && tx.transactionType === 'CREATE');
       if (txIndex < 0 || receipts[txIndex].contractAddress?.toLowerCase() !== deployment[key].toLowerCase()) {
         throw new Error(`${key} does not match the confirmed ${name} creation receipt`);
       }

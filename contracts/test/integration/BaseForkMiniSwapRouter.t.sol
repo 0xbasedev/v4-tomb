@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
@@ -58,7 +58,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
     using StateLibrary for IPoolManager;
 
     IPoolManager internal pm;
-    OldMoney internal money;
+    PegToken internal money;
     PegDefenseHook internal hook;
     MiniSwapRouter internal router;
     PoolModifyLiquidityTest internal liquidityRouter;
@@ -85,7 +85,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
 
         // Deploy MONEY (test contract holds trustees role; no Treasury needed for swap tests).
         vm.prank(owner);
-        money = new OldMoney(owner);
+        money = new PegToken(owner);
 
         // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
         // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2

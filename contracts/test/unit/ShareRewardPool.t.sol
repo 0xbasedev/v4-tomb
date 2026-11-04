@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {ShareRewardPool} from "../../src/distribution/ShareRewardPool.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,7 +25,7 @@ contract MockLp is ERC20 {
 
 contract ShareRewardPoolTest is BaseTest {
     ShareRewardPool internal pool;
-    Estate internal estate;
+    ShareToken internal estate;
     MockLp internal lp;
 
     address internal communityFund = makeAddr("communityFund");
@@ -40,7 +40,7 @@ contract ShareRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(poolStart, communityFund, devFund, owner);
+        estate = new ShareToken(poolStart, communityFund, devFund, owner);
 
         vm.prank(owner);
         pool = new ShareRewardPool(address(estate), poolStart, owner);

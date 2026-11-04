@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 
@@ -48,7 +48,7 @@ interface IWeth9 {
  *         Gated on BASE_RPC_URL — skipped if unset.
  */
 contract BaseForkLpWrapperTest is BaseTest {
-    OldMoney internal money;
+    PegToken internal money;
     V4PositionWrapper internal wrapper;
     PoolKey internal poolKey;
 
@@ -82,7 +82,7 @@ contract BaseForkLpWrapperTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy MONEY and pre-fund the test contract.
-        money = new OldMoney(address(this));
+        money = new PegToken(address(this));
         money.mint(address(this), MONEY_BAL);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.

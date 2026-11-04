@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -20,8 +20,8 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract EstateTest is BaseTest {
-    Estate internal estate;
+contract ShareTokenTest is BaseTest {
+    ShareToken internal estate;
 
     address internal communityFund = makeAddr("communityFund");
     address internal devFund = makeAddr("devFund");
@@ -42,7 +42,7 @@ contract EstateTest is BaseTest {
         vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(vestingStart, communityFund, devFund, owner);
+        estate = new ShareToken(vestingStart, communityFund, devFund, owner);
 
         // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -94,14 +94,14 @@ contract EstateTest is BaseTest {
 
     function test_Constructor_RejectsZeroCommunityFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, address(0), devFund, address(this));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        new ShareToken(vestingStart, address(0), devFund, address(this));
     }
 
     function test_Constructor_RejectsZeroDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, communityFund, address(0), address(this));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        new ShareToken(vestingStart, communityFund, address(0), address(this));
     }
 
     // ---------------------------------------------------------------------
@@ -110,17 +110,17 @@ contract EstateTest is BaseTest {
 
     function test_SetTreasuryFund_OnlyDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.NotDevFund.selector);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
         estate.setTreasuryFund(alice);
 
         vm.prank(stranger);
-        vm.expectRevert(Estate.NotDevFund.selector);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
         estate.setTreasuryFund(alice);
     }
 
     function test_SetTreasuryFund_RejectsZero() public {
         vm.prank(devFund);
-        vm.expectRevert(Estate.ZeroAddress.selector);
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
         estate.setTreasuryFund(address(0));
     }
 
@@ -134,13 +134,13 @@ contract EstateTest is BaseTest {
 
     function test_SetDevFund_OnlyDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.NotDevFund.selector);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
         estate.setDevFund(alice);
     }
 
     function test_SetDevFund_RejectsZero() public {
         vm.prank(devFund);
-        vm.expectRevert(Estate.ZeroAddress.selector);
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
         estate.setDevFund(address(0));
     }
 
@@ -250,7 +250,7 @@ contract EstateTest is BaseTest {
 
     function test_DistributeReward_RejectsZero() public {
         vm.prank(trustees);
-        vm.expectRevert(Estate.ZeroAddress.selector);
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
         estate.distributeReward(address(0));
     }
 
@@ -269,7 +269,7 @@ contract EstateTest is BaseTest {
         estate.distributeReward(farmingFund);
 
         vm.prank(trustees);
-        vm.expectRevert(Estate.AlreadyDistributed.selector);
+        vm.expectRevert(ShareToken.AlreadyDistributed.selector);
         estate.distributeReward(farmingFund);
     }
 

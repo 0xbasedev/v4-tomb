@@ -6,8 +6,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 /**
  * @title ShareRewardPool
- * @notice 370-day MasterChef-style farm for $ESTATE distribution. Estate's farming
- *         allocation (59,500 ESTATE from `Estate.distributeReward(farmingPool)`) is
+ * @notice 370-day MasterChef-style farm for $ESTATE distribution. ShareToken's farming
+ *         allocation (59,500 ESTATE from `ShareToken.distributeReward(farmingPool)`) is
  *         pre-funded into this contract; LPs stake their LP tokens and earn ESTATE
  *         pro-rata over the year.
  *

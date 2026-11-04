@@ -99,7 +99,7 @@ p { color: var(--ash); line-height: 1.7; }
   font-size: .81rem;
   line-height: 1.5;
 }
-.network-note span, .gauge-label i {
+.network-note span {
   flex: none;
   width: 6px;
   height: 6px;
@@ -189,6 +189,10 @@ p { color: var(--ash); line-height: 1.7; }
 .token-section, .split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .token-section { margin-top: 28px; }
 .token-card { border-top-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.token-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.token-icon { display: block; flex: none; width: 32px; height: 32px; object-fit: contain; }
+.token-card .token-icon { width: 46px; height: 46px; }
+.swap-pair { margin-block: 12px; color: var(--bone); font-family: var(--mono); }
 .token-card h2 { color: var(--accent); margin-top: 10px; }
 .token-card a { display: inline-block; color: var(--accent); margin-top: 12px; font-size: .85rem; }
 .ember { --accent: var(--ember); }

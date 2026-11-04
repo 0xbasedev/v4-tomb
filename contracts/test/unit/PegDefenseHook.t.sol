@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 import {BaseV4Hook} from "../../src/hooks/base/BaseV4Hook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -67,7 +67,7 @@ contract PegDefenseHookTest is BaseTest {
 
     PegDefenseHook internal hook;
     MockPoolManager internal pm;
-    OldMoney internal money;
+    PegToken internal money;
     address internal weth = makeAddr("weth");
     PoolKey internal poolKey;
 
@@ -82,7 +82,7 @@ contract PegDefenseHookTest is BaseTest {
         pm = new MockPoolManager();
 
         vm.prank(owner);
-        money = new OldMoney(owner);
+        money = new PegToken(owner);
 
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.

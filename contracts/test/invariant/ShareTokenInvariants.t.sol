@@ -3,16 +3,16 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 
 /**
- * @title EstateHandler
+ * @title ShareTokenHandler
  * @notice Fuzz-target wrapper for ESTATE. The handler holds the trustees role so it can
  *         call `distributeReward`. It also drives time forward (via vm.warp) so the
  *         claimRewards vesting math is exercised across the full 365-day schedule.
  */
-contract EstateHandler is Test {
-    Estate public estate;
+contract ShareTokenHandler is Test {
+    ShareToken public estate;
 
     address public farmingPool;
     address public communityFund;
@@ -23,7 +23,7 @@ contract EstateHandler is Test {
     bool public ghost_distributed;
 
     constructor(
-        Estate _estate,
+        ShareToken _estate,
         address _farmingPool,
         address _communityFund,
         address _devFund
@@ -111,12 +111,12 @@ contract EstateHandler is Test {
 }
 
 /**
- * @title EstateInvariants
+ * @title ShareTokenInvariants
  * @notice Properties that must hold across all interactions with $ESTATE.
  */
-contract EstateInvariants is StdInvariant, Test {
-    Estate public estate;
-    EstateHandler public handler;
+contract ShareTokenInvariants is StdInvariant, Test {
+    ShareToken public estate;
+    ShareTokenHandler public handler;
 
     address public farmingPool;
     address public communityFund;
@@ -132,8 +132,8 @@ contract EstateInvariants is StdInvariant, Test {
         communityFund = makeAddr("communityFund");
         devFund = makeAddr("devFund");
 
-        estate = new Estate(startTime, communityFund, devFund, address(this));
-        handler = new EstateHandler(estate, farmingPool, communityFund, devFund);
+        estate = new ShareToken(startTime, communityFund, devFund, address(this));
+        handler = new ShareTokenHandler(estate, farmingPool, communityFund, devFund);
 
         // Hand trustees to the handler so it can call distributeReward.
         estate.transferTrustees(address(handler));

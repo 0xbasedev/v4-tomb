@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 import { networks } from "./networks";
 
-export interface OldMoneyDeployment {
+export interface LegacyProtocolDeployment {
   /** $MONEY token (peg target: 1 MONEY = 1 WETH). */
   money: Address;
   /** $ESTATE share token. */
@@ -47,12 +47,12 @@ export interface OldMoneyDeployment {
 }
 
 // Stable objects prevent polling effects from restarting on every render.
-const deployments = new Map<number, OldMoneyDeployment | null>(networks.map((network) => [
+const deployments = new Map<number, LegacyProtocolDeployment | null>(networks.map((network) => [
   network.id,
   network.deployment ? { ...network.deployment, deployBlock: BigInt(network.deployment.deployBlock) } : null,
 ]));
 
 /** A missing deployment disables all protocol interactions. */
-export function getDeployment(chainId: number): OldMoneyDeployment | null {
+export function getDeployment(chainId: number): LegacyProtocolDeployment | null {
   return deployments.get(chainId) ?? null;
 }

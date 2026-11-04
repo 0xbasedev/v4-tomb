@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {GenesisRewardPool} from "../../src/distribution/GenesisRewardPool.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -26,7 +26,7 @@ contract MockLp is ERC20 {
 
 contract GenesisRewardPoolTest is BaseTest {
     GenesisRewardPool internal pool;
-    OldMoney internal money;
+    PegToken internal money;
     MockLp internal lp;
     MockLp internal lp2;
 
@@ -38,7 +38,7 @@ contract GenesisRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney(owner);
+        money = new PegToken(owner);
 
         vm.prank(owner);
         pool = new GenesisRewardPool(address(money), poolStart, owner);
@@ -47,7 +47,7 @@ contract GenesisRewardPoolTest is BaseTest {
         lp2 = new MockLp("LP token 2", "LP2");
 
         // Treasury would normally pre-fund the pool via MONEY.distributeReward.
-        // In this test, owner is the trustees on MONEY (set in OldMoney constructor
+        // In this test, owner is the trustees on MONEY (set in PegToken constructor
         // since owner deployed it). owner mints the pool's full reward allocation.
         // Extract the constant first — otherwise pool.TOTAL_REWARDS() consumes the prank.
         uint256 rewards = pool.TOTAL_REWARDS();

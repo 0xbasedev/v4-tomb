@@ -3,8 +3,8 @@ pragma solidity 0.8.26;
 
 import {console2} from "forge-std/Script.sol";
 
-import {OldMoney} from "../src/tokens/OldMoney.sol";
-import {Estate} from "../src/tokens/Estate.sol";
+import {PegToken} from "../src/tokens/PegToken.sol";
+import {ShareToken} from "../src/tokens/ShareToken.sol";
 import {TrustNote} from "../src/tokens/TrustNote.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Boardroom} from "../src/core/Boardroom.sol";
@@ -37,7 +37,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /**
  * @title Deploy
- * @notice One-shot Foundry deploy script for the Old Money protocol.
+ * @notice One-shot Foundry deploy script for the inherited WETH-based protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
  *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
@@ -62,8 +62,8 @@ contract Deploy is NetworkConfig, Create3Config {
     mapping(string role => address expected) private _expected;
     uint256 private _hookNonce;
 
-    OldMoney public money;
-    Estate public estate;
+    PegToken public money;
+    ShareToken public estate;
     TrustNote public trustnote;
     PegDefenseHook public hook;
     Oracle public oracle;
@@ -87,7 +87,7 @@ contract Deploy is NetworkConfig, Create3Config {
         _preflight();
         _loadPlan(json, string.concat(path, ".create3"), deployer);
 
-        console2.log("=== Old Money deploy ===");
+        console2.log("=== Legacy WETH protocol deploy ===");
         console2.log("chain id:", block.chainid);
         console2.log("deployer:", deployer);
 
@@ -215,12 +215,13 @@ contract Deploy is NetworkConfig, Create3Config {
     function _deployTokens(
         Genesis memory g
     ) internal {
-        money = OldMoney(_deploy("money", abi.encodePacked(type(OldMoney).creationCode, abi.encode(_plan.deployer))));
-        estate = Estate(
+        money = PegToken(_deploy("money", abi.encodePacked(type(PegToken).creationCode, abi.encode(_plan.deployer))));
+        estate = ShareToken(
             _deploy(
                 "estate",
                 abi.encodePacked(
-                    type(Estate).creationCode, abi.encode(g.vestingStart, g.communityFund, g.devFund, _plan.deployer)
+                    type(ShareToken).creationCode,
+                    abi.encode(g.vestingStart, g.communityFund, g.devFund, _plan.deployer)
                 )
             )
         );

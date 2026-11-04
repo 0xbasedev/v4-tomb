@@ -3,8 +3,8 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -27,8 +27,8 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  *         Final ownership state after rotation (and what stays put):
  *
  *           Ownable2Step (rotated to Timelock via two-step):
- *             - OldMoney.owner = Timelock
- *             - Estate.owner   = Timelock
+ *             - PegToken.owner = Timelock
+ *             - ShareToken.owner   = Timelock
  *             - TrustNote.owner = Timelock
  *             - PegDefenseHook.owner = Timelock  (not exercised here — needs V4 setUp)
  *
@@ -40,8 +40,8 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  *
  *           Unchanged (protocol-internal — rotating breaks the seigniorage flow):
  *             - Boardroom.operator   = Treasury   (Treasury calls allocateSeigniorage)
- *             - OldMoney.trustees    = Treasury   (Treasury mints/burns)
- *             - Estate.trustees      = Treasury
+ *             - PegToken.trustees    = Treasury   (Treasury mints/burns)
+ *             - ShareToken.trustees      = Treasury
  *             - TrustNote.trustees   = Treasury
  *             - V4PositionWrapper    = no admin   (wrap/unwrap are permissionless)
  *
@@ -60,8 +60,8 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  */
 contract GovernanceRotationTest is BaseTest {
     // ----- protocol contracts (set up like EpochCycle/BaseFork tests) -----
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -88,8 +88,8 @@ contract GovernanceRotationTest is BaseTest {
 
         // Deploy tokens (owner deploys → owner is Ownable2Step.owner).
         vm.startPrank(owner);
-        money = new OldMoney(owner);
-        estate = new Estate(startTime, communityFund, devFund, owner);
+        money = new PegToken(owner);
+        estate = new ShareToken(startTime, communityFund, devFund, owner);
         trustnote = new TrustNote(owner);
         oracle = new MockOracle(1e18);
 

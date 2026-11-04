@@ -1,12 +1,12 @@
 # xTOMB and xSHARE
 
-The `merge` branch contains the xTOMB and xSHARE frontend preview and the in-progress Masonry contracts. See the [frontend guide](frontend/README.md) and [integration status](docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) for the active work. The deployment runbook and legacy network manifests below still target the inherited Old Money contracts.
+The `merge` branch contains the xTOMB and xSHARE frontend preview and the in-progress Masonry contracts. See the [frontend guide](frontend/README.md) and [integration status](docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) for the active work. The inherited deployment tooling below uses a separate WETH-based configuration.
 
-## Inherited Old Money tooling
+## Inherited WETH-based tooling
 
-A full-stack fork of [0xbasedev/v4-tomb](https://github.com/0xbasedev/v4-tomb) at `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6`. It preserves MONEY / ESTATE / TRUSTNOTE, WETH peg, Treasury seigniorage and bonds, Boardroom staking, Genesis / Main / Share reward pools, the fourteen-tier Uniswap V4 hook, swaps, LP wrapping, governance tooling, and the Art Deco React interface.
+A full-stack fork of [0xbasedev/v4-tomb](https://github.com/0xbasedev/v4-tomb) at `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6`. Inherited token implementations use the Solidity names `PegToken` and `ShareToken`. The historical ERC-20 and permit names, manifest keys `money` and `estate`, and CREATE3 salts keep their original values.
 
-Chain dependencies now come from a shared, validated [network manifest](config/networks.json). Supported targets are **Cancun-compatible EVM chains with compatible V4 infrastructure and an 18-decimal WETH peg asset**. This is not a Solana port or a change to the original economics. No Masonry-specific tiers, taxes, or Genesis NFT policies have been added.
+The inherited deploy tooling reads chain dependencies from a shared, validated [network manifest](config/networks.json). Its targets are **Cancun-compatible EVM chains with compatible V4 infrastructure and an 18-decimal WETH peg asset**. The Masonry preview describes its separate USDC-based rules.
 
 ## Start locally
 

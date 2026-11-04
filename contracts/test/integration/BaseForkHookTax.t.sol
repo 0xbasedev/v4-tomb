@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -58,8 +58,8 @@ interface IWeth9 {
 contract BaseForkHookTaxTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -104,8 +104,8 @@ contract BaseForkHookTaxTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
-        money = new OldMoney(address(this));
-        estate = new Estate(startTime, communityFund, devFund, address(this));
+        money = new PegToken(address(this));
+        estate = new ShareToken(startTime, communityFund, devFund, address(this));
         trustnote = new TrustNote(address(this));
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.

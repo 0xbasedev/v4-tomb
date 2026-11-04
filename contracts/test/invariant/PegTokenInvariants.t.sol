@@ -3,21 +3,21 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 /**
- * @title OldMoneyHandler
- * @notice Fuzz-target wrapper around OldMoney. The invariant runner calls these external
+ * @title PegTokenHandler
+ * @notice Fuzz-target wrapper around PegToken. The invariant runner calls these external
  *         functions with random arguments; we bound the arguments to valid ranges (correct
  *         actor, balance-bounded amount, etc.) so the handler doesn't waste runs on
  *         obviously-invalid calls.
  *
- *         The handler holds the trustees role on OldMoney so its `mint` action succeeds.
+ *         The handler holds the trustees role on PegToken so its `mint` action succeeds.
  *         Burn / transfer actions vm.prank an actor so msg.sender inside the token
  *         contract is that actor.
  */
-contract OldMoneyHandler is Test {
-    OldMoney public money;
+contract PegTokenHandler is Test {
+    PegToken public money;
 
     address[] public actors;
 
@@ -26,7 +26,7 @@ contract OldMoneyHandler is Test {
     uint256 public ghost_burned;
 
     constructor(
-        OldMoney _money
+        PegToken _money
     ) {
         money = _money;
         actors.push(makeAddr("alice"));
@@ -76,18 +76,18 @@ contract OldMoneyHandler is Test {
 }
 
 /**
- * @title OldMoneyInvariants
+ * @title PegTokenInvariants
  * @notice Properties that must hold across any sequence of mints, burns, and transfers on
  *         the $MONEY token. The constructor mints 1 ether to the deployer (this test
  *         contract), then we hand off trustees to the handler so it can mint freely.
  */
-contract OldMoneyInvariants is StdInvariant, Test {
-    OldMoney public money;
-    OldMoneyHandler public handler;
+contract PegTokenInvariants is StdInvariant, Test {
+    PegToken public money;
+    PegTokenHandler public handler;
 
     function setUp() public {
-        money = new OldMoney(address(this));
-        handler = new OldMoneyHandler(money);
+        money = new PegToken(address(this));
+        handler = new PegTokenHandler(money);
         money.transferTrustees(address(handler));
 
         targetContract(address(handler));

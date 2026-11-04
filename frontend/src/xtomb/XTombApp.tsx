@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Outlet, Route, Routes, useLocation } from "rea
 import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { networks } from "../lib/networks";
 import { Gauge } from "./Gauge";
+import { TokenIcon } from "./TokenIcon";
 import { AdminPage, BridgePage, WizardPage } from "./setup/SetupPages";
 import { durationDays, lpDay, percent, policy, sampleTargetBps, tiers } from "./policy";
 
@@ -84,7 +85,7 @@ function Stats({ items }: { items: ReadonlyArray<readonly [string, string]> }) {
 
 function GaugePanel({ sample }: { sample?: number }) {
   return <section className="panel gauge-panel" aria-label="xTOMB peg monitor">
-    <div className="gauge-label"><span><i /> xTOMB peg monitor</span><span className="chip">{sample === undefined ? "Reference" : "Simulation"}</span></div>
+    <div className="gauge-label"><span><TokenIcon token="xTOMB" />xTOMB peg monitor</span><span className="chip">{sample === undefined ? "Reference" : "Simulation"}</span></div>
     <Gauge sample={sample} />
     <Stats items={[["Target", "$1.00"], ["Expansion gate", `>$${(policy.requiresFreshTwapStrictlyAbovePegBps / 10_000).toFixed(2)}`],
       ["Defense threshold", `≤$${(policy.criticalDefenseEntryBps / 10_000).toFixed(2)}`]]} />
@@ -109,8 +110,8 @@ function Landing() {
       <span className="launch-arrow" aria-hidden="true">↗</span>
     </Link>
     <section className="token-section" aria-label="Protocol assets">
-      <article className="panel token-card ember"><span className="label">Peg asset</span><h2>xTOMB</h2><p>Genesis rewards and the USDC peg. Official sells use the Fire Tax.</p><Link to="/swap">Explore the swap desk <span aria-hidden="true">↗</span></Link></article>
-      <article className="panel token-card spectre"><span className="label">Share asset</span><h2>xSHARE</h2><p>Official xSHARE/USDC sell fees fund protocol liquidity and Treasury reserves.</p><Link to="/masonry">See Treasury routing <span aria-hidden="true">↗</span></Link></article>
+      <article className="panel token-card ember"><span className="label">Peg asset</span><h2 className="token-line"><TokenIcon token="xTOMB" />xTOMB</h2><p>Genesis rewards and the USDC peg. Official sells use the Fire Tax.</p><Link to="/swap">Explore the swap desk <span aria-hidden="true">↗</span></Link></article>
+      <article className="panel token-card spectre"><span className="label">Share asset</span><h2 className="token-line"><TokenIcon token="xSHARE" />xSHARE</h2><p>Official xSHARE/USDC sell fees fund protocol liquidity and Treasury reserves.</p><Link to="/masonry">See Treasury routing <span aria-hidden="true">↗</span></Link></article>
     </section>
   </>;
 }
@@ -139,13 +140,13 @@ function Genesis() {
     <Stats items={[["Duration", `${durationDays} days`], ["LP opens", `Day ${lpDay}`], ["LP emission share from Day 2", "75%"], ["LP deposit and compound fee", percent(policy.genesisLevelUsdcLpBurnFeeBps)]]} />
     <h2 className="section-title">Choose a Genesis pass</h2>
     <div className="tier-grid">{tiers.map((tier) => <article key={tier.name} className={`panel tier ${tier.tone}`}>
-      <h3>{tier.name}</h3><div className="price">{tier.price} <span>USDC</span></div>
+      <h3>{tier.name}</h3><div className="price token-line">{tier.price} <TokenIcon token="USDC" /><span>USDC</span></div>
       <ul>{tier.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
       <button type="button" className="button" disabled>Mint {tier.name}</button>
     </article>)}</div>
     <div className="split below">
       <section className="panel"><h2>Standard staking</h2><p>Earn xTOMB from Day 1. After the official LP pool opens, standard staking receives the remaining 25% of scheduled emissions.</p></section>
-      <section className="panel"><h2>xTOMB/USDC LP</h2><p>Deposit or compound from Day {lpDay} until Genesis ends. Only net shares earn rewards after the {percent(policy.genesisLevelUsdcLpBurnFeeBps)} LP fee.</p></section>
+      <section className="panel"><h2 className="token-line"><TokenIcon token="xTOMB" />xTOMB/USDC LP</h2><p>Deposit or compound from Day {lpDay} until Genesis ends. Only net shares earn rewards after the {percent(policy.genesisLevelUsdcLpBurnFeeBps)} LP fee.</p></section>
     </div>
   </>;
 }
@@ -172,6 +173,7 @@ function Swap() {
     <div className="split">
       <section className="panel control-panel">
         <h2>Fire Tax simulator</h2>
+        <p className="token-line swap-pair"><TokenIcon token={asset} />{asset}<span aria-hidden="true">/</span><TokenIcon token="USDC" />USDC</p>
         <div className="fields">
           <label>Asset<select value={asset} onChange={(event) => setAsset(event.target.value === "xSHARE" ? "xSHARE" : "xTOMB")}><option>xTOMB</option><option>xSHARE</option></select></label>
           <label>Direction<select value={sell ? "sell" : "buy"} onChange={(event) => setSell(event.target.value === "sell")}><option value="sell">Sell</option><option value="buy">Buy</option></select></label>
@@ -199,7 +201,7 @@ function Masonry() {
     <Heading title="Masonry">Follow how xSHARE sell fees fund Treasury assets and xTOMB defense.</Heading>
     <Stats items={[["Protocol liquidity", percent(policy.squareTaxPolBps)], ["USDC reserve", percent(policy.squareTaxUsdcReserveBps)], ["Retained xSHARE", percent(policy.squareTaxSquareReserveBps)]]} />
     <div className="split below">
-      <section className="panel"><h2>xSHARE/USDC liquidity</h2><p>Under normal routing, part of the collected xSHARE funds redeemable protocol liquidity shares held by Treasury.</p></section>
+      <section className="panel"><h2 className="token-line"><TokenIcon token="xSHARE" />xSHARE/USDC liquidity</h2><p>Under normal routing, part of the collected xSHARE funds redeemable protocol liquidity shares held by Treasury.</p></section>
       <section className="panel"><h2>Critical Defense</h2><p>A fresh xTOMB TWAP at or below $0.90 activates defense. New xSHARE sell fees are earmarked to buy and burn xTOMB. Earlier allocations keep their purpose.</p></section>
     </div>
   </>;

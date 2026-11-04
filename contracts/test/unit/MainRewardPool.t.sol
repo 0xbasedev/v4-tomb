@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {MainRewardPool} from "../../src/distribution/MainRewardPool.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,7 +25,7 @@ contract MockLp is ERC20 {
 
 contract MainRewardPoolTest is BaseTest {
     MainRewardPool internal pool;
-    OldMoney internal money;
+    PegToken internal money;
     MockLp internal lp;
 
     uint256 internal poolStart;
@@ -36,7 +36,7 @@ contract MainRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney(owner);
+        money = new PegToken(owner);
 
         vm.prank(owner);
         pool = new MainRewardPool(address(money), poolStart, owner);
