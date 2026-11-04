@@ -7,12 +7,15 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
 /// @notice Interface for a genuinely fungible v4 LP vault: shares must be
 /// redeemable pro-rata by ANY holder, not only the original NFT depositor.
 /// @dev The legacy V4PositionWrapper in this repo does NOT implement this.
 interface IMasonryRedeemableLPVault is IERC20 {
+    function poolKey() external view returns (PoolKey memory);
+
     function redeem(uint256 shares, address recipient)
         external
         returns (uint256 levelReceived, uint256 usdcReceived);
@@ -53,6 +56,7 @@ interface IMasonryBuybackExecutionGuard {
 /// and a Genesis pool that credits net (gross - fee) shares only.
 contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using PoolIdLibrary for PoolKey;
 
     uint256 public constant DEPOSIT_BURN_FEE_BPS = 50;
     uint256 public constant BPS = 10_000;
@@ -129,6 +133,8 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
                 && !(c0 == address(level_) && c1 == address(usdc_))
         ) revert InvalidPool();
         if (c0 >= c1) revert InvalidPool();
+
+        if (PoolId.unwrap(lpVault_.poolKey().toId()) != PoolId.unwrap(buybackPoolKey_.toId())) revert InvalidPool();
 
         lpVault = lpVault_;
         level = level_;

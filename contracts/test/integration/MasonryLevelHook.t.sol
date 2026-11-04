@@ -15,7 +15,16 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
 import {MasonryLevelHook, IMasonryLevelTwap} from "../../src/hooks/MasonryLevelHook.sol";
 import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
-import {MockMasonryLevel, MockMasonryUSDC} from "../unit/MasonryGenesisLPBurnFee.t.sol";
+import {MockMasonryLevel, MockMasonryUSDC, MockMasonryBurnGuard} from "../unit/MasonryGenesisLPBurnFee.t.sol";
+import {MasonryLevelUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
+import {MasonryGenesisPass} from "../../src/masonry/MasonryGenesisPass.sol";
+import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisStaking.sol";
+import {
+    MasonryGenesisLPBurnFee,
+    IMasonryBurnableLevel,
+    IMasonryExactInputV4Router
+} from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
+import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
 contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
@@ -26,6 +35,7 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
     PoolSwapTest private swaps;
     PoolKey private key;
     bool private level0;
+    int24 private center;
     uint256 private twap = 1e18;
     address private constant TREASURY = address(0x777);
 
@@ -65,7 +75,7 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         level.approve(address(swaps), type(uint256).max);
         usdc.approve(address(swaps), type(uint256).max);
         int24 tick = TickMath.getTickAtSqrtPrice(peg);
-        int24 center = tick / 60 * 60;
+        center = tick / 60 * 60;
         liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
         liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 120, center + 120, 1e16, 0), "");
     }
@@ -157,6 +167,152 @@ contract MasonryLevelHookTest is Test, IMasonryLevelTwap {
         _swap(level0, -900_000e18);
         assertEq(level.totalBurned(), 0);
         assertEq(hook.raisedBps(), 100);
+    }
+
+    function testVaultTransferredSharesRedeemAndDirectDonationsStayUnallocated() public {
+        MasonryLevelUsdcVault vault = _vault();
+        uint256 shares = 1e16;
+        (uint256 levelIn, uint256 usdcIn) = vault.deposit(shares, type(uint256).max, type(uint256).max, address(this));
+        level.transfer(address(vault), 20e18);
+        address holder = makeAddr("holder");
+        vault.transfer(holder, shares / 2);
+
+        vm.prank(holder);
+        (uint256 levelOut, uint256 usdcOut) = vault.redeem(shares / 2, holder);
+        assertApproxEqAbs(levelOut, levelIn / 2, 1);
+        assertApproxEqAbs(usdcOut, usdcIn / 2, 1);
+        assertEq(level.balanceOf(holder), levelOut);
+        assertEq(usdc.balanceOf(holder), usdcOut);
+        vault.redeem(shares / 2, address(this));
+        assertEq(vault.totalSupply(), 0);
+        assertEq(level.balanceOf(address(vault)), 20e18);
+
+        vault.deposit(shares, levelIn, usdcIn, address(this));
+        vault.redeem(shares, address(this));
+        assertEq(level.balanceOf(address(vault)), 20e18);
+    }
+
+    function testVaultNewDepositCannotCapturePreviouslyAccruedFees() public {
+        MasonryLevelUsdcVault vault = _vault();
+        uint256 shares = 1e16;
+        vault.deposit(shares, type(uint256).max, type(uint256).max, address(this));
+        _swap(!level0, -500e6);
+
+        // Compare the old holder's redemption against an identical branch
+        // with a new depositor entering immediately before redemption.
+        uint256 checkpoint = vm.snapshotState();
+        (uint256 levelExpected, uint256 usdcExpected) = vault.redeem(shares, address(this));
+        assertTrue(vm.revertToState(checkpoint));
+        address late = makeAddr("late depositor");
+        (uint256 levelIn, uint256 usdcIn) = vault.deposit(shares, type(uint256).max, type(uint256).max, late);
+        assertGt(level0 ? vault.feeReserve1() : vault.feeReserve0(), 0);
+        vm.prank(late);
+        (uint256 levelLate, uint256 usdcLate) = vault.redeem(shares, late);
+        assertLe(levelLate, levelIn);
+        assertLe(usdcLate, usdcIn);
+        (uint256 levelOut, uint256 usdcOut) = vault.redeem(shares, address(this));
+        assertEq(levelOut, levelExpected);
+        assertEq(usdcOut, usdcExpected);
+        assertEq(vault.feeReserve0(), 0);
+        assertEq(vault.feeReserve1(), 0);
+    }
+
+    function testVaultSlippageRevertsWithoutChangingShares() public {
+        MasonryLevelUsdcVault vault = _vault();
+        vm.expectRevert();
+        vault.deposit(1e16, 0, 0, address(this));
+        assertEq(vault.totalSupply(), 0);
+        vault.deposit(1e16, type(uint256).max, type(uint256).max, address(this));
+
+        vm.expectRevert();
+        vault.redeem(1e16, type(uint256).max, 0, address(this));
+        assertEq(vault.balanceOf(address(this)), 1e16);
+    }
+
+    function testVaultAndCollectorRejectMismatchedPoolKeys() public {
+        PoolKey memory wrong = key;
+        wrong.fee = 1000;
+        int24 lower = center - 6000;
+        int24 upper = center + 6000;
+        vm.expectRevert(MasonryLevelUsdcVault.InvalidConfiguration.selector);
+        new MasonryLevelUsdcVault(wrong, lower, upper);
+
+        MasonryLevelUsdcVault vault = _vault();
+        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
+        MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
+        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidPool.selector);
+        new MasonryGenesisLPBurnFee(
+            vault,
+            IMasonryBurnableLevel(address(level)),
+            usdc,
+            IMasonryExactInputV4Router(address(router)),
+            guard,
+            wrong,
+            address(this),
+            1e16,
+            10_000e6
+        );
+    }
+
+    function testGenesisDepositRedeemsRealVaultFeeAndRetriesUsdcBuyback() public {
+        MasonryLevelUsdcVault vault = _vault();
+        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
+        guard.setSafe(false);
+        MasonryGenesisLPBurnFee collector = new MasonryGenesisLPBurnFee(
+            vault,
+            IMasonryBurnableLevel(address(level)),
+            usdc,
+            IMasonryExactInputV4Router(address(new MiniSwapRouter(hook.poolManager()))),
+            guard,
+            key,
+            address(this),
+            1e16,
+            10_000e6
+        );
+        MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        MasonryGenesisStaking staking =
+            new MasonryGenesisStaking(pass, collector, IMasonryGenesisSettlement(address(this)), usdc, 7000e18);
+        collector.setGenesis(address(staking));
+        level.approve(address(staking), 7000e18);
+        staking.fund();
+
+        address member = makeAddr("genesis member");
+        usdc.mint(member, 50e6);
+        vm.startPrank(member);
+        usdc.approve(address(pass), 50e6);
+        pass.purchase(MasonryGenesisPass.Tier.Genesis);
+        vault.approve(address(staking), type(uint256).max);
+        vm.stopPrank();
+
+        uint256 gross = 1e16;
+        vault.deposit(gross * 2, type(uint256).max, type(uint256).max, member);
+        vm.warp(schedule.lpOpens());
+        vm.prank(member);
+        staking.deposit(1, gross);
+
+        uint256 firstBurn = level.totalBurned();
+        assertGt(firstBurn, 0);
+        assertEq(firstBurn, collector.totalLevelBurnedFromLPFees());
+        assertGt(collector.pendingBurnUSDC(), 0);
+        assertEq(collector.pendingFeeShares(), 0);
+
+        guard.setSafe(true);
+        vm.prank(member);
+        staking.deposit(1, gross);
+        assertEq(collector.pendingBurnUSDC(), 0);
+        assertEq(collector.totalFeeSharesCollected(), gross / 100);
+        assertGt(level.totalBurned(), firstBurn);
+        assertEq(level.totalBurned(), collector.totalLevelBurnedFromLPFees());
+        assertEq(hook.genesisLevelBurned(), 0);
+        (uint256 shares,,) = staking.positions(1, member);
+        assertEq(shares, gross * 2 - gross / 100);
+        assertEq(vault.balanceOf(address(staking)), shares);
+    }
+
+    function _vault() private returns (MasonryLevelUsdcVault vault) {
+        vault = new MasonryLevelUsdcVault(key, center - 6000, center + 6000);
+        level.approve(address(vault), type(uint256).max);
+        usdc.approve(address(vault), type(uint256).max);
     }
 
     function _swap(

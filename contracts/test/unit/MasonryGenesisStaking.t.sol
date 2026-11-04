@@ -71,13 +71,15 @@ contract MasonryGenesisStakingTest is Test {
         pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         address c0 = address(level) < address(usdc) ? address(level) : address(usdc);
         address c1 = address(level) < address(usdc) ? address(usdc) : address(level);
+        PoolKey memory key = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
+        vault.setPoolKey(key);
         fee = new MasonryGenesisLPBurnFee(
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(level)),
             usdc,
             new MockMasonryV4Router(level, usdc),
             new MockMasonryBurnGuard(),
-            PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0))),
+            key,
             address(this),
             10_000e18,
             10_000e6

@@ -35,6 +35,7 @@ contract MockMasonryRedeemableVault is ERC20 {
     MockMasonryLevel public immutable level;
     MockMasonryUSDC public immutable usdc;
     bool public failRedemption;
+    PoolKey private key;
 
     constructor(MockMasonryLevel level_, MockMasonryUSDC usdc_)
         ERC20("LEVEL/USDC LP Vault", "mlp")
@@ -42,6 +43,9 @@ contract MockMasonryRedeemableVault is ERC20 {
         level = level_;
         usdc = usdc_;
     }
+
+    function setPoolKey(PoolKey memory key_) external { key = key_; }
+    function poolKey() external view returns (PoolKey memory) { return key; }
 
     function mintShares(address to, uint256 shares) external { _mint(to, shares); }
     function setFailRedemption(bool fail) external { failRedemption = fail; }
@@ -125,6 +129,7 @@ contract MasonryGenesisLPBurnFeeTest is Test {
             hooks: IHooks(address(0))
         });
 
+        vault.setPoolKey(key);
         collector = new MasonryGenesisLPBurnFee(
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(level)),
