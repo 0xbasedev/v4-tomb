@@ -7,6 +7,36 @@ export function readManifest(file = 'config/networks.json') {
   return { document, networks: parseNetworks(document) };
 }
 
+const createdTopic = '0x4db17dd5e4732fb6da34a148104a592783ca119a1e7bb8829eba6cbadef0b511';
+const proxyTopic = '0x2feea65dd4e9f9cbd86b74b7734210c59a1b2981b5b137bd0ee3e208200c9067';
+const lower = (value) => value?.toLowerCase();
+const indexedAddress = (value) => `0x${value.slice(2).toLowerCase().padStart(64, '0')}`;
+
+export async function verifyCreate3Receipts(plan, deployment, receipts) {
+  const { coreRoles, create3Address, factory } = await import('./create3.mjs');
+  if (lower(plan.factory) !== lower(factory)) throw new Error('Unexpected CreateX factory');
+  const mined = receipts.filter((receipt) => lower(receipt.to) === lower(factory)
+    && lower(receipt.from) === lower(plan.deployer) && receipt.contractAddress == null);
+  for (const role of coreRoles) {
+    const predicted = create3Address(plan, role, role === 'hook' ? plan.hookNonce : undefined);
+    if (lower(predicted.address) !== lower(plan.addresses[role])
+      || lower(predicted.address) !== lower(deployment[role])) {
+      throw new Error(`${role} does not match the CREATE3 prediction`);
+    }
+    const confirmed = mined.filter((receipt) => {
+      const logs = (receipt.logs ?? []).filter((log) => lower(log.address) === lower(factory));
+      return logs.some((log, index) => log.topics?.length === 3
+        && lower(log.topics[0]) === proxyTopic
+        && lower(log.topics[1]) === indexedAddress(predicted.proxy)
+        && lower(log.topics[2]) === lower(predicted.guarded)
+        && logs.slice(index + 1).some((creation) => creation.topics?.length === 2
+          && lower(creation.topics[0]) === createdTopic
+          && lower(creation.topics[1]) === indexedAddress(predicted.address)));
+    });
+    if (confirmed.length !== 1) throw new Error(`${role} has no unique confirmed CreateX creation receipt`);
+  }
+}
+
 export async function publishDeployment(document, artifact, broadcast, index, rpc) {
   const networks = parseNetworks(document);
   const network = networks[index];
@@ -28,16 +58,26 @@ export async function publishDeployment(document, artifact, broadcast, index, rp
   if (receipts.some((receipt) => !receipt || BigInt(receipt.status) !== 1n || !receipt.blockNumber)) {
     throw new Error('All broadcast transactions must have successful mined receipts');
   }
-  const names = {
-    OldMoney: 'money', Estate: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
-    Boardroom: 'boardroom', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
-    GenesisRewardPool: 'genesisRewardPool', MainRewardPool: 'mainRewardPool',
-    ShareRewardPool: 'shareRewardPool', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',
-  };
-  for (const [name, key] of Object.entries(names)) {
-    const txIndex = transactions.findIndex((tx) => tx.contractName === name && tx.transactionType === 'CREATE');
-    if (txIndex < 0 || receipts[txIndex].contractAddress?.toLowerCase() !== deployment[key].toLowerCase()) {
-      throw new Error(`${key} does not match the confirmed ${name} creation receipt`);
+  if (network.create3) {
+    const { factory, factoryCodeHash, hashHex } = await import('./create3.mjs');
+    const code = await rpc('eth_getCode', [factory, 'latest']);
+    if (!code || hashHex(code) !== factoryCodeHash) throw new Error('Unexpected CreateX factory bytecode');
+    await verifyCreate3Receipts(network.create3, deployment, receipts);
+  } else {
+    const names = {
+      PegToken: 'money', ShareToken: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
+      Boardroom: 'boardroom', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
+      GenesisRewardPool: 'genesisRewardPool', MainRewardPool: 'mainRewardPool',
+      ShareRewardPool: 'shareRewardPool', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',
+    };
+    // Older Foundry broadcasts recorded the original Solidity names.
+    const legacyNames = { PegToken: 'OldMoney', ShareToken: 'Estate' };
+    for (const [name, key] of Object.entries(names)) {
+      const acceptedNames = [name, ...(legacyNames[name] ? [legacyNames[name]] : [])];
+      const txIndex = transactions.findIndex((tx) => acceptedNames.includes(tx.contractName) && tx.transactionType === 'CREATE');
+      if (txIndex < 0 || receipts[txIndex].contractAddress?.toLowerCase() !== deployment[key].toLowerCase()) {
+        throw new Error(`${key} does not match the confirmed ${name} creation receipt`);
+      }
     }
   }
   for (const key of deploymentKeys) {

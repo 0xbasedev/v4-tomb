@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
@@ -55,8 +55,8 @@ contract MockTreasury is ITreasury {
 
 contract BoardroomTest is BaseTest {
     Boardroom internal boardroom;
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     MockTreasury internal treasuryMock;
 
     address internal communityFund = makeAddr("communityFund");
@@ -77,15 +77,15 @@ contract BoardroomTest is BaseTest {
 
         // Deploy tokens with owner as initial trustees.
         vm.prank(owner);
-        money = new OldMoney();
+        money = new PegToken(owner);
         vm.prank(owner);
-        estate = new Estate(block.timestamp, communityFund, devFund);
+        estate = new ShareToken(ShareTokenProfiles.legacy(block.timestamp, communityFund, devFund, owner), owner);
 
         treasuryMock = new MockTreasury();
         treasuryMock.setStartTime(block.timestamp);
 
         vm.prank(owner);
-        boardroom = new Boardroom();
+        boardroom = new Boardroom(owner);
         vm.prank(owner);
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
 
@@ -94,7 +94,7 @@ contract BoardroomTest is BaseTest {
         vm.prank(owner);
         money.transferTrustees(address(this)); // test contract becomes trustees
 
-        // Materialize Estate supply via distributeReward, then fund alice and bob.
+        // Materialize ShareToken supply via distributeReward, then fund alice and bob.
         vm.prank(owner);
         estate.distributeReward(farmingPool);
         vm.prank(farmingPool);

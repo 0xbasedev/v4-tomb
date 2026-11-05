@@ -1,0 +1,57 @@
+[
+  {
+    "type": "function",
+    "name": "consult",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint144",
+        "internalType": "uint144"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "twap",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint144",
+        "internalType": "uint144"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "update",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  }
+]

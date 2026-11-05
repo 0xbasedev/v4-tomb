@@ -21,7 +21,7 @@ import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {IPriceSource} from "../interfaces/IPriceSource.sol";
 import {Trustees} from "../governance/Trustees.sol";
 
-/// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (OldMoney).
+/// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (PegToken).
 ///      Defined inline so this hook doesn't take a hard import dependency on the token.
 interface IBurnable {
     function burn(
@@ -186,18 +186,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         IPoolManager _poolManager,
         address _money,
         address _initialTrustees
-    ) BaseV4Hook(_poolManager) {
+    ) BaseV4Hook(_poolManager) Trustees(_initialTrustees) {
         money = _money;
-
-        // Override the Trustees() base-constructor's msg.sender assignment. Required for
-        // CREATE2-via-broadcast deploys (e.g., `new Hook{salt:}(...)` inside
-        // `vm.startBroadcast`) where msg.sender of the constructor is the canonical
-        // deployer (0x4e59...) rather than the human deployer we want as administrator.
-        // Direct-deploy callers (tests using `deployCodeTo`, inline-assembly `create2`
-        // from a test contract) should pass `msg.sender` / `address(this)` to preserve
-        // the prior default behavior.
-        _transferTrustees(_initialTrustees); // reverts on zero address (ZeroTrusteesAddress)
-        _transferOwnership(_initialTrustees);
 
         // Tomb-faithful tier table (matches Bomb.sol exactly).
         taxTiersTwaps = [
@@ -243,12 +233,13 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     }
 
     function afterInitialize(
-        address, /* sender */
+        address sender,
         PoolKey calldata key,
         uint160, /* sqrtPriceX96 */
         int24 tick
     ) external override onlyPoolManager returns (bytes4) {
         if (bound) revert AlreadyBound();
+        if (sender != trustees()) revert NotTrustees();
         if (Currency.unwrap(key.currency0) != money && Currency.unwrap(key.currency1) != money) {
             revert PoolMissingMoney();
         }

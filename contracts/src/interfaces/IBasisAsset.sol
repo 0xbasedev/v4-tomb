@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 /**
  * @title IBasisAsset
  * @notice Tomb-shape interface for any "basis asset" — a token whose mint/burn authority sits
- *         with a single operator (the Treasury). Implemented by OldMoney, Estate, and
+ *         with a single operator (the Treasury). Implemented by PegToken, ShareToken, and
  *         TrustNote via the [[Trustees]] base contract's operator()/isOperator()/transferOperator
  *         aliases.
  */

@@ -48,7 +48,6 @@ abstract contract NetworkConfig is Script {
         address manager = _infrastructure("poolManager");
         address positions = _infrastructure("positionManager");
         address permit = _infrastructure("permit2");
-        _infrastructure("create2Deployer");
         _infrastructure("universalRouter");
         (bool ok, bytes memory data) = positions.staticcall(abi.encodeWithSignature("poolManager()"));
         if (!ok || data.length != 32 || abi.decode(data, (address)) != manager) {

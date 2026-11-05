@@ -18,8 +18,9 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@config/*": ["../config/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../config/*.d.mts"]
 }

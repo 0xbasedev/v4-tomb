@@ -1,336 +1,336 @@
-import { useChainId } from "wagmi";
-import { explorerTransactionUrl } from "@/lib/networks";
-import { StatTile } from "@/components/StatTile";
-import { FeaturedTile } from "@/components/FeaturedTile";
-import { PhaseBanner } from "@/components/PhaseBanner";
-import { RuleTrio } from "@/components/RuleTrio";
+import { useRef, useState } from "react";
 
-import {
-  useBondMarket,
-  useDeployment,
-  useEpoch,
-  useMoneyMarket,
-  useTokenSupplies,
-  useTreasuryEvents,
-  type TreasuryEventKind,
-} from "@/lib/hooks";
-import { formatToken, formatTokenAuto, formatPrice, formatCountdown } from "@/lib/format";
+import { GenesisStrip } from "@/components/GenesisStrip";
+import { NextMove } from "@/components/NextMove";
+import { PageHeader, SectionTitle } from "@/components/PageHeader";
+import { PegGauge } from "@/components/PegGauge";
+import { PendingBadge, PlannedBadge, SimBadge } from "@/components/Status";
+import { DRIVER_LABEL, targetBps } from "@/lib/fireTax";
+import { fmtDuration } from "@/lib/genesis";
+import { useProtocol } from "@/lib/hooks";
+import { DEFENSE, EXPANSION, FIRE, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
+import { PHASE_META, expansionCap, marketPhase } from "@/lib/market";
+import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
+import { useReveal } from "@/lib/motion/useReveal";
+import { usePreview } from "@/lib/preview";
 
 /**
- * Dashboard — "The Ledger." Live operating state of the Trust.
- *
- * Reads via wagmi multicalls (Sprint B):
- *   useEpoch         → epoch counter, next-epoch countdown
- *   useMoneyMarket   → price, peg, ceiling, premium threshold, circulating supply,
- *                       seigniorage reserve, current phase (bootstrap/expansion/etc)
- *   useTokenSupplies → MONEY / ESTATE / TRUSTNOTE totalSupply
- *
- * Pre-Oracle-update (first epoch on a fresh deploy), `useMoneyMarket.price` is 0n
- * because `getMoneyPrice()` reverts until the oracle records its first observation.
- * The format helpers render 0n as "—" so the UI stays honest about the void.
- *
- * Genesis / Main / Share allocations are protocol constants — shown as static values
- * since they're not stored on-chain in a single-call view.
+ * Dashboard — the peg, the planned expansion rule, Critical Defense, xSHARE
+ * fee routing and the configured supply, each reading the launch config and
+ * (once deployed) the contracts. Sample values carry a Simulated badge.
  */
 
-// Roman numeral helper for small integers — used to render the epoch as "I" / "II" / etc.
-function toRoman(n: number): string {
-  if (n <= 0) return "—";
-  const numerals: [number, string][] = [
-    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
-    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
-    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
-  ];
-  let result = "";
-  let remaining = n;
-  for (const [value, sym] of numerals) {
-    while (remaining >= value) {
-      result += sym;
-      remaining -= value;
-    }
-  }
-  return result;
-}
-
-// Friendly labels for the event-feed table.
-const EVENT_LABEL: Record<TreasuryEventKind, string> = {
-  TreasuryFunded: "Reserve · Treasury Funded",
-  BoardroomFunded: "Expansion · Boardroom Paid",
-  DaoFundFunded: "Allocation · Dao Fund",
-  DevFundFunded: "Allocation · Dev Fund",
-  BoughtBonds: "Bond · Acquired",
-  RedeemedBonds: "Bond · Redeemed",
-};
-
-function formatRelativeTime(secondsAgo: number): string {
-  if (secondsAgo < 60) return `${Math.floor(secondsAgo)}s ago`;
-  if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
-  if (secondsAgo < 86_400) return `${Math.floor(secondsAgo / 3600)}h ago`;
-  return `${Math.floor(secondsAgo / 86_400)}d ago`;
-}
+const fmt = (n: number | null, d = 2) => (n === null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: d }));
+/** Sample circulating xTOMB for the expansion-cap illustration (no supply binding yet). */
+const SIM_CIRCULATING = 4_200_000;
 
 export function Dashboard() {
-  const chainId = useChainId();
-  const deployment = useDeployment();
-  const { epoch, secondsUntilNextEpoch } = useEpoch();
-  const market = useMoneyMarket();
-  const bonds = useBondMarket();
-  const supplies = useTokenSupplies();
-  const events = useTreasuryEvents({ limit: 10 });
-
-  const epochNum = epoch !== undefined ? Number(epoch) : 0;
-  const bootstrapNum = Number(market.bootstrapEpochs);
-  const inBootstrap = market.phase === "bootstrap";
-
-  // Phase banner detail line — formal "Epoch X of Y" formatting.
-  const phaseDetail = inBootstrap
-    ? `Epoch ${toRoman(epochNum + 1)} of ${toRoman(bootstrapNum)}`
-    : `Epoch ${toRoman(epochNum)}`;
-
-  // Headline metric — price + band membership.
-  const priceStr = formatPrice(market.price);
-  const ceilingStr = formatPrice(market.priceCeiling);
-  const inBand = market.price > 0n && market.price >= market.priceOne && market.price <= market.priceCeiling;
-  const badge =
-    market.price === 0n
-      ? "Awaiting Oracle"
-      : inBand
-        ? "Within The Band"
-        : market.price < market.priceOne
-          ? "Below Par"
-          : "Above Ceiling";
-  const badgeTone: "gold" | "ruby" | "emerald" = inBand || market.price === 0n
-    ? "gold"
-    : market.price < market.priceOne
-      ? "ruby"
-      : "emerald";
-
-  // Disconnected / wrong-chain state — render the Ledger with "—" everywhere
-  // rather than crashing or hiding the page.
-  const noDeployment = deployment === null;
+  const root = useRef<HTMLDivElement>(null);
+  const p = useProtocol();
+  const preview = usePreview();
+  const m = p.market;
+  useReveal(root, []);
+  const meta = PHASE_META[m.phase];
+  const age = m.observedAt !== null ? Math.max(0, p.now - m.observedAt) : null;
+  const xt = p.taxFor("xTOMB", 1_000);
+  const xs = p.taxFor("xSHARE", 1_000);
+  const cap = p.sim ? expansionCap(SIM_CIRCULATING, m.twap, m.fresh) : null;
 
   return (
-    <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            Live State of The Trust · Base · MMXXVI
+    <div ref={root}>
+      <PageHeader
+        eyebrow={p.sim ? "Dashboard · simulated data" : "Dashboard"}
+        title="The peg, on one screen"
+        lede="Inspect the validated TWAP, the planned expansion rule, Critical Defense and where xSHARE's sell tax goes."
+        aside={
+          <div className="panel panel-raised p-5 lg:w-[440px]">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="label">xTOMB peg monitor</span>
+              {p.sim ? <SimBadge /> : <span className="chip chip-ok h-6">Live</span>}
+            </div>
+            <PegGauge price={m.twap ?? 0} phase={m.phase} simulated={p.sim} idleLabel="No valid TWAP" />
           </div>
-          <h1 className="gold-text font-display italic text-section">
-            The Ledger
-          </h1>
-          <RuleTrio className="mb-2 mt-8" />
-          {noDeployment && (
-            <p className="mt-6 font-body text-sm italic text-deco-gold-dark">
-              Connect a wallet on a configured network to observe live state.
+        }
+      />
+
+      <div className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-8 md:px-8">
+        <GenesisStrip />
+
+        {/* The interface's opinion comes first: one move, one alternative, one thing to avoid. */}
+        <section>
+          <NextMove />
+        </section>
+
+        {/* ===== State ===== */}
+        <section data-reveal className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="panel p-5 lg:col-span-2">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className={`chip ${meta.chip}`}>
+                <span className="h-1.5 w-1.5 animate-breathe rounded-full bg-current" />
+                {meta.label}
+              </span>
+              {p.sim && <SimBadge />}
+            </div>
+            <h2 className="font-display text-xl font-semibold text-bone">{meta.title}</h2>
+            <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-bone-dim">{meta.detail}</p>
+            <dl className="mt-5 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+              <Fact k="Validated TWAP" v={m.twap !== null ? `$${m.twap.toFixed(4)}` : "—"} />
+              <Fact k="Observed" v={age !== null ? `${fmtDuration(age)} ago` : "—"} tone={m.fresh ? "" : "text-warn"} />
+              <Fact k="xTOMB sell tax" v={xt.rateBps !== null ? pct(xt.rateBps) : "rejected"} sub={xt.driver ? DRIVER_LABEL[xt.driver] : undefined} />
+              <Fact k="xSHARE sell tax" v={xs.rateBps !== null ? pct(xs.rateBps) : "rejected"} sub={xs.driver ? DRIVER_LABEL[xs.driver] : undefined} />
+            </dl>
+          </div>
+          <WhatIf />
+        </section>
+
+        {/* ===== Expansion + Defense ===== */}
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div data-reveal className="panel p-5">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="label">Expansion rule</span>
+              <PlannedBadge label="Planned · mint not bound" />
+            </div>
+            <h3 className="font-display text-lg font-semibold text-bone">
+              Fresh validated TWAP strictly above ${EXPANSION.gate.toFixed(2)}
+            </h3>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-bone-dim">
+              An eligible six-hour epoch may mint at most {pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB. No spot fallback, no catch-up for
+              missed epochs, nothing when the oracle is stale. There are no unconditional bootstrap epochs.
             </p>
-          )}
-        </div>
-      </section>
-
-      {/* ===== Phase indicator ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <PhaseBanner phase={market.phase} detail={phaseDetail} />
-      </section>
-
-      {/* ===== Headline metric: MONEY price + epoch countdown ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The Quotation
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <FeaturedTile
-              label="MONEY · Quoted in Ether"
-              value={priceStr}
-              unit="ETH"
-              badge={badge}
-              badgeTone={badgeTone}
-              className="md:col-span-2"
-              visual={
-                <div className="mx-auto h-20 w-full max-w-md border border-deco-gold/40 bg-deco-ground-soft">
-                  <div
-                    className="h-full w-full"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgba(212,175,55,0.05) 0%, rgba(212,175,55,0.15) 50%, rgba(212,175,55,0.05) 100%)",
-                    }}
-                  />
-                  <div className="label-deco -mt-12 text-center text-deco-gold-dark">
-                    Band · {formatPrice(market.priceOne)} – {ceilingStr} ETH
-                  </div>
-                </div>
-              }
-            />
-            <div className="flex flex-col gap-5">
-              <StatTile
-                label="Epoch"
-                value={epoch !== undefined ? toRoman(epochNum) : "—"}
-                hint={inBootstrap ? "The Bootstrap" : "The Cycle"}
-              />
-              <StatTile
-                label="Next Epoch"
-                value={formatCountdown(secondsUntilNextEpoch)}
-                hint="Until Allocation"
-              />
+            <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
+              <Fact k="This epoch" v={m.fresh && m.twap !== null && m.twap > EXPANSION.gate ? "eligible" : "not eligible"} tone={m.fresh && m.twap !== null && m.twap > EXPANSION.gate ? "text-ember-hot" : "text-ash"} />
+              <Fact k={p.sim ? "Cap on sample supply" : "Cap this epoch"} v={cap !== null ? `${fmt(cap, 0)} xTOMB` : "needs supply binding"} sub={p.sim ? `${pct(EXPANSION.maxPerEpochBps)} of ${SIM_CIRCULATING.toLocaleString()} (sample)` : undefined} />
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* ===== Supply Ledger ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The Supply Ledger
+          <div data-reveal id="defense" className={`panel p-5 ${m.defense.active ? "border-bad/40" : ""}`}>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="label">Critical Defense</span>
+              <span className={`chip h-6 ${m.defense.active ? "chip-bad" : ""}`}>{m.defense.active ? "Active" : "Inactive"}</span>
+              {p.sim && <SimBadge />}
+            </div>
+            <h3 className="font-display text-lg font-semibold text-bone">
+              Enters at a fresh TWAP ≤ ${DEFENSE.enterAt.toFixed(2)}
+            </h3>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-bone-dim">
+              While active, 100% of new xSHARE sell tax buys and burns xTOMB; earlier earmarks keep their purpose. It exits after {DEFENSE.recoveryEpochs}{" "}
+              consecutive real six-hour checkpoints with a fresh TWAP strictly above ${DEFENSE.exitAbove.toFixed(2)}. Stale data never ends it.
+            </p>
+            <div className="mt-4">
+              <div className="mb-1 flex justify-between font-mono text-[11px] text-ash">
+                <span>Recovery checkpoints</span>
+                <span>
+                  {m.defense.active ? m.defense.checkpoints : 0}/{DEFENSE.recoveryEpochs}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {Array.from({ length: DEFENSE.recoveryEpochs }, (_, i) => (
+                  <div key={i} className={`h-2 rounded-full ${m.defense.active && i < m.defense.checkpoints ? "bg-ok" : "bg-white/[0.07]"}`} />
+                ))}
+              </div>
+              <p className="mt-2 font-mono text-[10.5px] text-ash-dim">Oracle max age for defense decisions: {DEFENSE.oracleMaxAgeSeconds / 60} min</p>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile
-              label="MONEY · Circulating"
-              value={formatTokenAuto(market.circulatingSupply)}
-              hint="Per Treasury (excludes reward pools + airdrop)"
-            />
-            <StatTile
-              label="MONEY · Total Supply"
-              value={formatTokenAuto(supplies.moneySupply)}
-              hint="Including Treasury + Pools"
-            />
-            <StatTile
-              label="ESTATE · Outstanding"
-              value={formatTokenAuto(supplies.estateSupply)}
-              hint="Hard Cap 70,000"
-            />
-            <StatTile
-              label="Trust Notes · Outstanding"
-              value={formatTokenAuto(supplies.trustNoteSupply)}
-              hint="Bonds Held"
-            />
-            <StatTile
-              label="Treasury · Reserve"
-              value={formatTokenAuto(market.seigniorageSaved)}
-              hint="MONEY · Empty in Bootstrap"
-            />
-            <StatTile label="Genesis Pool" value="11,000" hint="MONEY · 24-Hour Window" />
-            <StatTile label="Main Pool" value="140,000" hint="MONEY · 9-Day Distribution" />
-            <StatTile label="Share Pool" value="59,500" hint="ESTATE · 370-Day Distribution" />
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ===== Mechanism State ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The Mechanism · State
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile
-              label="Bond Discount"
-              value={
-                bonds.discountRate > 0n
-                  ? `${(Number(bonds.discountRate) / 1e18).toFixed(4)}×`
-                  : "—"
-              }
-              hint={bonds.discountRate > 0n ? "TRUSTNOTE per MONEY burned" : "Active only below peg"}
+        {/* ===== xSHARE fee routing ===== */}
+        <section>
+          <SectionTitle kicker="xSHARE sell tax" title="Where the fee goes" right={p.sim ? <SimBadge /> : undefined} />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <Routing
+              title="Normal routing"
+              active={!m.defense.active}
+              note="Shares of the collected tax, not of the sale."
+              rows={[
+                { k: "Protocol-owned xSHARE/USDC LP", bps: SQUARE_ROUTING.polBps, tone: "bg-spectre" },
+                { k: "USDC reserve (sold for USDC)", bps: SQUARE_ROUTING.usdcReserveBps, tone: "bg-[#5b9dff]" },
+                { k: "Retained xSHARE reserve", bps: SQUARE_ROUTING.squareReserveBps, tone: "bg-amethyst" },
+              ]}
+              balances={[
+                ["Earmarked for POL", p.hooks.xSHARE.pol, "xSHARE"],
+                ["Earmarked for USDC reserve", p.hooks.xSHARE.usdcReserve, "xSHARE"],
+                ["Retained", p.hooks.xSHARE.retained, "xSHARE"],
+                ["USDC routed", p.hooks.xSHARE.usdcRouted, "USDC"],
+              ]}
             />
-            <StatTile
-              label="Bond Premium"
-              value={
-                bonds.premiumRate > 0n
-                  ? `${(Number(bonds.premiumRate) / 1e18).toFixed(4)}×`
-                  : "—"
-              }
-              hint={bonds.premiumRate > 0n ? "MONEY per TRUSTNOTE redeemed" : "Active above 1.10 ETH"}
-            />
-            <StatTile
-              label="Contraction Headroom"
-              value={formatTokenAuto(bonds.burnableLeft)}
-              hint="MONEY · Burnable This Epoch"
-            />
-            <StatTile
-              label="Peg Ceiling"
-              value={ceilingStr}
-              hint="Below: Tax · Above: Issue Notes"
+            <Routing
+              title="Critical Defense"
+              active={m.defense.active}
+              note="Only new eligible fee revenue; prior earmarks, user capital and Treasury principal are untouched."
+              rows={[{ k: "xSHARE → USDC → xTOMB, burned", bps: 10_000, tone: "bg-bad" }]}
+              balances={[
+                ["Earmarked for buy-and-burn", p.hooks.xSHARE.critical, "xSHARE"],
+                ["xTOMB burned by xSHARE routing", p.hooks.xSHARE.levelBurned, "xTOMB"],
+              ]}
             />
           </div>
-        </div>
-      </section>
-
-      {/* ===== Recent Epochs ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
-        <div className="mx-auto max-w-5xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The Record of Epochs
-          </div>
-
-          <div className="deco-panel overflow-x-auto p-0">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-deco-gold/30">
-                  <th className="label-deco px-5 py-4 text-deco-gold-dark">When</th>
-                  <th className="label-deco px-5 py-4 text-deco-gold-dark">Action</th>
-                  <th className="label-deco px-5 py-4 text-right text-deco-gold-dark">Amount</th>
-                  <th className="label-deco px-5 py-4 text-right text-deco-gold-dark">Tx</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.isLoading ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-gold-dark">
-                      Reading the ledger…
-                    </td>
-                  </tr>
-                ) : events.isError ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-ruby/80">
-                      Event scan failed — see browser console.
-                    </td>
-                  </tr>
-                ) : events.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-6 text-center font-body text-sm italic text-deco-gold-dark">
-                      No epoch ticks yet. The first record will appear after the keeper
-                      advances the Treasury past <code className="font-ornament text-deco-gold">nextEpochPoint</code>.
-                    </td>
-                  </tr>
-                ) : (
-                  events.rows.map((row) => {
-                    const nowSec = Math.floor(Date.now() / 1000);
-                    const when = Number(row.timestamp) > 0 ? formatRelativeTime(nowSec - Number(row.timestamp)) : "—";
-                    const isBond = row.kind === "BoughtBonds" || row.kind === "RedeemedBonds";
-                    const amountAsset = isBond ? "MONEY" : "MONEY";
-                    return (
-                      <tr key={`${row.transactionHash}-${row.logIndex}`} className="border-b border-deco-gold/15 last:border-b-0">
-                        <td className="px-5 py-4 font-body text-base italic text-deco-ivory-soft">{when}</td>
-                        <td className="px-5 py-4 font-display text-lg text-deco-ivory">{EVENT_LABEL[row.kind]}</td>
-                        <td className="px-5 py-4 text-right font-display text-lg text-deco-ivory">
-                          {formatToken(row.amount, 2)}{" "}
-                          <span className="font-ornament text-xs text-deco-gold-dark">{amountAsset}</span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <a
-                            href={explorerTransactionUrl(chainId, row.transactionHash)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold"
-                          >
-                            {explorerTransactionUrl(chainId, row.transactionHash) ? "View →" : "—"}
-                          </a>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="mt-6 text-center font-body text-sm italic text-deco-gold-dark">
-            Live event scan · refreshes every minute.
+          <p className="mt-3 text-[12px] text-ash">
+            xTOMB's own sell tax is separate: burned in full during Genesis, sent to the hook's fee recipient afterwards. Treasury-held xTOMB is never sold for
+            fee routing.
           </p>
-        </div>
-      </section>
+        </section>
+
+        {/* ===== Supply ===== */}
+        <section data-reveal className="panel p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="label mb-1">xSHARE supply</div>
+              <h3 className="font-display text-lg font-semibold text-bone">Configured cap: {SQUARE_SUPPLY.cap.toLocaleString()} xSHARE</h3>
+            </div>
+            <span className="font-mono text-[11px] text-ash">config/masonry-launch.template.json</span>
+          </div>
+          <SupplyBar />
+        </section>
+
+      </div>
+      {preview.enabled && <span className="sr-only">Values on this page are simulated.</span>}
+    </div>
+  );
+}
+
+function Fact({ k, v, sub, tone = "" }: { k: string; v: string; sub?: string; tone?: string }) {
+  return (
+    <div className="rounded-xl bg-black/25 p-3">
+      <dt className="label mb-1">{k}</dt>
+      <dd className={`num text-[15px] text-bone ${tone}`}>{v}</dd>
+      {sub && <dd className="mt-0.5 text-[11px] text-ash">{sub}</dd>}
+    </div>
+  );
+}
+
+/** Pick a price and read what the protocol does there — independent of the live state. */
+function WhatIf() {
+  const preview = usePreview();
+  const [price, setPrice] = useState(1.0);
+  const presets: [string, number][] = [
+    ["Defense", 0.88],
+    ["Below", 0.95],
+    ["Peg", 1.0],
+    ["Above gate", 1.03],
+  ];
+  const phase = marketPhase({ twap: price, fresh: true, defenseActive: price <= DEFENSE.enterAt });
+  const text: Record<string, string> = {
+    defense: "At or below the Critical Defense threshold.",
+    tax: "Below peg: the Fire Tax target rises toward the cap.",
+    band: "Inside the band: no expansion, baseline tax.",
+    expansion: "Above the expansion price gate — planned mint of up to 2% per eligible epoch.",
+  };
+  return (
+    <div data-reveal className="panel p-5">
+      <div className="label mb-2">What happens at…</div>
+      <div className="flex flex-wrap gap-1">
+        {presets.map(([l, v]) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => {
+              setPrice(v);
+              if (preview.enabled) preview.setTwap(v);
+            }}
+            className={`rounded-lg border px-2.5 py-1.5 text-[12px] ${price === v ? "border-ember/60 bg-ember/10 text-ember-hot" : "border-white/[0.08] text-ash hover:text-bone"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 num text-2xl text-bone">${price.toFixed(2)}</div>
+      <p className="mt-1 text-[13.5px] text-bone-dim">{text[phase]}</p>
+      <p className="mt-2 font-mono text-[11px] text-ash">Fire Tax target here: {pct(targetBps(price))}</p>
+      {preview.enabled && <p className="mt-2 text-[11px] text-ash-dim">In Preview this also moves the simulated TWAP.</p>}
+    </div>
+  );
+}
+
+function Routing({
+  title,
+  active,
+  note,
+  rows,
+  balances,
+}: {
+  title: string;
+  active: boolean;
+  note: string;
+  rows: { k: string; bps: number; tone: string }[];
+  balances: [string, number | null, string][];
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      gsap.fromTo(".rt-bar", { scaleX: 0 }, { scaleX: 1, transformOrigin: "left", duration: 0.8, stagger: 0.08, ease: EASE.settle });
+    },
+    { scope: root, dependencies: [active] },
+  );
+  return (
+    <div ref={root} data-reveal className={`panel p-5 transition-opacity ${active ? "" : "opacity-55"}`}>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-display text-[16px] font-semibold text-bone">{title}</span>
+        <span className={`chip h-6 ${active ? "chip-ok" : ""}`}>{active ? "In effect" : "Standby"}</span>
+      </div>
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.k}>
+            <div className="mb-1 flex justify-between text-[12.5px]">
+              <span className="text-bone-dim">{r.k}</span>
+              <span className="num text-bone">{pct(r.bps)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/[0.05]">
+              <div className={`rt-bar h-full rounded-full ${r.tone}`} style={{ width: `${r.bps / 100}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11.5px] text-ash">{note}</p>
+      <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
+        {balances.map(([k, v, u]) => (
+          <div key={k}>
+            <dt className="text-[11px] text-ash">{k}</dt>
+            <dd className="num text-[13px] text-bone">
+              {fmt(v)} <span className="text-[10.5px] text-ash">{u}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function SupplyBar() {
+  const v = SQUARE_SUPPLY.vesting;
+  const vested = Object.values(v).every((x) => x !== null) ? Object.values(v).reduce<number>((a, b) => a + (b ?? 0), 0) : null;
+  const initial = SQUARE_SUPPLY.initial.ownerTeamDeveloper + SQUARE_SUPPLY.initial.treasury + SQUARE_SUPPLY.initial.arbitrage;
+  const assigned = SQUARE_SUPPLY.farming + SQUARE_SUPPLY.saleEscrow + SQUARE_SUPPLY.deployer + initial;
+  const rest = SQUARE_SUPPLY.cap - assigned;
+  const parts: { k: string; n: number; tone: string; note?: string }[] = [
+    { k: "Farming emissions", n: SQUARE_SUPPLY.farming, tone: "bg-spectre" },
+    { k: "Initial (owner/team/dev · Treasury · arbitrage)", n: initial, tone: "bg-[#5b9dff]" },
+    { k: "Sale escrow", n: SQUARE_SUPPLY.saleEscrow, tone: "bg-ember" },
+    { k: "Deployer", n: SQUARE_SUPPLY.deployer, tone: "bg-bone" },
+    { k: vested === null ? "Vesting buckets — set in the Wizard" : "Vesting", n: rest, tone: "bg-amethyst", note: vested === null ? "unset" : undefined },
+  ];
+  return (
+    <div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-white/[0.05]">
+        {parts.map((x) => (
+          <div key={x.k} className={`${x.tone} ${x.note ? "opacity-40" : ""}`} style={{ width: `${(x.n / SQUARE_SUPPLY.cap) * 100}%` }} title={x.k} />
+        ))}
+      </div>
+      <ul className="mt-3 grid grid-cols-1 gap-1.5 text-[12.5px] sm:grid-cols-2 lg:grid-cols-3">
+        {parts.map((x) => (
+          <li key={x.k} className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-sm ${x.tone} ${x.note ? "opacity-40" : ""}`} />
+            <span className="text-bone-dim">{x.k}</span>
+            <span className="num ml-auto text-bone">{x.n.toLocaleString()}</span>
+          </li>
+        ))}
+      </ul>
+      {vested === null && (
+        <p className="mt-2 flex items-center gap-2 text-[12px] text-ash">
+          <PendingBadge label="Unset" /> The template leaves Team, Developer, Treasury and Arbitrage vesting at null; deploy is blocked until they reconcile to the cap.
+        </p>
+      )}
+      <p className="mt-1 font-mono text-[10.5px] text-ash-dim">Fire Tax cap {pct(FIRE.capBps)} applies to both assets.</p>
     </div>
   );
 }

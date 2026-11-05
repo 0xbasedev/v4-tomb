@@ -95,6 +95,15 @@ test('publishes a complete deployment only after checking mined receipts and cod
   assert.equal(p.document.networks[0].deployment.deployBlock, '41868762');
 });
 
+test('publishes renamed peg and share artifacts using the same legacy manifest keys', async () => {
+  const p = publication();
+  p.broadcast.transactions[0].contractName = 'PegToken';
+  p.broadcast.transactions[1].contractName = 'ShareToken';
+  const result = await publishDeployment(p.document, p.artifact, p.broadcast, 0, p.rpc);
+  assert.equal(result.networks[0].deployment.money, p.artifact.money);
+  assert.equal(result.networks[0].deployment.estate, p.artifact.estate);
+});
+
 for (const [description, change, expected] of [
   ['simulation without transaction hashes', (p) => { delete p.broadcast.transactions[0].hash; }, /completed broadcast/],
   ['broadcast chain mismatch', (p) => { p.broadcast.chain = 1; }, /same chain/],

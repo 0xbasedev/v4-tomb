@@ -1,239 +1,330 @@
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { ConnectButton } from "@/components/ConnectButton";
-import { StatTile } from "@/components/StatTile";
-import { PillarCard } from "@/components/PillarCard";
-import { RuleTrio } from "@/components/RuleTrio";
-import { Sunburst } from "@/components/Sunburst";
+import { Wordmark } from "@/components/brand/Sigil";
+import { AnimatedNumber } from "@/components/fx/AnimatedNumber";
+import { HeatSync } from "@/components/fx/HeatSync";
+import { Ambient, Footer } from "@/components/Layout";
+import { NextMove } from "@/components/NextMove";
+import { PegGauge } from "@/components/PegGauge";
+import { PreviewDock } from "@/components/PreviewDock";
+import { TokenIcon } from "@/components/TokenIcon";
+import { NetworkNote, SimBadge } from "@/components/Status";
+import { useProtocol } from "@/lib/hooks";
+import { DEFENSE, EPOCH_SECONDS, EXPANSION, FIRE, SQUARE_SUPPLY, pct } from "@/lib/launch";
+import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
+import { useMagnetic } from "@/lib/motion/useMagnetic";
+import { GenesisStrip } from "@/components/GenesisStrip";
 
 /**
- * Landing — Art Deco grammar per docs/skill-art-deco.md.
+ * Landing — the pitch, with the live protocol on the right.
  *
- * Anatomy (top to bottom, all centered on a vertical axis):
- *   1. Minimal nav — brand mark + ConnectButton
- *   2. Hero — sunburst behind metallic OLD MONEY title, rule trios above and below,
- *      formal subhead, dual CTA. Stats panel (six tiles) directly below.
- *   3. "The Three Estates" — three pillar cards equal in weight, framed-within-framed
- *   4. "The Mechanism" — three formal step panels explaining the protocol
- *   5. Footer — closing rule trio and house signature
- *
- * Vertical symmetry is enforced throughout — no asymmetric/diagonal energy. Voice
- * is formal: "Acquire," "Discover," "We Are Honoured To Present."
+ *   1. Hero: "xTOMB" rises out of the obsidian letter by letter; the live
+ *      PegGauge sits beside it so the first thing you see is real state.
+ *   2. Live strip: TWAP · next checkpoint · Fire Tax now · Genesis burn.
+ *   3. Three tokens: what each is for, and the one action it wants from you.
+ *   4. Two regimes: above peg vs below peg — what the protocol does and what
+ *      you should do. This is the whole mechanism in one comparison.
+ *   5. Right now: the NextMove card for the live phase.
  */
+
+const fmt0 = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmt4 = (n: number) => n.toFixed(4);
+const fmtPct = (n: number) => `${+n.toFixed(2)}%`;
+
 export function Landing() {
+  const root = useRef<HTMLDivElement>(null);
+  const launch = useRef<HTMLAnchorElement>(null);
+  useMagnetic(launch, 0.25);
+
+  const p = useProtocol();
+  const market = p.market;
+  const secondsUntilNextEpoch = EPOCH_SECONDS - (p.now % EPOCH_SECONDS);
+  const genesisLive = p.clock?.phase === "day1" || p.clock?.phase === "lp" || p.clock?.phase === "pre";
+  const tax = p.taxFor("xTOMB", 1_000).rateBps;
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      const tl = gsap.timeline({ defaults: { ease: EASE.rise } });
+      tl.from(".hero-letter", { yPercent: 110, rotate: 6, duration: 1.1, stagger: 0.06, ease: "expo.out" })
+        .from(".hero-fade", { autoAlpha: 0, y: 16, duration: 0.8, stagger: 0.08 }, "-=0.7")
+        .from(".hero-gauge", { autoAlpha: 0, scale: 0.94, duration: 1.1, ease: EASE.settle }, "-=0.9");
+
+      gsap.utils.toArray<HTMLElement>(".scroll-in").forEach((el) => {
+        gsap.from(el, {
+          autoAlpha: 0,
+          y: 40,
+          duration: 0.9,
+          scrollTrigger: { trigger: el, start: "top 85%" },
+        });
+      });
+
+      // Token cards: subtle 3D tilt toward the pointer.
+      gsap.utils.toArray<HTMLElement>(".tilt").forEach((card) => {
+        const rx = gsap.quickTo(card, "rotationX", { duration: 0.6, ease: "power3.out" });
+        const ry = gsap.quickTo(card, "rotationY", { duration: 0.6, ease: "power3.out" });
+        card.addEventListener("pointermove", (e) => {
+          const r = card.getBoundingClientRect();
+          ry(((e.clientX - r.left) / r.width - 0.5) * 8);
+          rx(-((e.clientY - r.top) / r.height - 0.5) * 8);
+        });
+        card.addEventListener("pointerleave", () => {
+          rx(0);
+          ry(0);
+        });
+      });
+    },
+    { scope: root },
+  );
+
+  const h = Math.floor(secondsUntilNextEpoch / 3600);
+  const m = Math.floor((secondsUntilNextEpoch % 3600) / 60);
+
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-deco-ground">
+    <div ref={root} className="relative min-h-screen overflow-x-hidden">
+      <Ambient />
+      <HeatSync />
+
       {/* ===== Nav ===== */}
-      <nav className="relative z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6 md:px-12">
-        <div className="flex items-baseline gap-4">
-          <span
-            className="font-display text-3xl font-bold text-deco-gold"
-            style={{ letterSpacing: "0.15em" }}
-          >
-            OM
-          </span>
-          <span className="label-deco hidden text-deco-gold-dark md:inline">
-            The Trust
-          </span>
+      <nav className="relative z-20 mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 md:px-8">
+        <Wordmark />
+        <div className="flex items-center gap-2 md:gap-3">
+          <Link to="/docs" className="hidden px-3 text-[14px] text-ash transition-colors hover:text-bone sm:block">
+            Docs
+          </Link>
+          <Link to="/dashboard" className="btn btn-ghost hidden h-10 sm:inline-flex">
+            Open app
+          </Link>
+          <ConnectButton compact />
         </div>
-        <ConnectButton />
       </nav>
+      <NetworkNote />
 
       {/* ===== Hero ===== */}
-      <section className="relative px-6 pt-12 pb-20 md:px-12 md:pt-16 md:pb-28">
-        {/* Sunburst behind the hero — large, semi-transparent, slow rotation */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-[40%]">
-          <Sunburst rays={32} opacity={0.18} className="h-[800px] w-[800px] md:h-[1100px] md:w-[1100px]" />
-        </div>
-
-        <div className="relative z-10 mx-auto max-w-4xl">
-          {/* Top rule trio */}
-          <RuleTrio className="mb-6" />
-
-          {/* Imperial label */}
-          <div className="label-deco mb-4 text-deco-gold-dark">
-            An Algorithmic Trust · Pegged to Ether
+      <section className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-16 pt-8 md:px-8 lg:grid-cols-[1.15fr_1fr] lg:pb-24 lg:pt-14">
+        <div>
+          <div className="hero-fade mb-6 flex flex-wrap items-center gap-2">
+            <span className="chip chip-ember">$1 USDC peg</span>
+            <span className="chip">Uniswap v4</span>
+            <span className="chip">xTOMB/USDC · xSHARE/USDC</span>
           </div>
-
-          {/* Chrome hero title */}
-          <h1 className="gold-text-shimmer font-display italic text-hero">
-            OLD MONEY
+          <h1 className="whitespace-nowrap text-hero font-display font-bold text-bone" aria-label="xTOMB">
+            {"xTOMB".split("").map((ch, i) => (
+              <span key={i} className="inline-block overflow-hidden pb-[0.06em] align-bottom">
+                <span className={`hero-letter inline-block ${i === 0 ? "ember-text" : ""}`}>{ch}</span>
+              </span>
+            ))}
           </h1>
-
-          {/* Subhead */}
-          <p
-            className="mt-8 font-headline text-xl text-deco-ivory md:text-2xl"
-            style={{ letterSpacing: "0.08em" }}
-          >
-            Engineered with Precision. Defended by Sovereign Code.
-            <br />
-            Earned at The Club.
+          <p className="hero-fade mt-6 max-w-xl text-[18px] leading-relaxed text-bone-dim md:text-[20px]">
+            xTOMB targets $1 in USDC. Every official sell pays one <span className="text-ember-hot">Fire Tax</span> — 1% at peg,
+            up to 12% under pressure — and xSHARE's sell tax funds <span className="text-spectre">protocol liquidity</span> or, in
+            Critical Defense, <span className="text-bad">buys and burns xTOMB</span>. Genesis opens the first path in.
           </p>
-
-          {/* Bottom rule trio with diamond */}
-          <RuleTrio className="mb-10 mt-10" />
-
-          {/* CTAs */}
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <Link to="/dashboard" className="btn-deco btn-deco-primary">
-              Enter The Trust
+          <div className="hero-fade mt-9 flex flex-wrap items-center gap-3">
+            <Link ref={launch} to={genesisLive ? "/genesis" : "/dashboard"} className="btn btn-primary h-14 px-8 text-[15px]">
+              {genesisLive ? "Enter Genesis" : "Launch app"} <span aria-hidden>→</span>
             </Link>
-            <Link to="/docs" className="btn-deco">
-              Discover The Mechanism
+            <a href="#regimes" className="btn btn-ghost h-14 px-6">
+              How the peg holds
+            </a>
+          </div>
+        </div>
+
+        <div className="hero-gauge panel panel-raised p-6 md:p-8">
+          {p.sim && (
+            <div className="mb-2 flex justify-end">
+              <SimBadge />
+            </div>
+          )}
+          <PegGauge price={market.twap ?? 0} phase={market.phase} simulated={p.sim} idleLabel="No valid TWAP" />
+          <div className="mt-2 grid grid-cols-3 gap-3 border-t border-white/5 pt-5 text-center">
+            <div>
+              <div className="label mb-1">Target</div>
+              <div className="num text-bone">$1.00</div>
+            </div>
+            <div>
+              <div className="label mb-1">Expansion gate</div>
+              <div className="num text-bone">&gt;${EXPANSION.gate.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="label mb-1">Defense</div>
+              <div className="num text-bone">≤${DEFENSE.enterAt.toFixed(2)}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Genesis (while it runs) ===== */}
+      <section className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-5 md:px-8">
+        <GenesisStrip />
+      </section>
+
+      {/* ===== Live strip ===== */}
+      <section className="relative z-10 mx-auto w-full max-w-7xl px-4 md:px-8">
+        <div className="scroll-in grid grid-cols-2 overflow-hidden rounded-shard border border-white/[0.07] bg-basalt/70 backdrop-blur md:grid-cols-4">
+          {[
+            { label: p.sim ? "xTOMB TWAP · sim" : "xTOMB TWAP", node: <AnimatedNumber value={market.twap} format={fmt4} />, unit: "USD" },
+            { label: "Next checkpoint", node: <span className="num">{h}h {String(m).padStart(2, "0")}m</span>, unit: "6h epochs" },
+            { label: p.sim ? "xTOMB sell tax · sim" : "xTOMB sell tax", node: <AnimatedNumber value={tax !== null ? tax / 100 : null} format={fmtPct} />, unit: "one rate" },
+            { label: p.sim ? "Burned in Genesis · sim" : "Burned in Genesis", node: <AnimatedNumber value={p.hooks.xTOMB.genesisBurned} format={fmt0} />, unit: "xTOMB" },
+          ].map((s, i) => (
+            <div key={s.label} className={`p-5 md:p-6 ${i % 2 === 1 ? "border-l border-white/[0.06]" : ""} ${i >= 2 ? "border-t border-white/[0.06] md:border-t-0" : ""} ${i === 2 ? "md:border-l" : ""}`}>
+              <div className="label mb-2">{s.label}</div>
+              <div className="flex items-baseline gap-2 font-display text-2xl font-semibold tracking-[-0.03em] text-bone md:text-3xl">
+                {s.node}
+                <span className="font-mono text-[11px] font-normal tracking-wider text-ash">{s.unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== Three tokens ===== */}
+      <section className="relative z-10 mx-auto w-full max-w-7xl px-4 py-24 md:px-8 md:py-32">
+        <div className="scroll-in mb-12 max-w-2xl">
+          <div className="label mb-3">Three tokens, three jobs</div>
+          <h2 className="text-section text-bone">Each one wants something different from you.</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3" style={{ perspective: 1200 }}>
+          {[
+            {
+              sym: "xTOMB",
+              tone: "ember-text",
+              ring: "hover:border-ember/40",
+              role: "The peg",
+              body: `Targets $1 in USDC on the official xTOMB/USDC pool. Sells pay one Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)}); during Genesis the whole tax is burned. Buys and transfers are never taxed.`,
+              want: "Swap or add liquidity",
+              to: "/swap",
+            },
+            {
+              sym: "xSHARE",
+              tone: "spectre-text",
+              ring: "hover:border-spectre/40",
+              role: "The claim",
+              body: `Capped at ${SQUARE_SUPPLY.cap.toLocaleString()} (configured). Its sell tax normally funds 12% protocol LP, 20% USDC reserve and 68% xSHARE reserve; in Critical Defense 100% buys and burns xTOMB.`,
+              want: "See the routing",
+              to: "/dashboard",
+            },
+            {
+              sym: "xBOND",
+              tone: "amethyst-text",
+              ring: "hover:border-amethyst/40",
+              role: "The defense",
+              body: "A planned bond office. Issuance and redemption stay disabled until a verified bond contract exposes both actions — no rates or returns are promised here.",
+              want: "Preview the bond office",
+              to: "/bonds",
+            },
+          ].map((t) => (
+            <Link
+              key={t.sym}
+              to={t.to}
+              className={`tilt scroll-in panel group flex flex-col gap-5 p-7 transition-colors [transform-style:preserve-3d] ${t.ring}`}
+            >
+              <div className="flex items-center justify-between">
+                <TokenIcon symbol={t.sym} size={44} />
+                <span className="label">{t.role}</span>
+              </div>
+              <h3 className={`font-display text-4xl font-bold tracking-[-0.04em] ${t.tone}`}>{t.sym}</h3>
+              <p className="flex-1 text-[15px] leading-relaxed text-bone-dim">{t.body}</p>
+              <span className="flex items-center justify-between border-t border-white/5 pt-4 text-[14px] font-semibold text-bone">
+                {t.want}
+                <span className="transition-transform group-hover:translate-x-1">→</span>
+              </span>
             </Link>
-          </div>
-        </div>
-
-        {/* ===== Stats panel ===== */}
-        <div className="relative z-10 mx-auto mt-20 max-w-5xl md:mt-24">
-          <div className="label-deco mb-6 text-deco-gold-dark">
-            The Ledger · The Protocol at a Glance
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <StatTile label="MONEY · Price" value="1.0000" hint="ETH · TWAP" />
-            <StatTile label="Peg" value="100.00%" hint="Within The Band" />
-            <StatTile label="Supply" value="160,001" hint="MONEY in Circulation" />
-            <StatTile label="Treasury Reserve" value="0" hint="MONEY · Held" />
-            <StatTile label="Next Epoch" value="06:00:00" hint="HH : MM : SS" />
-            <StatTile label="Bond Rate" value="—" hint="No Issuance Active" />
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* ===== The Three Estates ===== */}
-      <section className="relative px-6 py-24 md:px-12 md:py-32">
-        <div className="mx-auto max-w-4xl">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            We Present
-          </div>
-          <h2
-            className="gold-text mb-4 font-display italic text-section"
-          >
-            The Three Estates
-          </h2>
-          <p
-            className="mx-auto max-w-xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
-            style={{ letterSpacing: "0.04em" }}
-          >
-            Each performs its station. Together they preserve the Trust.
-          </p>
-          <RuleTrio className="mb-16 mt-10" />
-
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-            <PillarCard
-              numeral="I"
-              title="The Club"
-              blurb="Stake $ESTATE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
-              cta="Take a Seat"
-              to="/club"
-            />
-            <PillarCard
-              numeral="II"
-              title="The Vault"
-              blurb="Provide MONEY-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand MONEY across nine days."
-              cta="Open The Vault"
-              to="/vault"
-            />
-            <PillarCard
-              numeral="III"
-              title="Trust Notes"
-              blurb="When MONEY falls below peg, redeem it for Trust Notes at a discount. When the Trust recovers above one and one-tenth, redeem for a premium."
-              cta="View The Notes"
-              to="/notes"
-            />
-          </div>
+      {/* ===== Two regimes ===== */}
+      <section id="regimes" className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-24 md:px-8 md:pb-32">
+        <div className="scroll-in mb-12 max-w-2xl">
+          <div className="label mb-3">How the peg holds</div>
+          <h2 className="text-section text-bone">Two regimes. The protocol pays you to be on the right side of each.</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Regime
+            tone="ember"
+            title="Above the gate"
+            range={`fresh TWAP > $${EXPANSION.gate.toFixed(2)}`}
+            does={[
+              `Planned: an eligible six-hour epoch can mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB`,
+              "Only a fresh validated TWAP counts — never spot, never catch-up",
+              `Sells pay the ${pct(FIRE.baselineBps)} baseline unless a recovery floor is still decaying`,
+            ]}
+            you="Provide official liquidity. Treasury mint wiring is still open, so expansion is shown as planned."
+            cta={{ to: "/swap?mode=liquidity", label: "Add liquidity" }}
+          />
+          <Regime
+            tone="amethyst"
+            title="Below peg"
+            range="TWAP < $1.00"
+            does={[
+              `The Fire Tax target rises toward ${pct(FIRE.capBps)} at $${FIRE.fullTaxAt.toFixed(2)} and decays back over seven hours`,
+              `At a fresh TWAP ≤ $${DEFENSE.enterAt.toFixed(2)}, Critical Defense sends 100% of new xSHARE tax to xTOMB buy-and-burn`,
+              `Defense ends only after ${DEFENSE.recoveryEpochs} consecutive checkpoints above $${DEFENSE.exitAbove.toFixed(2)}`,
+            ]}
+            you="Don't sell into a high tax. The interface shows the one rate before you sign."
+            cta={{ to: "/swap", label: "Check the Fire Tax" }}
+          />
         </div>
       </section>
 
-      {/* ===== The Mechanism ===== */}
-      <section id="mechanism" className="relative bg-deco-ground-soft px-6 py-24 md:px-12 md:py-32">
-        <div className="mx-auto max-w-4xl">
-          <div className="label-deco mb-3 text-deco-gold-dark">In Brief</div>
-          <h2 className="gold-text mb-4 font-display italic text-section">
-            The Mechanism
-          </h2>
-          <p
-            className="mx-auto max-w-xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
-            style={{ letterSpacing: "0.04em" }}
-          >
-            A flywheel of supply and seigniorage. Six hours to the epoch.
-          </p>
-          <RuleTrio className="mb-16 mt-10" />
-
-          <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
-            <div className="text-center">
-              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
-                I
-              </div>
-              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
-                Acquire
-              </h3>
-              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
-              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                Stake your Ether in the Genesis Pool for twenty-four hours and receive $MONEY.
-                Or purchase upon the V4 pool. Or provide liquidity and earn.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
-                II
-              </div>
-              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
-                Compound
-              </h3>
-              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
-              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                Acquire $ESTATE. Stake at The Club. When the Trust expands above peg,
-                seigniorage is distributed to The Members. Patience is rewarded.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="font-ornament mb-4 text-2xl font-bold text-deco-gold" style={{ letterSpacing: "0.2em" }}>
-                III
-              </div>
-              <h3 className="mb-4 font-display text-2xl text-deco-ivory" style={{ letterSpacing: "0.06em" }}>
-                Defend
-              </h3>
-              <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
-              <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                When the Trust falters below peg, the Hook burns supply on every sale.
-                Trust Notes contract circulation further. The peg is restored.
-              </p>
-            </div>
-          </div>
+      {/* ===== Right now ===== */}
+      <section className="relative z-10 mx-auto w-full max-w-3xl px-4 pb-24 md:px-8">
+        <div className="scroll-in">
+          <NextMove />
         </div>
       </section>
 
-      {/* ===== Footer ===== */}
-      <footer className="relative px-6 py-16 md:px-12 md:py-20">
-        <div className="mx-auto max-w-4xl">
-          <RuleTrio className="mb-10" />
+      <Footer />
+      <PreviewDock />
+    </div>
+  );
+}
 
-          <div className="text-center">
-            <p className="font-display text-2xl italic text-deco-ivory md:text-3xl" style={{ letterSpacing: "0.1em" }}>
-              Wealth Engineered with Precision.
-            </p>
-            <div className="mt-4 font-ornament text-sm text-deco-gold" style={{ letterSpacing: "0.3em" }}>
-              MMXXVI · The House of Old Money
-            </div>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-6">
-              <a href="#twitter" className="label-deco hover:text-deco-gold-light">
-                Correspondence
-              </a>
-              <span className="text-deco-gold-dark">·</span>
-              <a href="#docs" className="label-deco hover:text-deco-gold-light">
-                The Mechanism
-              </a>
-              <span className="text-deco-gold-dark">·</span>
-              <a href="#github" className="label-deco hover:text-deco-gold-light">
-                The Ledger
-              </a>
-            </div>
-          </div>
+function Regime({
+  tone,
+  title,
+  range,
+  does,
+  you,
+  cta,
+}: {
+  tone: "ember" | "amethyst";
+  title: string;
+  range: string;
+  does: string[];
+  you: string;
+  cta: { to: string; label: string };
+}) {
+  const accent = tone === "ember" ? "from-ember/20" : "from-amethyst/20";
+  const dot = tone === "ember" ? "bg-ember" : "bg-amethyst";
+  const btn = tone === "ember" ? "btn-primary" : "btn-amethyst";
+  return (
+    <div className="scroll-in panel relative overflow-hidden p-7 md:p-8">
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${accent} to-transparent opacity-50`} />
+      <div className="relative">
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="font-display text-3xl font-bold tracking-[-0.03em] text-bone">{title}</h3>
+          <span className="num text-[12px] text-bone-dim">{range}</span>
         </div>
-      </footer>
-    </main>
+        <div className="label mb-3">The protocol</div>
+        <ul className="mb-7 space-y-3">
+          {does.map((d) => (
+            <li key={d} className="flex gap-3 text-[15px] text-bone-dim">
+              <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+              {d}
+            </li>
+          ))}
+        </ul>
+        <div className="label mb-2">You</div>
+        <p className="mb-6 text-[16px] font-medium text-bone">{you}</p>
+        <Link to={cta.to} className={`btn ${btn}`}>
+          {cta.label} →
+        </Link>
+      </div>
+    </div>
   );
 }

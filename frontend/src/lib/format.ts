@@ -1,8 +1,10 @@
 import { formatUnits } from "viem";
 
+import { PEG } from "@/lib/peg";
+
 /**
  * Format helpers for bigint → display-string conversions used across the UI.
- * Centralised so the Art Deco formatting voice stays consistent (commas,
+ * Centralised so number formatting stays consistent (commas,
  * trailing-zero suppression, fixed precision).
  */
 
@@ -60,10 +62,10 @@ export function formatTokenAuto(value: bigint | undefined | null): string {
   return fracPart ? `${withSep}.${fracPart}` : withSep;
 }
 
-/** Format a 1e18-scaled price as a 4-decimal price string. */
+/** Format a Treasury/hook price (PEG.priceDecimals) as a 4-decimal string. */
 export function formatPrice(value: bigint | undefined | null): string {
   if (value === undefined || value === null || value === 0n) return "—";
-  const raw = formatUnits(value, 18);
+  const raw = formatUnits(value, PEG.priceDecimals);
   const num = parseFloat(raw);
   if (!isFinite(num)) return "—";
   return num.toFixed(4);
@@ -82,7 +84,7 @@ export function formatBps(value: bigint | undefined | null): string {
   return `${pct.toFixed(2)}%`;
 }
 
-/** Format a seconds-remaining integer as a compact Art Deco "Dd · Hh · Mm" string. */
+/** Format a seconds-remaining integer as a compact "Dd · Hh · Mm" string. */
 export function formatCountdown(seconds: number): string {
   if (!isFinite(seconds) || seconds <= 0) return "Open Now";
   const d = Math.floor(seconds / 86_400);

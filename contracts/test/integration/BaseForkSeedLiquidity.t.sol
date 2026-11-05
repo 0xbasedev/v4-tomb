@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
 
@@ -44,7 +44,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
+    PegToken internal money;
     V4PositionWrapper internal wrapper;
     PoolKey internal poolKey;
 
@@ -77,7 +77,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy MONEY (we mint for tests).
-        money = new OldMoney();
+        money = new PegToken(address(this));
         money.mint(address(this), MONEY_BAL);
 
         // Acquire WETH from real ETH via OP-stack predeploy deposit.

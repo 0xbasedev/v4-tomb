@@ -13,6 +13,27 @@
       },
       "deployment": {
         "treasury": "0x0000000000000000000000000000000000001112"
+      },
+      "create3": {
+        "factory": "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed",
+        "deployer": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+        "releaseId": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "addresses": {
+          "money": "0x66E14dD2bc03d37B4c74bE11477B0D6B69a148E4",
+          "estate": "0x2a7D746C4c30B8B2C0B0041da3EF4Dfa97a37E5a",
+          "trustNote": "0xf85409B7F8A5375b5793e49b99B62D773E664DE8",
+          "treasury": "0xF952c6A9F91aB63c57D4a60bfE327A5905b5F9B3",
+          "boardroom": "0x90E1a59f91C2C19Bc032AC5f785277dC83F33046",
+          "oracle": "0x1055d9B93892f4fB564999479da46aF56936A2cC",
+          "hook": "0x60F8203CF279B41D4bB291981a4c7Acf4A7E1088",
+          "lpWrapper": "0x60d597433fCaaE10bbDdF8029E183fBaf36031cb",
+          "genesisRewardPool": "0x8D50691De7ef9092432ce5a7816E7a5cab281feB",
+          "mainRewardPool": "0x455C3d2EfFcD2528351a59D17C4e0f7269c317f3",
+          "shareRewardPool": "0x0D94E0D0Bd5c5fE5F7a6a1DDC77c53bc6479119e",
+          "timelock": "0x953C7FefA1d61003ceEF3FA601B38a4285dfc322",
+          "miniSwapRouter": "0x3aD3BF2B5Fa248C1DF90626eb5de8D5c799F6a08"
+        },
+        "hookNonce": 28654
       }
     },
     {
@@ -27,6 +48,32 @@
       },
       "deployment": {
         "treasury": "0x0000000000000000000000000000000000001112"
+      },
+      "create3": {
+        "factory": "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed",
+        "deployer": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+        "releaseId": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "addressNonces": {
+          "money": 262,
+          "timelock": 20,
+          "miniSwapRouter": 35
+        },
+        "addresses": {
+          "money": "0xa4a44dD904abd86FD03B5398859CFCA0Ef68056d",
+          "estate": "0x2a7D746C4c30B8B2C0B0041da3EF4Dfa97a37E5a",
+          "trustNote": "0xf85409B7F8A5375b5793e49b99B62D773E664DE8",
+          "treasury": "0xF952c6A9F91aB63c57D4a60bfE327A5905b5F9B3",
+          "boardroom": "0x90E1a59f91C2C19Bc032AC5f785277dC83F33046",
+          "oracle": "0x1055d9B93892f4fB564999479da46aF56936A2cC",
+          "hook": "0x60F8203CF279B41D4bB291981a4c7Acf4A7E1088",
+          "lpWrapper": "0x60d597433fCaaE10bbDdF8029E183fBaf36031cb",
+          "genesisRewardPool": "0x8D50691De7ef9092432ce5a7816E7a5cab281feB",
+          "mainRewardPool": "0x455C3d2EfFcD2528351a59D17C4e0f7269c317f3",
+          "shareRewardPool": "0x0D94E0D0Bd5c5fE5F7a6a1DDC77c53bc6479119e",
+          "timelock": "0xc9B457990AA35438493494D4753997A9499Da43C",
+          "miniSwapRouter": "0xED9520c67cEE3F888F454B7df277c4e37c4c14aB"
+        },
+        "hookNonce": 28654
       }
     }
   ]
