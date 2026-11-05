@@ -1,0 +1,106 @@
+[
+  {
+    "type": "function",
+    "name": "localDomain",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "recipientIsm",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "delivered",
+    "inputs": [
+      {
+        "name": "messageId",
+        "type": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "quoteDispatch",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "uint32"
+      },
+      {
+        "name": "recipient",
+        "type": "bytes32"
+      },
+      {
+        "name": "body",
+        "type": "bytes"
+      },
+      {
+        "name": "metadata",
+        "type": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "dispatch",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "uint32"
+      },
+      {
+        "name": "recipient",
+        "type": "bytes32"
+      },
+      {
+        "name": "body",
+        "type": "bytes"
+      },
+      {
+        "name": "metadata",
+        "type": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "messageId",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "payable"
+  }
+]
