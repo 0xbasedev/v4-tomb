@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Addresses} from "../../src/libs/Addresses.sol";
+import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";

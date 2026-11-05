@@ -1,6 +1,6 @@
 /**
- * Permit2 — Uniswap's canonical token-approval contract. Same address on every chain
- * (0x000000000022D473030F116dDEE9F6B43aC78BA3).
+ * Permit2 — Uniswap's token-approval contract.
+ * Address supplied by the deployment manifest.
  *
  * Swap flow uses the AllowanceTransfer side of Permit2:
  *   1. user ERC-20.approve(permit2, max)              — one-time per token

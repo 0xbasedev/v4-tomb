@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
+
+import {console2} from "forge-std/Script.sol";
 
 import {Timelock} from "../src/governance/Timelock.sol";
 
@@ -13,25 +15,26 @@ import {Timelock} from "../src/governance/Timelock.sol";
  *
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY — must be the Timelock's admin (signer of the queue script).
- *           TIMELOCK
- *           MONEY
- *           ESTATE
- *           TRUSTNOTE
- *           HOOK
+ *           TIMELOCK address is resolved from the selected manifest deployment.
+ *           MONEY address is resolved from the selected manifest deployment.
+ *           ESTATE address is resolved from the selected manifest deployment.
+ *           TRUSTNOTE address is resolved from the selected manifest deployment.
+ *           HOOK address is resolved from the selected manifest deployment.
  *           ETA — Unix timestamp that was used in `RotateGovernanceQueue.s.sol`. Same value!
  *
  *         Must be invoked with `block.timestamp >= ETA` and within
  *         `block.timestamp <= ETA + Timelock.GRACE_PERIOD` (14 days).
  */
-contract RotateGovernanceExecute is Script {
+contract RotateGovernanceExecute is NetworkConfig {
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
-        Timelock timelock = Timelock(payable(vm.envAddress("TIMELOCK")));
-        address money = vm.envAddress("MONEY");
-        address estate = vm.envAddress("ESTATE");
-        address trustnote = vm.envAddress("TRUSTNOTE");
-        address hook = vm.envAddress("HOOK");
+        Timelock timelock = Timelock(payable(_deployment("timelock")));
+        address money = _deployment("money");
+        address estate = _deployment("estate");
+        address trustnote = _deployment("trustNote");
+        address hook = _deployment("hook");
         uint256 eta = vm.envUint("ETA");
 
         console2.log("=== RotateGovernanceExecute ===");

@@ -17,7 +17,7 @@ pragma solidity 0.8.26;
  *
  *         Verified 2026-05-22. See memory/reference_v4_deployments.md for sources.
  */
-library Addresses {
+library HistoricalAddresses {
     uint256 internal constant ETHEREUM_MAINNET = 1;
     uint256 internal constant BASE_MAINNET = 8453;
     uint256 internal constant BASE_SEPOLIA = 84_532;

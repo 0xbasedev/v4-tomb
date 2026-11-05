@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {Addresses} from "../../src/libs/Addresses.sol";
+import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
@@ -25,9 +25,17 @@ import {ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 
 interface IWeth9 {
     function deposit() external payable;
-    function approve(address spender, uint256 amount) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
+    function approve(
+        address spender,
+        uint256 amount
+    ) external returns (bool);
+    function balanceOf(
+        address account
+    ) external view returns (uint256);
+    function transfer(
+        address to,
+        uint256 amount
+    ) external returns (bool);
 }
 
 /**
@@ -82,9 +90,8 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
         // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2
         // address has the bit pattern V4 validates against.
-        uint160 flags = uint160(
-            Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-        );
+        uint160 flags =
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), address(this)));
         (address minedHookAddr, bytes32 salt) = HookMiner.find(address(this), flags, hookCreationCode);
@@ -131,7 +138,9 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         );
         liquidityRouter.modifyLiquidity(
             poolKey,
-            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: int256(uint256(liq)), salt: 0}),
+            ModifyLiquidityParams({
+                tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: int256(uint256(liq)), salt: 0
+            }),
             bytes("")
         );
 
@@ -141,7 +150,10 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         IWeth9(weth).transfer(alice, 5 ether);
     }
 
-    function _deployWithSalt(bytes memory creationCode, bytes32 salt) internal returns (address deployed) {
+    function _deployWithSalt(
+        bytes memory creationCode,
+        bytes32 salt
+    ) internal returns (address deployed) {
         assembly {
             deployed := create2(0, add(creationCode, 0x20), mload(creationCode), salt)
         }

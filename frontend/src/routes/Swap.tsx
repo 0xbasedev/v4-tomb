@@ -1,3 +1,4 @@
+import { pegReserves } from "../../../config/schema.mjs";
 import { useState } from "react";
 import { formatUnits, parseUnits, type Address } from "viem";
 import { useAccount, useReadContracts } from "wagmi";
@@ -127,9 +128,11 @@ export function Swap() {
       })()
     : null;
   const reserves = usePoolReserves(moneyWethPoolKey);
-  // PoolKey sorts WETH as currency0 (smaller address) on Base/Base Sepolia.
-  const poolWeth = reserves.amount0;
-  const poolMoney = reserves.amount1;
+  const orderedReserves = deployment
+    ? pegReserves(deployment.money, deployment.weth, reserves.amount0, reserves.amount1)
+    : { weth: 0n, money: 0n };
+  const poolWeth = orderedReserves.weth;
+  const poolMoney = orderedReserves.money;
 
   // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
   // is not bound to any of our hooks, so for now we keep its spot at the
@@ -183,7 +186,7 @@ export function Swap() {
       toast.push({
         variant: "error",
         title: "Wallet not connected",
-        message: "Connect on Base Sepolia to swap.",
+        message: "Connect on a configured network to swap.",
       });
       return;
     }
@@ -197,9 +200,7 @@ export function Swap() {
     }
     if (amountIn <= 0n) return;
 
-    // Pool key for MONEY-WETH: WETH sorts as currency0 on Base/Base Sepolia
-    // (0x4200... < 0xb650...). Verify via the hook's moneyIsCurrency0 flag
-    // in case we ever flip token addresses (e.g., mainnet rotation).
+    // V4 sorts currencies by address on every chain.
     const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
     const currency0: Address = wethIsToken0 ? deployment.weth : deployment.money;
     const currency1: Address = wethIsToken0 ? deployment.money : deployment.weth;

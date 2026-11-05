@@ -11,7 +11,7 @@ import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
-import {Addresses} from "../../src/libs/Addresses.sol";
+import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../../src/interfaces/IPriceSource.sol";
 

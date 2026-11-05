@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
 
 import {OldMoney} from "../src/tokens/OldMoney.sol";
 import {Estate} from "../src/tokens/Estate.sol";
@@ -10,7 +10,7 @@ import {Treasury} from "../src/core/Treasury.sol";
 import {Boardroom} from "../src/core/Boardroom.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
-import {Addresses} from "../src/libs/Addresses.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
@@ -21,6 +21,9 @@ import {V4PositionWrapper} from "../src/distribution/V4PositionWrapper.sol";
 
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {MiniSwapRouter} from "../src/swap/MiniSwapRouter.sol";
+import {Timelock} from "../src/governance/Timelock.sol";
 
 import {HookMiner} from "../test/utils/HookMiner.sol";
 
@@ -33,26 +36,18 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 /**
  * @title Deploy
  * @notice One-shot Foundry deploy script for the Old Money protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
  *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
- *         the human-controlled ones: AIRDROP_WALLET, COMMUNITY_FUND, DEV_FUND.
+ *         the manifest infrastructure and human-controlled recipient/admin addresses.
  *
  *         See docs/DEPLOY.md for env-var setup and per-chain commands.
  */
-contract Deploy is Script {
+contract Deploy is NetworkConfig {
     using PoolIdLibrary for PoolKey;
-
-    /// @notice Canonical deterministic CREATE2 deployer. When `vm.startBroadcast` is
-    ///         active, Foundry routes `create2` calls (including the `new Contract{salt:}`
-    ///         syntax and inline-assembly create2) through this address. So when mining a
-    ///         hook address, we MUST mine against this deployer, not the EOA.
-    address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
     struct Genesis {
         address airdropWallet;
@@ -60,6 +55,8 @@ contract Deploy is Script {
         address devFund;
         uint256 vestingStart;
         uint256 epochStart;
+        address timelockAdmin;
+        uint256 timelockDelay;
     }
 
     OldMoney public money;
@@ -73,14 +70,18 @@ contract Deploy is Script {
     MainRewardPool public mainRewardPool;
     ShareRewardPool public shareRewardPool;
     V4PositionWrapper public lpWrapper;
+    MiniSwapRouter public miniSwapRouter;
+    Timelock public timelock;
     address public wethAddress;
     PoolKey public poolKey;
 
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(pk);
 
         Genesis memory g = _readGenesis();
+        _preflight();
 
         console2.log("=== Old Money deploy ===");
         console2.log("chain id:", block.chainid);
@@ -88,7 +89,7 @@ contract Deploy is Script {
 
         vm.startBroadcast(pk);
 
-        wethAddress = Addresses.weth();
+        wethAddress = _infrastructure("weth");
         console2.log("WETH:", wethAddress);
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
@@ -96,6 +97,8 @@ contract Deploy is Script {
         _deployLpWrapper();
         _deployRewardPools(g);
         _deployCoreAndInit(g);
+        miniSwapRouter = new MiniSwapRouter(IPoolManager(_infrastructure("poolManager")));
+        timelock = new Timelock(g.timelockAdmin, g.timelockDelay);
 
         // Genesis distributions go directly to the freshly deployed pool contracts.
         money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
@@ -103,7 +106,7 @@ contract Deploy is Script {
 
         // Register the LP wrapper as the stake token in the Main + Share reward pools.
         // Deployer is still the operator on these pools — handoff to a Timelock happens
-        // in a later sprint (Sprint 14). Sets a single 100-weight entry on each; future
+        // via the governance ceremony. Sets a single 100-weight entry on each; future
         // ops can call .set() to add more LP types or adjust weights.
         mainRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
         shareRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
@@ -122,6 +125,7 @@ contract Deploy is Script {
         vm.stopBroadcast();
 
         _postDeployChecks(g);
+        _exportDeployment();
     }
 
     // ------------------------------------------------------------------
@@ -134,6 +138,15 @@ contract Deploy is Script {
         g.devFund = vm.envAddress("DEV_FUND");
         g.vestingStart = vm.envOr("VESTING_START", block.timestamp + 1 hours);
         g.epochStart = vm.envOr("EPOCH_START", g.vestingStart);
+        g.timelockAdmin = vm.envAddress("TIMELOCK_ADMIN");
+        g.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
+        require(
+            g.airdropWallet != address(0) && g.communityFund != address(0) && g.devFund != address(0),
+            "Deploy: zero wallet"
+        );
+        require(g.timelockAdmin != address(0), "Deploy: zero admin");
+        require(g.epochStart > block.timestamp && g.vestingStart > block.timestamp, "Deploy: start must be future");
+        require(g.timelockDelay >= 1 days && g.timelockDelay <= 30 days, "Deploy: invalid timelock delay");
     }
 
     function _deployTokens(
@@ -150,20 +163,18 @@ contract Deploy is Script {
     function _deployHookAndInitPool(
         address deployer
     ) internal {
-        IPoolManager pm = IPoolManager(Addresses.poolManager());
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
         bytes memory creationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
         uint160 flags =
             uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
-        // Mine against the canonical CREATE2 deployer — Foundry routes broadcast
-        // create2 calls through it, so the deployed address is derived from this
-        // address, not the deployer EOA. (deployer param kept for ABI compat.)
-        deployer; // silence unused-var warning
-        (address mined, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, creationCode);
+        (address mined, bytes32 salt) = HookMiner.find(_infrastructure("create2Deployer"), flags, creationCode);
 
-        PegDefenseHook deployedHook = new PegDefenseHook{salt: salt}(pm, address(money), deployer);
-        require(address(deployedHook) == mined, "Deploy: hook addr mismatch");
-        hook = deployedHook;
+        // Call the selected factory directly so Foundry's default CREATE2 address
+        // cannot disagree with the address used for mining hook permission bits.
+        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
+        require(success && mined.code.length > 0, "Deploy: hook deployment failed");
+        hook = PegDefenseHook(mined);
         console2.log("PegDefenseHook:", address(hook));
 
         (Currency c0, Currency c1) = address(money) < wethAddress
@@ -198,7 +209,7 @@ contract Deploy is Script {
         int24 tickLower = TickMath.minUsableTick(60);
         int24 tickUpper = TickMath.maxUsableTick(60);
         lpWrapper = new V4PositionWrapper(
-            IPositionManager(Addresses.positionManager()),
+            IPositionManager(_infrastructure("positionManager")),
             poolKey,
             tickLower,
             tickUpper,
@@ -248,6 +259,32 @@ contract Deploy is Script {
         console2.log("Boardroom:", address(boardroom));
     }
 
+    /// @notice Simulation output only. Publish after confirming broadcast receipts.
+    function _exportDeployment() internal {
+        string memory key = "deployment";
+        vm.serializeUint(key, "chainId", block.chainid);
+        vm.serializeAddress(key, "money", address(money));
+        vm.serializeAddress(key, "estate", address(estate));
+        vm.serializeAddress(key, "trustNote", address(trustnote));
+        vm.serializeAddress(key, "treasury", address(treasury));
+        vm.serializeAddress(key, "boardroom", address(boardroom));
+        vm.serializeAddress(key, "oracle", address(oracle));
+        vm.serializeAddress(key, "hook", address(hook));
+        vm.serializeAddress(key, "lpWrapper", address(lpWrapper));
+        vm.serializeAddress(key, "genesisRewardPool", address(genesisRewardPool));
+        vm.serializeAddress(key, "mainRewardPool", address(mainRewardPool));
+        vm.serializeAddress(key, "shareRewardPool", address(shareRewardPool));
+        vm.serializeAddress(key, "miniSwapRouter", address(miniSwapRouter));
+        vm.serializeAddress(key, "timelock", address(timelock));
+        vm.serializeAddress(key, "weth", wethAddress);
+        vm.serializeAddress(key, "poolManager", _infrastructure("poolManager"));
+        vm.serializeAddress(key, "positionManager", _infrastructure("positionManager"));
+        vm.serializeAddress(key, "permit2", _infrastructure("permit2"));
+        string memory json = vm.serializeAddress(key, "universalRouter", _infrastructure("universalRouter"));
+        vm.createDir("./deployment-output", true);
+        vm.writeJson(json, string.concat("./deployment-output/", vm.toString(block.chainid), ".json"));
+    }
+
     function _postDeployChecks(
         Genesis memory g
     ) internal view {
@@ -277,6 +314,6 @@ contract Deploy is Script {
         console2.log("     LP stake token (100 weight each). LPs mint a full-range MONEY/WETH V4");
         console2.log("     position, wrap it, and stake the ERC-20 shares.");
         console2.log("  3. Seed initial V4 pool liquidity (manual step before genesis opens).");
-        console2.log("  4. Rotate Treasury operator to a Timelock (Sprint 14, not yet shipped).");
+        console2.log("  4. Rotate governance to the deployed Timelock using the governance scripts.");
     }
 }

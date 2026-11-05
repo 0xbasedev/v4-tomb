@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
 
-import {Addresses} from "../src/libs/Addresses.sol";
+import {NetworkConfig} from "./NetworkConfig.s.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -39,16 +39,16 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
  *           - **MONEY**: from the 9,000-MONEY airdrop wallet allocation. The operator
  *             transfers however much they want to seed into the operator wallet first.
  *           - **WETH**: from team funds. Deposit ETH to the OP-stack predeploy at
- *             `0x4200000000000000000000000000000000000006` to mint WETH 1:1.
+ *             the configured wrapped-ETH contract to mint WETH 1:1.
  *
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY — operator signing the tx. Holds MONEY + WETH.
- *           MONEY                — the deployed $MONEY address (see docs/DEPLOYED.md).
- *           HOOK                 — the deployed PegDefenseHook address.
+ *           MONEY address is resolved from the selected manifest deployment.
+ *           HOOK address is resolved from the selected manifest deployment.
  *           MONEY_AMOUNT         — wei of MONEY to deposit (e.g., 3000 ether).
  *           WETH_AMOUNT          — wei of WETH to deposit (e.g., 1 ether).
  */
-contract SeedLiquidity is Script {
+contract SeedLiquidity is NetworkConfig {
     using StateLibrary for IPoolManager;
 
     struct Inputs {
@@ -61,12 +61,13 @@ contract SeedLiquidity is Script {
     }
 
     function run() external {
+        _network();
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         Inputs memory i = Inputs({
             operator: vm.addr(pk),
-            money: vm.envAddress("MONEY"),
-            weth: Addresses.weth(),
-            hook: vm.envAddress("HOOK"),
+            money: _deployment("money"),
+            weth: _infrastructure("weth"),
+            hook: _deployment("hook"),
             moneyAmount: vm.envUint("MONEY_AMOUNT"),
             wethAmount: vm.envUint("WETH_AMOUNT")
         });
@@ -107,7 +108,7 @@ contract SeedLiquidity is Script {
         PoolKey memory poolKey,
         Inputs memory i
     ) internal view returns (uint128 liquidity) {
-        IPoolManager pm = IPoolManager(Addresses.poolManager());
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
         (uint160 sqrtPriceX96,,,) = pm.getSlot0(poolKey.toId());
         require(sqrtPriceX96 != 0, "SeedLiquidity: pool not initialized");
 
@@ -127,8 +128,8 @@ contract SeedLiquidity is Script {
     function _approvePermit2(
         Inputs memory i
     ) internal {
-        IAllowanceTransfer permit2 = IAllowanceTransfer(Addresses.permit2());
-        IPositionManager positionManager = IPositionManager(Addresses.positionManager());
+        IAllowanceTransfer permit2 = IAllowanceTransfer(_infrastructure("permit2"));
+        IPositionManager positionManager = IPositionManager(_infrastructure("positionManager"));
 
         IERC20(i.money).approve(address(permit2), type(uint256).max);
         IERC20(i.weth).approve(address(permit2), type(uint256).max);
@@ -141,7 +142,7 @@ contract SeedLiquidity is Script {
         uint128 liquidity,
         Inputs memory i
     ) internal returns (uint256 tokenId) {
-        IPositionManager positionManager = IPositionManager(Addresses.positionManager());
+        IPositionManager positionManager = IPositionManager(_infrastructure("positionManager"));
         tokenId = positionManager.nextTokenId();
 
         (uint256 amount0Max, uint256 amount1Max) =

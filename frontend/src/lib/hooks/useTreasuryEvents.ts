@@ -74,6 +74,9 @@ export function useTreasuryEvents({ limit = 10 }: UseTreasuryEventsOptions = {})
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
+    setRows([]);
+    setIsError(false);
+    setIsLoading(!!deployment && !!publicClient);
     if (!deployment || !publicClient) return;
     let cancelled = false;
 

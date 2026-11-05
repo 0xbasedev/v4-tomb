@@ -1,21 +1,23 @@
 import { http, createConfig } from "wagmi";
-import { base, baseSepolia } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
+import { defineChain, type Chain } from "viem";
+import { injected } from "wagmi/connectors/injected";
+import { networks } from "./networks";
 
-/**
- * Wagmi config for Old Money frontend. Supports Base mainnet (production) and Base
- * Sepolia (testnet). RPC URLs default to the public endpoints — override via env
- * (VITE_BASE_RPC_URL, VITE_BASE_SEPOLIA_RPC_URL) if you need higher rate limits.
- */
+const toChain = (network: (typeof networks)[number]) => defineChain({
+  id: network.id,
+  name: network.name,
+  nativeCurrency: network.nativeCurrency,
+  rpcUrls: { default: { http: [network.rpcUrl] } },
+  blockExplorers: network.explorerUrl
+    ? { default: { name: "Explorer", url: network.explorerUrl } }
+    : undefined,
+  testnet: network.testnet,
+});
+const chains: [Chain, ...Chain[]] = [toChain(networks[0]), ...networks.slice(1).map(toChain)];
+
 export const wagmiConfig = createConfig({
-  chains: [base, baseSepolia],
-  transports: {
-    [base.id]: http(
-      import.meta.env.VITE_BASE_RPC_URL ?? "https://mainnet.base.org",
-    ),
-    [baseSepolia.id]: http(
-      import.meta.env.VITE_BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
-    ),
-  },
+  chains,
+  // Do not assume a Multicall3 deployment exists on an arbitrary EVM chain.
+  transports: Object.fromEntries(networks.map((network) => [network.id, http(network.rpcUrl)])),
   connectors: [injected()],
 });

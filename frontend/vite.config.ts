@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
@@ -8,10 +9,29 @@ export default defineConfig({
     alias: {
       // Mirror the tsconfig paths entry — TS paths is type-only; Vite needs its own.
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@protocol-manifest": resolve(dirname(fileURLToPath(import.meta.url)), process.env.PROTOCOL_CONFIG ?? "../config/networks.json"),
     },
   },
   server: {
     port: 5173,
     open: false,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes("node_modules/viem/") ||
+            id.includes("node_modules/ox/") ||
+            id.includes("node_modules/abitype/")
+          ) {
+            return "viem";
+          }
+          if (id.includes("node_modules/wagmi/") || id.includes("node_modules/@wagmi/")) {
+            return "wagmi";
+          }
+        },
+      },
+    },
   },
 });

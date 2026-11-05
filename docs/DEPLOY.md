@@ -1,95 +1,88 @@
-# Deploy
+# Configure and deploy
 
-How to deploy Old Money to a chain. Production deploys follow this exact path; testnet deploys differ only in that WETH is mocked.
+Run tooling from the repository root except Foundry commands, which run from `contracts/`. These instructions supersede chain-specific commands in historical runbooks and script headers.
 
-## Prerequisites
+## 1. Configure a compatible chain
 
-1. Working Foundry install (`forge --version`).
-2. `forge install` has run (`lib/openzeppelin-contracts`, `lib/solady`, `lib/v4-core`, `lib/v4-periphery` populated).
-3. All five pre-deploy gates from [SECURITY.md](SECURITY.md) are green for the build at HEAD.
+Edit `config/networks.json`. Each network defines:
 
-## Required env vars
+- `id`, `name`, `testnet`, and 18-decimal native gas-currency metadata;
+- a browser-accessible public `rpcUrl`, and `explorerUrl` or `null`;
+- `infrastructure`: trusted `weth`, V4 `poolManager`, V4 `positionManager`, `permit2`, `universalRouter`, and a salt || initCode compatible `create2Deployer`;
+- `deployment`: `null` before deployment, or the complete address record afterward.
 
-Set in `contracts/.env` (gitignored). Copy from `.env.example` and fill in.
+Addresses are configuration data, never Solidity/TypeScript constants. Select an 18-decimal WETH asset to preserve the economic denomination. Do not substitute a chain's wrapped native token if it is not the intended WETH peg asset. Native gas currency metadata is independent of the peg.
 
-| Var | Description |
-|---|---|
-| `DEPLOYER_PRIVATE_KEY` | Signer key for the deploy. Prefer `--ledger` over a raw PK; if using a PK use a fresh address with just enough gas. |
-| `BASE_RPC_URL` / `BASE_SEPOLIA_RPC_URL` / `MAINNET_RPC_URL` / `ETH_SEPOLIA_RPC_URL` | RPC endpoint per chain. |
-| `BASESCAN_API_KEY` | For `--verify`. |
-| `AIRDROP_WALLET` | Address that receives 9,000 MONEY for airdrop campaign. Should be a multisig. |
-| `COMMUNITY_FUND` | Address receiving the 5,500 ESTATE community vesting drip. |
-| `DEV_FUND` | Address receiving the 5,000 ESTATE dev vesting drip. **Also controls `setTreasuryFund` / `setDevFund` rotation per Tomb's quirk — make this a multisig.** |
-| `VESTING_START` (optional) | Unix timestamp for ESTATE vesting start. Defaults to `block.timestamp + 1 hour`. |
-| `EPOCH_START` (optional) | Unix timestamp for first epoch. Defaults to `VESTING_START`. |
+Do not put private RPC credentials in the public manifest; it is bundled into the frontend. Operators can override their RPC privately with `RPC_URL`. A browser RPC needs appropriate CORS support.
 
-The three reward pool contracts (`GenesisRewardPool`, `MainRewardPool`, `ShareRewardPool`) are deployed by the script itself — no env vars needed. The script funds them in the same transaction.
-
-## Commands
-
-```bash
-# Base Sepolia (WETH at canonical OP-stack predeploy 0x4200...0006)
-forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --verify
-
-# Base mainnet (WETH at canonical OP-stack predeploy 0x4200...0006)
-forge script script/Deploy.s.sol --rpc-url base --broadcast --verify
-
-# Dry run against a Base fork — no broadcast, just simulates
-forge script script/Deploy.s.sol --rpc-url base
+```sh
+node scripts/protocol.mjs validate
+node scripts/install-contract-deps.mjs
 ```
 
-## What the script does
+To inspect the old deployment, copy `config/examples/upstream-base-sepolia.json` over `config/networks.json` and rebuild the frontend. That profile is historical and is not evidence that its contracts remain safe or active.
 
-The script implements an 8-step sequence:
+## 2. Set operator parameters
 
-1. Read WETH address from `Addresses.weth()` (canonical on every supported chain — no mock).
-2. Deploy `OldMoney`, `Estate`, `TrustNote`.
-3. Mine a CREATE2 salt for `PegDefenseHook` → deploy via `create2` opcode at the required permission-bit address (`AFTER_INITIALIZE | BEFORE_SWAP` → low-14-bit pattern `0x1080`).
-4. Call `PoolManager.initialize(poolKey, sqrtPriceX96)` on the live V4 PoolManager. The hook's `afterInitialize` fires and binds it to the pool.
-5. Deploy `Oracle` pointing to the hook as `IPriceSource`.
-6. Deploy `GenesisRewardPool` (opens at `epochStart`), `MainRewardPool` (opens at `epochStart + 1 day`), `ShareRewardPool` (opens at `epochStart + 1 day`).
-7. Deploy `Treasury` + `Boardroom`, initialize both — Treasury's `excludedFromTotalSupply` list contains `genesisRewardPool`, `mainRewardPool`, and `airdropWallet` so their un-emitted MONEY doesn't get counted as circulating supply.
-8. Run genesis distributions — sends 11k MONEY to `GenesisRewardPool`, 140k MONEY to `MainRewardPool`, 9k MONEY to `AIRDROP_WALLET`, and 59.5k ESTATE to `ShareRewardPool`. Hand off operator authority on every protocol contract to the Treasury.
+```sh
+cd contracts
+cp .env.example .env
+# Fill in RPC_URL, signer, nonzero recipient wallets, TIMELOCK_ADMIN,
+# and optionally explicit future launch times. Never commit .env.
+set -a
+source .env
+set +a
+```
 
-The script asserts post-deploy that every operator handoff landed correctly, the hook is bound, and the four token-balance funding amounts match the expected values — it reverts the entire deploy if any check fails.
+`PROTOCOL_NETWORK_INDEX` is the zero-based manifest index (default 0). `PROTOCOL_CONFIG` defaults to `../config/networks.json`; custom files must be under the allowed public config directory. The frontend selects the same `PROTOCOL_CONFIG` path (relative to `frontend/`); by default it uses `../config/networks.json`. Set that variable when building or starting the UI. The CLI also honors it, or accepts an explicit manifest path. Browser tests always use the isolated local example profile.
 
-## Post-deploy steps (manual, NOT in the script)
+The main deploy creates tokens, hook/pool, oracle, wrapper, three funded reward pools, Treasury, Boardroom, MiniSwapRouter, and Timelock. It wires Treasury token authority and the Main/Share wrapper pools. It leaves Genesis token registration, seed liquidity, Boardroom seeding, tax enablement/fund cuts, and governance rotation to the launch ceremony.
 
-1. **Deploy the Timelock** (`forge script script/DeployTimelock.s.sol` — TBD in Sprint 12c).
-2. **Transfer ownership** of every contract from the deployer EOA to the Timelock:
-   - `money.transferOwnership(timelock)` → `timelock.acceptOwnership()` (two-step)
-   - Same for `estate`, `trustnote`, `treasury`, `boardroom`, `oracle`, `hook`
-3. **Verify on BaseScan** — `--verify` should handle this automatically when the API key is set, but spot-check the contracts page for green checkmarks.
-4. **Seed the V4 pool with initial liquidity.** The script initializes the pool but does NOT add liquidity. Someone (typically the team) must:
-   - Acquire some WETH (deposit ETH to WETH at `0x4200...0006` on OP-stack chains, or buy on a DEX)
-   - Acquire some MONEY (this is what the LP pools will distribute over time, so on day 1 the team supplies initial liquidity from the airdrop wallet allocation)
-   - Use Uniswap's V4 position manager to add liquidity at a tight range around tick 0 (parity)
+## 3. Simulate, review, broadcast
 
-## Verifying the deploy
+```sh
+forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --slow
+# Review addresses, starts, fund recipients, Timelock admin/delay and transactions.
+forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --broadcast --slow
+```
 
-After running, check the output for the deployed addresses. Run the post-deploy verification script (TBD) to assert:
+Preflight checks the selected chain ID, dependency code, 18-decimal WETH, and PositionManager bindings before broadcasting. CREATE2 deployment calls the configured factory directly; no Foundry default factory address is assumed. The hook's mined address must encode the existing V4 permissions, and pool initialization binds it.
 
-- Each contract's bytecode is non-empty at the deployed address.
-- `treasury.operator()` returns the multisig that called the deploy.
-- `money.operator()`, `estate.operator()`, `trustnote.operator()`, `boardroom.operator()` all return `treasury`.
-- `hook.bound()` returns true and `hook.poolId()` matches `keccak256(abi.encode(poolKey))`.
-- `oracle.priceSource()` returns the hook address.
-- `treasury.isInitialized()` returns true.
+The script writes `deployment-output/<chainId>.json`. It is a simulation artifact until broadcast receipts confirm. A failed or partial broadcast is not a usable deployment: inspect receipts and Foundry resume behavior before retrying. Do not publish a mixture of outputs from different deploy attempts.
 
-## Known caveats / pending items
+## 4. Publish confirmed addresses
 
-- **The three reward pools are deployed BUT empty of pool entries.** Each pool's `add(allocPoint, lpToken, false, 0)` must be called by the operator (initially the deployer) for every LP token to support — e.g., the MONEY/WETH V4 LP token, a USDC/WETH pair, etc. Until that's done, the pools hold the MONEY/ESTATE but no one can stake to earn it.
-- **No Timelock deploy script yet.** Sprint 14.
-- **No real liquidity provisioning.** A separate manual step — fund the V4 OLDM/WETH pool with initial liquidity from the airdrop wallet allocation before genesis pool opens.
-- **No automated pool-side swap test on mainnet.** The deploy script initializes the pool but doesn't run a swap through it. The first swap will trigger `beforeSwap` and the dynamic fee logic for real.
+From the repository root, replace `<chainId>` and `<index>` with your selected profile:
 
-## Rollback / recovery
+```sh
+node scripts/protocol.mjs publish config/networks.json \
+  contracts/deployment-output/<chainId>.json \
+  contracts/broadcast/Deploy.s.sol/<chainId>/run-latest.json <index>
+(cd frontend && npm run build)
+```
 
-The Old Money deploy is mostly idempotent within a single chain: re-running the script on the same chain will hit the constructor `notInitialized` guard on `Treasury` and `Boardroom`. However, the V4 pool can only be initialized once per `PoolKey` — if the second deploy collides, `PoolManager.initialize` reverts.
+The publisher checks RPC chain ID, successful mined receipts, deployed contract addresses against their creation receipts, and code at every configured deployment address. `deployBlock` is derived from the earliest confirmed broadcast receipt and stored as a decimal string to avoid JavaScript number precision loss. Review the resulting manifest before committing it.
 
-If a deploy fails partway:
-- The contracts already deployed remain on-chain forever (no `selfdestruct`).
-- The deployer EOA still holds operator/owner on the partial contracts.
-- Recover by either continuing the deploy with a custom one-off script, or accepting the wasted gas and starting fresh with new contract addresses.
+## 5. Finish the existing launch ceremony
 
-For mainnet, do a dry-run against the fork first (`forge script ... --rpc-url base` without `--broadcast`) and confirm the simulation succeeds before broadcasting.
+All operational scripts now read protocol addresses from the manifest, not legacy `MONEY`, `TREASURY`, `HOOK`, or `TIMELOCK` environment variables. Amounts, weights, signers, fund policy, ETA and other operation-specific inputs remain explicit environment variables as documented in each script. Set the correct `PROTOCOL_NETWORK_INDEX` and RPC each time.
+
+Use `OpenGenesis.s.sol` for allowed stake tokens and weights; `SeedLiquidity.s.sol` for funded seed LP; `PostBootstrap.s.sol` for the existing tax/fund transition; and `RotateGovernanceQueue.s.sol` / `RotateGovernanceExecute.s.sol` for delayed ownership rotation. Standalone router/Timelock deploy scripts remain available for deliberate replacements; they are unnecessary for a fresh main deploy, and replacement addresses must be reviewed in the manifest. Consult the preserved launch/governance runbooks for the complete existing ceremony.
+
+## Keeper
+
+Set repository variable `KEEPER_ENABLED=true` only after the deployment and launch ceremony are approved. Configure the GitHub environment `keeper` with `RPC_URL`, `KEEPER_PRIVATE_KEY`, and `PROTOCOL_NETWORK_INDEX`. Use a signer with gas only and no privileged roles. The workflow resolves Treasury from the manifest and rejects a chain mismatch. It is disabled unless explicitly opted in. Additional chain instances can use separate environment-bound keeper jobs with distinct signers and manifests.
+
+## Verification
+
+```sh
+node --test config/schema.test.mjs
+(cd frontend && npm ci && npm run build)
+(cd frontend && npx playwright install chromium && npm run test:browser)
+(cd contracts && forge fmt --check && forge test)
+(cd contracts && FOUNDRY_PROFILE=ci forge test)
+# Optional historical live-chain coverage:
+(cd contracts && BASE_RPC_URL=<your-base-rpc> forge test --match-path 'test/integration/BaseFork*.t.sol')
+```
+
+Local deployment tests use a real V4 PoolManager with mocked peripheral views on chain IDs 777 and 888. They verify hook permissions/binding, Treasury roles, reward funding, auxiliary contracts, and artifact export. They do not substitute for a target-chain dry run, external security audit, governance review, or live-wallet transaction testing.

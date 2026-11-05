@@ -1,10 +1,6 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_BASE_RPC_URL?: string;
-  readonly VITE_BASE_SEPOLIA_RPC_URL?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
+declare module "@protocol-manifest" {
+  const manifest: unknown;
+  export default manifest;
 }

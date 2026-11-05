@@ -1,0 +1,7 @@
+{
+  "forge-std": { "repository": "foundry-rs/forge-std", "revision": "77041d2ce690e692d6e03cc812b57d1ddaa4d505" },
+  "openzeppelin-contracts": { "repository": "OpenZeppelin/openzeppelin-contracts", "revision": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0" },
+  "solady": { "repository": "Vectorized/solady", "revision": "258f67cc71e39cff307b726939ade17e9d8bcf5c" },
+  "v4-core": { "repository": "Uniswap/v4-core", "revision": "bea7f6d1c11cd5dc4f0d5151ffa37a1c239feee6" },
+  "v4-periphery": { "repository": "Uniswap/v4-periphery", "revision": "c6e4754dab11bd38c6f08ac51c3c868569e93d64" }
+}

@@ -1,4 +1,4 @@
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 
 /**
  * ConnectButton — Art Deco.
@@ -19,22 +19,38 @@ import { useAccount, useConnect, useDisconnect } from "wagmi";
  * styles fixes the perceived size jump.
  */
 export function ConnectButton() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const { chains, switchChain, isPending: isSwitching, error } = useSwitchChain();
 
   if (isConnected && address) {
     return (
-      <button
-        onClick={() => disconnect()}
-        title="Click to disconnect"
-        className="label-deco flex items-center gap-2 border border-deco-gold/50 bg-deco-ground px-3 py-2 text-deco-gold transition-colors hover:border-deco-gold hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deco-gold"
-      >
-        <span className="inline-block h-2 w-2 rotate-45 bg-deco-gold" aria-hidden />
-        <span>
-          {address.slice(0, 6)}…{address.slice(-4)}
-        </span>
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor="protocol-network">Network</label>
+        <select
+          id="protocol-network"
+          aria-label="Network"
+          className="bg-deco-ground border border-deco-gold/50 px-2 py-2 text-deco-gold"
+          value={chains.some((chain) => chain.id === chainId) ? chainId : ""}
+          disabled={isSwitching}
+          onChange={(event) => switchChain({ chainId: Number(event.target.value) })}
+        >
+          <option value="" disabled>Select network</option>
+          {chains.map((chain) => <option key={chain.id} value={chain.id}>{chain.name}</option>)}
+        </select>
+        {error && <span role="alert">Network switch failed. Try again in your wallet.</span>}
+        <button
+          onClick={() => disconnect()}
+          title="Click to disconnect"
+          className="label-deco flex items-center gap-2 border border-deco-gold/50 bg-deco-ground px-3 py-2 text-deco-gold transition-colors hover:border-deco-gold hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deco-gold"
+        >
+          <span className="inline-block h-2 w-2 rotate-45 bg-deco-gold" aria-hidden />
+          <span>
+            {address.slice(0, 6)}…{address.slice(-4)}
+          </span>
+        </button>
+      </div>
     );
   }
 

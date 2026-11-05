@@ -1,3 +1,4 @@
+import { networks } from "@/lib/networks";
 import { useState } from "react";
 import { useReadContracts } from "wagmi";
 
@@ -248,17 +249,10 @@ function buildQueueCommand(d: NonNullable<ReturnType<typeof useDeployment>>): st
   return [
     "cd contracts",
     "set -a && source .env && set +a",
-    `export TIMELOCK=${d.timelock}`,
-    `export MONEY=${d.money}`,
-    `export ESTATE=${d.estate}`,
-    `export TRUSTNOTE=${d.trustNote}`,
-    `export HOOK=${d.hook}`,
-    `export TREASURY=${d.treasury}`,
-    `export GENESIS_REWARD_POOL=${d.genesisRewardPool}`,
-    `export MAIN_REWARD_POOL=${d.mainRewardPool}`,
-    `export SHARE_REWARD_POOL=${d.shareRewardPool}`,
+    `export PROTOCOL_NETWORK_INDEX=${networks.findIndex((n) => n.deployment?.treasury === d.treasury)}`,
+    "# RPC_URL must point to this network; the script checks its chain ID.",
     "forge script script/RotateGovernanceQueue.s.sol \\",
-    "  --rpc-url base_sepolia --broadcast --slow",
+    '  --rpc-url "$RPC_URL" --broadcast --slow',
   ].join("\n");
 }
 
@@ -266,15 +260,12 @@ function buildExecuteCommand(d: NonNullable<ReturnType<typeof useDeployment>>): 
   return [
     "cd contracts",
     "set -a && source .env && set +a",
-    `export TIMELOCK=${d.timelock}`,
-    `export MONEY=${d.money}`,
-    `export ESTATE=${d.estate}`,
-    `export TRUSTNOTE=${d.trustNote}`,
-    `export HOOK=${d.hook}`,
+    `export PROTOCOL_NETWORK_INDEX=${networks.findIndex((n) => n.deployment?.treasury === d.treasury)}`,
+    "# RPC_URL must point to this network; the script checks its chain ID.",
     "# ETA must match what you used in queue (or its default).",
     "# If you didn't override, the default was: queue_block.timestamp + timelock.delay() + 60.",
     "export ETA=<unix-timestamp-from-queue-log>",
     "forge script script/RotateGovernanceExecute.s.sol \\",
-    "  --rpc-url base_sepolia --broadcast --slow",
+    '  --rpc-url "$RPC_URL" --broadcast --slow',
   ].join("\n");
 }

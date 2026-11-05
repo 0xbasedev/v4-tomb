@@ -8,6 +8,7 @@ libs = ["lib"]
 test = "test"
 script = "script"
 cache_path = "cache"
+fs_permissions = [{ access = "read", path = "../config" }, { access = "read", path = "./test/fixtures" }, { access = "read-write", path = "./deployment-output" }]
 
 # Compiler pinning
 solc = "0.8.26"
@@ -77,18 +78,5 @@ wrap_comments = false
 ignore = ["lib/**", "test/**/snapshots/**"]
 
 
-# RPC endpoints — populated from .env at runtime
-[rpc_endpoints]
-base = "${BASE_RPC_URL}"
-base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
-mainnet = "${MAINNET_RPC_URL}"
-eth_sepolia = "${ETH_SEPOLIA_RPC_URL}"
-
-
-# Block explorer verification
-[etherscan]
-base = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api", chain = 8453 }
-base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api", chain = 84532 }
-
-
-# See https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+# RPC and explorer details are selected at invocation time.
+# Use --rpc-url "$RPC_URL" and --verify --verifier-url "$VERIFIER_URL" as needed.

@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 
+import { NetworkStatus } from "@/components/NetworkStatus";
 import { ConnectButton } from "@/components/ConnectButton";
 import { RuleTrio } from "@/components/RuleTrio";
 import { useIsAdmin } from "@/lib/hooks";
@@ -25,6 +26,7 @@ export function Layout() {
   return (
     <div className="flex min-h-screen flex-col bg-deco-ground">
       <Nav />
+      <NetworkStatus />
       <main className="flex-1">
         <Outlet />
       </main>
@@ -46,7 +48,7 @@ function Nav() {
             OM
           </span>
           <span className="label-deco hidden text-deco-gold-dark md:inline">
-            The Trust · Base
+            The Trust
           </span>
         </Link>
 

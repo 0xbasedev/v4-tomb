@@ -1,3 +1,5 @@
+import { useChainId } from "wagmi";
+import { explorerTransactionUrl } from "@/lib/networks";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -24,6 +26,8 @@ export interface Toast {
   message?: string;
   /** Optional explorer link for tx-hash visibility. */
   txHash?: string;
+  /** Captured when created so switching networks never changes an existing link. */
+  chainId?: number;
   /** Override auto-dismiss in ms. 0 = never auto-dismiss. */
   durationMs?: number;
 }
@@ -47,13 +51,14 @@ const DEFAULT_DURATION: Record<ToastVariant, number> = {
 let counter = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const chainId = useChainId();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const push = useCallback((t: Omit<Toast, "id"> & { id?: string }) => {
     const id = t.id ?? `t-${++counter}`;
-    setToasts((prev) => [...prev.filter((x) => x.id !== id), { ...t, id }]);
+    setToasts((prev) => [...prev.filter((x) => x.id !== id), { ...t, chainId: t.chainId ?? chainId, id }]);
     return id;
-  }, []);
+  }, [chainId]);
 
   const update = useCallback((id: string, patch: Partial<Omit<Toast, "id">>) => {
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -110,9 +115,8 @@ function ToastCard({ toast }: { toast: Toast }) {
           ? "border-deco-gold/60 text-deco-gold animate-pulse"
           : "border-deco-ivory/40 text-deco-ivory";
 
-  const explorerHref = toast.txHash
-    ? `https://sepolia.basescan.org/tx/${toast.txHash}`
-    : undefined;
+  const explorerHref = toast.chainId === undefined
+    ? undefined : explorerTransactionUrl(toast.chainId, toast.txHash);
 
   return (
     <div
@@ -148,7 +152,7 @@ function ToastCard({ toast }: { toast: Toast }) {
               rel="noreferrer"
               className="label-deco mt-2 inline-block text-deco-gold transition-colors hover:text-deco-gold-light"
             >
-              View on BaseScan →
+              View transaction →
             </a>
           )}
         </div>

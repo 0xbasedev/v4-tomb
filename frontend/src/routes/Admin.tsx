@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
 
 import { LaunchSequence } from "@/components/LaunchSequence";
@@ -39,6 +39,7 @@ import { maskDecimalInput } from "@/lib/util/decimal";
  */
 
 export function Admin() {
+  const { chainId, address } = useAccount();
   const deployment = useDeployment();
   const admin = useIsAdmin();
   const epoch = useEpoch();
@@ -48,11 +49,11 @@ export function Admin() {
   // One write hook reused across panels — only one action runs at a time on
   // this page, so a shared pipeline is fine.
   const write = useWriteContract();
-  const receipt = useWaitForTransactionReceipt({ hash: write.data });
+  const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId: write.variables?.chainId });
 
   function broadcast(label: string, call: Parameters<typeof write.writeContract>[0]) {
     const tid = toast.push({ variant: "pending", title: label, message: "Awaiting your signature." });
-    write.writeContract(call, {
+    write.writeContract({ ...call, chainId, account: address }, {
       onSuccess: (hash) => {
         toast.update(tid, {
           variant: "pending",
@@ -206,7 +207,7 @@ function NotConnected() {
       <div className="deco-panel mx-auto max-w-2xl text-center">
         <div className="label-deco mb-3 text-deco-gold-dark">The Trust Awaits</div>
         <h2 className="mb-4 font-display text-3xl italic text-deco-ivory md:text-4xl">
-          Connect a wallet on Base Sepolia
+          Connect a wallet on a configured network
         </h2>
         <p className="font-body text-base italic text-deco-ivory-soft">
           The Admin console reads the operator slots on Treasury, PegDefenseHook, and
