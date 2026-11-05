@@ -27,7 +27,20 @@
 | SQUARE max supply allocation | `config/masonry-launch.template.json`, `config/masonry-launch.mjs` | Unfinalized by design: 33,333 cap; 25,641 farming; 6,941 remaining vesting allocation unresolved |
 | Strict above-peg seigniorage | `MasonryRules` has >1.01 eligibility predicates | **NOT enforced by new production Treasury yet**; inherited `contracts/src/core/Treasury.sol` still has old WETH/bond mechanics |
 | Live Genesis, Farm, Masonry launch | `contracts/script/Deploy.s.sol` deploys inherited WETH protocol, whereas `DeployMasonryComponent.s.sol` is a component deployer only | **BLOCKED**: complete Masonry-specific deployment/wiring and funding are missing |
-| UI | xTOMB/xSHARE frontend preview | Not wired to live Masonry contract addresses and user flows |
+| Setup Wizard / Admin | `frontend/src/xtomb/setup/SetupPages.tsx`, `configuration.ts`, `planner.worker.ts`, `verifyLaunch.ts`, `GenesisScheduling.tsx` and `frontend/test/setup.spec.ts` | **Implemented four-step release-planning UI**; live deployment is a separate, still-blocked release gate |
+| Public dApp | xTOMB/xSHARE frontend preview | Live balances, minting, swaps, staking and Farm/Masonry bindings remain unavailable until verified deployment |
+
+## Existing Setup Wizard and Admin — preserve this work
+
+**Status: implemented as a release planning, review and admin UI on `merge`.** It is incorrect to describe the Setup Wizard itself as unfinished. The separate remaining work is executing a safe, wired, funded Masonry deployment from its reviewed release plan.
+
+- **Network:** choose Base, Robinhood Chain, BSC, PulseChain, Sonic, or custom EVM; expose chain-specific dependencies and preserve overrides.
+- **Launch settings:** release ID, signer/governance/Treasury recipients, token supply and SQUARE vesting conservation, fixed Genesis economics, optional Genesis start now or later, and per-transaction burn execution limits.
+- **Optional xSHARE bridge:** export Hyperlane route/verifier/owner/cap plans; bridge routes remain disabled until separately verified.
+- **Review:** worker-derived CreateX/CREATE3 deterministic addresses, draft autosave and import/export, separate address/release/launch/bridge JSON exports.
+- **Admin:** import/read a plan, compare expected chain IDs, confirm CreateX bytecode and deployed code presence, and use the authorized governance wallet to schedule a deferred Genesis only after verifying funding and staking connection.
+- **Source/test evidence:** `frontend/src/xtomb/setup/SetupPages.tsx`, `configuration.ts`, `planner.worker.ts`, `verifyLaunch.ts`, `GenesisScheduling.tsx` and `frontend/test/setup.spec.ts`. Browser automation exists in source, but **was not rerun as part of this reconciliation**.
+- **Boundary:** the wizard currently generates and verifies deployment plans; it does not itself execute the complete Masonry contract deployment pipeline. Avoid calling the implemented planning wizard missing simply because the deployer and live user contract integrations remain blocked.
 
 These classifications reflect checked source and repository documentation, **not** a fresh Foundry execution in this review environment. Prior local-passing claims require reproducible clean CI/fork output at the exact release SHA.
 
@@ -39,7 +52,7 @@ These classifications reflect checked source and repository documentation, **not
 - [ ] **G4 — Genesis economics:** review NFT tier perks, optional upgrade/migration and automation executor, delayed unused-emission rules, min-out/cooldowns, no duplicate 0.5% fee on LP zaps; test seven-day/Day-2 boundaries, 3% Genesis sell burn, 50/50 reward vesting and auto-compound accounting against a real v4 PoolManager and six-decimal USDC.
 - [ ] **G5 — Farm/Masonry LP interfaces:** use transferable/redeemable official vault shares end-to-end; add farms, boardroom, automation, withdraw/exit mechanics, and owner-safe fee distribution. Eliminate direct legacy `V4PositionWrapper` assumptions.
 - [ ] **G6 — Risk calibration:** determine the actual chain, real PoolManager/USDC, tick range/spacing, liquidity floor, TWAP cadence, guard maximum output/input, stablecoin decimals, gas and exposed unofficial-pool bypass. Perform adversarial oracle-manipulation, tick crossing, dust, failure/escrow and immutable-boundary tests.
-- [ ] **G7 — UI and operations:** wire wallet/chain, live Genesis tiers, staking, claims, zaps, swap, burn dashboard, operations logs, authenticated owner controls and config-driven launch wizard. Keep mobile-first UX and do not present mock balances as live.
+- [ ] **G7 — Live dApp integration, not a Wizard rebuild:** **preserve the already implemented four-step Setup Wizard and Admin**. Connect its validated launch files / predicted CREATE3 addresses to the completed Masonry deployer and verified deployed manifest; then wire live Genesis passes, staking, claims, zaps, swaps, burn dashboard, farms, Masonry and owner operations. Keep the existing draft import/export and deferred on-chain Genesis scheduling intact. Keep mobile-first UX and never present mock balances as live.
 - [ ] **G8 — Release gate:** clean checkout, pinned dependencies, `node --test config/*.test.mjs`, `forge build`, `forge test`, full Foundry invariant/fork tests with fork RPCs, frontend build and Playwright, contract sizes, static/security review, external audit and chain-specific rehearsal. No funded deployment or live keeper until all pass.
 
 ## Confirmed constraints to preserve
@@ -59,7 +72,7 @@ From a clean checkout of `merge` (not an inherited legacy deployment):
 `node scripts/install-contract-deps.mjs`
 `node --test config/*.test.mjs`
 `(cd contracts && forge build && forge test)`
-`(cd frontend && npm ci && npm run build)`
+`(cd frontend && npm ci && npm run build && npm run test:browser)`
 
 Target-chain fork tests and CI receipts must accompany the eventual release commit. This reconciliation was based on branch diffs, source inspection and documented test claims; **Foundry was not installed in the current execution environment**, and direct git network access was unavailable.
 
