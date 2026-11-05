@@ -2,6 +2,7 @@ import { useAccount } from "wagmi";
 import type { Address } from "viem";
 
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
+import { bridgeNetwork } from "@/lib/create3";
 import { DEPLOYMENTS, REGISTRY } from "@/lib/launch";
 import { PREVIEW_ADDRESS, usePreview } from "@/lib/preview";
 import { chainName } from "@/lib/wagmi";
@@ -47,9 +48,12 @@ export function useNetworkStatus(): NetworkState {
   const deployment = chainId !== undefined ? (DEPLOYMENTS.find((d) => d.chainId === chainId) ?? null) : null;
   const walletAddress = isConnected && address ? address : null;
 
+  const bridgeOnly = !supported && bridgeNetwork(chainId) !== null;
   const walletLine = !isConnected
     ? null
-    : !supported
+    : bridgeOnly
+      ? `${chainName(chainId)} is an xSHARE bridge network (planned), not a Masonry launch chain. xTOMB needs a chain with a Uniswap v4 PoolManager and native USDC.`
+      : !supported
       ? `Your wallet is on an unsupported network (${chainName(chainId)}). xTOMB needs a chain with a Uniswap v4 PoolManager and native USDC.`
       : !deployment
         ? `${chainName(chainId)} has no verified xTOMB deployment yet. Transactions are unavailable.`

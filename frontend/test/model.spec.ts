@@ -185,3 +185,48 @@ test.describe("Expansion and Critical Defense", () => {
     expect(SQUARE_SUPPLY.cap).toBe(33_333);
   });
 });
+
+test.describe("CREATE3 release planning", () => {
+  const release = { releaseId: `0x${"99".repeat(32)}` as const, deployer: "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf" as const };
+
+  test("the browser planner matches scripts/create3.mjs for every Masonry role, hooks included", async () => {
+    test.setTimeout(120_000);
+    // @ts-expect-error — plain .mjs from the repository root, no type declarations
+    const script = await import("../../scripts/create3.mjs");
+    const { planMasonry: browserPlan, MASONRY_HOOK_FLAGS, HOOK_MASK } = await import("../src/lib/create3");
+    const expected = script.planMasonry({ ...release, canonicalDomain: 8453 });
+    const actual = await browserPlan({ ...release, chainId: 8453 });
+    expect(actual.addresses).toEqual(expected.addresses);
+    expect(actual.hookNonces).toEqual(expected.hookNonces);
+    for (const role of ["masonryTaxHook", "masonryShareTaxHook"] as const) expect(BigInt(actual.addresses[role]) & HOOK_MASK).toBe(MASONRY_HOOK_FLAGS);
+    expect(new Set(Object.values(actual.addresses)).size).toBe(Object.keys(actual.addresses).length);
+  });
+
+  test("bridge and Bridged xSHARE addresses match the script for a Base home chain", async () => {
+    // @ts-expect-error — plain .mjs from the repository root
+    const script = await import("../../scripts/create3.mjs");
+    const { planBridge: browserBridge, BRIDGE } = await import("../src/lib/create3");
+    const owner = "0x0000000000000000000000000000000000000123";
+    const full = script.planBridge(BRIDGE, {
+      ...release,
+      canonicalDomain: 8453,
+      canonicalTokenRole: "masonryShare",
+      routeCaps: { 4663: "100", 56: "200", 369: "300", 146: "400" },
+      bridgeOperators: Object.fromEntries(BRIDGE.networks.map(({ id }) => [id, { owner, ism: owner }])),
+    });
+    const mine = browserBridge(release, 8453, "masonryShare")!;
+    for (const n of full.networks) {
+      expect(n.bridge).toBe(mine.bridge);
+      expect(n.token).toBe(mine.tokens[n.id]);
+      expect(n.enabled).toBe(false);
+    }
+    expect(browserBridge(release, 42161)).toBeNull(); // Arbitrum is not a bridge network
+  });
+
+  test("a different signer or release ID moves every address", async () => {
+    const { create3Address } = await import("../src/lib/create3");
+    const a = create3Address(release, "masonryPeg").address;
+    expect(create3Address({ ...release, deployer: "0x0000000000000000000000000000000000000123" }, "masonryPeg").address).not.toBe(a);
+    expect(create3Address({ ...release, releaseId: `0x${"88".repeat(32)}` }, "masonryPeg").address).not.toBe(a);
+  });
+});

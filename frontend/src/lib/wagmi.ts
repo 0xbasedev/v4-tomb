@@ -1,3 +1,4 @@
+import { bridgeNetwork } from "@/lib/create3";
 import { http, createConfig, type Transport } from "wagmi";
 import {
   arbitrum,
@@ -65,4 +66,4 @@ export const wagmiConfig = createConfig({
 export const SUPPORTED_CHAIN_IDS = chains.map((c) => c.id);
 export const DEPLOYED_CHAIN_IDS = DEPLOYMENTS.map((d) => d.chainId);
 export const chainName = (id: number | undefined) =>
-  id === undefined ? "—" : (REGISTRY.chains.find((c) => c.id === id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);
+  id === undefined ? "—" : (REGISTRY.chains.find((c) => c.id === id)?.name ?? bridgeNetwork(id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);

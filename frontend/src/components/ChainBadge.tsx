@@ -19,6 +19,11 @@ const SLUG: Record<number, string> = {
   143: "monad",
   999: "hyperliquid",
   1: "ethereum",
+  // xSHARE bridge networks (Hyperlane)
+  4663: "robinhood",
+  56: "binance",
+  369: "pulse",
+  146: "sonic",
 };
 
 const HUES = [18, 200, 280, 330, 160, 45, 230, 0, 120, 260, 300, 190, 60];

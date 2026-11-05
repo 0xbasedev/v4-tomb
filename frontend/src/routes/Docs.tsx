@@ -11,6 +11,7 @@ import { EpochWheel, RoutingSplit } from "@/components/docs/TreasuryVisuals";
 import { CompoundCurve, RoutePlayer } from "@/components/docs/ZapVisuals";
 import { PageHeader } from "@/components/PageHeader";
 import { PendingPanel } from "@/components/Status";
+import { BRIDGE } from "@/lib/create3";
 import { GENESIS_DAYS, LP_DAY } from "@/lib/genesis";
 import { DEFENSE, EPOCH_SECONDS, EXPANSION, FARM_POLICY, FIRE, GENESIS_POLICY, PASSES, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
@@ -65,6 +66,10 @@ const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Compound cooldown", tag: "automation", body: `${H(GENESIS_POLICY.compoundCooldownSeconds)}, shared by claims and compounds, by hand or by keeper. Withdrawals are never locked.` },
   { term: "xSHARE routing", tag: "treasury", body: `Normal mode: ${pct(SQUARE_ROUTING.polBps)} of collected xSHARE tax to protocol LP, ${pct(SQUARE_ROUTING.usdcReserveBps)} to the USDC reserve, ${pct(SQUARE_ROUTING.squareReserveBps)} to the xSHARE reserve.` },
   { term: "Hook", tag: "swap", body: "A Uniswap v4 contract that runs on every swap of its pool. The xTOMB and xSHARE hooks observe price, charge the Fire Tax and reject sells without a valid TWAP." },
+  { term: "CREATE3 release plan", tag: "app", body: "CreateX predicts every project address from the deployment signer, a release ID and each role — the same on every chain with the canonical factory. Hooks are mined for their Uniswap v4 permission bits. Predictions aren't deployments." },
+  { term: "Home chain", tag: "bridge", body: "Where original xSHARE lives and the bridge escrows it. Chosen in the Wizard; every route runs home ↔ satellite." },
+  { term: "Bridged xSHARE", tag: "bridge", body: "The 18-decimal token on the four non-home networks. Same symbol as xSHARE, its own address; minted and burned only by the bridge." },
+  { term: "Hyperlane", tag: "bridge", body: "The messaging layer the bridge uses: a Mailbox per chain, an ISM that verifies messages, and relayers that deliver them. Fees are quoted in the source chain's native currency." },
   { term: "Preview", tag: "app", body: "Until a verified deployment exists, the app runs on simulated data. Every action is simulated and no wallet request is ever sent." },
 ];
 
@@ -299,11 +304,17 @@ export function Docs() {
             id="bridge"
             numeral={num("bridge")}
             title="Bridge"
-            lede="The plan: a new Genesis every month on a new chain, each with Ultra and xSHARE pools, until xTOMB is on every chain with Uniswap v4 and native USDC."
-            facts={["Ultra passes and xSHARE are planned to be bridgeable — that needs new, audited contracts.", "Today's pass is soulbound and xSHARE has no bridge.", "Chain order and dates aren't set."]}
+            lede={`xSHARE moves over Hyperlane between the home chain and ${BRIDGE.networks.map((n) => n.name).join(", ")}. Original xSHARE stays home; the others receive Bridged xSHARE.`}
+            facts={[
+              "Satellite → satellite is two transfers through the home chain.",
+              "xSHARE only — Genesis passes are soulbound and stay put.",
+              "Every route is disabled until a verified deployment passes a production canary. Sonic also needs a verified validator and relayer.",
+              "Addresses are predicted with CreateX CREATE3 from the deployment signer and release ID.",
+            ]}
           >
-            <PendingPanel title="Multichain Genesis" badge="planned">
-              See the animated cadence and candidate chains on the Bridge page. <Link to="/bridge" className="text-ember-hot underline-offset-2 hover:underline">Open Bridge →</Link>
+            <PendingPanel title="xSHARE bridge" badge="planned">
+              Five networks, all disabled in the manifest. The Bridge page shows the routes, the send checks and predicted addresses from your release plan.{" "}
+              <Link to="/bridge" className="text-ember-hot underline-offset-2 hover:underline">Open Bridge →</Link>
             </PendingPanel>
           </DocSection>
 

@@ -124,7 +124,7 @@ test.describe("Wallet and network states", () => {
   });
 
   test("unsupported chain: the note warns and nothing can be sent", async ({ page, broadcasts }) => {
-    await installWallet(page, "0x38"); // BNB Chain: no Uniswap v4 + native USDC entry in the registry
+    await installWallet(page, "0xfa"); // Fantom: neither a Masonry chain nor a bridge network
     await page.goto("/genesis?preview=0");
     await page.getByRole("button", { name: "Connect wallet" }).click();
     await expect(note(page)).toContainText(/unsupported network/);
@@ -143,7 +143,7 @@ test.describe("Wallet and network states", () => {
   });
 
   test("Preview with an unsupported wallet still warns, and stays simulated", async ({ page, broadcasts }) => {
-    await installWallet(page, "0x38");
+    await installWallet(page, "0xfa");
     await page.goto("/dashboard?wallet=0");
     await page.getByRole("button", { name: "Connect wallet" }).click();
     await expect(note(page)).toContainText(/unsupported network.*Showing simulated data/);
@@ -191,3 +191,48 @@ test.describe("Preview makes zero transaction requests", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 });
+
+test.describe("Bridge and release plan", () => {
+  test("a bridge-only network says so and stays unsupported for Masonry", async ({ page, broadcasts }) => {
+    await installWallet(page, "0x38"); // BNB Smart Chain
+    await page.goto("/genesis?preview=0");
+    await page.getByRole("button", { name: "Connect wallet" }).click();
+    await expect(note(page)).toContainText(/BNB Smart Chain is an xSHARE bridge network/);
+    await expect(pool(page, 0)).toContainText("Switch to a supported network.");
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+
+  test("five networks, all disabled; Sonic awaits relayer and verifier setup", async ({ page, broadcasts }) => {
+    await page.goto("/bridge");
+    const nets = page.getByTestId("bridge-networks");
+    for (const name of ["Base", "Robinhood Chain", "BNB Smart Chain", "PulseChain", "Sonic"]) await expect(nets).toContainText(name);
+    await expect(nets.locator("[data-network=sonic]")).toContainText("Awaiting relayer and verifier setup");
+    await expect(nets.locator("[data-network=base]")).toContainText("Bridge unavailable");
+    await expect(page.getByRole("button", { name: "Bridge unavailable" })).toBeDisabled();
+    await expect(page.getByTestId("bridge-reasons")).toContainText(/No home chain|disabled in the manifest/);
+    await expect(page.locator("body")).not.toContainText(/LayerZero|\bOFT\b|ONFT/);
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+
+  test("Wizard predicts addresses from signer + release ID and the Bridge page shows them", async ({ page, broadcasts }) => {
+    test.setTimeout(120_000);
+    await page.goto("/wizard");
+    await page.getByRole("button", { name: /Base\s*8453/ }).click();
+    await page.getByRole("button", { name: /Release$/ }).click();
+    await page.getByRole("textbox", { name: "Deployment signer" }).fill("0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf");
+    await page.getByRole("textbox", { name: "Release ID" }).fill(`0x${"99".repeat(32)}`);
+    const masonry = page.getByTestId("predicted-masonry");
+    await expect(masonry).toBeVisible({ timeout: 60_000 });
+    await expect(masonry).toContainText("masonryTaxHook");
+    await expect(masonry).toContainText("0x35c8 ✓");
+    await expect(page.getByTestId("predicted-bridge")).toContainText("xshareBridge");
+
+    await page.getByRole("link", { name: /(^|\s)Bridge$/ }).filter({ visible: true }).first().click();
+    await expect(page.getByText(/Home chain in your release plan: Base/)).toBeVisible();
+    await expect(page.getByTestId("bridge-networks").locator("[data-network=base]")).toContainText(/home · original xSHARE/);
+    await expect(page.getByTestId("bridge-networks").locator("[data-network=pulsechain]")).toContainText(/token 0x.*predicted/);
+    await expect(page.getByRole("button", { name: "Bridge unavailable" })).toBeDisabled();
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+});
+

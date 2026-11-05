@@ -7,6 +7,8 @@ import { officialChain } from "@config/masonry-deployment.mjs";
 import { ChainBadge } from "@/components/ChainBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { Reason } from "@/components/Status";
+import { bridgeInputGaps, emptyRelease, ReleaseStep, releaseJson, type ReleaseState } from "@/components/wizard/ReleaseStep";
+import { BRIDGE_DOMAINS, loadRelease, ROLE_LABEL, type MasonryPlan } from "@/lib/create3";
 import { LAUNCH, POLICY, REGISTRY } from "@/lib/launch";
 import { useReveal } from "@/lib/motion/useReveal";
 
@@ -18,12 +20,15 @@ import { useReveal } from "@/lib/motion/useReveal";
  *                 validated by the same validateMasonryLaunch the deploy uses
  *   3 Pools       official pool keys, vault ranges, oracle and guard bounds,
  *                 Genesis start — the constructor-bound values
- *   4 Review      fixed release invariants vs deployment-bound choices, then
- *                 export the plan. Deploying runs from the scripts, not here.
+ *   4 Release     CREATE3: deployment signer + release ID → predicted addresses
+ *                 for every Masonry component, the xSHARE bridge and Bridged xSHARE
+ *   5 Review      fixed release invariants vs deployment-bound choices, then
+ *                 export the plans. Deploying runs from the scripts, not here.
  */
 
-type Step = 0 | 1 | 2 | 3;
-const STEPS = ["Chain", "Allocations", "Pools", "Review"];
+type Step = 0 | 1 | 2 | 3 | 4;
+const STEPS = ["Chain", "Allocations", "Pools", "Release", "Review"];
+const LAST = (STEPS.length - 1) as Step;
 
 const POLICY_LABEL: Record<string, string> = {
   fireTaxHardCapBps: "Fire Tax hard cap",
@@ -79,7 +84,9 @@ export function Wizard() {
   const root = useRef<HTMLDivElement>(null);
   useReveal(root, []);
   const [step, setStep] = useState<Step>(0);
-  const [chainId, setChainId] = useState<number>(84532);
+  // Resume the plan saved in this browser, if any.
+  const [saved] = useState(loadRelease);
+  const [chainId, setChainId] = useState<number>(() => (saved && officialChain(REGISTRY, saved.canonicalDomain) ? saved.canonicalDomain : 84532));
   const [doc, setDoc] = useState(() => clone(LAUNCH));
   const [pools, setPools] = useState({
     genesisStart: "",
@@ -99,6 +106,8 @@ export function Wizard() {
     maxDeviationBps: 300,
   });
 
+  const [release, setRelease] = useState<ReleaseState>(() => (saved ? { ...emptyRelease(), deployer: saved.deployer, releaseId: saved.releaseId } : emptyRelease()));
+  const [plan, setPlan] = useState<MasonryPlan | null>(null);
   const chain = officialChain(REGISTRY, chainId);
   const result = useMemo(() => {
     try {
@@ -117,16 +126,20 @@ export function Wizard() {
         lede="Choose the chain, set allocations and pools, and review what's fixed versus chosen at deploy. The Wizard validates with the same schema the deploy scripts use and exports the plan; it never deploys."
       />
       <div className="mx-auto w-full max-w-5xl px-4 pb-12 md:px-8">
-        <ol data-reveal className="mb-6 grid grid-cols-4 gap-2">
+        <ol data-reveal className="mb-6 grid grid-cols-5 gap-1.5 sm:gap-2">
           {STEPS.map((s, i) => (
             <li key={s}>
               <button
                 type="button"
                 onClick={() => setStep(i as Step)}
-                className={`flex w-full flex-col items-start rounded-xl border px-3 py-2 text-left ${step === i ? "border-ember/60 bg-ember/[0.07]" : "border-white/[0.07] hover:border-white/20"}`}
+                aria-current={step === i ? "step" : undefined}
+                className={`flex w-full min-w-0 flex-col items-start rounded-xl border px-2 py-2 text-left sm:px-3 ${step === i ? "border-ember/60 bg-ember/[0.07]" : "border-white/[0.07] hover:border-white/20"}`}
               >
-                <span className="font-mono text-[10px] text-ash">Step {i + 1}</span>
-                <span className="text-[13px] font-semibold text-bone">{s}</span>
+                <span className="font-mono text-[10px] text-ash">
+                  <span className="hidden sm:inline">Step </span>
+                  {i + 1}
+                </span>
+                <span className="w-full truncate text-[11px] font-semibold text-bone sm:text-[13px]">{s}</span>
               </button>
             </li>
           ))}
@@ -135,13 +148,14 @@ export function Wizard() {
         {step === 0 && <ChainStep chainId={chainId} setChainId={setChainId} />}
         {step === 1 && <AllocStep doc={doc} setDoc={setDoc} result={result} />}
         {step === 2 && <PoolsStep pools={pools} setPools={setPools} issues={poolIssues} />}
-        {step === 3 && <ReviewStep chainName={chain?.name ?? `chain ${chainId}`} chainId={chainId} doc={doc} pools={pools} result={result} poolIssues={poolIssues} />}
+        {step === 3 && <ReleaseStep chainId={chainId} chainName={chain?.name ?? `chain ${chainId}`} release={release} setRelease={setRelease} plan={plan} setPlan={setPlan} />}
+        {step === 4 && <ReviewStep chainName={chain?.name ?? `chain ${chainId}`} chainId={chainId} doc={doc} pools={pools} result={result} poolIssues={poolIssues} release={release} plan={plan} />}
 
         <div className="mt-6 flex justify-between">
           <button type="button" className="btn h-10 px-4" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1) as Step)}>
             Back
           </button>
-          <button type="button" className="btn btn-primary h-10 px-5" disabled={step === 3} onClick={() => setStep((s) => Math.min(3, s + 1) as Step)}>
+          <button type="button" className="btn btn-primary h-10 px-5" disabled={step === LAST} onClick={() => setStep((s) => Math.min(LAST, s + 1) as Step)}>
             Next
           </button>
         </div>
@@ -193,7 +207,10 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
                 <ChainBadge id={c.id} name={c.name} size={24} />
                 <span className="min-w-0">
                   <span className="block truncate text-[12.5px] text-bone">{c.name}</span>
-                  <span className="block font-mono text-[10px] text-ash">{c.id}</span>
+                  <span className="block font-mono text-[10px] text-ash">
+                    {c.id}
+                    {BRIDGE_DOMAINS.includes(c.id) && <span className="ml-1.5 text-spectre">· bridge home</span>}
+                  </span>
                 </span>
               </button>
             ))}
@@ -224,6 +241,9 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
       </div>
       {checks?.error && <Reason tone="warn">Couldn't reach the chain: {checks.error}</Reason>}
       {chain.id === 1 && <Reason tone="warn">Ethereum mainnet: rehearse the full launch on a testnet first.</Reason>}
+      <Reason>
+        This is the home chain for the release. The xSHARE bridge can only be planned when the home chain is one of its five networks (marked “bridge home”). Bridge support doesn't certify a chain for the Masonry launch.
+      </Reason>
       <p className="mt-3 font-mono text-[10.5px] text-ash-dim">
         Sources: Uniswap v4 deployments and Circle USDC addresses, retrieved {REGISTRY.sources.retrieved}.
       </p>
@@ -359,7 +379,7 @@ function PoolsStep({ pools, setPools, issues }: { pools: Pools; setPools: (p: Po
   return (
     <section data-reveal className="panel p-5 md:p-6">
       <h2 className="font-display text-lg font-semibold text-bone">3 · Pools and bounds</h2>
-      <p className="mt-1 text-[13px] text-bone-dim">These are constructor arguments — fixed once deployed. Hook addresses are mined at deploy time for their permission bits.</p>
+      <p className="mt-1 text-[13px] text-bone-dim">These are constructor arguments — fixed once deployed. Hook addresses are mined in the release plan (next step) for their permission bits.</p>
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         {field("genesisStart", "Genesis start", "shared by the schedule, hook and staking", "datetime-local")}
         {field("levelFee", "xTOMB/USDC LP fee (pips)", "static fee; 3000 = 0.30%")}
@@ -398,6 +418,8 @@ function ReviewStep({
   pools,
   result,
   poolIssues,
+  release,
+  plan,
 }: {
   chainName: string;
   chainId: number;
@@ -405,11 +427,22 @@ function ReviewStep({
   pools: Pools;
   result: { ok: boolean; error?: string };
   poolIssues: string[];
+  release: ReleaseState;
+  plan: MasonryPlan | null;
 }) {
   const ready = result.ok && poolIssues.length === 0;
+  const gaps = bridgeInputGaps(release, chainId);
+  function downloadRelease() {
+    const blob = new Blob([JSON.stringify(releaseJson(release, chainId), null, 2) + "\n"], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "release.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
   function download() {
-    const plan = { chainId, chain: chainName, launch: doc, deploymentBound: pools, generatedAt: new Date().toISOString() };
-    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    const out = { chainId, chain: chainName, launch: doc, deploymentBound: pools, predicted: plan, generatedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `xtomb-launch-plan-${chainId}.json`;
@@ -419,13 +452,20 @@ function ReviewStep({
   return (
     <section data-reveal className="space-y-5">
       <div className="panel p-5 md:p-6">
-        <h2 className="font-display text-lg font-semibold text-bone">4 · Review</h2>
+        <h2 className="font-display text-lg font-semibold text-bone">5 · Review</h2>
         <div className={`mt-3 rounded-xl border p-3 text-[13px] ${ready ? "border-ok/30 bg-ok/[0.05] text-ok" : "border-warn/30 bg-warn/[0.05] text-warn"}`} role="status">
           {ready ? `✓ Ready to export for ${chainName}.` : `Not ready: ${[!result.ok ? result.error : null, ...poolIssues].filter(Boolean).join(" ")}`}
         </div>
-        <button type="button" className="btn btn-primary mt-4 h-11 px-5" disabled={!ready} onClick={download}>
-          Export launch plan (JSON)
-        </button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary h-11 px-5" disabled={!ready} onClick={download}>
+            Export launch plan (JSON)
+          </button>
+          <button type="button" className="btn h-11 px-5" disabled={!plan} onClick={downloadRelease}>
+            Export release.json
+          </button>
+        </div>
+        {!plan && <Reason>Set the deployment signer and release ID in step 4 to export the release plan.</Reason>}
+        {plan && gaps.length > 0 && <Reason tone="warn">The release exports without complete bridge inputs; the bridge planner will ask for {gaps.join("; ")}.</Reason>}
         <Reason>Deployment runs from the deploy scripts with this plan; the Wizard never sends a transaction.</Reason>
       </div>
       <div className="panel p-5 md:p-6">
@@ -459,7 +499,10 @@ function ReviewStep({
             ["Oracle min liquidity", pools.oracleMinLiquidity || "unset"],
             ["Guard tolerances", `${pools.spotBps} / ${pools.impactBps} / ${pools.lossBps} bps`],
             ["Max xSHARE per route", pools.maxSquarePerRoute || "unset"],
-            ["Hook addresses", "mined at deploy (permission bits)"],
+            ["Release ID", release.releaseId ? `${release.releaseId.slice(0, 10)}…${release.releaseId.slice(-6)}` : "unset"],
+            ["Deployment signer", release.deployer || "unset"],
+            [ROLE_LABEL.masonryTaxHook, plan ? `${plan.addresses.masonryTaxHook.slice(0, 8)}… · nonce ${plan.hookNonces.masonryTaxHook}` : "predicted in step 4"],
+            [ROLE_LABEL.masonryShareTaxHook, plan ? `${plan.addresses.masonryShareTaxHook.slice(0, 8)}… · nonce ${plan.hookNonces.masonryShareTaxHook}` : "predicted in step 4"],
             ["Treasury, fee recipient, binders", "set at deploy"],
           ].map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between gap-3 border-b border-white/[0.04] py-1">

@@ -198,6 +198,26 @@ export function Admin() {
           </div>
         </section>
 
+        <section data-reveal className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="panel p-5">
+            <div className="label mb-2">Release plan · CREATE3</div>
+            <p className="text-[13px] leading-relaxed text-bone-dim">
+              Every project address is predicted from the deployment signer and release ID before deploy, and the deploy scripts check each one before broadcasting. Plan or review it in the{" "}
+              <Link to="/wizard" className="text-ember-hot hover:underline">
+                Wizard's release step
+              </Link>
+              .
+            </p>
+          </div>
+          <div className="panel p-5">
+            <div className="label mb-2">Compound gate · not bound</div>
+            <p className="text-[13px] leading-relaxed text-bone-dim">
+              MasonryCompoundGate holds the hard-coded 3-hour clock shared by manual and keeper compounds, with an owner-set executor list. Its Genesis and Farm adapters aren't wired yet, so it has no deployment entry and{" "}
+              <span className="font-mono">setExecutor</span> isn't offered here.
+            </p>
+          </div>
+        </section>
+
         <section data-reveal className="panel p-5">
           <div className="label mb-2">Not offered</div>
           <p className="text-[13px] leading-relaxed text-bone-dim">
