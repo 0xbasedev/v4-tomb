@@ -8,12 +8,13 @@ import { useMagnetic } from "@/lib/motion/useMagnetic";
 
 /** Genesis at a glance, shown while it's upcoming or running. */
 export function GenesisStrip({ className = "" }: { className?: string }) {
-  const { clock, pass, sim } = useProtocol();
+  const { clock, pass, sim, genesisScheduled } = useProtocol();
   const cta = useRef<HTMLAnchorElement>(null);
   useMagnetic(cta, 0.2);
-  if (!clock || clock.phase === "ended") return null;
-  const status =
-    clock.phase === "pre"
+  if (genesisScheduled !== false && (!clock || clock.phase === "ended")) return null;
+  const status = !clock
+    ? "Deployed · start date not set yet"
+    : clock.phase === "pre"
       ? `Starts in ${fmtDuration(clock.secondsToStart)}${clock.ultraEarly ? " · Ultra early staking open" : ""}`
       : clock.phase === "day1"
         ? `Day 1 · LP pool opens in ${fmtDuration(clock.secondsToLp)}`

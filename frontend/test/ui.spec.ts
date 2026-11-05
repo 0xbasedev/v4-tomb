@@ -18,7 +18,7 @@ async function preset(page: Page, title: string) {
 
 test.describe("Genesis boundaries", () => {
   test("Day 1 → Day 2: the LP pool opens and takes 75%", async ({ page, broadcasts }) => {
-    await page.goto(`/genesis?t=${DAY - 5}`);
+    await page.goto(`/genesis?t=${DAY - 60}`);
     await expect(page.getByText(/Genesis · day 1 of 7/i)).toBeVisible();
     await expect(pool(page, 0)).toContainText(/Emissions now\s*100%/);
     await expect(pool(page, 1)).toContainText(/Emissions now\s*0%/);
@@ -33,7 +33,7 @@ test.describe("Genesis boundaries", () => {
   });
 
   test("Genesis end: deposits close, withdrawals and claims stay open", async ({ page, broadcasts }) => {
-    await page.goto(`/genesis?t=${7 * DAY - 5}`);
+    await page.goto(`/genesis?t=${7 * DAY - 60}`);
     await expect(page.getByText(/Genesis · day 7 of 7/i)).toBeVisible();
     await expect(pool(page, 1)).toContainText(/Emissions now\s*75%/);
 
@@ -234,4 +234,55 @@ test.describe("Bridge and release plan", () => {
     await expect(page.getByRole("button", { name: "Bridge unavailable" })).toBeDisabled();
     await expectNoTransactionRequests(page, broadcasts);
   });
+
+  test("Wizard address patterns: a custom prefix is mined and a conflicting hook suffix is refused", async ({ page, broadcasts }) => {
+    test.setTimeout(150_000);
+    await page.goto("/wizard");
+    await page.getByRole("button", { name: /Base\s*8453/ }).click();
+    await page.getByRole("button", { name: /Release$/ }).click();
+    await page.getByRole("textbox", { name: "Deployment signer" }).fill("0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf");
+    await page.getByRole("textbox", { name: "Release ID" }).fill(`0x${"99".repeat(32)}`);
+    await page.getByText("Custom contract addresses").click();
+    await page.getByRole("combobox", { name: "Contract to customize" }).selectOption("masonryTaxHook");
+    await page.getByRole("textbox", { name: "Address suffix" }).fill("ffff");
+    await expect(page.getByRole("alert")).toContainText(/conflicts with Uniswap permissions/);
+    await expect(page.getByTestId("predicted-masonry")).toHaveCount(0);
+    await page.getByRole("textbox", { name: "Address suffix" }).fill("");
+    await page.getByRole("combobox", { name: "Contract to customize" }).selectOption("masonryPeg");
+    await page.getByRole("textbox", { name: "Address prefix" }).fill("ab");
+    const masonry = page.getByTestId("predicted-masonry");
+    await expect(masonry).toBeVisible({ timeout: 90_000 });
+    await expect(masonry).toContainText(/masonryPeg · pattern · nonce \d+/);
+    await expect(masonry.getByRole("button", { name: /^0xab/i }).first()).toBeVisible();
+    await expectNoTransactionRequests(page, broadcasts);
+  });
 });
+
+test.describe("Deferred Genesis scheduling", () => {
+  test("unscheduled Genesis: passes and staking stay closed and say why", async ({ page, broadcasts }) => {
+    await page.goto("/genesis?genesis=unscheduled&pass=none");
+    await expect(page.getByText(/Genesis · not scheduled yet/i)).toBeVisible();
+    await expect(page.getByText("Not set yet")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Mint Pro" })).toBeDisabled();
+    await expect(page.getByText(/Pass sales open once Genesis is scheduled/).first()).toBeVisible();
+    await expect(pool(page, 0)).toContainText(/Staking opens once the scheduler sets the start date/);
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+
+  test("Admin schedules Genesis once: readiness checks, a future date, then it's permanent", async ({ page, broadcasts }) => {
+    await page.goto("/admin?genesis=unscheduled");
+    const panel = page.getByTestId("genesis-schedule");
+    await expect(panel).toContainText("Genesis isn't scheduled yet");
+    await expect(panel.getByRole("button", { name: /Schedule Genesis/ })).toBeDisabled();
+    await expect(panel).toContainText("Pick the start date and time.");
+    const future = new Date(Date.now() + 3 * 86_400_000);
+    const local = new Date(future.getTime() - future.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    await panel.getByLabel("Genesis start").fill(local);
+    await expect(panel).toContainText(/sent as \d+/);
+    await panel.getByRole("button", { name: /Schedule Genesis/ }).click();
+    await expect(panel).toContainText(/Scheduled for/, { timeout: 10_000 });
+    await expect(panel.getByRole("button", { name: /Schedule Genesis/ })).toHaveCount(0);
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+});
+

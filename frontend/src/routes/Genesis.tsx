@@ -30,7 +30,9 @@ export function Genesis() {
       <PageHeader
         eyebrow={
           !c
-            ? "Genesis"
+            ? p.genesisScheduled === false
+              ? "Genesis · not scheduled yet"
+              : "Genesis"
             : c.phase === "pre"
               ? `Genesis · starts in ${fmtDuration(c.secondsToStart)}`
               : c.phase === "ended"
@@ -40,7 +42,22 @@ export function Genesis() {
         token="xTOMB"
         title={<span className="ember-text">Genesis</span>}
         lede={`Seven days, pass-gated. Stake in the standard pool from Day 1; the xTOMB/USDC LP pool opens on Day ${LP_DAY} and takes 75% of emissions from then on. Every reward is half liquid, half vested.`}
-        aside={c && <Timeline clock={c} simulated={p.sim} />}
+        aside={
+          c ? (
+            <Timeline clock={c} simulated={p.sim} />
+          ) : p.genesisScheduled === false ? (
+            <div className="panel p-5">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="label">Start date</span>
+                {p.sim && <SimBadge />}
+              </div>
+              <div className="font-display text-lg font-semibold text-bone">Not set yet</div>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-bone-dim">
+                The schedule contract is deployed with no start. Its scheduler sets the date once; after that it can't change. Pass sales and staking open then.
+              </p>
+            </div>
+          ) : null
+        }
       />
 
       <div className="mx-auto w-full max-w-7xl space-y-10 px-4 md:px-8">

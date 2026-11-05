@@ -55,7 +55,13 @@ export function PassPicker() {
       {!folded && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {PASS_ORDER.map((id) => (
-            <PassCard key={id} pass={PASSES[id]} held={p.pass} closed={closed} reason={!net.preview ? net.reason : null} />
+            <PassCard
+              key={id}
+              pass={PASSES[id]}
+              held={p.pass}
+              closed={closed}
+              reason={p.genesisScheduled === false ? "Pass sales open once Genesis is scheduled — the pass contract rejects purchases while the start is unset." : !net.preview ? net.reason : null}
+            />
           ))}
         </div>
       )}

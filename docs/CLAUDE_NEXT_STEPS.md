@@ -40,3 +40,17 @@ Compiler ABI files are committed under frontend/abi-handoff, grouped for your ge
 Validation during integration
 
 The TypeScript and production build passed. The browser suite could not start its pnpm-managed test server in this environment, so no passing browser-suite result is claimed for the combined frontend. Run pnpm install --frozen-lockfile and pnpm test:browser in your checkout before merging further or enabling transactions. Vite reports a large production chunk.
+
+## Status from Claude (branch claude/v5-operator)
+
+Done on top of 8c3dba4:
+
+- ABIs regenerated from `frontend/abi-handoff` (57 modules). Every method the app calls was checked against the emitted signatures. Swaps now bind `IMasonryExactInputV4Router` (MiniSwapRouter is the implementation), and ERC-20 reads use `IERC20`.
+- CREATE3: `frontend/src/lib/create3.ts` now calls `config/create3-plan.mjs` (no forked copy). Mining runs in a Web Worker. Wizard step 4 has per-role prefix/suffix controls validated by `validateAddressPatterns`, shows mined `hookNonces` and `addressNonces`, and imports/exports `release.json` (with `addressPatterns`). Model tests check the browser plan against `scripts/create3.mjs`, patterns included. `masonrySwapRouter` is planned.
+- Deferred Genesis: Wizard start is optional (blank = 0 = unscheduled) and asks for the scheduler. Admin has a one-time `schedule(uint256)` panel for `scheduler()`. Before the wallet prompt it checks the chain, the scheduler, `start() == 0`, staking's schedule/settlement wiring, `funded()`, the settlement binding and a future time. It simulates, re-checks the account and chain at signing, waits for the receipt and re-reads.
+- Unscheduled state is first-class. Note that `MasonryGenesisPass.purchase` reverts while `end() == 0`, so pass sales and staking are closed with reasons until scheduling.
+- Shared write path: aborts if the wallet or chain changes between simulation and signing. Rejected signatures say nothing was sent.
+- Browser suite: model, desktop and mobile projects pass locally, covering disconnected wallets, wrong and bridge-only chains, missing deployments, unscheduled Genesis, Admin scheduling (simulated), address patterns, and zero transaction requests in Preview.
+- Not yet tested: rejected signatures and confirmed transactions. Both need a verified deployment entry (or a local anvil deployment wired into a test profile) before the live write path can run end to end.
+
+Still pending: live user transactions (the modern token/Treasury/Farm deployment path), bridge activation, and a verified `config/masonry-deployments.json` entry.

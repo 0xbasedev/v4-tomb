@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useConfig } from "wagmi";
-import { readContract, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
-import { BaseError, ContractFunctionRevertedError, erc20Abi, maxUint256, parseUnits, type Abi, type Address } from "viem";
+import { getAccount, readContract, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, erc20Abi, isAddressEqual, maxUint256, parseUnits, type Abi, type Address } from "viem";
 
 import { useToast } from "@/components/ToastProvider";
 import {
@@ -10,7 +10,7 @@ import {
   masonryGenesisStakingAbi,
   masonryLevelUsdcVaultAbi,
   masonrySquareUsdcVaultAbi,
-  miniSwapRouterAbi,
+  iMasonryExactInputV4RouterAbi,
 } from "@/lib/abis/masonry";
 import type { TaxedAsset } from "@/lib/fireTax";
 import { PASSES, PASS_TIER_ID, type PassTier } from "@/lib/launch";
@@ -45,6 +45,7 @@ interface CallStep {
 }
 
 function decode(e: unknown): string {
+  if (e instanceof BaseError && e.walk((x) => x instanceof UserRejectedRequestError)) return "You declined in your wallet. Nothing was sent.";
   if (e instanceof BaseError) {
     const revert = e.walk((x) => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;
     if (revert?.data?.errorName) return `Reverted: ${revert.data.errorName}`;
@@ -71,6 +72,13 @@ export function useActions() {
       busyRef.current = true;
       setBusy(true);
       const account = net.walletAddress;
+      const chainId = net.deployment.chainId;
+      // The wallet must still be the same account on the deployment's chain at
+      // the moment of every signature prompt — not just when the flow began.
+      const still = () => {
+        const a = getAccount(config);
+        if (!a.address || !isAddressEqual(a.address, account) || a.chainId !== chainId) throw new Error("The wallet account or network changed. Nothing was sent; reconnect and try again.");
+      };
       const id = toast.push({ variant: "pending", title, message: "Checking…" });
       try {
         for (const step of steps) {
@@ -78,12 +86,14 @@ export function useActions() {
             const allowance = await readContract(config, { address: a.token, abi: erc20Abi, functionName: "allowance", args: [account, a.spender] });
             if (allowance >= a.amount) continue;
             toast.update(id, { message: `Approve ${step.label} in your wallet…` });
+            still();
             const h = await writeContract(config, { address: a.token, abi: erc20Abi, functionName: "approve", args: [a.spender, a.amount] });
             await waitForTransactionReceipt(config, { hash: h });
           }
           toast.update(id, { message: `Simulating ${step.label}…` });
           const sim = await simulateContract(config, { account, address: step.address, abi: step.abi, functionName: step.functionName, args: step.args } as Parameters<typeof simulateContract>[1]);
           toast.update(id, { message: `Confirm ${step.label} in your wallet…` });
+          still();
           const hash = await writeContract(config, sim.request as Parameters<typeof writeContract>[1]);
           const receipt = await waitForTransactionReceipt(config, { hash });
           if (receipt.status !== "success") throw new Error(`${step.label} reverted`);
@@ -213,7 +223,7 @@ export function useActions() {
       const zeroForOne = tokenIn.toLowerCase() === key.currency0.toLowerCase();
       return run(
         label,
-        [{ label: "swap", approvals: [{ token: tokenIn, spender: c.miniSwapRouter, amount: raw }], address: c.miniSwapRouter, abi: miniSwapRouterAbi as Abi, functionName: "swapExactIn", args: [key, zeroForOne, raw, minOut, net.walletAddress] }],
+        [{ label: "swap", approvals: [{ token: tokenIn, spender: c.miniSwapRouter, amount: raw }], address: c.miniSwapRouter, abi: iMasonryExactInputV4RouterAbi as Abi, functionName: "swapExactIn", args: [key, zeroForOne, raw, minOut, net.walletAddress] }],
         onDone,
       );
     },

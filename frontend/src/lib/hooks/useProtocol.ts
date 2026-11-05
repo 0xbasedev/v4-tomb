@@ -3,7 +3,7 @@ import { formatUnits, zeroAddress, type Address } from "viem";
 
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
 import {
-  iERC20MetadataAbi,
+  iERC20Abi,
   masonryCriticalDefenseAbi,
   masonryGenesisLPBurnFeeAbi,
   masonryGenesisPassAbi,
@@ -37,6 +37,8 @@ export interface ProtocolState {
   net: NetworkState;
   account: Address | null;
   clock: GenesisClock | null;
+  /** false: the schedule is deployed with start 0 (set once later by the scheduler). null: unknown. */
+  genesisScheduled: boolean | null;
   pass: PassTier | null;
   market: {
     twap: number | null;
@@ -96,7 +98,7 @@ export function useProtocol(): ProtocolState {
   const live = useLiveReads(d, net.account);
 
   if (preview.enabled) {
-    const clock = genesisClock(preview.start, preview.now);
+    const clock = preview.scheduled ? genesisClock(preview.start, preview.now) : null;
     const prices = simPrices(preview);
     const twap = preview.oracleFresh ? preview.twap : null;
     const connected = !!net.account;
@@ -105,6 +107,7 @@ export function useProtocol(): ProtocolState {
       net,
       account: net.account,
       clock,
+      genesisScheduled: preview.scheduled,
       pass: connected ? preview.pass : null,
       market: {
         twap: preview.twap,
@@ -133,7 +136,8 @@ export function useProtocol(): ProtocolState {
         funded: true,
         budget: 1_050_000,
         totals: { 0: 2_400_000, 1: 480_000 },
-        positions: connected
+        // Nothing can be staked before the schedule has a start.
+        positions: connected && preview.scheduled
           ? { 0: { shares: preview.positions[0].shares, pending: preview.pending[0] }, 1: { shares: preview.positions[1].shares, pending: preview.pending[1] } }
           : { 0: null, 1: null },
         nextCompoundAt: preview.nextCompoundAt,
@@ -154,7 +158,7 @@ export function useProtocol(): ProtocolState {
           raisedBps: preview.raised[asset].bps,
           raisedAt: preview.raised[asset].at,
           now: preview.now,
-          genesisActive: clock.active,
+          genesisActive: !!clock?.active,
         });
       },
     };
@@ -207,11 +211,11 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalLevelBurnedFromLPFees" }, // 30
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingFeeShares" }, // 31
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingBurnUSDC" }, // 32
-          { address: c.level, abi: iERC20MetadataAbi, functionName: "balanceOf", args: [user] }, // 33
-          { address: c.square, abi: iERC20MetadataAbi, functionName: "balanceOf", args: [user] }, // 34
-          { address: c.usdc, abi: iERC20MetadataAbi, functionName: "balanceOf", args: [user] }, // 35
-          { address: c.levelVault, abi: iERC20MetadataAbi, functionName: "balanceOf", args: [user] }, // 36
-          { address: c.squareVault, abi: iERC20MetadataAbi, functionName: "balanceOf", args: [user] }, // 37
+          { address: c.level, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 33
+          { address: c.square, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
+          { address: c.usdc, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
+          { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 36
+          { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 37
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 38
         ]
       : [],
@@ -246,7 +250,8 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
 
   const nowSec = Math.floor(Date.now() / 1000);
   const start = ok<bigint>(r[0]);
-  const clock = start !== undefined ? genesisClock(Number(start), nowSec) : null;
+  // start == 0: deployed unscheduled — no clock until the scheduler sets it.
+  const clock = start !== undefined && start !== 0n ? genesisClock(Number(start), nowSec) : null;
   const twapRead = ok<readonly [bigint, bigint, boolean]>(r[1]);
   const twap = twapRead ? n18(twapRead[0]) : null;
   const observedAt = twapRead ? Number(twapRead[1]) : null;
@@ -276,6 +281,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   return {
     sim: false,
     clock,
+    genesisScheduled: start === undefined ? null : start !== 0n,
     pass: tier !== undefined ? PASS_TIER_FROM_ID[tier] : null,
     market: {
       twap,

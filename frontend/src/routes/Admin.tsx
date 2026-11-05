@@ -4,6 +4,7 @@ import { useReadContracts } from "wagmi";
 import { isAddress, zeroAddress, type Abi, type Address } from "viem";
 
 import { masonryContractKeys, masonryContractLabels, type MasonryContractKey } from "@config/masonry-deployment.mjs";
+import { GenesisSchedulePanel } from "@/components/admin/GenesisSchedulePanel";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { Reason, SimBadge } from "@/components/Status";
 import {
@@ -26,12 +27,13 @@ import { useReveal } from "@/lib/motion/useReveal";
  * hook POL binder). It shows what's deployed and offers only the writes the
  * connected contracts support for the connected wallet's role, each with the
  * reason it's disabled. Values are labelled Fixed (contract constants),
- * Deployment-bound (constructor immutables) or Settable (owner setters).
+ * Deployment-bound (constructor immutables), Settable (owner setters) or Set
+ * once (Genesis start, by the schedule's immutable scheduler).
  * There is no timelock, tax switch, forced epoch or Genesis registration:
  * the xTOMB contracts don't have them.
  */
 
-type Kind = "Fixed" | "Deployment-bound" | "Settable" | "State";
+type Kind = "Fixed" | "Deployment-bound" | "Settable" | "Set once" | "State";
 interface Item {
   label: string;
   kind: Kind;
@@ -55,7 +57,8 @@ const big18 = (v: unknown) => (typeof v === "bigint" ? (Number(v) / 1e18).toLoca
 const ITEMS: Item[] = [
   { label: "Genesis length", kind: "Fixed", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "DURATION", expect: secs(POLICY.genesisDurationSeconds), fmt: secs },
   { label: "LP pool opens after", kind: "Fixed", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "LP_DELAY", expect: secs(POLICY.genesisLpOpenDelaySeconds), fmt: secs },
-  { label: "Genesis start", kind: "Deployment-bound", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "start", fmt: (v) => new Date(Number(v) * 1000).toUTCString() },
+  { label: "Genesis scheduler", kind: "Deployment-bound", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "scheduler", fmt: addr },
+  { label: "Genesis start", kind: "Set once", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "start", fmt: (v) => (Number(v) === 0 ? "unscheduled (0)" : new Date(Number(v) * 1000).toUTCString()) },
   { label: "xTOMB sell tax cap", kind: "Fixed", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "MAX_TAX_BPS", expect: bps(POLICY.fireTaxHardCapBps), fmt: bps },
   { label: "xTOMB Genesis floor", kind: "Fixed", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "GENESIS_MIN_TAX_BPS", expect: bps(POLICY.genesisLevelSellMinimumBps), fmt: bps },
   { label: "xTOMB tax recipient", kind: "Deployment-bound", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "taxRecipient", fmt: addr },
@@ -125,7 +128,7 @@ export function Admin() {
               {p.sim && <SimBadge label="Simulated owner" />}
             </div>
             <ul className="space-y-1 font-mono text-[12px] text-bone-dim">
-              {(["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder"] as AdminRole[]).map((r) => (
+              {(["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder", "schedule.scheduler"] as AdminRole[]).map((r) => (
                 <li key={r} className="flex justify-between gap-2">
                   <span>{r}</span>
                   <span className={admin.roles.includes(r) ? "text-ok" : "text-ash"}>{admin.roles.includes(r) ? "you" : admin.holders[r] ? addr(admin.holders[r]) : "—"}</span>
@@ -170,7 +173,7 @@ export function Admin() {
                         {it.contract}.{it.fn}
                       </td>
                       <td className="px-4 py-2">
-                        <span className={`chip h-5 px-2 text-[10px] ${it.kind === "Fixed" ? "" : it.kind === "Settable" ? "chip-ember" : it.kind === "State" ? "chip-spectre" : "chip-amethyst"}`}>{it.kind}</span>
+                        <span className={`chip h-5 px-2 text-[10px] ${it.kind === "Fixed" ? "" : it.kind === "Settable" || it.kind === "Set once" ? "chip-ember" : it.kind === "State" ? "chip-spectre" : "chip-amethyst"}`}>{it.kind}</span>
                       </td>
                       <td className={`num px-4 py-2 text-right ${mismatch ? "text-bad" : "text-bone"}`}>
                         {v}
@@ -183,6 +186,8 @@ export function Admin() {
             </table>
           </div>
         </section>
+
+        <GenesisSchedulePanel />
 
         <AdminActions roles={admin.roles} state={state} />
 

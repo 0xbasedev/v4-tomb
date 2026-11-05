@@ -46,7 +46,7 @@ export function Layout() {
       <RouteSweep />
       <TopNav />
       <NetworkNote />
-      <main id="main" tabIndex={-1} className="relative z-10 flex-1 pb-24 outline-none xl:pb-0">
+      <main id="main" tabIndex={-1} className="relative z-10 flex-1 outline-none">
         <Outlet />
       </main>
       <Footer />
@@ -276,7 +276,7 @@ function RouteSweep() {
 
 export function Footer() {
   return (
-    <footer className="relative z-10 mt-16 border-t border-white/[0.05]">
+    <footer className="relative z-10 mt-16 border-t border-white/[0.05] pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-0">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-8">
         <div className="flex items-center gap-4">
           <Wordmark />

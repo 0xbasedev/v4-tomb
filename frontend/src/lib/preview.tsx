@@ -15,7 +15,7 @@ import type { TokenId } from "@/lib/tokens";
  * in-memory state and post a "Simulated" toast.
  *
  * URL controls (also on the dock):
- *   ?genesis=pre|early|day1|day2|ended   or   ?t=<seconds since Genesis start>
+ *   ?genesis=unscheduled|pre|early|day1|day2|ended   or   ?t=<seconds since Genesis start>
  *   ?price=0.96         xTOMB TWAP          ?oracle=stale     no valid TWAP
  *   ?defense=1          Critical Defense    ?pass=genesis|pro|ultra|none
  *   ?wallet=0           sample wallet off   ?owner=0          view as a non-owner
@@ -89,8 +89,12 @@ export interface PreviewState {
   enabled: boolean;
   now: number;
   start: number;
+  /** False while the schedule contract's start is 0 (deployed unscheduled). */
+  scheduled: boolean;
   offset: number;
   setOffset: (s: number) => void;
+  /** Back to "deployed, start = 0". */
+  unschedule: () => void;
   twap: number;
   setTwap: (n: number) => void;
   oracleFresh: boolean;
@@ -116,6 +120,8 @@ export interface PreviewState {
   tranches: Tranche[];
   log: SimTx[];
   act: {
+    /** MasonryGenesisSchedule.schedule(start) — once, by the scheduler. */
+    schedule: (startUnix: number) => void;
     purchase: (t: PassTier) => void;
     deposit: (pool: 0 | 1, amount: number) => void;
     withdraw: (pool: 0 | 1, amount: number) => void;
@@ -139,6 +145,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   const [offset, setOffsetState] = useState(initialOffset);
   // Genesis start is anchored so that `now - start === offset` at the moment it's set.
   const [start, setStart] = useState(() => mountedAt.current - initialOffset());
+  const [scheduled, setScheduled] = useState(() => q().get("genesis") !== "unscheduled");
   const [twap, setTwap] = useState(() => {
     const p = Number(q().get("price"));
     return Number.isFinite(p) && p > 0 ? p : 1.0;
@@ -245,6 +252,12 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const act: PreviewState["act"] = {
+    schedule: (startUnix) => {
+      setStart(startUnix);
+      setOffsetState(now - startUnix);
+      setScheduled(true);
+      push(`Schedule Genesis for ${new Date(startUnix * 1000).toUTCString()}`);
+    },
     purchase: (t) => {
       setPass(t);
       setBalances((b) => ({ ...b, USDC: b.USDC - PASSES[t].priceUsdc }));
@@ -332,8 +345,13 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     enabled,
     now,
     start,
+    scheduled,
     offset: now - start,
-    setOffset,
+    setOffset: (o: number) => {
+      setScheduled(true);
+      setOffset(o);
+    },
+    unschedule: () => setScheduled(false),
     twap,
     setTwap: (n) => {
       setTwap(n);

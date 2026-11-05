@@ -1,53 +1,40 @@
-import { concatHex, encodeAbiParameters, encodePacked, getAddress, isAddress, keccak256, sliceHex, type Address, type Hex } from "viem";
+import type { Address, Hex } from "viem";
 
 import bridgeJson from "@config/xshare-bridge.json" with { type: "json" };
 
 /**
  * CreateX CREATE3 address planning, in the browser.
  *
- * A line-for-line port of scripts/create3.mjs (merge @ 484c279): the same
- * release ID, deployment signer and role give the same address on every chain
- * where the canonical CreateX factory is deployed. Hook roles are mined for
- * the Uniswap v4 permission bits. Everything here is a prediction — nothing
- * is deployed or verified by computing it. test/model.spec.ts checks this
- * port against the repository script.
+ * Every address comes from config/create3-plan.mjs — the same planner the
+ * deploy scripts and CLI use (merge @ 02858c6) — so the Wizard can't drift
+ * from the scripts. Searches for hook permission bits and per-role prefix /
+ * suffix patterns run in a Web Worker (create3.worker.ts) so the page stays
+ * smooth. Everything here is a prediction: nothing is deployed or verified
+ * by computing it.
  */
+import * as viem from "viem";
+import { create3Planner, masonryRoles, validateAddressPatterns, type AddressPatterns, type MasonryPlan as SharedMasonryPlan } from "@config/create3-plan.mjs";
 
 export const CREATEX_FACTORY: Address = "0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed";
-const PROXY_HASH: Hex = "0x21c35dbe1b344a2488cf3321d6ce542f8e9f305544ff09e4993a62319a497c1f";
-
-/** Masonry hooks: before/after initialize, after add/remove liquidity, before/after swap, before swap delta. */
-export const MASONRY_HOOK_FLAGS = 0x35c8n;
 export const HOOK_MASK = 0x3fffn;
+/** Required v4 permission bits per hook role (fixed by the contracts). */
+export const HOOK_FLAGS: Record<string, bigint> = { masonryTaxHook: 0x35c8n, masonryShareTaxHook: 0x35c8n };
+export const MASONRY_HOOK_FLAGS = 0x35c8n;
 
-export const MASONRY_ROLES = [
-  "masonryPeg",
-  "masonryShare",
-  "masonryGenesisPass",
-  "masonryGenesisSchedule",
-  "masonryGenesisStaking",
-  "masonryGenesisSettlement",
-  "masonryGenesisLPBurnFee",
-  "masonryLevelUsdcVault",
-  "masonrySquareUsdcVault",
-  "masonryBuybackGuard",
-  "masonryCompoundGate",
-  "masonryCriticalDefense",
-  "masonryLevelOracle",
-  "masonryTaxHook",
-  "masonryShareTaxHook",
-  "masonryShareOracle",
-  "masonryVestingTeam",
-  "masonryVestingDeveloper",
-  "masonryVestingTreasury",
-  "masonryVestingArbitrage",
-] as const;
-export type MasonryRole = (typeof MASONRY_ROLES)[number];
-const HOOK_ROLES: MasonryRole[] = ["masonryTaxHook", "masonryShareTaxHook"];
+export const MASONRY_ROLES = masonryRoles as readonly MasonryRole[];
+export type MasonryRole =
+  | "masonryPeg" | "masonryShare" | "masonrySwapRouter" | "masonryGenesisPass" | "masonryGenesisSchedule" | "masonryGenesisStaking"
+  | "masonryGenesisSettlement" | "masonryGenesisLPBurnFee" | "masonryLevelUsdcVault" | "masonrySquareUsdcVault"
+  | "masonryBuybackGuard" | "masonryCompoundGate" | "masonryCriticalDefense" | "masonryLevelOracle"
+  | "masonryTaxHook" | "masonryShareTaxHook" | "masonryShareOracle"
+  | "masonryVestingTeam" | "masonryVestingDeveloper" | "masonryVestingTreasury" | "masonryVestingArbitrage";
+export type PlannedRole = MasonryRole | "xshareBridge" | "bridgedShare";
+export const PATTERN_ROLES: PlannedRole[] = [...MASONRY_ROLES, "xshareBridge", "bridgedShare"];
 
-export const ROLE_LABEL: Record<MasonryRole | "xshareBridge" | "bridgedShare", string> = {
+export const ROLE_LABEL: Record<PlannedRole, string> = {
   masonryPeg: "xTOMB token",
   masonryShare: "xSHARE token (bridge home asset)",
+  masonrySwapRouter: "Swap router (exact-input v4)",
   masonryGenesisPass: "Genesis pass",
   masonryGenesisSchedule: "Genesis schedule",
   masonryGenesisStaking: "Genesis staking",
@@ -70,64 +57,72 @@ export const ROLE_LABEL: Record<MasonryRole | "xshareBridge" | "bridgedShare", s
   bridgedShare: "Bridged xSHARE (satellites)",
 };
 
+export type { AddressPatterns };
 export interface ReleaseInput {
   releaseId: Hex;
   deployer: Address;
+  addressPatterns?: AddressPatterns;
 }
+
+const planner = create3Planner(viem);
 
 export function releaseProblems(r: { releaseId?: string; deployer?: string }): string[] {
   const out: string[] = [];
   if (!r.releaseId || !/^0x[\da-f]{64}$/i.test(r.releaseId) || BigInt(r.releaseId) === 0n) out.push("Release ID must be a nonzero 32-byte hex value.");
-  if (!r.deployer || !isAddress(r.deployer, { strict: false }) || BigInt(r.deployer) === 0n) out.push("Deployment signer must be a nonzero address.");
+  if (!r.deployer || !viem.isAddress(r.deployer, { strict: false }) || BigInt(r.deployer) === 0n) out.push("Deployment signer must be a nonzero address.");
   return out;
 }
 
-export function create3Address(plan: ReleaseInput, role: string, nonce = 0) {
-  const deployer = getAddress(plan.deployer);
-  const digest = keccak256(encodePacked(["bytes32", "string", "uint256"], [plan.releaseId, role, BigInt(nonce)]));
-  const salt = concatHex([deployer, "0x00", sliceHex(digest, 0, 11)]);
-  const guarded = keccak256(encodeAbiParameters([{ type: "address" }, { type: "bytes32" }], [deployer, salt]));
-  const proxy = sliceHex(keccak256(concatHex(["0xff", CREATEX_FACTORY, guarded, PROXY_HASH])), 12);
-  const address = getAddress(sliceHex(keccak256(concatHex(["0xd694", proxy, "0x01"])), 12));
-  return { address, salt, guarded, proxy };
-}
-
-/** Same search as the script: the first nonce whose address carries the hook's permission bits. */
-export async function mineHook(plan: ReleaseInput, role: string, flags: bigint, onProgress?: (tried: number) => void, signal?: AbortSignal) {
-  for (let nonce = 0; nonce < 1_000_000; nonce++) {
-    const { address } = create3Address(plan, role, nonce);
-    if ((BigInt(address) & HOOK_MASK) === flags) return { address, nonce };
-    // Yield to the UI every few thousand tries so the page stays smooth.
-    if (nonce % 2_000 === 1_999) {
-      onProgress?.(nonce + 1);
-      await new Promise((r) => setTimeout(r, 0));
-      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-    }
+/** The shared validator's message for a bad pattern set (hex only, length limits, hook-bit conflicts), or null. */
+export function patternProblem(patterns: AddressPatterns): string | null {
+  try {
+    validateAddressPatterns(patterns);
+    return null;
+  } catch (e) {
+    return (e as Error).message;
   }
-  throw new Error(`No hook salt found for ${role}`);
 }
 
-export interface MasonryPlan {
-  deployer: Address;
-  releaseId: Hex;
-  factory: Address;
-  chainId: number;
+/** One role's address at a given nonce (no search). */
+export function create3Address(plan: ReleaseInput & { addressNonces?: Record<string, number> }, role: string, nonce?: number) {
+  return planner.create3Address({ factory: CREATEX_FACTORY, deployer: viem.getAddress(plan.deployer), releaseId: plan.releaseId, addressNonces: plan.addressNonces }, role, nonce);
+}
+
+export interface MasonryPlan extends SharedMasonryPlan {
   addresses: Record<MasonryRole, Address>;
-  hookNonces: Record<string, number>;
+  addressNonces?: Record<string, number>;
+  patterns: AddressPatterns;
 }
 
-export async function planMasonry(release: ReleaseInput & { chainId: number }, onProgress?: (role: string, tried: number) => void, signal?: AbortSignal): Promise<MasonryPlan> {
-  const hooks: Record<string, { address: Address; nonce: number }> = {};
-  for (const role of HOOK_ROLES) hooks[role] = await mineHook(release, role, MASONRY_HOOK_FLAGS, (n) => onProgress?.(role, n), signal);
-  const addresses = Object.fromEntries(MASONRY_ROLES.map((role) => [role, hooks[role]?.address ?? create3Address(release, role).address])) as Record<MasonryRole, Address>;
-  return {
-    deployer: getAddress(release.deployer),
-    releaseId: release.releaseId,
-    factory: CREATEX_FACTORY,
-    chainId: release.chainId,
-    addresses,
-    hookNonces: Object.fromEntries(Object.entries(hooks).map(([k, v]) => [k, v.nonce])),
-  };
+/** Synchronous plan (tests, CLI parity). The UI uses planInWorker. */
+export function planMasonrySync(release: ReleaseInput & { chainId: number }, onSearch?: (role: string) => void): MasonryPlan {
+  const p = planner.planMasonry({ releaseId: release.releaseId, deployer: release.deployer, canonicalDomain: release.chainId, addressPatterns: release.addressPatterns }, onSearch);
+  return { ...p, patterns: release.addressPatterns ?? {} } as MasonryPlan;
+}
+
+export interface FullPlan {
+  masonry: MasonryPlan;
+  bridge: BridgePlan | null;
+}
+
+/**
+ * Plan in a Web Worker. Resolves with both plans, or rejects with the
+ * planner's own error message. `onSearch` reports which role is being mined.
+ */
+export function planInWorker(release: ReleaseInput & { chainId: number }, onSearch?: (role: string) => void, signal?: AbortSignal): Promise<FullPlan> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./create3.worker.ts", import.meta.url), { type: "module" });
+    const stop = () => worker.terminate();
+    signal?.addEventListener("abort", () => (stop(), reject(new DOMException("aborted", "AbortError"))), { once: true });
+    worker.onmessage = ({ data }: MessageEvent<{ searching?: string; plan?: FullPlan; error?: string }>) => {
+      if (data.searching) return onSearch?.(data.searching);
+      stop();
+      if (data.error) reject(new Error(data.error));
+      else resolve(data.plan!);
+    };
+    worker.onerror = (e) => (stop(), reject(new Error(e.message || "The address planner stopped unexpectedly.")));
+    worker.postMessage(release);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -187,19 +182,37 @@ export interface BridgePlan {
   satellites: number[];
 }
 
-export function planBridge(release: ReleaseInput, canonicalDomain: number, canonicalTokenRole: "estate" | "masonryShare" = "masonryShare"): BridgePlan | null {
+// The shared planBridge also validates operators and caps for the deploy
+// script. For address prediction only, those are filled with inert
+// placeholders here and then discarded; the exported release keeps the real
+// inputs and the repository planner checks them.
+const PLACEHOLDER = "0x0000000000000000000000000000000000000001";
+
+export function planBridge(release: ReleaseInput, canonicalDomain: number, canonicalTokenRole: "estate" | "masonryShare" = "masonryShare", onSearch?: (role: string) => void): BridgePlan | null {
   if (!BRIDGE_DOMAINS.includes(canonicalDomain)) return null;
-  const bridge = create3Address(release, "xshareBridge").address;
-  const bridgedShare = create3Address(release, "bridgedShare").address;
-  const canonicalToken = create3Address(release, canonicalTokenRole).address;
   const satellites = BRIDGE_DOMAINS.filter((id) => id !== canonicalDomain);
+  const doc = planner.planBridge(
+    BRIDGE,
+    {
+      releaseId: release.releaseId,
+      deployer: release.deployer,
+      canonicalDomain,
+      canonicalTokenRole,
+      addressPatterns: release.addressPatterns,
+      routeCaps: Object.fromEntries(satellites.map((id) => [id, "1"])),
+      bridgeOperators: Object.fromEntries(BRIDGE_DOMAINS.map((id) => [id, { owner: PLACEHOLDER, ism: PLACEHOLDER }])),
+    },
+    onSearch,
+  );
+  const home = doc.networks.find((n) => n.id === canonicalDomain)!;
+  const sat = doc.networks.find((n) => n.id !== canonicalDomain)!;
   return {
     canonicalDomain,
     canonicalTokenRole,
-    bridge,
-    bridgedShare,
-    canonicalToken,
-    tokens: Object.fromEntries(BRIDGE_DOMAINS.map((id) => [id, id === canonicalDomain ? canonicalToken : bridgedShare])),
+    bridge: home.bridge as Address,
+    bridgedShare: sat.token as Address,
+    canonicalToken: home.token as Address,
+    tokens: Object.fromEntries(doc.networks.map((n) => [n.id, n.token as Address])),
     satellites,
   };
 }
@@ -218,12 +231,15 @@ export function randomReleaseId(): Hex {
 // JSON in the repository is the source of truth.
 // ---------------------------------------------------------------------------
 
-const KEY = "xtomb.release-plan.v1";
+const KEY = "xtomb.release-plan.v2";
 export interface StoredRelease {
   releaseId: Hex;
   deployer: Address;
   canonicalDomain: number;
   canonicalTokenRole: "estate" | "masonryShare";
+  addressPatterns?: AddressPatterns;
+  /** Predicted bridge addresses at save time (null when home isn't a bridge network). */
+  bridge?: BridgePlan | null;
   savedAt: number;
 }
 export function loadRelease(): StoredRelease | null {

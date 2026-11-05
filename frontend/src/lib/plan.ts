@@ -43,6 +43,16 @@ export function usePlan(): Plan {
 
   const ready = p.tranches.some((t) => trancheView(t, p.now).ready);
 
+  // Deployed with start = 0: nothing can be bought or staked until the scheduler sets the date once.
+  if (p.genesisScheduled === false) {
+    return {
+      headline: "Genesis is deployed but not scheduled. Pass sales and staking open once the start date is set.",
+      primary: { title: "Read how Genesis works", why: "Seven days, two pools, half of each reward liquid and half vested over 16 installments.", cta: "Docs", to: "/docs#genesis", tone: "ember" },
+      secondary: { title: "Check the Genesis page", why: "", cta: "Genesis", to: "/genesis", tone: "neutral" },
+      avoid: { title: "Buying a pass from anyone else", why: "passes are soulbound and only sold by the pass contract, once Genesis is scheduled." },
+    };
+  }
+
   if (c && c.phase !== "ended") {
     if (!p.pass) {
       return {

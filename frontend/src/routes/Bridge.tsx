@@ -6,7 +6,7 @@ import { ChainBadge } from "@/components/ChainBadge";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { PlannedBadge, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
-import { BRIDGE, bridgeNetwork, bridgeNetworkStatus, loadRelease, planBridge, type BridgeNetwork } from "@/lib/create3";
+import { BRIDGE, bridgeNetwork, bridgeNetworkStatus, loadRelease, type BridgeNetwork } from "@/lib/create3";
 import { REGISTRY } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useReveal } from "@/lib/motion/useReveal";
@@ -31,7 +31,8 @@ export function Bridge() {
   const root = useRef<HTMLDivElement>(null);
   useReveal(root, []);
   const release = useMemo(loadRelease, []);
-  const plan = release ? planBridge(release, release.canonicalDomain, release.canonicalTokenRole) : null;
+  // Predictions saved by the Wizard (mined with any address patterns); never a deployment.
+  const plan = release?.bridge ?? null;
   const home = plan ? bridgeNetwork(plan.canonicalDomain) : null;
 
   return (

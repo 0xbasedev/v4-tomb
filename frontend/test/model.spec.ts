@@ -193,13 +193,36 @@ test.describe("CREATE3 release planning", () => {
     test.setTimeout(120_000);
     // @ts-expect-error — plain .mjs from the repository root, no type declarations
     const script = await import("../../scripts/create3.mjs");
-    const { planMasonry: browserPlan, MASONRY_HOOK_FLAGS, HOOK_MASK } = await import("../src/lib/create3");
+    const { planMasonrySync, MASONRY_HOOK_FLAGS, HOOK_MASK } = await import("../src/lib/create3");
     const expected = script.planMasonry({ ...release, canonicalDomain: 8453 });
-    const actual = await browserPlan({ ...release, chainId: 8453 });
+    const actual = planMasonrySync({ ...release, chainId: 8453 });
     expect(actual.addresses).toEqual(expected.addresses);
     expect(actual.hookNonces).toEqual(expected.hookNonces);
     for (const role of ["masonryTaxHook", "masonryShareTaxHook"] as const) expect(BigInt(actual.addresses[role]) & HOOK_MASK).toBe(MASONRY_HOOK_FLAGS);
     expect(new Set(Object.values(actual.addresses)).size).toBe(Object.keys(actual.addresses).length);
+    expect(Object.keys(actual.addresses)).toContain("masonrySwapRouter");
+  });
+
+  test("address patterns: prefix + suffix are found, recorded as nonces, and match the script", async () => {
+    test.setTimeout(120_000);
+    // @ts-expect-error — plain .mjs from the repository root
+    const script = await import("../../scripts/create3.mjs");
+    const { planMasonrySync, create3Address } = await import("../src/lib/create3");
+    const addressPatterns = { masonryPeg: { prefix: "a", suffix: "b" } };
+    const mine = planMasonrySync({ ...release, chainId: 8453, addressPatterns });
+    const theirs = script.planMasonry({ ...release, canonicalDomain: 8453, addressPatterns });
+    expect(mine.addresses.masonryPeg).toBe(theirs.addresses.masonryPeg);
+    expect(mine.addresses.masonryPeg.toLowerCase()).toMatch(/^0xa.*b$/);
+    const nonce = mine.addressNonces!.masonryPeg!;
+    expect(create3Address(release, "masonryPeg", nonce).address).toBe(mine.addresses.masonryPeg);
+  });
+
+  test("pattern validation: hook suffixes must keep the permission bits; other roles allow four characters", async () => {
+    const { patternProblem } = await import("../src/lib/create3");
+    expect(patternProblem({ masonryTaxHook: { suffix: "35c8" } })).toBeNull();
+    expect(patternProblem({ masonryTaxHook: { suffix: "ffff" } })).toMatch(/conflicts with Uniswap permissions/);
+    expect(patternProblem({ masonryPeg: { prefix: "abc", suffix: "de" } })).toMatch(/up to four/);
+    expect(patternProblem({ masonryPeg: { prefix: "zz" } })).toMatch(/hexadecimal/);
   });
 
   test("bridge and Bridged xSHARE addresses match the script for a Base home chain", async () => {

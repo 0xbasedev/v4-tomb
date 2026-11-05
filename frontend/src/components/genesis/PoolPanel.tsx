@@ -44,7 +44,9 @@ export function PoolPanel({ pool }: { pool: 0 | 1 }) {
     ? netBlock
     : !p.account
     ? "Connect a wallet."
-    : !p.pass
+    : p.genesisScheduled === false
+      ? "Genesis isn't scheduled yet. Staking opens once the scheduler sets the start date in Admin."
+      : !p.pass
       ? "Buy a Genesis pass first — every staking entry point checks it."
       : !c
         ? "Genesis schedule unavailable."
@@ -70,7 +72,9 @@ export function PoolPanel({ pool }: { pool: 0 | 1 }) {
     (!c?.lpOpen ? (c?.phase === "ended" ? "Compounding closed with Genesis (the LP pool is closed)." : `Compounding goes into the LP pool, which opens on Day ${LP_DAY}.`) : tax.rateBps === null ? tax.blocked : !p.sim && !live.plan ? "Waiting for the vault range and validated spot to plan the compound." : null);
 
   const status = !c
-    ? "—"
+    ? p.genesisScheduled === false
+      ? "Not scheduled"
+      : "—"
     : lp
       ? c.phase === "ended"
         ? "Closed · withdraw & claim"

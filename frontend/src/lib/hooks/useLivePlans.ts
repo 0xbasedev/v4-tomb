@@ -3,7 +3,7 @@ import { useConfig, useReadContracts } from "wagmi";
 import { simulateContract } from "wagmi/actions";
 import { erc20Abi, formatUnits, parseUnits, zeroAddress, type Address } from "viem";
 
-import { masonryBuybackGuardAbi, masonryGenesisStakingAbi, masonryLevelUsdcVaultAbi, miniSwapRouterAbi } from "@/lib/abis/masonry";
+import { masonryBuybackGuardAbi, masonryGenesisStakingAbi, masonryLevelUsdcVaultAbi, iMasonryExactInputV4RouterAbi } from "@/lib/abis/masonry";
 import { planCompound, type CompoundPlan } from "@/lib/compoundPlan";
 import { cumulativeEmitted, genesisClock } from "@/lib/genesis";
 import { GENESIS_POLICY } from "@/lib/launch";
@@ -102,7 +102,7 @@ export function useSwapSimulation(asset: TaxedAsset | null, side: "sell" | "buy"
         const sim = await simulateContract(config, {
           account: net.walletAddress!,
           address: c.miniSwapRouter,
-          abi: miniSwapRouterAbi,
+          abi: iMasonryExactInputV4RouterAbi,
           functionName: "swapExactIn",
           args: [key, zeroForOne, raw, 0n, net.walletAddress!],
         });

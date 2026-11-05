@@ -1,16 +1,16 @@
 import { useReadContracts } from "wagmi";
 import type { Address } from "viem";
 
-import { masonryGenesisLPBurnFeeAbi, masonryGenesisSettlementAbi, masonrySquareHookAbi } from "@/lib/abis/masonry";
+import { masonryGenesisLPBurnFeeAbi, masonryGenesisScheduleAbi, masonryGenesisSettlementAbi, masonrySquareHookAbi } from "@/lib/abis/masonry";
 import { usePreview } from "@/lib/preview";
 import { useNetworkStatus } from "./useNetworkStatus";
 
-export type AdminRole = "lpBurnFee.owner" | "settlement.binder" | "squareHook.polBinder";
+export type AdminRole = "lpBurnFee.owner" | "settlement.binder" | "squareHook.polBinder" | "schedule.scheduler";
 
 /**
  * Roles the connected wallet holds on the deployed contracts. Admin is only
  * shown to a wallet with at least one. In Preview the sample wallet holds all
- * three (`?owner=0` or the dock's Owner box shows the page as a user sees it).
+ * four (`?owner=0` or the dock's Owner box shows the page as a user sees it).
  */
 export function useIsAdmin(): { isAdmin: boolean; roles: AdminRole[]; holders: Partial<Record<AdminRole, Address>> } {
   const preview = usePreview();
@@ -23,15 +23,16 @@ export function useIsAdmin(): { isAdmin: boolean; roles: AdminRole[]; holders: P
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "owner" },
           { address: c.settlement, abi: masonryGenesisSettlementAbi, functionName: "binder" },
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "polBinder" },
+          { address: c.schedule, abi: masonryGenesisScheduleAbi, functionName: "scheduler" },
         ]
       : [],
     query: { enabled: !!c, refetchInterval: 60_000 },
   });
   if (preview.enabled) {
     const on = preview.owner && preview.sampleWallet;
-    return { isAdmin: on, roles: on ? ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder"] : [], holders: {} };
+    return { isAdmin: on, roles: on ? ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder", "schedule.scheduler"] : [], holders: {} };
   }
-  const keys: AdminRole[] = ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder"];
+  const keys: AdminRole[] = ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder", "schedule.scheduler"];
   const holders: Partial<Record<AdminRole, Address>> = {};
   keys.forEach((k, i) => {
     const r = reads.data?.[i];

@@ -48,8 +48,16 @@ export function PreviewDock() {
 
           <div className="label mb-1">Genesis clock</div>
           <div className="mb-2 font-mono text-[11px] text-bone-dim">
-            {c.phase === "pre" ? `starts in ${fmtDuration(c.secondsToStart)}${c.ultraEarly ? " · Ultra early window" : ""}` : c.phase === "ended" ? `ended ${fmtDuration(c.secondsSinceEnd)} ago` : `Day ${c.day} · ${c.lpOpen ? "LP open" : `LP in ${fmtDuration(c.secondsToLp)}`}`}
+            {!p.scheduled ? "not scheduled · start = 0" : c.phase === "pre" ? `starts in ${fmtDuration(c.secondsToStart)}${c.ultraEarly ? " · Ultra early window" : ""}` : c.phase === "ended" ? `ended ${fmtDuration(c.secondsSinceEnd)} ago` : `Day ${c.day} · ${c.lpOpen ? "LP open" : `LP in ${fmtDuration(c.secondsToLp)}`}`}
           </div>
+          <button
+            type="button"
+            onClick={p.unschedule}
+            aria-pressed={!p.scheduled}
+            className={`mb-1 w-full rounded-lg border px-1 py-1.5 text-[10.5px] ${!p.scheduled ? "border-warn/60 text-warn" : "border-white/[0.08] text-ash hover:text-bone"}`}
+          >
+            Deployed · start unset (schedule from Admin)
+          </button>
           <div className="mb-2 grid grid-cols-5 gap-1">
             {MOMENTS.map((m) => (
               <button key={m.id} type="button" onClick={() => p.setOffset(GENESIS_MOMENTS[m.id])} className="rounded-lg border border-white/[0.08] px-1 py-1.5 text-[10.5px] text-ash hover:text-bone">

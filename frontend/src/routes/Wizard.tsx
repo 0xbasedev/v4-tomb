@@ -8,7 +8,7 @@ import { ChainBadge } from "@/components/ChainBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { Reason } from "@/components/Status";
 import { bridgeInputGaps, emptyRelease, ReleaseStep, releaseJson, type ReleaseState } from "@/components/wizard/ReleaseStep";
-import { BRIDGE_DOMAINS, loadRelease, ROLE_LABEL, type MasonryPlan } from "@/lib/create3";
+import { BRIDGE_DOMAINS, loadRelease, ROLE_LABEL, type FullPlan } from "@/lib/create3";
 import { LAUNCH, POLICY, REGISTRY } from "@/lib/launch";
 import { useReveal } from "@/lib/motion/useReveal";
 
@@ -90,6 +90,7 @@ export function Wizard() {
   const [doc, setDoc] = useState(() => clone(LAUNCH));
   const [pools, setPools] = useState({
     genesisStart: "",
+    scheduler: "",
     levelFee: 3000,
     squareFee: 3000,
     tickSpacing: 60,
@@ -106,8 +107,23 @@ export function Wizard() {
     maxDeviationBps: 300,
   });
 
-  const [release, setRelease] = useState<ReleaseState>(() => (saved ? { ...emptyRelease(), deployer: saved.deployer, releaseId: saved.releaseId } : emptyRelease()));
-  const [plan, setPlan] = useState<MasonryPlan | null>(null);
+  const [release, setRelease] = useState<ReleaseState>(() =>
+    saved
+      ? {
+          ...emptyRelease(),
+          deployer: saved.deployer,
+          releaseId: saved.releaseId,
+          patterns: Object.fromEntries(Object.entries(saved.addressPatterns ?? {}).map(([k, v]) => [k, { prefix: v.prefix ?? "", suffix: v.suffix ?? "" }])),
+        }
+      : emptyRelease(),
+  );
+  const [plan, setPlan] = useState<FullPlan | null>(null);
+  const importChain = (id: number) => {
+    if (id === chainId) return null;
+    if (!officialChain(REGISTRY, id)) return `Its home chain (${id}) isn't an official Uniswap v4 + USDC chain, so the current chain is kept.`;
+    setChainId(id);
+    return `Home chain set to ${officialChain(REGISTRY, id)!.name}.`;
+  };
   const chain = officialChain(REGISTRY, chainId);
   const result = useMemo(() => {
     try {
@@ -148,7 +164,7 @@ export function Wizard() {
         {step === 0 && <ChainStep chainId={chainId} setChainId={setChainId} />}
         {step === 1 && <AllocStep doc={doc} setDoc={setDoc} result={result} />}
         {step === 2 && <PoolsStep pools={pools} setPools={setPools} issues={poolIssues} />}
-        {step === 3 && <ReleaseStep chainId={chainId} chainName={chain?.name ?? `chain ${chainId}`} release={release} setRelease={setRelease} plan={plan} setPlan={setPlan} />}
+        {step === 3 && <ReleaseStep chainId={chainId} chainName={chain?.name ?? `chain ${chainId}`} release={release} setRelease={setRelease} plan={plan} setPlan={setPlan} onImportChain={importChain} />}
         {step === 4 && <ReviewStep chainName={chain?.name ?? `chain ${chainId}`} chainId={chainId} doc={doc} pools={pools} result={result} poolIssues={poolIssues} release={release} plan={plan} />}
 
         <div className="mt-6 flex justify-between">
@@ -320,6 +336,7 @@ function AllocStep({ doc, setDoc, result }: { doc: Doc; setDoc: (d: Doc) => void
 
 type Pools = {
   genesisStart: string;
+  scheduler: string;
   levelFee: number;
   squareFee: number;
   tickSpacing: number;
@@ -338,8 +355,9 @@ type Pools = {
 
 function poolProblems(p: Pools): string[] {
   const out: string[] = [];
-  if (!p.genesisStart) out.push("Genesis start time is unset.");
-  else if (new Date(p.genesisStart).getTime() <= Date.now()) out.push("Genesis start must be in the future.");
+  // Blank start = deploy unscheduled (start 0); the scheduler sets it once, later, in Admin.
+  if (p.genesisStart && new Date(p.genesisStart).getTime() <= Date.now()) out.push("Genesis start must be in the future, or blank to schedule later in Admin.");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(p.scheduler) || BigInt(p.scheduler || "0x0") === 0n) out.push("Genesis scheduler must be a nonzero address (governance wallet or multisig).");
   for (const [k, v] of [
     ["xTOMB/USDC fee", p.levelFee],
     ["xSHARE/USDC fee", p.squareFee],
@@ -381,7 +399,8 @@ function PoolsStep({ pools, setPools, issues }: { pools: Pools; setPools: (p: Po
       <h2 className="font-display text-lg font-semibold text-bone">3 · Pools and bounds</h2>
       <p className="mt-1 text-[13px] text-bone-dim">These are constructor arguments — fixed once deployed. Hook addresses are mined in the release plan (next step) for their permission bits.</p>
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-        {field("genesisStart", "Genesis start", "shared by the schedule, hook and staking", "datetime-local")}
+        {field("genesisStart", "Genesis start (optional)", "blank = deploy unscheduled; set it once later in Admin", "datetime-local")}
+        {field("scheduler", "Genesis scheduler", "governance wallet or multisig — the only account that can set the start later")}
         {field("levelFee", "xTOMB/USDC LP fee (pips)", "static fee; 3000 = 0.30%")}
         {field("squareFee", "xSHARE/USDC LP fee (pips)")}
         {field("tickSpacing", "Tick spacing")}
@@ -428,7 +447,7 @@ function ReviewStep({
   result: { ok: boolean; error?: string };
   poolIssues: string[];
   release: ReleaseState;
-  plan: MasonryPlan | null;
+  plan: FullPlan | null;
 }) {
   const ready = result.ok && poolIssues.length === 0;
   const gaps = bridgeInputGaps(release, chainId);
@@ -441,7 +460,9 @@ function ReviewStep({
     URL.revokeObjectURL(a.href);
   }
   function download() {
-    const out = { chainId, chain: chainName, launch: doc, deploymentBound: pools, predicted: plan, generatedAt: new Date().toISOString() };
+    // genesisStart goes out as unix seconds; 0 deploys the schedule unscheduled.
+    const genesisStart = pools.genesisStart ? Math.floor(new Date(pools.genesisStart).getTime() / 1000) : 0;
+    const out = { chainId, chain: chainName, launch: doc, deploymentBound: { ...pools, genesisStart }, predicted: plan, generatedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -490,7 +511,7 @@ function ReviewStep({
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-2">
           {[
             ["Chain", `${chainName} (${chainId})`],
-            ["Genesis start", pools.genesisStart || "unset"],
+            ["Genesis start", pools.genesisStart ? new Date(pools.genesisStart).toUTCString() : "unscheduled — set once in Admin"],
             ["xTOMB/USDC fee · spacing", `${pools.levelFee} pips · ${pools.tickSpacing}`],
             ["xSHARE/USDC fee", `${pools.squareFee} pips`],
             ["xTOMB vault range", `${pools.levelLower} → ${pools.levelUpper}`],
@@ -501,8 +522,10 @@ function ReviewStep({
             ["Max xSHARE per route", pools.maxSquarePerRoute || "unset"],
             ["Release ID", release.releaseId ? `${release.releaseId.slice(0, 10)}…${release.releaseId.slice(-6)}` : "unset"],
             ["Deployment signer", release.deployer || "unset"],
-            [ROLE_LABEL.masonryTaxHook, plan ? `${plan.addresses.masonryTaxHook.slice(0, 8)}… · nonce ${plan.hookNonces.masonryTaxHook}` : "predicted in step 4"],
-            [ROLE_LABEL.masonryShareTaxHook, plan ? `${plan.addresses.masonryShareTaxHook.slice(0, 8)}… · nonce ${plan.hookNonces.masonryShareTaxHook}` : "predicted in step 4"],
+            [ROLE_LABEL.masonryTaxHook, plan ? `${plan.masonry.addresses.masonryTaxHook.slice(0, 8)}… · nonce ${plan.masonry.hookNonces.masonryTaxHook}` : "predicted in step 4"],
+            [ROLE_LABEL.masonryShareTaxHook, plan ? `${plan.masonry.addresses.masonryShareTaxHook.slice(0, 8)}… · nonce ${plan.masonry.hookNonces.masonryShareTaxHook}` : "predicted in step 4"],
+            ["Custom address patterns", plan ? String(Object.keys(plan.masonry.patterns).length) : "—"],
+            ["Genesis scheduler", pools.scheduler || "unset"],
             ["Treasury, fee recipient, binders", "set at deploy"],
           ].map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between gap-3 border-b border-white/[0.04] py-1">
