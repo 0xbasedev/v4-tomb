@@ -15,8 +15,30 @@ import type { MasonryDeployment, OfficialRegistry } from "@config/masonry-deploy
  */
 export const LAUNCH = launch;
 export const POLICY = launch.policy;
-export const REGISTRY = registryJson as unknown as OfficialRegistry;
-export const DEPLOYMENTS = (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
+/**
+ * Local rehearsal (VITE_LOCAL_DEPLOYMENT=1): the anvil deployment written by
+ * contracts/script/DeployMasonryLocal.s.sol becomes the only deployment, and
+ * its chain (31337, marked testnet) joins the registry with the locally
+ * deployed PoolManager and USDC. Off by default; production builds never see it.
+ */
+const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+const localFiles =
+  viteEnv.VITE_LOCAL_DEPLOYMENT === "1"
+    ? (import.meta.glob("../../../contracts/deployment-output/masonry-local.json", { eager: true, import: "default" }) as Record<string, MasonryDeployment>)
+    : {};
+export const LOCAL_DEPLOYMENT: MasonryDeployment | null = Object.values(localFiles)[0] ?? null;
+
+const officialRegistry = registryJson as unknown as OfficialRegistry;
+export const REGISTRY: OfficialRegistry = LOCAL_DEPLOYMENT
+  ? {
+      ...officialRegistry,
+      chains: [
+        ...officialRegistry.chains,
+        { id: LOCAL_DEPLOYMENT.chainId, name: "Local (anvil)", testnet: true, poolManager: LOCAL_DEPLOYMENT.contracts.poolManager, usdc: LOCAL_DEPLOYMENT.contracts.usdc },
+      ],
+    }
+  : officialRegistry;
+export const DEPLOYMENTS = LOCAL_DEPLOYMENT ? [LOCAL_DEPLOYMENT] : (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
 
 const bps = (n: number) => n / 10_000;
 export const pct = (b: number, digits = 2) => `${+(b / 100).toFixed(digits)}%`;

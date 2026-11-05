@@ -68,6 +68,11 @@ export function useActions() {
         toast.push({ variant: "info", title, message: net.reason ?? "Transactions are unavailable." });
         return;
       }
+      if (steps.length === 0) {
+        // Never report success for a flow that had nothing to send.
+        toast.push({ variant: "error", title: `${title} · Not sent`, message: "This action couldn't be prepared from the deployment's on-chain data yet. Nothing was sent; try again in a moment." });
+        return;
+      }
       if (busyRef.current) return;
       busyRef.current = true;
       setBusy(true);
@@ -83,19 +88,19 @@ export function useActions() {
       try {
         for (const step of steps) {
           for (const a of step.approvals ?? []) {
-            const allowance = await readContract(config, { address: a.token, abi: erc20Abi, functionName: "allowance", args: [account, a.spender] });
+            const allowance = await readContract(config, { chainId, address: a.token, abi: erc20Abi, functionName: "allowance", args: [account, a.spender] });
             if (allowance >= a.amount) continue;
             toast.update(id, { message: `Approve ${step.label} in your wallet…` });
             still();
-            const h = await writeContract(config, { address: a.token, abi: erc20Abi, functionName: "approve", args: [a.spender, a.amount] });
-            await waitForTransactionReceipt(config, { hash: h });
+            const h = await writeContract(config, { chainId, address: a.token, abi: erc20Abi, functionName: "approve", args: [a.spender, a.amount] });
+            await waitForTransactionReceipt(config, { chainId, hash: h });
           }
           toast.update(id, { message: `Simulating ${step.label}…` });
-          const sim = await simulateContract(config, { account, address: step.address, abi: step.abi, functionName: step.functionName, args: step.args } as Parameters<typeof simulateContract>[1]);
+          const sim = await simulateContract(config, { chainId, account, address: step.address, abi: step.abi, functionName: step.functionName, args: step.args } as Parameters<typeof simulateContract>[1]);
           toast.update(id, { message: `Confirm ${step.label} in your wallet…` });
           still();
           const hash = await writeContract(config, sim.request as Parameters<typeof writeContract>[1]);
-          const receipt = await waitForTransactionReceipt(config, { hash });
+          const receipt = await waitForTransactionReceipt(config, { chainId, hash });
           if (receipt.status !== "success") throw new Error(`${step.label} reverted`);
           toast.update(id, { txHash: hash });
         }
@@ -122,6 +127,21 @@ export function useActions() {
   );
 
   const c = net.deployment?.contracts;
+  /** Pool 0 takes the deployment-bound standard asset, pool 1 the xTOMB/USDC vault share; both read on-chain. */
+  const poolAsset = useCallback(
+    async (pool: 0 | 1): Promise<{ token: Address; decimals: number } | null> => {
+      if (!c || !net.deployment) return null;
+      const chainId = net.deployment.chainId;
+      try {
+        const token = pool === 1 ? c.levelVault : await readContract(config, { chainId, address: c.staking, abi: masonryGenesisStakingAbi, functionName: "standardAsset" });
+        const decimals = await readContract(config, { chainId, address: token, abi: erc20Abi, functionName: "decimals" });
+        return { token, decimals };
+      } catch {
+        return null;
+      }
+    },
+    [c, config, net.deployment],
+  );
   const e18 = (n: number) => parseUnits(n.toFixed(18), 18);
   const e6 = (n: number) => parseUnits(n.toFixed(6), 6);
 
@@ -149,22 +169,26 @@ export function useActions() {
       );
     },
 
-    deposit(pool: 0 | 1, amount: number, standardAsset: Address | null, onDone?: () => void) {
+    deposit(pool: 0 | 1, amount: number, _standardAsset: Address | null, onDone?: () => void) {
       const label = pool === 0 ? `Stake ${amount} in the standard pool` : `Stake ${amount} LP in the xTOMB/USDC pool`;
       if (preview.enabled) return sim(label, () => preview.act.deposit(pool, amount), onDone);
       if (!c) return run(label, []);
-      const token = pool === 0 ? standardAsset : c.levelVault;
-      if (!token) return run(label, []);
-      // Standard asset decimals are deployment-bound; USDC (6) is the reference deployment.
-      const raw = pool === 0 && token.toLowerCase() === c.usdc.toLowerCase() ? e6(amount) : e18(amount);
-      return run(label, [{ label: "deposit", approvals: [{ token, spender: c.staking, amount: raw }], address: c.staking, abi: masonryGenesisStakingAbi as Abi, functionName: "deposit", args: [BigInt(pool), raw] }], onDone);
+      return poolAsset(pool).then((asset) => {
+        if (!asset) return run(label, []);
+        const raw = parseUnits(amount.toFixed(asset.decimals), asset.decimals);
+        return run(label, [{ label: "deposit", approvals: [{ token: asset.token, spender: c.staking, amount: raw }], address: c.staking, abi: masonryGenesisStakingAbi as Abi, functionName: "deposit", args: [BigInt(pool), raw] }], onDone);
+      });
     },
 
     withdraw(pool: 0 | 1, shares: number, onDone?: () => void) {
       const label = `Withdraw from pool ${pool}`;
       if (preview.enabled) return sim(label, () => preview.act.withdraw(pool, shares), onDone);
       if (!c) return run(label, []);
-      return run(label, [{ label: "withdraw", address: c.staking, abi: masonryGenesisStakingAbi as Abi, functionName: "withdraw", args: [BigInt(pool), e18(shares)] }], onDone);
+      // Shares are 1:1 with the pool's asset, so they carry its decimals.
+      return poolAsset(pool).then((asset) => {
+        if (!asset) return run(label, []);
+        return run(label, [{ label: "withdraw", address: c.staking, abi: masonryGenesisStakingAbi as Abi, functionName: "withdraw", args: [BigInt(pool), parseUnits(shares.toFixed(asset.decimals), asset.decimals)] }], onDone);
+      });
     },
 
     claim(pool: 0 | 1, onDone?: () => void) {

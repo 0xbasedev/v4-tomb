@@ -295,4 +295,27 @@ library ShareTokenProfiles {
         c.communityFund = communityFund;
         c.devFund = devFund;
     }
+
+    /// @notice The Masonry launch's xSHARE: every unit is accounted for up front.
+    /// @param initial  Minted at deploy (sale escrow, deployer, owner/team/developer,
+    ///                 Treasury, arbitrage and the MasonryLinearVesting contracts).
+    /// @param farming  Minted once to the Farm via `distributeReward`.
+    /// @param cap      Configured max supply; `initial + farming` must equal it exactly,
+    ///                 matching config/masonry-launch.mjs (which rejects any other sum).
+    function masonry(
+        ShareToken.Allocation[] memory initial,
+        uint256 farming,
+        uint256 cap
+    ) internal pure returns (ShareToken.Config memory c) {
+        uint256 total = farming;
+        for (uint256 i; i < initial.length; ++i) {
+            total += initial[i].amount;
+        }
+        if (total != cap) revert ShareToken.InvalidConfiguration();
+        c.name = "xSHARE";
+        c.symbol = "xSHARE";
+        c.maxSupply = cap;
+        c.initial = initial;
+        c.farmingAllocation = farming;
+    }
 }

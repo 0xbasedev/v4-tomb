@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { formatUnits, zeroAddress, type Address } from "viem";
+import { erc20Abi, formatUnits, zeroAddress, type Address } from "viem";
 
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
 import {
@@ -221,6 +221,20 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
       : [],
     query: { enabled, refetchInterval: 15_000 },
   });
+  // Pool 0 shares are denominated in the deployment-bound standard asset, so
+  // read which asset that is and its decimals instead of assuming 18 (or USDC).
+  const stdAssetRead = useReadContracts({
+    allowFailure: true,
+    contracts: c ? [{ address: c.staking, abi: masonryGenesisStakingAbi, functionName: "standardAsset" }] : [],
+    query: { enabled },
+  });
+  const stdAsset = ok<Address>(stdAssetRead.data?.[0]) ?? null;
+  const stdDecRead = useReadContracts({
+    allowFailure: true,
+    contracts: stdAsset ? [{ address: stdAsset, abi: erc20Abi, functionName: "decimals" }] : [],
+    query: { enabled: !!stdAsset },
+  });
+  const stdDecimals = ok<number>(stdDecRead.data?.[0]) ?? null;
   const r = reads.data ?? [];
   const count = Number(ok<bigint>(r[28]) ?? 0n);
   const trancheReads = useReadContracts({
@@ -259,13 +273,14 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   const defenseActive = ok<boolean>(r[2]) ?? false;
   const ref = n18(ok<bigint>(r[10]));
   const tier = ok<number>(r[17]);
-  const pos = (i: number) => {
+  // decimals: pool 0 → standard asset (unknown until read), pool 1 → LP vault shares (18).
+  const pos = (i: number, decimals: number | null) => {
     const v = ok<readonly [bigint, bigint, bigint]>(r[i]);
-    return v ? { shares: Number(formatUnits(v[0], 18)), pending: Number(formatUnits(v[2], 18)) } : null;
+    return v && decimals !== null ? { shares: Number(formatUnits(v[0], decimals)), pending: Number(formatUnits(v[2], 18)) } : null;
   };
-  const pool = (i: number) => {
+  const pool = (i: number, decimals: number | null) => {
     const v = ok<readonly [bigint, bigint, bigint]>(r[i]);
-    return v ? Number(formatUnits(v[0], 18)) : null;
+    return v && decimals !== null ? Number(formatUnits(v[0], decimals)) : null;
   };
   const raisedX = Number(ok<number>(r[5]) ?? 100);
   const raisedAtX = Number(ok<bigint>(r[6]) ?? 0n);
@@ -320,13 +335,13 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     staking: {
       funded: ok<boolean>(r[18]) ?? null,
       budget: n18(ok<bigint>(r[19])),
-      totals: { 0: pool(20), 1: pool(21) },
-      positions: { 0: pos(22), 1: pos(23) },
+      totals: { 0: pool(20, stdDecimals), 1: pool(21, 18) },
+      positions: { 0: pos(22, stdDecimals), 1: pos(23, 18) },
       nextCompoundAt: { 0: Number(ok<bigint>(r[24]) ?? 0n), 1: Number(ok<bigint>(r[25]) ?? 0n) },
       keeper: { executor: keeper && keeper !== zeroAddress ? keeper : null, minNetShares: n18(ok<bigint>(r[27])) ?? 0 },
     },
     tranches,
-    lpBurn: { totalShares: n18(ok<bigint>(r[29])), levelBurned: n18(ok<bigint>(r[30])), pendingShares: n18(ok<bigint>(r[31])), pendingUsdc: n18(ok<bigint>(r[32])) },
+    lpBurn: { totalShares: n18(ok<bigint>(r[29])), levelBurned: n18(ok<bigint>(r[30])), pendingShares: n18(ok<bigint>(r[31])), pendingUsdc: ok<bigint>(r[32]) !== undefined ? Number(formatUnits(ok<bigint>(r[32])!, 6)) : null },
     poolFeeBps: { xTOMB: (d?.pools.level.fee ?? 0) / 100, xSHARE: (d?.pools.square.fee ?? 0) / 100 },
     lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
     now: nowSec,

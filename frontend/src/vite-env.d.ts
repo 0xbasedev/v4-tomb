@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly [key: `VITE_RPC_${number}`]: string | undefined;
   /** "1" forces Preview mode (simulated chain) even when deployments are configured. */
   readonly VITE_PREVIEW?: string;
+  /** "1" loads contracts/deployment-output/masonry-local.json (anvil rehearsal) as the only deployment. */
+  readonly VITE_LOCAL_DEPLOYMENT?: string;
   /** "hash" | "memory" — router for static/sandboxed demo builds (default: browser history). */
   readonly VITE_ROUTER?: string;
 }
