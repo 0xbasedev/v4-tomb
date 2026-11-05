@@ -42,8 +42,19 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 ## Supply
 
 - xSHARE: cap 33,333, farming 25,641 over 365 days, sale escrow 100, deployer 1, owner/team/dev 100, treasury 500, arbitrage 50.
-- **Vesting remainder (6,941), owner decision 2026-11-05:** team 1,000; developer 1,000; Treasury 2,940; deployer/DAO address 100; arbitrage bot 1,901 (the rest). Sum = 6,941. Arbitrage therefore holds 1,951 in total with its initial 50. Open: whether the 100 to the deployer/DAO address vests (180 days, like the others) or is minted outright; `masonry-launch.template.json` has no key for it yet (only team, developer, treasury, arbitrage), so the template and `config/masonry-launch.mjs` validator need a fifth bucket once that is answered. Not yet written into the template.
-- xTOMB: `authorizedLaunchSupply` and the Genesis reward budget are **unset**. Initial: owner/team/dev 5,000, treasury 5,000, arbitrage 1,000.
+- **Vesting remainder (6,941), owner decision 2026-11-05:** team 1,000; developer 1,000; Treasury 2,940; arbitrage bot 1,901 (the rest) — all on 180-day linear streams. Plus **100 xSHARE minted outright to the deployer/DAO address** (the dev address), so that address starts with 101 liquid xSHARE (the deployer's 1 plus this 100). Check: 1,000 + 1,000 + 2,940 + 1,901 = 6,841 vesting, plus 100 outright = 6,941. Arbitrage holds 1,951 in total with its initial 50. Not yet written into `masonry-launch.template.json`, which needs a "deployer/DAO outright" entry and the four vesting amounts; the validator must be updated in the same change.
+- xTOMB initial: owner/team/dev 5,000, treasury 5,000, arbitrage 1,000.
+- **xTOMB launch supply, reward budget and seed liquidity: PROPOSED, not approved.** Draft for the owner to edit (confidence low–medium; the economics need a simulation before this is final):
+  - Seed liquidity 10,000 xTOMB + 10,000 USDC at the $1.00 peg (also sets the oracle's active-liquidity floor and guard tolerances; thin pools make the oracle reject sells).
+  - Genesis reward budget 25,000 xTOMB (about 3,570/day over 7 days; half liquid, half escrowed).
+  - `authorizedLaunchSupply` = 11,000 initial + 10,000 seed + 25,000 rewards = **46,000 xTOMB**. Expansion mints come later under the Treasury rules, not from this number.
+  - Trade-off: a bigger budget draws more stakers but more sell pressure into the 3–12% burn tax; the local placeholder (1,050,000) is far too large for a 10k-seed pool.
+  - Open: who funds the 10,000 seed USDC.
+
+## Control
+
+The **dev address is Owner, Operator and Admin** and has the privileged Admin-page functions that keep the protocol under control. It also holds the Genesis scheduler role unless the Wizard sets another. Treasury and fee-recipient addresses: not yet stated; the Wizard must require them explicitly. Constraints that still hold regardless: no owner/keeper trading pause on the v4 pools, no governance timelocks, Admin invisible to non-owners, only controls backed by real deployed methods. Single-key custody of all of these is the largest centralization risk in the design; a multisig for the dev address is strongly recommended but is the owner's call.
+
 - Token contracts must expose cumulative total burned. The Genesis LP-fee burn counter is a subset, never added twice.
 
 ## Treasury expansion (not built; blocker G2)
