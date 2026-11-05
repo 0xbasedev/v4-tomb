@@ -57,8 +57,9 @@ contract Oracle is IOracle, Epoch {
         address _tokenA,
         address _tokenB,
         uint256 _period,
-        uint256 _startTime
-    ) Epoch(_period, _startTime, 0) {
+        uint256 _startTime,
+        address initialTrustees
+    ) Epoch(_period, _startTime, 0, initialTrustees) {
         if (_tokenA == _tokenB) revert IdenticalTokens();
         priceSource = _priceSource;
         (token0, token1) = _tokenA < _tokenB ? (_tokenA, _tokenB) : (_tokenB, _tokenA);

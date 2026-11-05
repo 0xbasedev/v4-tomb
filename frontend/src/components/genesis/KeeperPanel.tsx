@@ -1,0 +1,68 @@
+import { useState } from "react";
+import { isAddress, type Address } from "viem";
+
+import { Reason, SimBadge } from "@/components/Status";
+import { useActions, useProtocol } from "@/lib/hooks";
+import { GENESIS_POLICY, PASSES, pct } from "@/lib/launch";
+import { PREVIEW_KEEPER } from "@/lib/preview";
+import { maskDecimalInput } from "@/lib/util/decimal";
+
+/**
+ * Keeper compounding — MasonryGenesisStaking.setKeeper(executor, minNetShares).
+ * Pro and Ultra only. The keeper you choose can compound your rewards into
+ * the LP pool on the same 3-hour clock as manual compounds; each automated run
+ * pays 2% of the liquid half to Treasury and must mint at least your minimum
+ * net shares, or it reverts.
+ */
+export function KeeperPanel() {
+  const p = useProtocol();
+  const actions = useActions();
+  const eligible = p.pass === "pro" || p.pass === "ultra";
+  const [executor, setExecutor] = useState<string>(p.sim ? PREVIEW_KEEPER : "");
+  const [min, setMin] = useState("0.5");
+  const on = !!p.staking.keeper.executor;
+  const valid = isAddress(executor) && parseFloat(min) > 0;
+  const reason = !p.account ? "Connect a wallet." : !p.pass ? "Buy a pass first." : !eligible ? `Keeper compounding needs a ${PASSES.pro.name} or ${PASSES.ultra.name} pass.` : null;
+
+  return (
+    <section data-reveal className="panel p-5 md:p-6">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="label">Keeper compounding</span>
+        <span className="chip h-6">Pro · Ultra</span>
+        {on && <span className="chip chip-ok h-6">On</span>}
+        {p.sim && <SimBadge />}
+      </div>
+      <p className="max-w-2xl text-[13.5px] leading-relaxed text-bone-dim">
+        Opt in and a keeper you choose compounds your rewards into the LP pool for you, on the same 3-hour clock as a manual compound. Each automated run
+        pays {pct(GENESIS_POLICY.automationFeeBps)} of the liquid half to Treasury; a manual compound pays none. The run reverts if it would mint fewer than
+        your minimum net shares.
+      </p>
+      {on ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-[13px]">
+          <span className="font-mono text-bone-dim">
+            keeper {p.staking.keeper.executor!.slice(0, 8)}… · min {p.staking.keeper.minNetShares} LP
+          </span>
+          <button type="button" className="btn h-9 px-4 text-[12.5px]" disabled={actions.busy} onClick={() => actions.setKeeper(null, 0)}>
+            Opt out
+          </button>
+        </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+          <label className="block">
+            <span className="label mb-1 block">Keeper address</span>
+            <input value={executor} onChange={(e) => setExecutor(e.target.value.trim())} placeholder="0x…" aria-label="Keeper address" className="well w-full px-3 py-2 font-mono text-[12.5px] text-bone" />
+          </label>
+          <label className="block">
+            <span className="label mb-1 block">Min net LP / run</span>
+            <input value={min} inputMode="decimal" onChange={(e) => setMin(maskDecimalInput(e.target.value))} aria-label="Minimum net shares per run" className="well w-full px-3 py-2 font-mono text-[12.5px] text-bone" />
+          </label>
+          <button type="button" className="btn btn-primary h-10 px-4 text-[13px]" disabled={!!reason || !valid || actions.busy} onClick={() => actions.setKeeper(executor as Address, parseFloat(min))}>
+            Opt in
+          </button>
+        </div>
+      )}
+      {reason && <Reason>{reason}</Reason>}
+      {!reason && !on && !valid && <Reason tone="warn">Enter the keeper's address and a minimum above zero.</Reason>}
+    </section>
+  );
+}

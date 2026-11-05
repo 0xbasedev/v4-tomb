@@ -1,29 +1,64 @@
+import type { ReactNode } from "react";
+
+import { AnimatedNumber } from "@/components/fx/AnimatedNumber";
+
 /**
- * StatTile — Art Deco data tile. Frame-within-frame border, ornament label in gold,
- * value in ivory display serif, optional hint in dark antique gold.
+ * StatTile — one number, one label, one line of context.
  *
- * Centered text, vertical symmetry. Used in the hero stats panel and on dashboards.
+ * Pass `numeric` to get a counting tween (preferred for live values); pass a
+ * plain `value` string for things that aren't numbers ("Open", "6 epochs").
+ * `tone` tints the value only — the tile itself stays neutral so a grid of
+ * tiles never competes with the page's primary action.
  */
 
 interface StatTileProps {
   label: string;
-  value: string;
-  hint?: string;
+  value?: string;
+  numeric?: number | null;
+  format?: (n: number) => string;
+  unit?: string;
+  hint?: ReactNode;
+  tone?: "default" | "ember" | "spectre" | "amethyst" | "ok" | "bad" | "warn";
+  icon?: ReactNode;
+  className?: string;
 }
 
-export function StatTile({ label, value, hint }: StatTileProps) {
+const TONE: Record<NonNullable<StatTileProps["tone"]>, string> = {
+  default: "text-bone",
+  ember: "text-ember-hot",
+  spectre: "text-spectre",
+  amethyst: "text-amethyst",
+  ok: "text-ok",
+  bad: "text-bad",
+  warn: "text-warn",
+};
+
+export function StatTile({
+  label,
+  value,
+  numeric,
+  format,
+  unit,
+  hint,
+  tone = "default",
+  icon,
+  className = "",
+}: StatTileProps) {
   return (
-    <div className="deco-panel text-center">
-      <div className="label-deco mb-3">{label}</div>
-      <div className="font-display text-3xl text-deco-ivory md:text-4xl">{value}</div>
-      {hint && (
-        <div
-          className="mt-2 font-body text-xs uppercase text-deco-gold-dark"
-          style={{ letterSpacing: "0.15em" }}
-        >
-          {hint}
-        </div>
-      )}
+    <div data-reveal className={`panel panel-hover flex flex-col gap-3 p-5 ${className}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="label">{label}</span>
+        {icon}
+      </div>
+      <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-display text-[22px] font-semibold leading-none tracking-[-0.03em] sm:text-[26px] md:text-[30px] ${TONE[tone]}`}>
+        {numeric !== undefined ? (
+          <AnimatedNumber value={numeric} format={format} className="font-display tracking-[-0.03em]" />
+        ) : (
+          <span className="min-w-0 break-words">{value ?? "—"}</span>
+        )}
+        {unit && <span className="font-mono text-xs font-medium tracking-wider text-ash">{unit}</span>}
+      </div>
+      {hint && <div className="text-[13px] leading-snug text-ash">{hint}</div>}
     </div>
   );
 }

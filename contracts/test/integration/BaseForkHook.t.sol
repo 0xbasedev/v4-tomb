@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -48,8 +48,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract BaseForkHookTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -86,9 +86,9 @@ contract BaseForkHookTest is BaseTest {
         weth = Addresses.weth();
 
         // 1. Deploy tokens.
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new PegToken(address(this));
+        estate = new ShareToken(startTime, communityFund, devFund, address(this));
+        trustnote = new TrustNote(address(this));
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right
         //    permission bits (AFTER_INITIALIZE | BEFORE_SWAP).
@@ -122,11 +122,11 @@ contract BaseForkHookTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // 4. Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime, address(this));
 
         // 5. Deploy Treasury + Boardroom, init, hand off operator.
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(address(this));
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
@@ -152,7 +152,7 @@ contract BaseForkHookTest is BaseTest {
         boardroom.setOperator(address(treasury));
 
         // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
-        // The test contract (deployer) holds 1 ESTATE from Estate's constructor mint.
+        // The test contract (deployer) holds 1 ESTATE from ShareToken's constructor mint.
         // Stake a tiny amount in Boardroom so allocateSeigniorage doesn't revert with
         // CannotAllocateWhenTotalSupplyZero when the bootstrap branch fires.
         estate.approve(address(boardroom), 1);

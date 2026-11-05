@@ -1,8 +1,12 @@
-# Old Money — configurable V4 Tomb protocol
+# xTOMB and xSHARE
 
-A full-stack fork of [0xbasedev/v4-tomb](https://github.com/0xbasedev/v4-tomb) at `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6`. It preserves MONEY / ESTATE / TRUSTNOTE, WETH peg, Treasury seigniorage and bonds, Boardroom staking, Genesis / Main / Share reward pools, the fourteen-tier Uniswap V4 hook, swaps, LP wrapping, governance tooling, and the Art Deco React interface.
+The `merge` branch contains the xTOMB and xSHARE frontend preview and the in-progress Masonry contracts. See the [frontend guide](frontend/README.md) and [integration status](docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) for the active work. The inherited deployment tooling below uses a separate WETH-based configuration.
 
-Chain dependencies now come from a shared, validated [network manifest](config/networks.json). Supported targets are **Cancun-compatible EVM chains with compatible V4 infrastructure and an 18-decimal WETH peg asset**. This is not a Solana port or a change to the original economics. No Masonry-specific tiers, taxes, or Genesis NFT policies have been added.
+## Inherited WETH-based tooling
+
+A full-stack fork of [0xbasedev/v4-tomb](https://github.com/0xbasedev/v4-tomb) at `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6`. Inherited token implementations use the Solidity names `PegToken` and `ShareToken`. The historical ERC-20 and permit names, manifest keys `money` and `estate`, and CREATE3 salts keep their original values.
+
+The inherited deploy tooling reads chain dependencies from a shared, validated [network manifest](config/networks.json). Its targets are **Cancun-compatible EVM chains with compatible V4 infrastructure and an 18-decimal WETH peg asset**. The Masonry preview describes its separate USDC-based rules.
 
 ## Start locally
 
@@ -16,7 +20,7 @@ node --test config/schema.test.mjs
 (cd frontend && npm ci && npm run build && npm run dev)
 ```
 
-The default profile is a local chain with no deployment. The interface remains browsable and protocol actions stay unavailable until a complete deployment is configured. All existing application routes remain present. Injected browser wallets are supported, including switching among configured chains. No Multicall3 address is assumed.
+The default profile is a local chain with no deployment. The xTOMB frontend is browsable and supports injected-wallet connection and switching among configured networks. It needs a verified xTOMB deployment and its own contract bindings before it can submit transactions.
 
 ## Deploy a new instance
 

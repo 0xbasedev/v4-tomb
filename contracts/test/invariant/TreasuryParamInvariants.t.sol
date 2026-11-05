@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {Treasury} from "../../src/core/Treasury.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 /**
  * @title TreasuryParamHandler
@@ -143,7 +143,7 @@ contract TreasuryParamHandler is Test {
 contract TreasuryParamInvariants is StdInvariant, Test {
     Treasury public treasury;
     TreasuryParamHandler public handler;
-    OldMoney public money;
+    PegToken public money;
 
     address constant TRUSTNOTE = address(0xA2);
     address constant ESTATE = address(0xA3);
@@ -152,8 +152,8 @@ contract TreasuryParamInvariants is StdInvariant, Test {
 
     function setUp() public {
         vm.warp(1_700_000_000);
-        treasury = new Treasury();
-        money = new OldMoney(); // needed for initialize()'s balanceOf snapshot
+        treasury = new Treasury(address(this));
+        money = new PegToken(address(this)); // needed for initialize()'s balanceOf snapshot
 
         address[] memory excluded = new address[](0);
         treasury.initialize(address(money), TRUSTNOTE, ESTATE, ORACLE, BOARDROOM, block.timestamp + 1 hours, excluded);

@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -27,8 +27,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *         each contract lives in test/unit/.
  */
 contract EpochCycleTest is BaseTest {
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -57,9 +57,9 @@ contract EpochCycleTest is BaseTest {
 
         // 1. Deploy tokens — owner becomes initial trustees on each.
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new PegToken(owner);
+        estate = new ShareToken(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         vm.stopPrank();
 
         // 2. Mock oracle at parity (1 MONEY = 1 WETH).
@@ -67,8 +67,8 @@ contract EpochCycleTest is BaseTest {
 
         // 3. Deploy core contracts.
         vm.startPrank(owner);
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
 
         // 4. Initialize boardroom + treasury. owner becomes operator on both.
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));

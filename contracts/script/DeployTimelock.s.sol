@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {NetworkConfig} from "./NetworkConfig.s.sol";
+import {Create3Config} from "./Create3Config.s.sol";
 
 import {console2} from "forge-std/Script.sol";
 
@@ -32,12 +33,16 @@ import {Timelock} from "../src/governance/Timelock.sol";
  *           forge script script/DeployTimelock.s.sol --rpc-url "$RPC_URL" --broadcast --verify
  *           forge script script/DeployTimelock.s.sol --rpc-url "$RPC_URL" --broadcast --verify
  */
-contract DeployTimelock is NetworkConfig {
+contract DeployTimelock is NetworkConfig, Create3Config {
     Timelock public timelock;
 
     function run() external {
-        _network();
+        (string memory json, string memory path) = _network();
+        string memory planPath = string.concat(path, ".create3");
+        Create3Plan memory plan = _readCreate3(json, planPath);
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        if (vm.addr(pk) != plan.deployer) revert InvalidCreate3Plan();
+        address expected = vm.parseJsonAddress(json, string.concat(planPath, ".addresses.timelock"));
         address admin = vm.envAddress("TIMELOCK_ADMIN");
         uint256 delay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
 
@@ -47,7 +52,15 @@ contract DeployTimelock is NetworkConfig {
         console2.log("delay (sec): ", delay);
 
         vm.startBroadcast(pk);
-        timelock = new Timelock(admin, delay);
+        timelock = Timelock(
+            payable(_deployCreate3(
+                    plan,
+                    "timelock",
+                    _addressNonce(json, planPath, "timelock"),
+                    expected,
+                    abi.encodePacked(type(Timelock).creationCode, abi.encode(admin, delay))
+                ))
+        );
         vm.stopBroadcast();
 
         console2.log("Timelock:    ", address(timelock));

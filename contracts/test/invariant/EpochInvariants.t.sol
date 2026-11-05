@@ -14,7 +14,7 @@ contract EpochHarness is Epoch {
     constructor(
         uint256 period_,
         uint256 startTime_
-    ) Epoch(period_, startTime_, 0) {}
+    ) Epoch(period_, startTime_, 0, msg.sender) {}
 
     /// @notice Trustees-pre-epoch + permissionless-post-epoch — same modifier semantics as
     ///         every real Epoch consumer (Treasury, Oracle).

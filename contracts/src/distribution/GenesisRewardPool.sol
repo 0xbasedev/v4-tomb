@@ -91,14 +91,16 @@ contract GenesisRewardPool {
 
     constructor(
         address _money,
-        uint256 _poolStartTime
+        uint256 _poolStartTime,
+        address initialOperator
     ) {
         if (block.timestamp >= _poolStartTime) revert StartTimeInPast();
         money = IERC20(_money);
         poolStartTime = _poolStartTime;
         poolEndTime = _poolStartTime + RUNNING_TIME;
-        operator = msg.sender;
-        emit OperatorTransferred(address(0), msg.sender);
+        if (initialOperator == address(0)) revert NotOperator();
+        operator = initialOperator;
+        emit OperatorTransferred(address(0), initialOperator);
     }
 
     // ------------------------------------------------------------------

@@ -31,9 +31,10 @@ abstract contract Trustees is Ownable2Step {
         _;
     }
 
-    constructor() Ownable(msg.sender) {
-        _trustees = msg.sender;
-        emit TrusteesTransferred(address(0), msg.sender);
+    constructor(
+        address initialTrustees
+    ) Ownable(initialTrustees) {
+        _transferTrustees(initialTrustees);
     }
 
     /// @notice Returns the current trustees address.

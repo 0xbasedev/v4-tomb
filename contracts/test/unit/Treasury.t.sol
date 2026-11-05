@@ -6,8 +6,8 @@ import {MockOracle} from "../utils/MockOracle.sol";
 
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
@@ -17,8 +17,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract TreasuryTest is BaseTest {
     Treasury internal treasury;
     Boardroom internal boardroom;
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     MockOracle internal oracle;
 
@@ -39,9 +39,9 @@ contract TreasuryTest is BaseTest {
 
         // 1. Deploy tokens (deployer = owner becomes trustees on each).
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new PegToken(owner);
+        estate = new ShareToken(startTime, communityFund, devFund, owner);
+        trustnote = new TrustNote(owner);
         vm.stopPrank();
 
         // 2. Deploy oracle (mocked) — initialize at parity.
@@ -49,8 +49,8 @@ contract TreasuryTest is BaseTest {
 
         // 3. Deploy Treasury and Boardroom.
         vm.startPrank(owner);
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(owner);
+        boardroom = new Boardroom(owner);
 
         // 4. Initialize Boardroom (owner becomes operator).
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));

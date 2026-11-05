@@ -263,6 +263,15 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     /* =================== GOVERNANCE =================== */
 
+    address private immutable _initializer;
+
+    constructor(
+        address initializer
+    ) {
+        if (initializer == address(0)) revert NotOperator();
+        _initializer = initializer;
+    }
+
     function initialize(
         address _money,
         address _trustnote,
@@ -272,6 +281,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         uint256 _startTime,
         address[] memory _excludedFromTotalSupply
     ) public notInitialized {
+        if (msg.sender != _initializer) revert NotOperator();
         money = _money;
         trustnote = _trustnote;
         estate = _estate;

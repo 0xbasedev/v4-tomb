@@ -40,7 +40,7 @@ contract OracleTest is BaseTest {
         source = new MockPriceSource(INIT_CUM, INIT_TS);
 
         vm.prank(owner);
-        oracle = new Oracle(IPriceSource(address(source)), tokenLow, tokenHigh, PERIOD, startTime);
+        oracle = new Oracle(IPriceSource(address(source)), tokenLow, tokenHigh, PERIOD, startTime, owner);
     }
 
     // ---------------------------------------------------------------------
@@ -53,14 +53,15 @@ contract OracleTest is BaseTest {
     }
 
     function test_Constructor_SortsTokens_ReversedArgs() public {
-        Oracle reversed = new Oracle(IPriceSource(address(source)), tokenHigh, tokenLow, PERIOD, startTime);
+        Oracle reversed =
+            new Oracle(IPriceSource(address(source)), tokenHigh, tokenLow, PERIOD, startTime, address(this));
         assertEq(reversed.token0(), tokenLow);
         assertEq(reversed.token1(), tokenHigh);
     }
 
     function test_Constructor_RejectsIdenticalTokens() public {
         vm.expectRevert(Oracle.IdenticalTokens.selector);
-        new Oracle(IPriceSource(address(source)), tokenLow, tokenLow, PERIOD, startTime);
+        new Oracle(IPriceSource(address(source)), tokenLow, tokenLow, PERIOD, startTime, address(this));
     }
 
     function test_Constructor_StoresPriceSource() public view {

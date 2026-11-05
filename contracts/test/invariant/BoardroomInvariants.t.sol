@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -54,14 +54,14 @@ contract MockTreasury is ITreasury {
  */
 contract BoardroomHandler is Test {
     Boardroom public boardroom;
-    Estate public estate;
+    ShareToken public estate;
     MockTreasury public treasury;
 
     address[] public actors;
 
     constructor(
         Boardroom _boardroom,
-        Estate _estate,
+        ShareToken _estate,
         MockTreasury _treasury
     ) {
         boardroom = _boardroom;
@@ -139,8 +139,8 @@ contract BoardroomHandler is Test {
 }
 
 contract BoardroomInvariants is StdInvariant, Test {
-    OldMoney public money;
-    Estate public estate;
+    PegToken public money;
+    ShareToken public estate;
     Boardroom public boardroom;
     MockTreasury public treasury;
     BoardroomHandler public handler;
@@ -153,14 +153,14 @@ contract BoardroomInvariants is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         // 1. Deploy tokens (deployer = trustees of each).
-        money = new OldMoney();
-        estate = new Estate(block.timestamp + 1 hours, communityFund, devFund);
+        money = new PegToken(address(this));
+        estate = new ShareToken(block.timestamp + 1 hours, communityFund, devFund, address(this));
 
         // 2. Mock treasury.
         treasury = new MockTreasury();
 
         // 3. Boardroom (deployer is the initial operator).
-        boardroom = new Boardroom();
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         // 4. Mint ESTATE supply via distributeReward, then push to test actors.

@@ -1,0 +1,84 @@
+.operator-heading > .label { color: var(--amber); letter-spacing: .18em; margin-bottom: 12px; }
+.operator-heading h1 { font-size: clamp(2.2rem, 6vw, 4rem); }
+.ops-nav { display: flex; gap: 20px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.ops-nav a { padding: 0 3px 11px; color: var(--muted); border-bottom: 2px solid transparent; font-size: .87rem; }
+.ops-nav a[aria-current="page"] { color: var(--bone); border-color: var(--ember); }
+.ops-layout { display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.ops-steps { display: grid; gap: 4px; }
+.ops-steps button {
+  min-height: 44px;
+  text-align: left;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--ash);
+  background: transparent;
+  font-size: .86rem;
+}
+.ops-steps button span { font: .76rem var(--mono); color: var(--amber); margin-right: 10px; }
+.ops-steps button:disabled, .ops-steps button:disabled span { color: var(--muted); }
+.ops-steps button[aria-current="step"] { color: var(--bone); border-color: var(--ember); background: #ff6a2b15; }
+.ops-workspace { min-width: 0; }
+.ops-section-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ops-section-head h2 { margin-top: 7px; }
+.ops-section-head .label { letter-spacing: .14em; }
+.ops-workspace p { font-size: .9rem; }
+.ops-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-block: 16px; }
+.ops-input-group, .ops-field { display: grid; align-content: start; gap: 7px; min-width: 0; color: var(--ash); font-size: .83rem; }
+.ops-field { max-width: 540px; margin-block: 16px; }
+.ops-fields input, .ops-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #ffffff24;
+  border-radius: 9px;
+  background: #090a0d;
+  color: var(--bone);
+  font: .83rem var(--mono);
+}
+.ops-meta { color: var(--muted); font-size: .8rem !important; }
+.ops-help { color: var(--ash); font-size: .83rem !important; line-height: 1.55; overflow-wrap: anywhere; }
+.ops-explainer { padding-left: 20px; color: var(--ash); font-size: .9rem; line-height: 1.55; }
+.ops-explainer li + li { margin-top: 5px; }
+.ops-detail { margin-block: 13px; padding: 13px 0; border-top: 1px solid var(--line); }
+.ops-detail summary { color: var(--bone); font-weight: 650; font-size: .92rem; }
+.ops-detail p { margin-top: 10px; }
+.ops-check { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--bone); font-size: .9rem; }
+.ops-check input { accent-color: var(--ember); }
+.ops-actions { margin-top: 17px; }
+.ops-actions + p { margin-top: 14px; }
+.ops-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-block: 20px; }
+.ops-facts dt, .address-list dt { color: var(--ash); font-size: .82rem; }
+.ops-facts dd { color: var(--bone); font: .8rem var(--mono); margin-top: 6px; overflow-wrap: anywhere; }
+.address-list { margin-top: 10px; }
+.address-list > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr);
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.address-list code { font: .78rem/1.5 var(--mono); overflow-wrap: anywhere; }
+.address-list small { display: block; color: var(--muted); margin: 6px 0 3px; }
+.check-status { font: .82rem var(--mono); }
+.check-status.factory { color: var(--spectre); }
+.check-status.wrong-code { color: var(--amber); }
+.check-status.missing { color: var(--muted); }
+.ops-verification { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.ops-verification .ops-meta { margin-top: 14px; }
+.ops-network-list { padding: 0; list-style: none; }
+.ops-network-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.ops-network-list small { display: block; color: var(--muted); font: .73rem/1.5 var(--mono); margin-top: 5px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 760px) {
+  .ops-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ops-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ops-steps button { padding: 7px; }
+  .ops-steps button span { display: block; margin-bottom: 4px; }
+}
+@media (max-width: 520px) {
+  .ops-fields, .ops-facts, .address-list > div { grid-template-columns: minmax(0, 1fr); }
+  .address-list > div { gap: 3px; }
+}

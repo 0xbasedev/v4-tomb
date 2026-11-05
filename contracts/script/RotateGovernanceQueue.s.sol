@@ -5,8 +5,8 @@ import {NetworkConfig} from "./NetworkConfig.s.sol";
 
 import {console2} from "forge-std/Script.sol";
 
-import {OldMoney} from "../src/tokens/OldMoney.sol";
-import {Estate} from "../src/tokens/Estate.sol";
+import {PegToken} from "../src/tokens/PegToken.sol";
+import {ShareToken} from "../src/tokens/ShareToken.sol";
 import {TrustNote} from "../src/tokens/TrustNote.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Timelock} from "../src/governance/Timelock.sol";
@@ -60,8 +60,8 @@ contract RotateGovernanceQueue is NetworkConfig {
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
         Timelock timelock = Timelock(payable(_deployment("timelock")));
-        OldMoney money = OldMoney(_deployment("money"));
-        Estate estate = Estate(_deployment("estate"));
+        PegToken money = PegToken(_deployment("money"));
+        ShareToken estate = ShareToken(_deployment("estate"));
         TrustNote trustnote = TrustNote(_deployment("trustNote"));
         PegDefenseHook hook = PegDefenseHook(_deployment("hook"));
         Treasury treasury = Treasury(_deployment("treasury"));

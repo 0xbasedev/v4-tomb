@@ -1,0 +1,47 @@
+[
+  {
+    "type": "function",
+    "name": "settle",
+    "inputs": [
+      {
+        "name": "beneficiary",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "reward",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "compound",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "automated",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "plan",
+        "type": "tuple",
+        "internalType": "struct IMasonryGenesisSettlement.CompoundPlan",
+        "components": [
+          {
+            "name": "levelToSell",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "grossShares",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  }
+]

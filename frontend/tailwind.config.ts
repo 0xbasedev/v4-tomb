@@ -1,82 +1,96 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Old Money Tailwind config — Art Deco grammar.
+ * xTomb — "Obsidian Crypt" design tokens.
  *
- * Per docs/skill-art-deco.md. Three palette modes:
- *   - Classic Black & Gold (default — warm black ground, ivory text, metallic gold)
- *   - Cream & Gold (editorial — ivory ground, near-black text)
- *   - Jewel & Gold (glamour — warm dark ground with one jewel-tone accent)
+ * Ground is volcanic glass (near-black with a cold blue cast). Heat is the
+ * signal: xTOMB is molten ember, xSHARE is cold spectral cyan, xBOND is
+ * amethyst. Status colours (ok / warn / bad) are reserved for state — never
+ * decoration — so the eye learns that colour means "act" or "careful".
  *
- * "Old Money" = inherited wealth = Gatsby-era opulence. Art Deco is the natural
- * grammar — geometry as glamour, symmetry as power, ornament as structure.
+ * Every colour is a flat hex so Tailwind's /opacity modifiers work.
  */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // ----- Classic Black & Gold (primary mode) -----
-        "deco-ground": "#0d0a05",        // warm near-black (NOT pure black)
-        "deco-ground-soft": "#1a1005",    // very dark warm brown
-        "deco-ground-medium": "#241608",  // mid-tone for layered depth
-        "deco-ivory": "#f5f0e0",          // antique ivory — primary text on dark
-        "deco-ivory-soft": "#ebe5d2",     // slightly darker ivory
-        "deco-cream": "#faf5e6",          // pale cream — ground for editorial mode
-        "deco-gold": "#d4af37",           // mid gold (flat fallback)
-        "deco-gold-light": "#f5e6a3",     // pale champagne (top of metallic gradient)
-        "deco-gold-deep": "#a67c00",      // deep amber (gradient middle)
-        "deco-gold-dark": "#8b6914",      // dark antique gold (secondary text)
+        // ---- Ground (obsidian) ----
+        void: "#050507",
+        basalt: "#0b0c10",
+        "basalt-2": "#111319",
+        "basalt-3": "#181b23",
+        seam: "#23262f",
 
-        // ----- Jewel accents (use sparingly — one section max) -----
-        "deco-emerald": "#1a5c3a",
-        "deco-sapphire": "#1a2a5c",
-        "deco-ruby": "#5c1a1a",
-        "deco-teal": "#1a4a5c",
+        // ---- Ink ----
+        bone: "#ece8df",
+        "bone-dim": "#b9b5ac",
+        ash: "#7c7a74",
+        "ash-dim": "#4a4945",
 
-        // ----- Project supplements (from memory ref_eighties — still relevant) -----
-        oxblood: "#4a0d0d",
-        "oxblood-deep": "#2a0606",
+        // ---- Heat: xTOMB ----
+        ember: "#ff6a2b",
+        "ember-hot": "#ffb547",
+        "ember-deep": "#c2410c",
+        magma: "#ff3d1f",
+
+        // ---- Cold: xSHARE ----
+        spectre: "#3ee7ff",
+        "spectre-deep": "#2a8cff",
+
+        // ---- Seal: xBOND ----
+        amethyst: "#b48cff",
+        "amethyst-deep": "#7c4dff",
+
+        // ---- State ----
+        ok: "#34e3a0",
+        warn: "#ffc24b",
+        bad: "#ff4d6a",
       },
       fontFamily: {
-        // Per skill: display = Bodoni/Didot family; body = Cormorant Garamond
-        display: ['"Playfair Display"', '"Cormorant Garamond"', '"Bodoni MT"', '"Didot"', "serif"],
-        headline: ['"Cormorant Garamond"', '"Bodoni MT"', '"Didot"', '"GFS Didot"', '"Times New Roman"', "serif"],
-        body: ['"Cormorant Garamond"', "Garamond", "Georgia", "serif"],
-        ornament: ['"Cinzel Decorative"', '"Trajan Pro"', "serif"],
-        label: ['"Cinzel"', '"Cinzel Decorative"', '"Trajan Pro"', "serif"],
+        display: ['"Unbounded Variable"', '"Unbounded"', "system-ui", "sans-serif"],
+        sans: ['"Inter Variable"', '"Inter"', "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
-        // Per skill: typography scale uses 1.333 perfect fourth multiplier
-        hero: ["clamp(48px, 7vw, 96px)", { lineHeight: "1.0", fontWeight: "400", letterSpacing: "0.05em" }],
-        section: ["clamp(32px, 4vw, 48px)", { lineHeight: "1.1", fontWeight: "400", letterSpacing: "0.08em" }],
-        subhead: ["clamp(18px, 2vw, 24px)", { lineHeight: "1.3", fontWeight: "400", letterSpacing: "0.15em" }],
-        label: ["11px", { lineHeight: "1.2", fontWeight: "600", letterSpacing: "0.3em" }],
+        hero: ["clamp(54px, 8.4vw, 128px)", { lineHeight: "0.86", letterSpacing: "-0.04em", fontWeight: "700" }],
+        section: ["clamp(30px, 4.2vw, 52px)", { lineHeight: "1.02", letterSpacing: "-0.02em", fontWeight: "600" }],
+        subhead: ["clamp(17px, 1.6vw, 21px)", { lineHeight: "1.5" }],
+        label: ["11px", { lineHeight: "1.2", letterSpacing: "0.16em", fontWeight: "500" }],
+      },
+      borderRadius: {
+        shard: "18px",
+      },
+      boxShadow: {
+        panel: "inset 0 1px 0 0 rgba(255,255,255,0.05), 0 24px 48px -24px rgba(0,0,0,0.8)",
+        ember: "0 0 0 1px rgba(255,106,43,0.5), 0 10px 40px -10px rgba(255,106,43,0.55)",
+        spectre: "0 0 0 1px rgba(62,231,255,0.45), 0 10px 40px -10px rgba(62,231,255,0.45)",
+        amethyst: "0 0 0 1px rgba(180,140,255,0.45), 0 10px 40px -10px rgba(180,140,255,0.45)",
       },
       keyframes: {
-        // Per skill: only subtle, dignified motion. Gold shimmer + rule draw.
-        "gold-shimmer": {
+        "ember-flow": {
           "0%, 100%": { backgroundPosition: "0% 50%" },
           "50%": { backgroundPosition: "100% 50%" },
         },
-        "rule-draw": {
-          "0%": { transform: "scaleX(0)" },
-          "100%": { transform: "scaleX(1)" },
+        breathe: {
+          "0%, 100%": { opacity: "0.55" },
+          "50%": { opacity: "1" },
         },
-        "fade-in-center": {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        "sunburst-rotate": {
+        "spin-slow": {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
         },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
-        "gold-shimmer": "gold-shimmer 4s linear infinite",
-        "rule-draw": "rule-draw 800ms ease-in-out forwards",
-        "fade-in-center": "fade-in-center 800ms ease-out forwards",
-        "sunburst-rotate": "sunburst-rotate 120s linear infinite",
+        "ember-flow": "ember-flow 6s ease-in-out infinite",
+        breathe: "breathe 2.4s ease-in-out infinite",
+        "spin-slow": "spin-slow 90s linear infinite",
+        "spin-slower": "spin-slow 160s linear infinite reverse",
+        shimmer: "shimmer 1.6s linear infinite",
       },
     },
   },

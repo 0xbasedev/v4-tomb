@@ -1,0 +1,20 @@
+[
+  {
+    "type": "function",
+    "name": "getCurrentTickCumulative",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "cumulative",
+        "type": "int56",
+        "internalType": "int56"
+      },
+      {
+        "name": "blockTimestamp",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  }
+]
