@@ -73,6 +73,13 @@ cd ../frontend && pnpm test:local
 
 ## Not done — next steps, in order
 
+0. **Read `docs/CANONICAL_SPEC.md` first. New owner decisions not yet built** (build contracts, tests and copy together; never advertise a perk the contract doesn't enforce):
+   - Per-tier Genesis deposit fees on pool-0 stakes: Genesis 3%, Pro 2%, Ultra 0%, to Treasury as USDC.
+   - LP-pool fee: flat 0.5% to Treasury as POL, **replacing** the xTOMB burn (`MasonryGenesisLPBurnFee` rework).
+   - Keeper compounding cadence per tier: Pro every 6h, Ultra every 3h. Open: whether manual compounding stays 3h for everyone.
+   - xSHARE vesting split (1,000 / 1,000 / 2,940 / 1,901 + 100 outright to the dev address) into the template and validator.
+   - Page copy (PassPicker perks in `launch.ts`, Docs, Genesis visuals) changes in the same change.
+
 1. **CREATE3 locally.** `DeployMasonryLocal` uses plain CREATE (plus the mined CREATE2 salt for hooks). Next: `vm.etch` the CreateX runtime at `0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed` (check `factoryCodeHash` in `config/create3-plan.mjs`) and deploy through it so addresses match the Wizard's plan. Hooks still need flag-mined addresses, so verify CREATE3 + flags with `HookMiner` against CreateX's guarded-salt derivation.
 2. **Real launch amounts.** The local deploy uses placeholders: xSHARE initial (deployer 7,042 standing in for the vesting buckets; 100 sale; 500 treasury; 50 arbitrage), a Genesis reward budget of 1,050,000 xTOMB, and seed liquidity. Owner decisions still open: the template's `authorizedLaunchSupply`, the Genesis reward budget, and the vesting bucket amounts and contracts (`MasonryLinearVesting`).
 3. **PegToken `totalBurned`.** Add a counter like ShareToken's, or track burns from events (status-doc item 6).
