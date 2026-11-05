@@ -1,0 +1,682 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "mailbox_",
+        "type": "address"
+      },
+      {
+        "name": "ism_",
+        "type": "address"
+      },
+      {
+        "name": "canonicalDomain_",
+        "type": "uint32"
+      },
+      {
+        "name": "asset_",
+        "type": "address"
+      },
+      {
+        "name": "owner_",
+        "type": "address"
+      },
+      {
+        "name": "initialPeers",
+        "type": "tuple[]",
+        "components": [
+          {
+            "name": "domain",
+            "type": "uint32"
+          },
+          {
+            "name": "peer",
+            "type": "address"
+          },
+          {
+            "name": "limit",
+            "type": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "DESTINATION_GAS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mailbox",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "interchainSecurityModule",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "localDomain",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "canonicalDomain",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isCanonical",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "asset",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextNonce",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "routes",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "peer",
+        "type": "address"
+      },
+      {
+        "name": "outboundEnabled",
+        "type": "bool"
+      },
+      {
+        "name": "limit",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "inboundPaused",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lockedFor",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "received",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32"
+      },
+      {
+        "name": "nonce",
+        "type": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "registerPeer",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      },
+      {
+        "name": "peer",
+        "type": "address"
+      },
+      {
+        "name": "limit",
+        "type": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setOutboundEnabled",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      },
+      {
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setInboundPaused",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      },
+      {
+        "name": "paused",
+        "type": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "quoteSend",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "uint32"
+      },
+      {
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "send",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "uint32"
+      },
+      {
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "messageId",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "handle",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32"
+      },
+      {
+        "name": "sender",
+        "type": "bytes32"
+      },
+      {
+        "name": "body",
+        "type": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "PeerRegistered",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32",
+        "indexed": true
+      },
+      {
+        "name": "peer",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "limit",
+        "type": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OutboundEnabledSet",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32",
+        "indexed": true
+      },
+      {
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "InboundPausedSet",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32",
+        "indexed": true
+      },
+      {
+        "name": "paused",
+        "type": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TransferSent",
+    "inputs": [
+      {
+        "name": "messageId",
+        "type": "bytes32",
+        "indexed": true
+      },
+      {
+        "name": "destination",
+        "type": "uint32",
+        "indexed": true
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "name": "nonce",
+        "type": "uint256"
+      },
+      {
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TransferReceived",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32",
+        "indexed": true
+      },
+      {
+        "name": "nonce",
+        "type": "uint256",
+        "indexed": true
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "InvalidConfiguration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTransfer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTokenDelta",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyMailbox",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRoute",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OutboundDisabled",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InboundPaused",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidFee",
+    "inputs": [
+      {
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "name": "supplied",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidPeer",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32"
+      },
+      {
+        "name": "sender",
+        "type": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "AlreadyReceived",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32"
+      },
+      {
+        "name": "nonce",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "RouteLimitExceeded",
+    "inputs": [
+      {
+        "name": "domain",
+        "type": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InsufficientEscrow",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingOwner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      {
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "acceptOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferStarted",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "OwnableUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OwnableInvalidOwner",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address"
+      }
+    ]
+  }
+]
