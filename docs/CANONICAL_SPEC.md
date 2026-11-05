@@ -41,7 +41,8 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 
 ## Supply
 
-- xSHARE: cap 33,333, farming 25,641 over 365 days, sale escrow 100, deployer 1, owner/team/dev 100, treasury 500, arbitrage 50. The remaining **6,941** vesting split (team, developer, treasury, arbitrage; 180-day streams) is **not authorized**. Do not invent it.
+- xSHARE: cap 33,333, farming 25,641 over 365 days, sale escrow 100, deployer 1, owner/team/dev 100, treasury 500, arbitrage 50.
+- **Vesting remainder (6,941), owner decision 2026-11-05:** team 1,000; developer 1,000; Treasury 2,940; deployer/DAO address 100; arbitrage bot 1,901 (the rest). Sum = 6,941. Arbitrage therefore holds 1,951 in total with its initial 50. Open: whether the 100 to the deployer/DAO address vests (180 days, like the others) or is minted outright; `masonry-launch.template.json` has no key for it yet (only team, developer, treasury, arbitrage), so the template and `config/masonry-launch.mjs` validator need a fifth bucket once that is answered. Not yet written into the template.
 - xTOMB: `authorizedLaunchSupply` and the Genesis reward budget are **unset**. Initial: owner/team/dev 5,000, treasury 5,000, arbitrage 1,000.
 - Token contracts must expose cumulative total burned. The Genesis LP-fee burn counter is a subset, never added twice.
 
