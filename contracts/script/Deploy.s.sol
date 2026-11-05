@@ -60,7 +60,7 @@ contract Deploy is NetworkConfig, Create3Config {
 
     Create3Plan private _plan;
     mapping(string role => address expected) private _expected;
-    uint256 private _hookNonce;
+    mapping(string role => uint256 nonce) private _nonces;
 
     PegToken public money;
     ShareToken public estate;
@@ -149,7 +149,7 @@ contract Deploy is NetworkConfig, Create3Config {
     ) private {
         _plan = _readCreate3(json, path);
         if (_plan.deployer != deployer) revert InvalidCreate3Plan();
-        _hookNonce = vm.parseJsonUint(json, string.concat(path, ".hookNonce"));
+        _nonces["hook"] = vm.parseJsonUint(json, string.concat(path, ".hookNonce"));
         string[13] memory roles = [
             "money",
             "estate",
@@ -167,8 +167,9 @@ contract Deploy is NetworkConfig, Create3Config {
         ];
         for (uint256 i; i < roles.length; ++i) {
             string memory role = roles[i];
+            if (keccak256(bytes(role)) != keccak256("hook")) _nonces[role] = _addressNonce(json, path, role);
             address expected = vm.parseJsonAddress(json, string.concat(path, ".addresses.", role));
-            address predicted = _create3Address(_plan, role, _deploymentNonce(role));
+            address predicted = _create3Address(_plan, role, _nonces[role]);
             if (expected != predicted) revert UnexpectedCreate3Address(role, expected, predicted);
             if (expected.code.length != 0 || vm.getNonce(expected) != 0) revert Create3AddressOccupied(expected);
             _expected[role] = expected;
@@ -178,17 +179,11 @@ contract Deploy is NetworkConfig, Create3Config {
         if (uint160(_expected["hook"]) & Hooks.ALL_HOOK_MASK != flags) revert InvalidCreate3Plan();
     }
 
-    function _deploymentNonce(
-        string memory role
-    ) private view returns (uint256) {
-        return keccak256(bytes(role)) == keccak256("hook") ? _hookNonce : 0;
-    }
-
     function _deploy(
         string memory role,
         bytes memory initcode
     ) private returns (address) {
-        return _deployCreate3(_plan, role, _deploymentNonce(role), _expected[role], initcode);
+        return _deployCreate3(_plan, role, _nonces[role], _expected[role], initcode);
     }
 
     // ------------------------------------------------------------------

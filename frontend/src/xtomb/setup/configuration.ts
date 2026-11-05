@@ -1,6 +1,6 @@
 import { getAddress, isAddress, zeroAddress } from "viem";
 import type { BridgeNetwork, BridgePlan, MasonryPlan, ReleaseInput } from "../../../../config/create3-plan.mjs";
-import { masonryRoles } from "../../../../config/create3-plan.mjs";
+import { bridgeRoles, masonryRoles, validateAddressPatterns } from "../../../../config/create3-plan.mjs";
 import { validateMasonryLaunch } from "../../../../config/masonry-launch.mjs";
 import launchTemplate from "../../../../config/masonry-launch.template.json";
 import bridgeTemplate from "../../../../config/xshare-bridge.json";
@@ -82,9 +82,18 @@ export const defaultFields = {
   bridge: "off",
   ...Object.fromEntries(bridgeNetworks.flatMap(({ id }) => [["owner" + id, ""], ["ism" + id, ""], ["cap" + id, ""]])),
   ...Object.fromEntries(masonryRoles.map((role) => ["hash-" + role, ""])),
+  ...Object.fromEntries([...masonryRoles, ...bridgeRoles].flatMap((role) => [
+    ["prefix-" + role, ""], ["suffix-" + role, ""],
+  ])),
 } satisfies Record<string, string>;
 
 export type Fields = Record<string, string>;
+
+export function addressPatternsFrom(fields: Fields, roles: readonly string[]) {
+  return validateAddressPatterns(Object.fromEntries(roles.map((role) => [
+    role, { prefix: fields["prefix-" + role], suffix: fields["suffix-" + role] },
+  ])));
+}
 export type Draft = { schemaVersion: 1; type: "xtomb-release-draft"; fields: Fields };
 const key = "xtomb:release-draft:v1";
 export const makeDraft = (fields: Fields): Draft => ({ schemaVersion: 1, type: "xtomb-release-draft", fields });
@@ -203,8 +212,10 @@ export function buildInputs(fields: Fields, requireFuture = true) {
   const { launch, releaseId, deployer } = launchFrom(fields, requireFuture);
   const withBridge = fields.bridge === "on";
   if (withBridge && !bridgeNetworks.some(({ id }) => id === network.id)) throw new Error("Bridge planning requires one of the five supported home networks.");
+  const addressPatterns = addressPatternsFrom(fields, withBridge ? [...masonryRoles, ...bridgeRoles] : masonryRoles);
   const release: ReleaseInput = {
     releaseId, deployer, canonicalDomain: network.id, canonicalTokenRole: "masonryShare",
+    ...(Object.keys(addressPatterns).length ? { addressPatterns } : {}),
     masonryInitCodeHashes: Object.fromEntries(masonryRoles.flatMap((role) => {
       const hash = fields["hash-" + role].trim();
       return hash ? [[role, hash]] : [];

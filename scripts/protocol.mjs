@@ -18,7 +18,7 @@ export async function verifyCreate3Receipts(plan, deployment, receipts) {
   const mined = receipts.filter((receipt) => lower(receipt.to) === lower(factory)
     && lower(receipt.from) === lower(plan.deployer) && receipt.contractAddress == null);
   for (const role of coreRoles) {
-    const predicted = create3Address(plan, role, role === 'hook' ? plan.hookNonce : 0);
+    const predicted = create3Address(plan, role, role === 'hook' ? plan.hookNonce : undefined);
     if (lower(predicted.address) !== lower(plan.addresses[role])
       || lower(predicted.address) !== lower(deployment[role])) {
       throw new Error(`${role} does not match the CREATE3 prediction`);

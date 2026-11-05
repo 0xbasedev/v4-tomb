@@ -1,8 +1,10 @@
 export type Hex = `0x${string}`;
+export type AddressPatterns = Record<string, { prefix?: string; suffix?: string }>;
 export interface AddressPlan {
   factory: Hex;
   deployer: Hex;
   releaseId: Hex;
+  addressNonces?: Record<string, number>;
 }
 export interface ReleaseInput {
   releaseId: string;
@@ -12,6 +14,7 @@ export interface ReleaseInput {
   routeCaps?: Record<number, string>;
   bridgeOperators?: Record<number, { owner: string; ism: string }>;
   masonryInitCodeHashes?: Record<string, string>;
+  addressPatterns?: AddressPatterns;
 }
 export interface MasonryPlan extends AddressPlan {
   chainId: number;
@@ -45,10 +48,12 @@ export interface BridgePlan {
 export const factory: Hex;
 export const factoryCodeHash: Hex;
 export const masonryRoles: readonly string[];
+export const bridgeRoles: readonly string[];
+export function validateAddressPatterns(input?: AddressPatterns): Record<string, { prefix: string; suffix: string }>;
 export function create3Planner(viem: Pick<typeof import('viem'),
   'concatHex' | 'encodeAbiParameters' | 'encodePacked' | 'getAddress' | 'keccak256' | 'sliceHex'>): {
   create3Address(plan: AddressPlan, role: string, nonce?: number): { address: Hex; salt: Hex; guarded: Hex; proxy: Hex };
   planCore(template: unknown, release: ReleaseInput, index: number): unknown;
-  planMasonry(release: ReleaseInput): MasonryPlan;
-  planBridge(template: unknown, release: ReleaseInput): BridgePlan;
+  planMasonry(release: ReleaseInput, onSearch?: (role: string) => void): MasonryPlan;
+  planBridge(template: unknown, release: ReleaseInput, onSearch?: (role: string) => void): BridgePlan;
 };

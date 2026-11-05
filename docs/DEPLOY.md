@@ -34,6 +34,23 @@ node scripts/create3.mjs core config/networks.json config/release.json config/co
 
 Select the generated `config/core.release.json` with `PROTOCOL_CONFIG`. The planner is offline. It predicts all 13 project addresses from CreateX, release ID, signer and role, including a salt whose hook address has the required V4 permission bits. The same release, signer and role produce the same address on each chain where the canonical factory is deployed. The factory address and runtime hash are pinned. [CreateX](https://github.com/pcaversaccio/createx/blob/6aa175d8ab30de8159199c8d7efa6d82ecbd5769/README.md)
 
+### Custom prefixes and suffixes
+
+In the Wizard, open **Custom contract addresses** under Launch settings. Pick a contract and enter a prefix, a suffix, or both. The optional Bridge step has its own controls for the bridge and wrapped xSHARE. In a release JSON, the equivalent settings look like this.
+
+```json
+{
+  "addressPatterns": {
+    "masonryPeg": { "prefix": "ab", "suffix": "cd" },
+    "xshareBridge": { "suffix": "b0b" }
+  }
+}
+```
+
+Patterns are case-insensitive. Standard contracts accept up to four hexadecimal characters total. Hooks accept up to four additional search bits beyond the required permission bits. A one-character prefix works with up to three fixed suffix characters. The core hook's permission bits are `0x1088` and the Masonry hooks use `0x35c8`. A search stops after one million candidates per contract. Shorten the pattern if it runs out of attempts.
+
+The planner saves the winning numbers in `addressNonces` for standard contracts and the existing hook nonce fields for hooks. Deployment and publication recompute addresses from those numbers and verify that they match the plan. Generate the core, Masonry and bridge plans from the same release inputs so a customized home xSHARE address matches in both plans. Confirm the patterns before reviewing constructor hashes. Contracts that refer to a changed address need newly reviewed constructor inputs.
+
 ## 3. Set operator parameters
 
 ```sh

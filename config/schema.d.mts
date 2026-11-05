@@ -16,6 +16,7 @@ export interface Network {
     deployer: Address;
     releaseId: `0x${string}`;
     hookNonce: number;
+    addressNonces?: Record<string, number>;
     addresses: Record<Exclude<DeploymentKey, InfrastructureKey>, Address>;
   } | null;
 }

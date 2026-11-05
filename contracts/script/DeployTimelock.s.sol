@@ -56,7 +56,7 @@ contract DeployTimelock is NetworkConfig, Create3Config {
             payable(_deployCreate3(
                     plan,
                     "timelock",
-                    0,
+                    _addressNonce(json, planPath, "timelock"),
                     expected,
                     abi.encodePacked(type(Timelock).creationCode, abi.encode(admin, delay))
                 ))

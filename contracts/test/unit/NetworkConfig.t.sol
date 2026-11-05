@@ -4,6 +4,8 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {NetworkConfig} from "../../script/NetworkConfig.s.sol";
 import {Deploy} from "../../script/Deploy.s.sol";
+import {DeployMasonryComponent} from "../../script/DeployMasonryComponent.s.sol";
+import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
 import {PoolManager} from "v4-core/src/PoolManager.sol";
 
 contract ConfigHarness is NetworkConfig {
@@ -61,6 +63,12 @@ contract ConfigDeployHarness is Deploy {
     ) internal view override returns (address) {
         if (keccak256(bytes(key)) == keccak256("poolManager")) return manager;
         return super._infrastructure(key);
+    }
+}
+
+contract ConfigMasonryDeployHarness is DeployMasonryComponent {
+    function _createXCodeHash() internal pure override returns (bytes32) {
+        return keccak256(type(ConfigTestFactory).runtimeCode);
     }
 }
 
@@ -177,6 +185,34 @@ contract NetworkConfigTest is Test {
         _deployAndAssert();
     }
 
+    function test_DeployMasonryComponentWithCustomAddress() public {
+        vm.etch(FACTORY, address(new ConfigTestFactory()).code);
+        vm.deal(vm.addr(1), 100 ether);
+        bytes memory initCode = abi.encodePacked(type(MasonryGenesisSchedule).creationCode, abi.encode(0, vm.addr(1)));
+        address expected = 0xC1e16e56c5f5075D3b0E35508f518CBFec035683;
+        string memory path = "./deployment-output/masonry-vanity-test.json";
+        vm.writeFile(
+            path,
+            string.concat(
+                '{"chainId":777,"factory":"',
+                vm.toString(FACTORY),
+                '","deployer":"',
+                vm.toString(vm.addr(1)),
+                '","releaseId":"0x9999999999999999999999999999999999999999999999999999999999999999"',
+                ',"addressNonces":{"masonryGenesisSchedule":399},"addresses":{"masonryGenesisSchedule":"',
+                vm.toString(expected),
+                '"},"initCodeHashes":{"masonryGenesisSchedule":"',
+                vm.toString(keccak256(initCode)),
+                '"}}'
+            )
+        );
+        vm.setEnv("MASONRY_CREATE3_CONFIG", path);
+        ConfigMasonryDeployHarness deploy = new ConfigMasonryDeployHarness();
+        assertEq(deploy.run("masonryGenesisSchedule", initCode), expected);
+        assertEq(MasonryGenesisSchedule(expected).scheduler(), vm.addr(1));
+        vm.removeFile(path);
+    }
+
     function _deployAndAssert() internal {
         // Real V4 pool initialization and hook binding; peripheral views are mocked.
         address realManager = address(new PoolManager(address(this)));
@@ -208,6 +244,9 @@ contract NetworkConfigTest is Test {
         string memory output = vm.readFile(file);
         assertEq(vm.parseJsonUint(output, ".chainId"), block.chainid);
         assertEq(vm.parseJsonAddress(output, ".hook"), address(deploy.hook()));
+        if (block.chainid == 888) {
+            assertEq(address(deploy.money()), 0xa4a44dD904abd86FD03B5398859CFCA0Ef68056d);
+        }
         vm.removeFile(file);
     }
 }

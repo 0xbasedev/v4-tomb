@@ -34,7 +34,7 @@ contract DeployMiniSwapRouter is NetworkConfig, Create3Config {
             payable(_deployCreate3(
                     plan,
                     "miniSwapRouter",
-                    0,
+                    _addressNonce(json, planPath, "miniSwapRouter"),
                     expected,
                     abi.encodePacked(type(MiniSwapRouter).creationCode, abi.encode(pm))
                 ))

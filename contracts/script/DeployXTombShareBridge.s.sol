@@ -56,7 +56,7 @@ contract DeployXTombShareBridge is Create3Config {
                 _deployCreate3(
                     plan,
                     "bridgedShare",
-                    0,
+                    _addressNonce(config, ".create3", "bridgedShare"),
                     local.asset,
                     abi.encodePacked(type(XTombBridgedShare).creationCode, abi.encode(local.bridge))
                 );
@@ -68,7 +68,7 @@ contract DeployXTombShareBridge is Create3Config {
             _deployCreate3(
                 plan,
                 "xshareBridge",
-                0,
+                _addressNonce(config, ".create3", "xshareBridge"),
                 local.bridge,
                 abi.encodePacked(
                     type(XTombShareBridge).creationCode,
@@ -90,7 +90,7 @@ contract DeployXTombShareBridge is Create3Config {
         Create3Plan memory plan,
         Network memory local,
         uint32 canonical
-    ) private pure returns (XTombShareBridge.PeerConfig[] memory peers) {
+    ) private view returns (XTombShareBridge.PeerConfig[] memory peers) {
         bool isHome = local.domain == canonical;
         peers = new XTombShareBridge.PeerConfig[](isHome ? 4 : 1);
         Predicted memory predicted = _predict(config, plan);
@@ -119,14 +119,14 @@ contract DeployXTombShareBridge is Create3Config {
     function _predict(
         string memory config,
         Create3Plan memory plan
-    ) private pure returns (Predicted memory) {
+    ) private view returns (Predicted memory) {
         string memory canonicalRole = vm.parseJsonString(config, ".canonicalTokenRole");
         bytes32 roleHash = keccak256(bytes(canonicalRole));
         if (roleHash != keccak256("estate") && roleHash != keccak256("masonryShare")) revert InvalidManifest();
         return Predicted(
-            _create3Address(plan, "xshareBridge", 0),
-            _create3Address(plan, canonicalRole, 0),
-            _create3Address(plan, "bridgedShare", 0)
+            _create3Address(plan, "xshareBridge", _addressNonce(config, ".create3", "xshareBridge")),
+            _create3Address(plan, canonicalRole, _addressNonce(config, ".create3", canonicalRole)),
+            _create3Address(plan, "bridgedShare", _addressNonce(config, ".create3", "bridgedShare"))
         );
     }
 

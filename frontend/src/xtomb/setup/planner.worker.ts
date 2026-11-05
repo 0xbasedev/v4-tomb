@@ -6,10 +6,11 @@ const planner = create3Planner(viem);
 self.addEventListener("message", ({ data }: MessageEvent<{ fields: Fields; requireFuture: boolean }>) => {
   try {
     const input = buildInputs(data.fields, data.requireFuture);
+    const onSearch = (role: string) => self.postMessage({ searching: role });
     const plan: LaunchPlan = {
       ...input,
-      masonry: planner.planMasonry(input.release),
-      bridge: input.withBridge ? planner.planBridge(bridgeInput, input.release) : null,
+      masonry: planner.planMasonry(input.release, onSearch),
+      bridge: input.withBridge ? planner.planBridge(bridgeInput, input.release, onSearch) : null,
     };
     self.postMessage({ plan });
   } catch (error) {

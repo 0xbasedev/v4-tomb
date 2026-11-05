@@ -25,6 +25,8 @@ contract DeployMasonryComponent is Create3Config {
         if (roleHash == keccak256("masonryTaxHook") || roleHash == keccak256("masonryShareTaxHook")) {
             nonce = vm.parseJsonUint(config, string.concat(".hookNonces.", role));
             if (uint160(expected) & 0x3fff != 0x35c8) revert InvalidCreate3Plan();
+        } else {
+            nonce = _addressNonce(config, "$", role);
         }
         vm.startBroadcast(plan.deployer);
         deployed = _deployCreate3(plan, role, nonce, expected, initCode);

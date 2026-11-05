@@ -34,9 +34,21 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('xTOMB funding exceeds authorized launch supply');
   await page.getByLabel('xTOMB authorized launch supply', { exact: true }).fill('12000');
+  await page.getByText('Custom contract addresses (optional)', { exact: true }).click();
+  const contract = page.getByRole('combobox', { name: /Contract to customize/ });
+  const suffix = page.getByLabel('Address suffix', { exact: true });
+  await page.getByLabel('Address prefix', { exact: true }).fill('0xA');
+  await suffix.fill('B');
+  await contract.selectOption('masonryTaxHook');
+  await suffix.fill('dead');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('suffix conflicts with Uniswap permissions');
+  await suffix.fill('5c8');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
   await page.getByLabel('Include xSHARE bridge in this release').check();
+  await page.getByText('Custom contract addresses (optional)', { exact: true }).click();
+  await suffix.fill('b');
   for (const name of ['Base', 'Robinhood Chain', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {
     await page.getByLabel(name + ' bridge owner', { exact: true }).fill(account);
     await page.getByLabel(name + ' message verifier', { exact: true }).fill(account);
@@ -54,6 +66,11 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   const masonry = await getDownload('Download address plan');
   const bridge = await getDownload('Download bridge plan');
   const launch = await getDownload('Download launch settings');
+  const inputs = await getDownload('Download release inputs');
+  expect(inputs.addressPatterns.masonryPeg).toEqual({ prefix: 'a', suffix: 'b' });
+  expect(masonry.addresses.masonryPeg).toMatch(/^0xa[0-9a-f]{38}b$/i);
+  expect(masonry.addressNonces.masonryPeg).toBeGreaterThanOrEqual(0);
+  expect(bridge.networks[0].bridge).toMatch(/b$/i);
   expect(launch.genesisStart).toBeGreaterThan(0);
   expect(launch.network.infrastructure.universalRouter.toLowerCase()).toBe('0x6ff5693b99212da76ad316178a184ab56d299b43');
   expect(masonry.chainId).toBe(8453);

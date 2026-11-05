@@ -48,6 +48,11 @@ export function parseNetworks(document) {
         || typeof create3.releaseId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(create3.releaseId)
         || BigInt(create3.releaseId) === 0n || !Number.isSafeInteger(create3.hookNonce) || create3.hookNonce < 0
         || !object(create3.addresses)) fail('invalid CREATE3 plan');
+      if (create3.addressNonces !== undefined && (!object(create3.addressNonces)
+        || Object.entries(create3.addressNonces).some(([role, nonce]) =>
+          role === 'hook' || !projectDeploymentKeys.includes(role) || !Number.isSafeInteger(nonce) || nonce < 0 || nonce >= 1_000_000))) {
+        fail('invalid CREATE3 address nonces');
+      }
       for (const key of projectDeploymentKeys) {
         if (!address(create3.addresses[key])) fail(`invalid create3.addresses.${key}`);
       }

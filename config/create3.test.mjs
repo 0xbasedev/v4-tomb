@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { coreRoles, create3Address, factory, planBridge, planCore, planMasonry } from '../scripts/create3.mjs';
 import { verifyCreate3Receipts } from '../scripts/protocol.mjs';
 import { parseNetworks } from './schema.mjs';
+import { validateAddressPatterns } from './create3-plan.mjs';
 
 const read = (file) => JSON.parse(readFileSync(new URL(file, import.meta.url)));
 const core = read('./examples/local.json');
@@ -66,6 +67,47 @@ test('modern Masonry plans its hook flags and independent oracle and token addre
   assert.deepEqual(plan.initCodeHashes, {});
 });
 
+test('custom addresses match both ends and replay the same salt across plans', () => {
+  const addressPatterns = {
+    masonryShare: { prefix: '0xA', suffix: 'B' },
+    masonryGenesisSchedule: { prefix: 'c', suffix: '3' },
+    masonryTaxHook: { suffix: '35c8' },
+    xshareBridge: { suffix: 'd' },
+    bridgedShare: { prefix: 'e' },
+  };
+  const customized = { ...release, canonicalDomain: 777, addressPatterns };
+  const plan = planMasonry(customized);
+  const bridgePlan = planBridge(bridge, { ...customized, canonicalDomain: 8453, canonicalTokenRole: 'masonryShare' });
+  assert.equal(plan.addresses.masonryGenesisSchedule, '0xC1e16e56c5f5075D3b0E35508f518CBFec035683');
+  assert.equal(plan.addressNonces.masonryGenesisSchedule, 399);
+  assert.match(plan.addresses.masonryShare, /^0xa[0-9a-f]{38}b$/i);
+  assert.equal(create3Address(plan, 'masonryShare').address, plan.addresses.masonryShare);
+  assert.equal(bridgePlan.networks[0].token, plan.addresses.masonryShare);
+  assert.equal(bridgePlan.create3.addressNonces.masonryShare, plan.addressNonces.masonryShare);
+  assert.ok(bridgePlan.networks.every(({ bridge }) => bridge.toLowerCase().endsWith('d')));
+  assert.ok(bridgePlan.networks.slice(1).every(({ token }) => token.toLowerCase().startsWith('0xe')));
+  assert.equal(BigInt(plan.addresses.masonryTaxHook) & 0xffffn, 0x35c8n);
+});
+
+test('validates patterns and rejects conflicting hook flags before searching', () => {
+  assert.deepEqual(validateAddressPatterns({ masonryPeg: { prefix: ' 0xAb ', suffix: 'CD' } }),
+    { masonryPeg: { prefix: 'ab', suffix: 'cd' } });
+  assert.throws(() => validateAddressPatterns({ masonryPeg: { prefix: 'xtomb' } }), /hexadecimal/);
+  assert.throws(() => validateAddressPatterns({ masonryPeg: { prefix: 'abc', suffix: 'de' } }), /up to four/);
+  assert.throws(() => validateAddressPatterns({ typo: { suffix: 'b' } }), /Invalid address pattern/);
+  assert.throws(() => planMasonry({ ...release, addressPatterns: { masonryTaxHook: { suffix: 'dead' } } }), /conflicts with Uniswap permissions/);
+  assert.throws(() => validateAddressPatterns({ hook: { prefix: 'ab' } }), /too many search bits/);
+});
+
+test('legacy core custom addresses match the Solidity deployment fixture', () => {
+  const plan = planCore(core, {
+    ...base, addressPatterns: { money: { prefix: 'a', suffix: 'd' }, miniSwapRouter: { suffix: 'b' }, timelock: { prefix: 'c' } },
+  }, 0).networks[0].create3;
+  assert.deepEqual(plan, read('../contracts/test/fixtures/networks.json').networks[1].create3);
+  assert.match(plan.addresses.money, /^0xa[0-9a-f]{38}d$/i);
+  assert.equal(plan.addresses.estate, corePlan.addresses.estate);
+});
+
 test('schema keeps planned addresses separate and rejects an inconsistent plan', () => {
   const planned = planCore(core, base, 0);
   assert.equal(parseNetworks(planned)[0].deployment, null);
@@ -78,8 +120,9 @@ const proxyCreated = '0x2feea65dd4e9f9cbd86b74b7734210c59a1b2981b5b137bd0ee3e208
 const topic = (address) => '0x' + address.slice(2).padStart(64, '0');
 
 test('receipt verification requires the planned factory, caller, proxy and contract events', async () => {
+  const plan = read('../contracts/test/fixtures/networks.json').networks[1].create3;
   const receipts = coreRoles.map((role) => {
-    const predicted = create3Address(corePlan, role, role === 'hook' ? corePlan.hookNonce : 0);
+    const predicted = create3Address(plan, role, role === 'hook' ? plan.hookNonce : undefined);
     return {
       to: factory, from: base.deployer, contractAddress: null,
       logs: [
@@ -88,9 +131,11 @@ test('receipt verification requires the planned factory, caller, proxy and contr
       ],
     };
   });
-  await verifyCreate3Receipts(corePlan, corePlan.addresses, receipts);
+  await verifyCreate3Receipts(plan, plan.addresses, receipts);
+  const wrongNonce = { ...plan, addressNonces: { ...plan.addressNonces, money: plan.addressNonces.money + 1 } };
+  await assert.rejects(verifyCreate3Receipts(wrongNonce, plan.addresses, receipts), /does not match the CREATE3 prediction/);
   const wrongSalt = structuredClone(receipts);
   wrongSalt[0].logs[0].topics[2] = '0x' + '00'.repeat(32);
-  await assert.rejects(verifyCreate3Receipts(corePlan, corePlan.addresses, wrongSalt), /creation receipt/);
-  await assert.rejects(verifyCreate3Receipts(corePlan, corePlan.addresses, receipts.map((receipt) => ({ ...receipt, from: account }))), /creation receipt/);
+  await assert.rejects(verifyCreate3Receipts(plan, plan.addresses, wrongSalt), /creation receipt/);
+  await assert.rejects(verifyCreate3Receipts(plan, plan.addresses, receipts.map((receipt) => ({ ...receipt, from: account }))), /creation receipt/);
 });

@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { bytesToHex } from "viem";
-import { masonryRoles } from "../../../../config/create3-plan.mjs";
+import { bridgeRoles, masonryRoles } from "../../../../config/create3-plan.mjs";
 import { durationDays, lpDay, percent, policy } from "../policy";
 import { TokenIcon } from "../TokenIcon";
 import {
-  bridgeNetworks, chainInfrastructure, download, importDraft, infrastructureFields, launchFrom, loadDraft,
+  addressPatternsFrom, bridgeNetworks, chainInfrastructure, download, importDraft, infrastructureFields, launchFrom, loadDraft,
   makeDraft, networkFrom, saveDraft, supplyFields, identityFields, type Fields, type LaunchPlan,
 } from "./configuration";
 import { verifyLaunch, type Verification } from "./verifyLaunch";
@@ -24,6 +24,7 @@ const roleNames: Record<string, string> = {
   masonryCompoundGate: "Compounding permissions", masonryCriticalDefense: "Peg defense controls",
   masonryVestingTeam: "Team vesting", masonryVestingDeveloper: "Developer vesting",
   masonryVestingTreasury: "Treasury vesting", masonryVestingArbitrage: "Arbitrage vesting",
+  xshareBridge: "xSHARE bridge", bridgedShare: "Wrapped xSHARE",
 };
 const roleName = (role: string) => roleNames[role] ?? (role.startsWith("masonry")
   ? role.slice("masonry".length).replace(/([a-z])([A-Z])/g, "$1 $2") : role);
@@ -65,6 +66,7 @@ function usePlanner() {
   const [plan, setPlan] = useState<LaunchPlan>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState("");
   useEffect(() => () => worker.current?.terminate(), []);
   function clear() {
     worker.current?.terminate();
@@ -72,6 +74,7 @@ function usePlanner() {
     setPlan(undefined);
     setError("");
     setBusy(false);
+    setSearching("");
   }
   function generate(fields: Fields, requireFuture = true) {
     clear();
@@ -86,7 +89,12 @@ function usePlanner() {
         setBusy(false);
         return true;
       };
-      active.onmessage = ({ data }: MessageEvent<{ plan?: LaunchPlan; error?: string }>) => {
+      active.onmessage = ({ data }: MessageEvent<{ plan?: LaunchPlan; error?: string; searching?: string }>) => {
+        if (worker.current !== active) return;
+        if (data.searching) {
+          setSearching(data.searching);
+          return;
+        }
         if (!complete()) return;
         setPlan(data.plan);
         setError(data.error ?? "");
@@ -98,7 +106,7 @@ function usePlanner() {
       setError("Address calculation is unavailable in this browser.");
     }
   }
-  return { plan, error, busy, clear, generate };
+  return { plan, error, busy, searching, clear, generate };
 }
 
 function FieldsGroup({ fields, update, entries, numeric = false }: {
@@ -119,6 +127,29 @@ function FieldsGroup({ fields, update, entries, numeric = false }: {
   })}</div>;
 }
 
+function AddressPatternFields({ fields, update, roles }: {
+  fields: Fields; update: (key: string, value: string) => void; roles: readonly string[];
+}) {
+  const [role, setRole] = useState(roles[0]);
+  const hasPattern = (candidate: string) => !!(fields["prefix-" + candidate].trim() || fields["suffix-" + candidate].trim());
+  const hook = role === "masonryTaxHook" || role === "masonryShareTaxHook";
+  return <details className="ops-detail">
+    <summary>Custom contract addresses (optional)</summary>
+    <p>Give a contract address a recognizable start, end, or both. For example, enter <code>dead</code> as the suffix to look for an address ending in <code>…dead</code>. Leave both fields blank to use the standard address.</p>
+    <p>Use 0–9 or A–F. Most contracts allow up to four characters total. Longer searches can take more time. Set these patterns before approving contract builds because constructor inputs may refer to the predicted addresses.</p>
+    <label className="ops-field">Contract to customize
+      <select value={role} onChange={(event) => setRole(event.target.value)}>
+        {roles.map((candidate) => <option key={candidate} value={candidate}>{roleName(candidate)}{hasPattern(candidate) ? " · custom" : ""}</option>)}
+      </select>
+    </label>
+    {hook && <p className="ops-help">Uniswap hook permissions already fix part of the suffix. Try a one-character prefix or a suffix such as <code>35c8</code>. When combining both, use a suffix of up to three characters with the prefix.</p>}
+    <FieldsGroup fields={fields} update={update} entries={[
+      ["prefix-" + role, "Address prefix", "The characters immediately after 0x. For example, ab looks for 0xab…"],
+      ["suffix-" + role, "Address suffix", "The characters at the very end. For example, 01 looks for …01."],
+    ]} />
+  </details>;
+}
+
 function PlanDetails({ plan }: { plan: LaunchPlan }) {
   return <>
     <dl className="ops-facts">
@@ -136,6 +167,10 @@ function PlanDetails({ plan }: { plan: LaunchPlan }) {
       <dl className="address-list">{plan.bridge.networks.map((network) => <div key={network.id}>
         <dt>{network.name}</dt><dd><code>{network.bridge}</code><small>Token</small><code>{network.token}</code></dd>
       </div>)}</dl>
+    </details>}
+    {!!plan.release.addressPatterns && <details className="ops-detail" open><summary>Custom address patterns</summary>
+      <dl className="address-list">{Object.entries(plan.release.addressPatterns).map(([role, { prefix, suffix }]) =>
+        <div key={role}><dt>{roleName(role)}</dt><dd><code>0x{prefix}…{suffix}</code></dd></div>)}</dl>
     </details>}
     <details className="ops-detail" open><summary>Which files should I download?</summary>
       <ul className="ops-explainer">
@@ -182,7 +217,9 @@ export function WizardPage() {
       if (step === 1) {
         if (chooseStart && !fields.genesisStart) throw new Error("Choose a Genesis date and time, or select Set later in Admin.");
         launchFrom(fields);
+        addressPatternsFrom(fields, masonryRoles);
       }
+      if (step === 2 && fields.bridge === "on") addressPatternsFrom(fields, bridgeRoles);
       setError("");
       setStep(step + 1);
       if (step === 2) planner.generate(fields);
@@ -258,6 +295,7 @@ export function WizardPage() {
               ]} />
             </details>
             <details className="ops-detail"><summary>Fixed Genesis rules</summary><p>Genesis runs for {durationDays} days and requires a pass. The official xTOMB/USDC liquidity pool opens on Day {lpDay}. Each xTOMB sell during Genesis pays one tax from {percent(policy.genesisLevelSellMinimumBps)} to {percent(policy.fireTaxHardCapBps)}, burned in the same transaction. Buys and wallet transfers pay zero Fire Tax.</p></details>
+            <AddressPatternFields fields={fields} update={update} roles={masonryRoles} />
             <details className="ops-detail"><summary>Advanced · Approved contract builds</summary>
               <p>A constructor hash is the fingerprint of a compiled contract and its setup inputs. Your developer provides it after reviewing the build. Leave these blank while planning addresses. Deployment requires the approved fingerprint for each contract.</p>
               <FieldsGroup fields={fields} update={update} entries={masonryRoles.map((role) => ["hash-" + role, roleName(role), "Paste the developer-provided fingerprint for this contract. It starts with 0x and contains 64 hexadecimal characters after that."])} />
@@ -268,6 +306,7 @@ export function WizardPage() {
             <label className="ops-check"><input type="checkbox" checked={fields.bridge === "on"} disabled={!selectedNetwork}
               onChange={(event) => update("bridge", event.target.checked ? "on" : "off")} />Include xSHARE bridge in this release</label>
             {!selectedNetwork && <p className="ops-meta">Bridge planning is available for the five supported home networks.</p>}
+            {fields.bridge === "on" && <AddressPatternFields fields={fields} update={update} roles={bridgeRoles} />}
             {fields.bridge === "on" && bridgeNetworks.map(({ id, name, registryAvailability }) => <details className="ops-detail" key={id} open>
               <summary>{name}{String(id) === fields.network ? " · Home" : ""}</summary>
               {registryAvailability?.status === "disabled" && <p className="ops-meta">Requires a verified Sonic validator and relayer setup before activation.</p>}
@@ -280,7 +319,10 @@ export function WizardPage() {
           </>}
           {step === 3 && <>
             <p>Check your settings and download the files for whoever is deploying the contracts. After deployment, open Admin to check the on-chain addresses and set the Genesis date if you deferred it.</p>
-            {planner.busy && <p role="status">Calculating deterministic addresses…</p>}
+            {planner.busy && <>
+              <p role="status">{planner.searching ? `Searching for the ${roleName(planner.searching)} address…` : "Calculating deterministic addresses…"}</p>
+              <button className="button" type="button" onClick={planner.clear}>Cancel address search</button>
+            </>}
             {planner.plan && <PlanDetails plan={planner.plan} />}
             {planner.error && <p className="callout" role="alert">{planner.error}</p>}
             {!planner.plan && !planner.busy && <button className="button" type="button" onClick={() => planner.generate(fields)}>Calculate addresses</button>}

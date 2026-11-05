@@ -46,6 +46,17 @@ abstract contract Create3Config is Script {
         return CREATEX_CODE_HASH;
     }
 
+    function _addressNonce(
+        string memory json,
+        string memory planPath,
+        string memory role
+    ) internal view returns (uint256 nonce) {
+        string memory key = string.concat(planPath, ".addressNonces.", role);
+        if (!vm.keyExistsJson(json, key)) return 0;
+        nonce = vm.parseJsonUint(json, key);
+        if (nonce >= 1_000_000) revert InvalidCreate3Plan();
+    }
+
     function _create3Salt(
         Create3Plan memory plan,
         string memory role,
