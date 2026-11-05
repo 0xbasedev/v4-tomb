@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {ShareRewardPool} from "../../src/distribution/ShareRewardPool.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -40,7 +40,7 @@ contract ShareRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new ShareToken(poolStart, communityFund, devFund, owner);
+        estate = new ShareToken(ShareTokenProfiles.legacy(poolStart, communityFund, devFund, owner), owner);
 
         vm.prank(owner);
         pool = new ShareRewardPool(address(estate), poolStart, owner);

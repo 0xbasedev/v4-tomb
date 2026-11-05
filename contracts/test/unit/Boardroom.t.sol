@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
@@ -79,7 +79,7 @@ contract BoardroomTest is BaseTest {
         vm.prank(owner);
         money = new PegToken(owner);
         vm.prank(owner);
-        estate = new ShareToken(block.timestamp, communityFund, devFund, owner);
+        estate = new ShareToken(ShareTokenProfiles.legacy(block.timestamp, communityFund, devFund, owner), owner);
 
         treasuryMock = new MockTreasury();
         treasuryMock.setStartTime(block.timestamp);

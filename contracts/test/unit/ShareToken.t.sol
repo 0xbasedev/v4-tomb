@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -42,7 +42,7 @@ contract ShareTokenTest is BaseTest {
         vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new ShareToken(vestingStart, communityFund, devFund, owner);
+        estate = new ShareToken(ShareTokenProfiles.legacy(vestingStart, communityFund, devFund, owner), owner);
 
         // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -95,13 +95,13 @@ contract ShareTokenTest is BaseTest {
     function test_Constructor_RejectsZeroCommunityFund() public {
         vm.prank(owner);
         vm.expectRevert(ShareToken.ZeroAddress.selector);
-        new ShareToken(vestingStart, address(0), devFund, address(this));
+        new ShareToken(ShareTokenProfiles.legacy(vestingStart, address(0), devFund, address(this)), address(this));
     }
 
     function test_Constructor_RejectsZeroDevFund() public {
         vm.prank(owner);
         vm.expectRevert(ShareToken.ZeroAddress.selector);
-        new ShareToken(vestingStart, communityFund, address(0), address(this));
+        new ShareToken(ShareTokenProfiles.legacy(vestingStart, communityFund, address(0), address(this)), address(this));
     }
 
     // ---------------------------------------------------------------------

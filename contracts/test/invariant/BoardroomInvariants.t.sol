@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
@@ -154,7 +154,7 @@ contract BoardroomInvariants is StdInvariant, Test {
 
         // 1. Deploy tokens (deployer = trustees of each).
         money = new PegToken(address(this));
-        estate = new ShareToken(block.timestamp + 1 hours, communityFund, devFund, address(this));
+        estate = new ShareToken(ShareTokenProfiles.legacy(block.timestamp + 1 hours, communityFund, devFund, address(this)), address(this));
 
         // 2. Mock treasury.
         treasury = new MockTreasury();

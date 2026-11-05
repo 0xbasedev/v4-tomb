@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -87,7 +87,7 @@ contract BaseForkHookTest is BaseTest {
 
         // 1. Deploy tokens.
         money = new PegToken(address(this));
-        estate = new ShareToken(startTime, communityFund, devFund, address(this));
+        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
         trustnote = new TrustNote(address(this));
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right

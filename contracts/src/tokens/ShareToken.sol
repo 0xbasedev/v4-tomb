@@ -11,40 +11,64 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title ShareToken
- * @notice Share token for the inherited WETH-based protocol, with the historical ESTATE metadata.
- *         Holders stake in the Boardroom to earn seigniorage during expansion epochs.
- * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
+ * @notice The share token. Public name **xSHARE** for the Masonry launch; the inherited
+ *         WETH-era protocol deploys the same source with its historical ESTATE profile.
+ * @dev    Port of Tomb Finance's BSHARE (BShare.sol in bombmoney/bomb-contracts) with the
+ *         supply schedule moved from constants into constructor configuration, so one source
+ *         serves both launches:
  *
- *         Supply (Tomb-exact):
- *           - Total max: 70,000 ESTATE
- *           - 59,500 to farming pool (minted one-shot via `distributeReward`)
- *           -  5,500 to community fund (linear-vested over 365 days, claimable via `claimRewards`)
- *           -  5,000 to dev fund (linear-vested over 365 days, claimable via `claimRewards`)
- *           - 1 ESTATE minted to the initial owner in the constructor for initial pool setup.
+ *           - `maxSupply` is a hard cap on every unit ever minted (burns don't free room).
+ *           - `initial` allocations are minted in the constructor. The Masonry launch mints its
+ *             sale escrow, deployer, owner/team/developer, Treasury, arbitrage and vesting
+ *             contract amounts here, reconciled to the cap by the launch validator.
+ *           - `farmingAllocation` is minted once, later, by trustees via `distributeReward`
+ *             (Masonry: 25,641 to the Farm when it exists; legacy: 59,500).
+ *           - `communityFundAllocation` / `devFundAllocation` vest linearly over
+ *             `vestingDuration` from `vestingStart` and are minted by `claimRewards`
+ *             (legacy only; the Masonry profile sets both to zero and vests through
+ *             MasonryLinearVesting contracts that receive initial allocations instead).
  *
- *         Non-logic-changing modernizations from Tomb's BShare:
- *           - 0.6.12 → 0.8.26; SafeMath dropped.
- *           - OZ v4 → OZ v5; ERC20Permit added (additive).
- *           - Single-step Ownable → Ownable2Step via [[Trustees]].
- *           - `require` strings → custom errors.
+ *         Legacy ESTATE profile (Tomb-exact, see `ShareTokenProfiles.legacy`): cap 70,001;
+ *         1 to the initial trustees; 59,500 farming; 5,500 community + 5,000 dev over 365 days.
  *
- *         Quirk preserved from Tomb: `setTreasuryFund` and `setDevFund` are both gated to the
- *         `devFund` address, not to owner or trustees. This is Tomb's chosen pattern.
+ *         Quirk preserved from Tomb: `setTreasuryFund` and `setDevFund` are gated to `devFund`.
  */
 contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     using SafeERC20 for IERC20;
 
-    /// @notice 59,500 ESTATE — farming pool allocation, minted one-shot via `distributeReward`.
-    uint256 public constant FARMING_POOL_REWARD_ALLOCATION = 59_500 ether;
+    struct Allocation {
+        address to;
+        uint256 amount;
+    }
 
-    /// @notice 5,500 ESTATE — community fund, linear-vested over `VESTING_DURATION`.
-    uint256 public constant COMMUNITY_FUND_POOL_ALLOCATION = 5500 ether;
+    struct Config {
+        string name;
+        string symbol;
+        uint256 maxSupply;
+        Allocation[] initial;
+        uint256 farmingAllocation;
+        uint256 communityFundAllocation;
+        uint256 devFundAllocation;
+        uint256 vestingStart;
+        uint256 vestingDuration;
+        address communityFund;
+        address devFund;
+    }
 
-    /// @notice 5,000 ESTATE — dev fund, linear-vested over `VESTING_DURATION`.
-    uint256 public constant DEV_FUND_POOL_ALLOCATION = 5000 ether;
+    /// @notice Hard cap on cumulative minting.
+    uint256 public immutable maxSupply;
 
-    /// @notice 365 days — duration over which community and dev fund vest linearly.
-    uint256 public constant VESTING_DURATION = 365 days;
+    /// @notice Farming allocation, minted one-shot via `distributeReward`.
+    uint256 public immutable FARMING_POOL_REWARD_ALLOCATION;
+
+    /// @notice Community fund allocation, linear-vested over `VESTING_DURATION`.
+    uint256 public immutable COMMUNITY_FUND_POOL_ALLOCATION;
+
+    /// @notice Dev fund allocation, linear-vested over `VESTING_DURATION`.
+    uint256 public immutable DEV_FUND_POOL_ALLOCATION;
+
+    /// @notice Duration over which the community and dev funds vest linearly.
+    uint256 public immutable VESTING_DURATION;
 
     /// @notice Timestamp at which vesting begins.
     uint256 public immutable startTime;
@@ -57,6 +81,12 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
 
     /// @notice Per-second emission rate to the dev fund (constant).
     uint256 public immutable devFundRewardRate;
+
+    /// @notice Cumulative units minted (never decreases; burns are tracked separately).
+    uint256 public totalMinted;
+
+    /// @notice Cumulative units burned.
+    uint256 public totalBurned;
 
     /// @notice Address receiving the community fund vesting drip.
     address public communityFund;
@@ -81,30 +111,63 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     error AlreadyDistributed();
     error ZeroAddress();
     error NotDevFund();
+    error CapExceeded();
+    error InvalidConfiguration();
 
     constructor(
-        uint256 _startTime,
-        address _communityFund,
-        address _devFund,
+        Config memory config,
         address initialTrustees
-    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Trustees(initialTrustees) {
-        if (_communityFund == address(0)) revert ZeroAddress();
-        if (_devFund == address(0)) revert ZeroAddress();
+    ) ERC20(config.name, config.symbol) ERC20Permit(config.name) Trustees(initialTrustees) {
+        if (config.maxSupply == 0) revert InvalidConfiguration();
+        if (config.communityFundAllocation != 0 && config.communityFund == address(0)) revert ZeroAddress();
+        if (config.devFundAllocation != 0 && config.devFund == address(0)) revert ZeroAddress();
+        if ((config.communityFundAllocation | config.devFundAllocation) != 0 && config.vestingDuration == 0) {
+            revert InvalidConfiguration();
+        }
 
-        // Tomb-faithful: mint 1 unit to deployer for initial pool setup / sanity check.
-        _mint(initialTrustees, 1 ether);
+        uint256 initialTotal;
+        for (uint256 i; i < config.initial.length; ++i) {
+            if (config.initial[i].to == address(0)) revert ZeroAddress();
+            initialTotal += config.initial[i].amount;
+        }
+        uint256 scheduled =
+            initialTotal + config.farmingAllocation + config.communityFundAllocation + config.devFundAllocation;
+        if (scheduled > config.maxSupply) revert CapExceeded();
 
-        startTime = _startTime;
-        endTime = _startTime + VESTING_DURATION;
+        maxSupply = config.maxSupply;
+        FARMING_POOL_REWARD_ALLOCATION = config.farmingAllocation;
+        COMMUNITY_FUND_POOL_ALLOCATION = config.communityFundAllocation;
+        DEV_FUND_POOL_ALLOCATION = config.devFundAllocation;
+        VESTING_DURATION = config.vestingDuration;
+        startTime = config.vestingStart;
+        endTime = config.vestingStart + config.vestingDuration;
+        communityFundLastClaimed = config.vestingStart;
+        devFundLastClaimed = config.vestingStart;
+        communityFundRewardRate = config.vestingDuration == 0 ? 0 : config.communityFundAllocation / config.vestingDuration;
+        devFundRewardRate = config.vestingDuration == 0 ? 0 : config.devFundAllocation / config.vestingDuration;
+        communityFund = config.communityFund;
+        devFund = config.devFund;
 
-        communityFundLastClaimed = _startTime;
-        devFundLastClaimed = _startTime;
+        for (uint256 i; i < config.initial.length; ++i) {
+            if (config.initial[i].amount != 0) _mint(config.initial[i].to, config.initial[i].amount);
+        }
+    }
 
-        communityFundRewardRate = COMMUNITY_FUND_POOL_ALLOCATION / VESTING_DURATION;
-        devFundRewardRate = DEV_FUND_POOL_ALLOCATION / VESTING_DURATION;
+    // ---------------------------------------------------------------------
+    // Supply accounting
+    // ---------------------------------------------------------------------
 
-        communityFund = _communityFund;
-        devFund = _devFund;
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal override {
+        if (from == address(0)) {
+            totalMinted += value;
+            if (totalMinted > maxSupply) revert CapExceeded();
+        }
+        if (to == address(0)) totalBurned += value;
+        super._update(from, to, value);
     }
 
     // ---------------------------------------------------------------------
@@ -137,7 +200,7 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     // Linear vesting math
     // ---------------------------------------------------------------------
 
-    /// @notice Amount of $ESTATE currently claimable by `communityFund`.
+    /// @notice Amount currently claimable by `communityFund`.
     function unclaimedTreasuryFund() public view returns (uint256) {
         uint256 _now = block.timestamp;
         if (_now > endTime) _now = endTime;
@@ -145,7 +208,7 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
         return (_now - communityFundLastClaimed) * communityFundRewardRate;
     }
 
-    /// @notice Amount of $ESTATE currently claimable by `devFund`.
+    /// @notice Amount currently claimable by `devFund`.
     function unclaimedDevFund() public view returns (uint256) {
         uint256 _now = block.timestamp;
         if (_now > endTime) _now = endTime;
@@ -172,7 +235,7 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     // One-shot farming pool distribution
     // ---------------------------------------------------------------------
 
-    /// @notice Mint the farming pool allocation in a single call. Callable at most once by trustees.
+    /// @notice Mint the farming allocation in a single call. Callable at most once by trustees.
     function distributeReward(
         address farmingIncentiveFund
     ) external onlyTrustees {
@@ -187,7 +250,7 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     // Burn (Tomb-faithful surface)
     // ---------------------------------------------------------------------
 
-    /// @notice Burn $ESTATE from the caller's own balance.
+    /// @notice Burn from the caller's own balance.
     /// @dev Override preserves Tomb's explicit public restatement of the inherited symbol.
     function burn(
         uint256 amount
@@ -207,5 +270,29 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     ) external onlyTrustees {
         token.safeTransfer(to, amount);
         emit UnsupportedTokenRecovered(token, amount, to);
+    }
+}
+
+/// @notice Ready-made ShareToken configurations.
+library ShareTokenProfiles {
+    /// @notice The inherited protocol's Tomb-exact ESTATE schedule.
+    function legacy(
+        uint256 vestingStart,
+        address communityFund,
+        address devFund,
+        address initialTrustees
+    ) internal pure returns (ShareToken.Config memory c) {
+        c.name = "Estate";
+        c.symbol = "ESTATE";
+        c.maxSupply = 70_001 ether;
+        c.initial = new ShareToken.Allocation[](1);
+        c.initial[0] = ShareToken.Allocation(initialTrustees, 1 ether);
+        c.farmingAllocation = 59_500 ether;
+        c.communityFundAllocation = 5500 ether;
+        c.devFundAllocation = 5000 ether;
+        c.vestingStart = vestingStart;
+        c.vestingDuration = 365 days;
+        c.communityFund = communityFund;
+        c.devFund = devFund;
     }
 }

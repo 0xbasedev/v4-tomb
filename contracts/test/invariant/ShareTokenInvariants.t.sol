@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 
 /**
  * @title ShareTokenHandler
@@ -132,7 +132,7 @@ contract ShareTokenInvariants is StdInvariant, Test {
         communityFund = makeAddr("communityFund");
         devFund = makeAddr("devFund");
 
-        estate = new ShareToken(startTime, communityFund, devFund, address(this));
+        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
         handler = new ShareTokenHandler(estate, farmingPool, communityFund, devFund);
 
         // Hand trustees to the handler so it can call distributeReward.

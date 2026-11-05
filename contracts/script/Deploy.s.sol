@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {console2} from "forge-std/Script.sol";
 
 import {PegToken} from "../src/tokens/PegToken.sol";
-import {ShareToken} from "../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../src/tokens/ShareToken.sol";
 import {TrustNote} from "../src/tokens/TrustNote.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Boardroom} from "../src/core/Boardroom.sol";
@@ -216,7 +216,7 @@ contract Deploy is NetworkConfig, Create3Config {
                 "estate",
                 abi.encodePacked(
                     type(ShareToken).creationCode,
-                    abi.encode(g.vestingStart, g.communityFund, g.devFund, _plan.deployer)
+                    abi.encode(ShareTokenProfiles.legacy(g.vestingStart, g.communityFund, g.devFund, _plan.deployer), _plan.deployer)
                 )
             )
         );
