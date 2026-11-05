@@ -1,5 +1,8 @@
 # Masonry — cautious v4 backend merge (work in progress)
 
+> **2026-11-04 reconciliation update:** This plan is an *early porting baseline*, not the current feature-status report. The v4 LEVEL/SQUARE tax hooks, native oracle, guarded routing, LP vault, Genesis staking/settlement, and fee-collector components have since been implemented on `merge`. Their remaining problems concern production deployment wiring, old WETH/bond Treasury replacement, downstream LP integration, target-chain testing and security review. Refer to **[MASONRY_MERGE_RECONCILIATION_2026-11-04.md](MASONRY_MERGE_RECONCILIATION_2026-11-04.md)** and **[MASONRY_V4_IMPLEMENTATION_STATUS.md](MASONRY_V4_IMPLEMENTATION_STATUS.md)** for current status. Do not implement duplicate components based solely on this historical list.
+
+
 > **Not production ready.** This branch is a staging area for selective backend
 > ports into Uniswap v4. It is intentionally based on
 > `feat/chain-agnostic-config`, not a wholesale merge of legacy branches.
@@ -79,7 +82,7 @@ Current implementation here:
   sustained pool liquidity, with bounded owner governance and launch
   anti-sniper restrictions.
 
-## Mandatory port and integration gates (NOT complete)
+## Historical porting checklist (some components now implemented; verify current reconciliation)
 
 1. Create `MasonryPegDefenseHook` for each official LEVEL/USDC and SQUARE/USDC
    v4 pool; validate mined hook flags, token ordering, 6-decimal USDC
