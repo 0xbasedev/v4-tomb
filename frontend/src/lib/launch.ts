@@ -139,7 +139,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisNftPriceUsdc,
     keeper: false,
     earlyStandardStaking: false,
-    perks: ["Stake, claim and withdraw by hand", "Compound into the LP pool by hand from Day 2"],
+    perks: ["Stake, claim and withdraw by hand", "Compound into the LP pool by hand from Day 2", "3% fee on standard-pool deposits"],
   },
   pro: {
     id: "pro",
@@ -148,7 +148,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisProNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: false,
-    perks: ["Everything in Genesis", `Opt in to keeper compounding (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
+    perks: ["Everything in Genesis", "2% fee on standard-pool deposits instead of 3%", `Opt in to keeper compounding (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
   },
   ultra: {
     id: "ultra",
@@ -157,7 +157,11 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisUltraNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: true,
-    perks: ["Everything in Pro", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
+    perks: ["Everything in Pro", "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
+
+/** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the Treasury. */
+export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 0 };
+export const depositFeeBps = (tier: PassTier | null | undefined): number => (tier ? DEPOSIT_FEE_BPS[tier] : DEPOSIT_FEE_BPS.genesis);

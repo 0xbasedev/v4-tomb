@@ -3,7 +3,7 @@ import type { Address } from "viem";
 
 import { sellTax, type TaxedAsset } from "@/lib/fireTax";
 import { compoundSplit, cumulativeEmitted, genesisClock, walletClaim, type Tranche } from "@/lib/genesis";
-import { DEPLOYMENTS, GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
+import { DEPLOYMENTS, depositFeeBps, GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
 import { stepDefense } from "@/lib/market";
 import type { TokenId } from "@/lib/tokens";
 
@@ -272,7 +272,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
       push(`Upgrade ${PASSES[from].name} → ${PASSES[to].name} · ${diff} USDC`);
     },
     deposit: (pool, amount) => {
-      const net = pool === 1 ? amount * (1 - GENESIS_POLICY.lpBurnFeeBps / 10_000) : amount;
+      const net = pool === 1 ? amount * (1 - GENESIS_POLICY.lpBurnFeeBps / 10_000) : amount * (1 - depositFeeBps(pass) / 10_000);
       setPositions((p) => {
         const pos = p[pool];
         const share = pos.shares / SIM_TOTALS[pool];
@@ -280,7 +280,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
         return { ...p, [pool]: { shares: pos.shares + net, paidMark: marks[pool], stored } };
       });
       setBalances((b) => ({ ...b, [pool === 0 ? "USDC" : "xTOMB-USDC"]: b[pool === 0 ? "USDC" : "xTOMB-USDC"] - amount }));
-      push(pool === 0 ? `Stake ${amount.toLocaleString()} USDC` : `Stake ${amount.toFixed(4)} LP · ${(amount - net).toFixed(4)} LP burn fee`);
+      push(pool === 0 ? `Stake ${amount.toLocaleString()} USDC · ${(amount - net).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC fee to Treasury` : `Stake ${amount.toFixed(4)} LP · ${(amount - net).toFixed(4)} LP burn fee`);
     },
     withdraw: (pool, amount) => {
       setPositions((p) => {

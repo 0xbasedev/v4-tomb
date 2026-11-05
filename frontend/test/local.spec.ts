@@ -155,11 +155,11 @@ test("buy a Pro pass, then stake USDC once Genesis is live", async ({ page }) =>
   await pool0.getByRole("button", { name: "Stake" }).click();
   await expect(page.getByText(/Stake 100 in the standard pool · (Confirmed|Not sent)/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("Stake 100 in the standard pool · Confirmed")).toBeVisible();
-  await expect(pool0).toContainText(/Your stake[\s\S]*100/, { timeout: 20_000 });
+  await expect(pool0).toContainText(/Your stake[\s\S]*98/, { timeout: 20_000 });
 
   // Principal comes back out in the asset's own decimals (USDC: 6).
   await pool0.getByLabel("Amount to stake in pool 0").fill("40");
   await pool0.getByRole("button", { name: "Withdraw" }).click();
   await expect(page.getByText("Withdraw from pool 0 · Confirmed")).toBeVisible({ timeout: 20_000 });
-  await expect(pool0).toContainText(/Your stake[\s\S]*60/, { timeout: 20_000 });
+  await expect(pool0).toContainText(/Your stake[\s\S]*58/, { timeout: 20_000 });
 });

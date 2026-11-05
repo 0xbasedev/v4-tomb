@@ -74,7 +74,7 @@ cd ../frontend && pnpm test:local
 ## Not done — next steps, in order
 
 0. **Read `docs/CANONICAL_SPEC.md` first. New owner decisions not yet built** (build contracts, tests and copy together; never advertise a perk the contract doesn't enforce):
-   - Per-tier Genesis deposit fees on pool-0 stakes: Genesis 3%, Pro 2%, Ultra 0%, to Treasury as USDC.
+   - ~~Per-tier Genesis deposit fees on pool-0 stakes~~ **BUILT** (`MasonryGenesisStaking.deposit`): Genesis 3%, Pro 2%, Ultra 0%, USDC to `pass.treasury()`; only net shares earn; unit tests, live test (Pro stake 100 -> 98), PoolPanel preview, Docs and PassPicker copy. Note the V2 `Lodge-Capital/Masonry` branch `codex/genesis-passes` charges Ultra 1%; the owner chose 0%. That branch also has a 25%/50% (Ultra) immediate-release share and Ultra-only early-access pools, not ported.
    - LP-pool fee: flat 0.5% to Treasury as POL, **replacing** the xTOMB burn (`MasonryGenesisLPBurnFee` rework).
    - Keeper compounding cadence per tier: Pro every 6h, Ultra every 3h. Open: whether manual compounding stays 3h for everyone.
    - xSHARE vesting split (1,000 / 1,000 / 2,940 / 1,901 + 100 outright to the dev address) into the template and validator.

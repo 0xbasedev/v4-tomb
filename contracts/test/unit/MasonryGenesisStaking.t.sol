@@ -209,8 +209,8 @@ contract MasonryGenesisStakingTest is Test {
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
         (uint256 shares,,) = staking.positions(1, PRO);
-        assertEq(shares, 995e18);
-        assertEq(fee.totalFeeSharesCollected(), 5e18);
+        assertApproxEqAbs(shares, 995e18, 1e3); // Pro stakes 98 net of the 2% deposit fee; 1-wei acc rounding
+        assertApproxEqAbs(fee.totalFeeSharesCollected(), 5e18, 10);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
@@ -220,7 +220,7 @@ contract MasonryGenesisStakingTest is Test {
         vm.warp(schedule.lpOpens() + 3 hours);
         vm.prank(KEEPER);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
-        assertEq(fee.totalFeeSharesCollected(), 5.15625e18);
+        assertApproxEqAbs(fee.totalFeeSharesCollected(), 5.15625e18, 10);
     }
 
     function testUltraAndGenesisEarnEqualRewardsOnEqualStake() public {
@@ -234,8 +234,64 @@ contract MasonryGenesisStakingTest is Test {
         staking.claim(0);
         vm.prank(ULTRA);
         staking.claim(0);
-        assertEq(level.balanceOf(BASIC), 500e18);
-        assertEq(level.balanceOf(ULTRA), 500e18);
+        // Same deposit, different fee: rewards follow NET shares (3% vs 0%), not gross deposits.
+        (uint256 basicNet,,) = staking.positions(0, BASIC);
+        (uint256 ultraNet,,) = staking.positions(0, ULTRA);
+        assertEq(basicNet, 97e6);
+        assertEq(ultraNet, 100e6);
+        assertApproxEqAbs(level.balanceOf(BASIC) * ultraNet, level.balanceOf(ULTRA) * basicNet, 1e18);
+        assertApproxEqAbs(level.balanceOf(BASIC) + level.balanceOf(ULTRA), 1000e18, 10);
+    }
+
+    function testPoolZeroDepositFeeByTierGoesToTreasuryInUsdc() public {
+        vm.warp(schedule.start());
+        uint256 t0 = usdc.balanceOf(TREASURY);
+        uint256 collected;
+        address[3] memory users = [BASIC, PRO, ULTRA];
+        uint256[3] memory net = [uint256(97e6), 98e6, 100e6];
+        for (uint256 i; i < 3; ++i) {
+            uint256 before = usdc.balanceOf(users[i]);
+            vm.prank(users[i]);
+            staking.deposit(0, 100e6);
+            (uint256 shares,,) = staking.positions(0, users[i]);
+            assertEq(shares, net[i], "net shares");
+            assertEq(before - usdc.balanceOf(users[i]), 100e6, "user pays gross");
+            collected += 100e6 - net[i];
+            assertEq(usdc.balanceOf(TREASURY) - t0, collected, "treasury receives each fee in USDC");
+        }
+        (uint256 total,,) = staking.pools(0);
+        assertEq(total, 295e6, "only net shares earn");
+        assertEq(usdc.balanceOf(address(staking)), 295e6, "staking holds net only");
+    }
+
+    function testDepositFeeEmitsAndUltraPaysNone() public {
+        vm.warp(schedule.start());
+        vm.expectEmit(true, false, false, true);
+        emit MasonryGenesisStaking.DepositFeePaid(BASIC, MasonryGenesisPass.Tier.Genesis, 3e6);
+        vm.prank(BASIC);
+        staking.deposit(0, 100e6);
+        uint256 t0 = usdc.balanceOf(TREASURY);
+        vm.prank(ULTRA);
+        staking.deposit(0, 100e6);
+        assertEq(usdc.balanceOf(TREASURY), t0, "Ultra pays 0%");
+    }
+
+    function testDepositFeeBpsTable() public view {
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Genesis), 300);
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Pro), 200);
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Ultra), 0);
+    }
+
+    function testWithdrawReturnsNetSharesOnly() public {
+        vm.warp(schedule.start());
+        vm.startPrank(BASIC);
+        staking.deposit(0, 100e6);
+        uint256 before = usdc.balanceOf(BASIC);
+        staking.withdraw(0, 97e6);
+        assertEq(usdc.balanceOf(BASIC) - before, 97e6);
+        vm.expectRevert();
+        staking.withdraw(0, 1);
+        vm.stopPrank();
     }
 
     function _expectClosed(

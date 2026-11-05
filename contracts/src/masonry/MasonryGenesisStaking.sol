@@ -35,6 +35,12 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     uint256 private constant ACC_PRECISION = 1e24;
     uint256 public constant COMPOUND_COOLDOWN = MasonryRules.COMPOUND_COOLDOWN;
     uint256 public constant ULTRA_EARLY_ACCESS = 1 days;
+    /// @notice Pool-0 deposit fee by pass tier, paid in USDC to the pass Treasury.
+    /// Pool 1 (LP vault) is not charged here; it uses the LP fee module.
+    uint16 public constant GENESIS_DEPOSIT_FEE_BPS = 300;
+    uint16 public constant PRO_DEPOSIT_FEE_BPS = 200;
+    uint16 public constant ULTRA_DEPOSIT_FEE_BPS = 0;
+    uint256 private constant BPS = 10_000;
 
     struct Pool {
         uint256 totalStaked;
@@ -73,6 +79,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     error Cooldown();
 
     event Staked(address indexed beneficiary, uint256 indexed pool, uint256 netShares);
+    event DepositFeePaid(address indexed beneficiary, MasonryGenesisPass.Tier tier, uint256 fee);
     event Withdrawn(address indexed beneficiary, uint256 indexed pool, uint256 shares);
     event Settled(address indexed beneficiary, uint256 indexed sourcePool, uint256 levelAmount, bool compounded);
 
@@ -93,7 +100,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
         if (
             standardAsset_ == lpAsset || standardAsset_ == level || lpAsset == level
                 || address(standardAsset_).code.length == 0 || address(settlement_).code.length == 0
-                || lpFee_.usdc() != pass_.usdc() || budget == 0
+                || lpFee_.usdc() != pass_.usdc() || standardAsset_ != lpFee_.usdc() || budget == 0
         ) revert InvalidConfiguration();
         rewardBudget = budget;
     }
@@ -124,7 +131,24 @@ contract MasonryGenesisStaking is ReentrancyGuard {
 
         _checkpoint(pool, msg.sender);
         _receive(asset, amount);
-        _credit(pool, msg.sender, amount);
+        uint256 fee;
+        if (pool == 0) {
+            fee = Math.mulDiv(amount, depositFeeBps(tier), BPS);
+            if (fee != 0) {
+                asset.safeTransfer(pass.treasury(), fee);
+                emit DepositFeePaid(msg.sender, tier, fee);
+            }
+        }
+        _credit(pool, msg.sender, amount - fee);
+    }
+
+    function depositFeeBps(
+        MasonryGenesisPass.Tier tier
+    ) public pure returns (uint16) {
+        if (tier == MasonryGenesisPass.Tier.Genesis) return GENESIS_DEPOSIT_FEE_BPS;
+        if (tier == MasonryGenesisPass.Tier.Pro) return PRO_DEPOSIT_FEE_BPS;
+        if (tier == MasonryGenesisPass.Tier.Ultra) return ULTRA_DEPOSIT_FEE_BPS;
+        revert NotEligible();
     }
 
     function withdraw(
