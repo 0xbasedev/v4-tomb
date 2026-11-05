@@ -121,7 +121,7 @@ export function TierMatrix() {
     ["24h early standard staking", (t) => t.earlyStandardStaking],
   ];
   return (
-    <Stage caption="Soulbound, one per wallet, paid in USDC to Treasury. No deposit fees, no upgrades.">
+    <Stage caption="Soulbound, one per wallet, paid in USDC to Treasury. Upgrade any time before Genesis ends for just the price difference. Not transferable.">
       <div ref={root} role="table" aria-label="Genesis passes compared" className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-x-2 gap-y-0">
         <div role="row" className="contents">
           <span role="columnheader" className="label self-end pb-2">Pass</span>

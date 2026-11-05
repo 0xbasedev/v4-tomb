@@ -55,7 +55,7 @@ const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Genesis floor", tag: "swap", body: `During Genesis, sells pay at least ${pct(FIRE.genesisFloorBps.xTOMB)} (xTOMB) or ${pct(FIRE.genesisFloorBps.xSHARE)} (xSHARE). The whole xTOMB sell tax burns during Genesis.` },
   { term: "Sell leg", tag: "swap", body: "The part of a route that sells xTOMB or xSHARE for USDC. Only that leg pays the Fire Tax — removing liquidity to USDC taxes the sold half, not the whole position." },
   { term: "Pool fee", tag: "swap", body: "The Uniswap v4 LP fee on each leg. It's shown separately from the Fire Tax." },
-  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in USDC: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. No deposit fees, no upgrades.` },
+  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in USDC: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. Start at Genesis and upgrade to Pro or Ultra for only the difference; passes can't be transferred. No deposit fees.` },
   { term: "Standard pool", tag: "genesis", body: `Genesis pool 0. It takes every emission on Day 1 and 25% from Day ${LP_DAY}. Ultra can stake in it up to 24h before Genesis starts.` },
   { term: "LP pool", tag: "genesis", body: `Genesis pool 1 — xTOMB/USDC vault shares. Opens on Day ${LP_DAY} with 75% of emissions.` },
   { term: "Liquid / vested", tag: "genesis", body: `Every reward splits ${pct(GENESIS_POLICY.liquidShare * 10_000)} liquid, the rest vested. This is separate from the 75/25 pool split.` },

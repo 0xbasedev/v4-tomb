@@ -3,13 +3,14 @@ import { useRef, useState } from "react";
 import { Sigil } from "@/components/brand/Sigil";
 import { Reason, SimBadge } from "@/components/Status";
 import { useActions, useNetworkStatus, useProtocol } from "@/lib/hooks";
-import { PASSES, PASS_ORDER, type PassDef } from "@/lib/launch";
+import { PASSES, PASS_ORDER, type PassDef, type PassTier } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 
 /**
  * Genesis passes — MasonryGenesisPass: soulbound ERC-721, one per wallet,
- * bought in USDC (paid straight to Treasury) until Genesis ends. Every pass
+ * bought in USDC (paid straight to Treasury) until Genesis ends. Buy any tier
+ * outright, or upgrade in place by paying only the difference. Every pass
  * earns with the same reward weighting; tiers differ only in keeper
  * compounding (Pro, Ultra) and Ultra's 24-hour early standard staking.
  */
@@ -18,10 +19,12 @@ export function PassPicker() {
   const net = useNetworkStatus();
   const root = useRef<HTMLDivElement>(null);
   const closed = p.clock?.phase === "ended";
-  // Once a pass is held the picker has nothing left to sell (no upgrades), so it
-  // folds into a one-line summary; the comparison stays one tap away.
+  // A top-tier holder has nothing left to buy, so the picker folds into a
+  // one-line summary (the comparison stays one tap away). Anyone who can still
+  // upgrade keeps the cards open.
   const [compare, setCompare] = useState(false);
-  const folded = !!p.pass && !compare;
+  const canUpgrade = !!p.pass && PASSES[p.pass].rank < PASSES.ultra.rank && !closed;
+  const folded = !!p.pass && !canUpgrade && !compare;
   useGSAP(
     () => {
       if (prefersReducedMotion() || folded) return;
@@ -42,11 +45,11 @@ export function PassPicker() {
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-bone">{p.pass ? `You hold the ${PASSES[p.pass].name} pass.` : "Choose a Genesis pass"}</h2>
           <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-bone-dim">
             {p.pass
-              ? `${PASSES[p.pass].perks.slice(1).join(" · ") || PASSES[p.pass].perks.join(" · ")}. Passes are soulbound and can't be upgraded — your next step is staking below.`
-              : "Soulbound, one per wallet, paid in USDC. Every pass earns at the same rate — passes don't change rewards, only automation and Ultra's early start."}
+              ? `${PASSES[p.pass].perks.slice(1).join(" · ") || PASSES[p.pass].perks.join(" · ")}. ${canUpgrade ? "Upgrade any time before Genesis ends and pay only the difference. " : ""}Passes are soulbound and can't be transferred — your next step is staking below.`
+              : "Soulbound, one per wallet, paid in USDC. Buy the one you want, or start at Genesis and upgrade later for just the difference. Every pass earns at the same rate — passes don't change rewards, only automation and Ultra's early start."}
           </p>
         </div>
-        {p.pass && (
+        {p.pass && !canUpgrade && (
           <button type="button" onClick={() => setCompare((v) => !v)} aria-expanded={compare} className="btn h-10 shrink-0 self-start px-4 text-[13px] md:self-auto">
             {compare ? "Hide passes" : "Compare passes"}
           </button>
@@ -75,7 +78,16 @@ function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string 
   useMagnetic(cta, 0.16);
   const ultra = pass.id === "ultra";
   const owned = held === pass.id;
-  const blocked = owned ? "Held" : held ? "One pass per wallet — passes can't be upgraded" : closed ? "Passes are sold until Genesis ends" : reason;
+  const heldDef = held ? PASSES[held as PassTier] : null;
+  const upgrade = !!heldDef && pass.rank > heldDef.rank;
+  const diff = heldDef ? pass.priceUsdc - heldDef.priceUsdc : 0;
+  const blocked = owned
+    ? "Held"
+    : heldDef && !upgrade
+      ? "You already hold a higher pass — passes can't be downgraded or transferred"
+      : closed
+        ? "Passes are sold until Genesis ends"
+        : reason;
   return (
     <article className={`pass-card relative flex flex-col rounded-2xl border bg-basalt-2/70 p-5 ${owned ? "border-ok/50" : ultra ? "border-spectre/30" : "border-white/[0.08]"}`}>
       {ultra && <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(120%_70%_at_50%_0%,rgba(62,231,255,0.10),transparent_60%)]" />}
@@ -107,11 +119,11 @@ function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string 
       <button
         ref={cta}
         type="button"
-        onClick={() => actions.purchasePass(pass.id)}
+        onClick={() => (upgrade && heldDef ? actions.upgradePass(heldDef.id, pass.id) : actions.purchasePass(pass.id))}
         disabled={!!blocked || actions.busy}
         className={`relative mt-4 h-11 w-full text-[13px] ${ultra ? "btn btn-spectre" : pass.id === "pro" ? "btn btn-primary" : "btn"}`}
       >
-        {owned ? "Held" : `Mint ${pass.name}`}
+        {owned ? "Held" : upgrade ? `Upgrade for ${diff} USDC` : `Mint ${pass.name}`}
       </button>
       {blocked && !owned && <Reason>{blocked}</Reason>}
     </article>

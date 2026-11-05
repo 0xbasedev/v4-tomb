@@ -169,6 +169,28 @@ export function useActions() {
       );
     },
 
+    /** Raise the held pass in place; pays only the price difference. */
+    upgradePass(from: PassTier, to: PassTier, onDone?: () => void) {
+      const diff = PASSES[to].priceUsdc - PASSES[from].priceUsdc;
+      const label = `Upgrade ${PASSES[from].name} → ${PASSES[to].name} pass · ${diff} USDC`;
+      if (preview.enabled) return sim(label, () => preview.act.upgrade(from, to), onDone);
+      if (!c) return run(label, []);
+      return run(
+        label,
+        [
+          {
+            label: "pass upgrade",
+            approvals: [{ token: c.usdc, spender: c.pass, amount: e6(diff) }],
+            address: c.pass,
+            abi: masonryGenesisPassAbi as Abi,
+            functionName: "upgrade",
+            args: [PASS_TIER_ID[to]],
+          },
+        ],
+        onDone,
+      );
+    },
+
     deposit(pool: 0 | 1, amount: number, _standardAsset: Address | null, onDone?: () => void) {
       const label = pool === 0 ? `Stake ${amount} in the standard pool` : `Stake ${amount} LP in the xTOMB/USDC pool`;
       if (preview.enabled) return sim(label, () => preview.act.deposit(pool, amount), onDone);

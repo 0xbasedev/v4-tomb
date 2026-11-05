@@ -25,7 +25,8 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 ## Genesis
 
 - 7 days. Official LP pool and compounding open at start + 24h and close at Genesis end. Claims and principal withdrawals stay open afterwards. Ultra may pre-stake in pool 0 up to 24h before start.
-- Passes (soulbound, USDC to Treasury): Genesis $50, Pro $100, Ultra $500. Equal reward weight. All staking and reward entry points require a pass.
+- Passes (soulbound, not transferable; USDC to Treasury): Genesis $50, Pro $100, Ultra $500 total. Everyone needs a pass to take part in Genesis; the $50 Genesis pass has no perks beyond participation. Buy any tier outright, or start lower and `upgrade()` in place for only the difference ($50 to Pro, $400 more to Ultra); the total paid is identical either way, and the same token is kept. Upgrades close when Genesis ends. Equal reward weight for every tier. All staking and reward entry points require a pass.
+- Perks: Genesis none. Pro: opt-in keeper compounding. Ultra: everything in Pro plus pool-0 pre-stake up to 24h before start, at the same rate and start time as everyone else. (Perks as shown in the Genesis UI; unconfirmed beyond that.)
 - Emissions: 100% to pool 0 on Day 1; from Day 2, 75% LP / 25% pool 0.
 - Rewards: 50% liquid, 50% escrow in 16 claim-gated 6-hour installments, first at end + 6h. Same schedule for all tiers.
 - Fees: one 50 bps LP-share fee per deposit or compound (burns xTOMB; USDC leg buys back and burns when the guard allows, otherwise escrowed and retried only by later authorized Genesis activity). 2% claim-to-wallet fee to Treasury. 2% keeper performance fee. Shared 3-hour claim/compound cooldown per beneficiary per pool.

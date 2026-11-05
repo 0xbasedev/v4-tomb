@@ -123,6 +123,8 @@ export interface PreviewState {
     /** MasonryGenesisSchedule.schedule(start) — once, by the scheduler. */
     schedule: (startUnix: number) => void;
     purchase: (t: PassTier) => void;
+    /** MasonryGenesisPass.upgrade(tier) — pays only the price difference. */
+    upgrade: (from: PassTier, to: PassTier) => void;
     deposit: (pool: 0 | 1, amount: number) => void;
     withdraw: (pool: 0 | 1, amount: number) => void;
     claim: (pool: 0 | 1) => void;
@@ -262,6 +264,12 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
       setPass(t);
       setBalances((b) => ({ ...b, USDC: b.USDC - PASSES[t].priceUsdc }));
       push(`Buy ${PASSES[t].name} pass · ${PASSES[t].priceUsdc} USDC`);
+    },
+    upgrade: (from, to) => {
+      const diff = PASSES[to].priceUsdc - PASSES[from].priceUsdc;
+      setPass(to);
+      setBalances((b) => ({ ...b, USDC: b.USDC - diff }));
+      push(`Upgrade ${PASSES[from].name} → ${PASSES[to].name} · ${diff} USDC`);
     },
     deposit: (pool, amount) => {
       const net = pool === 1 ? amount * (1 - GENESIS_POLICY.lpBurnFeeBps / 10_000) : amount;

@@ -158,6 +158,24 @@ test.describe("Wallet and network states", () => {
 });
 
 test.describe("Preview makes zero transaction requests", () => {
+  test("passes upgrade in place for just the price difference", async ({ page, broadcasts }) => {
+    await installWallet(page, "0x2105");
+    await page.goto("/genesis?genesis=day2&pass=genesis&wallet=0");
+    await page.getByRole("button", { name: "Connect wallet" }).click();
+    await expect(note(page)).toContainText(/Showing simulated data/);
+
+    await expect(page.getByText(/You hold the Genesis pass/)).toBeVisible();
+    await expect(page.getByText(/can't be transferred/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Held" })).toBeDisabled();
+    await page.getByRole("button", { name: "Upgrade for 50 USDC" }).click();
+    await expect(page.getByText(/You hold the Pro pass/)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Upgrade for 400 USDC" }).click();
+    await expect(page.getByText(/You hold the Ultra pass/)).toBeVisible({ timeout: 10_000 });
+    // Nothing left to buy: the picker folds away.
+    await expect(page.getByRole("button", { name: "Compare passes" })).toBeVisible();
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+
   test("pass, stake, claim and swap — all simulated with a real wallet connected", async ({ page, broadcasts }) => {
     test.setTimeout(90_000);
     await installWallet(page, "0x2105");

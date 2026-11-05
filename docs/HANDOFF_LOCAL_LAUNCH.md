@@ -36,7 +36,7 @@ Old getters (`FARMING_POOL_REWARD_ALLOCATION`, `VESTING_DURATION`, …) remain a
   1. Unscheduled deployment: Mint is disabled; Admin readiness shows 6/6 ✓.
   2. Rejected signature: shows "You declined…", the wallet records no send, the nonce is unchanged, and Genesis stays unscheduled.
   3. Admin schedules Genesis: simulate → sign → receipt → "Scheduled for" read back from chain.
-  4. Buy a Pro pass, then time travel (chain + browser clock); stake 100 USDC shows a stake of 100; withdraw 40 shows a stake of 60.
+  4. Buy Genesis, upgrade to Pro for the $50 difference (transfer logs sum to exactly 100 USDC), then time travel (chain + browser clock); stake 100 USDC shows a stake of 100; withdraw 40 shows a stake of 60.
 
 ### Bugs the live run found (fixed here)
 
@@ -48,9 +48,9 @@ Old getters (`FARMING_POOL_REWARD_ALLOCATION`, `VESTING_DURATION`, …) remain a
 
 ### Tests actually run (2026-11-05, this branch)
 
-- `forge test --offline --no-match-contract BaseFork`: 431 passed, 1 skipped, 0 failed.
+- `forge test --offline --no-match-contract BaseFork`: 439 passed, 1 skipped, 0 failed (includes 8 new pass-upgrade tests).
 - `pnpm typecheck`, `pnpm build`: OK.
-- `pnpm test:browser`: 64/65. The one failure, `[mobile] Swap … LP → USDC … untaxed exit`, is intermittent (2 of 3 on rerun): Playwright reports "element is not stable" on the animated "Take it as xTOMB instead" nudge. That is Preview-only code this branch doesn't touch. Fix by pausing the nudge animation while it's hovered/focused (or under reduced motion), not with `force: true`.
+- `pnpm test:browser`: 67/67 on the last run, which includes the new pass-upgrade test. Earlier on this branch one test,  `[mobile] Swap … LP → USDC … untaxed exit`, was intermittent (2 of 3 on rerun): Playwright reports "element is not stable" on the animated "Take it as xTOMB instead" nudge. That is Preview-only code this branch doesn't touch. Fix by pausing the nudge animation while it's hovered/focused (or under reduced motion), not with `force: true`.
 - `pnpm test:local`: 4/4 on a fresh anvil.
 
 ### How to run the live suite
@@ -66,6 +66,10 @@ cd ../frontend && pnpm test:local
 - `--disable-code-size-limit` is only needed for the local v4 `PoolManager`. Every Masonry contract is under 24 KB; the largest, `MasonrySquareHook`, is 22,078 bytes.
 - `--offline` stops forge from hanging on sourcify lookups behind restrictive egress.
 - The suite needs a **fresh** anvil each run: it schedules once and time-travels, and a `beforeAll` guard fails fast if chain time drifts from wall time.
+
+### Pass upgrades (round 3)
+
+`MasonryGenesisPass.upgrade(tier)` raises the held pass in place for the price difference (same soulbound token, `tokenOf` added, `Upgraded` event); closes at Genesis end. UI: PassPicker shows "Upgrade for N USDC" on higher tiers and stays open until Ultra. Copy now says passes can't be transferred. ABI regenerated.
 
 ## Not done — next steps, in order
 

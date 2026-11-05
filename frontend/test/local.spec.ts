@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -66,6 +67,10 @@ async function connect(page: Page) {
 
 const setReject = (page: Page, v: boolean) => page.evaluate((x) => ((window as unknown as { __wallet: { reject: boolean } }).__wallet.reject = x), v);
 
+function USDC_ADDR(): string {
+  return JSON.parse(readFileSync(new URL("../../contracts/deployment-output/masonry-local.json", import.meta.url), "utf8")).contracts.usdc;
+}
+
 function futureLocal(hours: number) {
   const d = new Date(Date.now() + hours * 3_600_000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -128,9 +133,16 @@ test("buy a Pro pass, then stake USDC once Genesis is live", async ({ page }) =>
   await page.goto("/genesis");
   await connect(page);
   await expect(page.getByText(/Genesis · starts in/i)).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Mint Pro" }).click();
-  await expect(page.getByText(/· Confirmed/).first()).toBeVisible({ timeout: 20_000 });
+  // Start at Genesis ($50), then upgrade to Pro for the $50 difference: $100 total, one soulbound pass.
+  // (Treasury is the deployer here, so balances net to zero — sum the USDC Transfer logs instead.)
+  const fromBlock = await rpc("eth_blockNumber");
+  await page.getByRole("button", { name: "Mint Genesis" }).click();
+  await expect(page.getByText(/You hold the Genesis pass/)).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Upgrade for 50 USDC" }).click();
   await expect(page.getByText(/You hold the Pro pass/)).toBeVisible({ timeout: 20_000 });
+  const transfer = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const logs: { data: string }[] = await rpc("eth_getLogs", [{ address: USDC_ADDR(), fromBlock, toBlock: "latest", topics: [transfer, "0x" + ACCOUNT.slice(2).toLowerCase().padStart(64, "0")] }]);
+  expect(logs.reduce((n, l) => n + BigInt(l.data), 0n)).toBe(100_000_000n);
 
   // Move the chain past the scheduled start, then stake in the standard pool.
   // The countdown runs on the browser clock, so move it in step with the chain.
