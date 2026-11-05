@@ -1,0 +1,9 @@
+[
+  {
+    "type": "function",
+    "name": "distribute",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  }
+]

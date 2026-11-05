@@ -3,226 +3,411 @@
 @tailwind utilities;
 
 /*
- * Old Money base styles — Art Deco grammar per docs/skill-art-deco.md.
+ * xTomb — Obsidian Crypt.
  *
- * Anatomy:
- *   - Warm near-black ground (#0d0a05), antique ivory text (#f5f0e0)
- *   - Metallic gold gradient on display type and section dividers
- *   - Rule trios (thin-thick-thin) as section boundaries
- *   - Stepped frame-within-frame borders on panels
- *   - Vertical center axis enforced — every section text-align center
- *   - Playfair Display for display, Cormorant Garamond for body, Cinzel for labels
+ * Grammar:
+ *   - Volcanic-glass ground with grain; panels are glass shards (thin seam,
+ *     inner top highlight, faint sheen) — never flat boxes.
+ *   - Heat carries meaning. Ember = xTOMB / primary action. Spectre = xSHARE.
+ *     Amethyst = xBOND. ok / warn / bad are reserved for state.
+ *   - Unbounded for display + numerals that matter, Inter for reading,
+ *     JetBrains Mono for labels, tickers and every number in a table.
+ *   - Motion is GSAP-driven (see lib/motion). CSS here only handles hover
+ *     micro-states so the page still feels alive with JS motion disabled.
  */
+
+:root {
+  /* 0 = ice cold (deep contraction) … 1 = white hot (premium). Tweened by
+     <HeatSync/> from live TWAP so the whole page warms and cools with the peg. */
+  --heat: 0.5;
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-color: #23262f transparent;
   }
 
   body {
-    font-family: theme(fontFamily.body);
-    color: theme(colors.deco-ivory);
-    background-color: theme(colors.deco-ground);
-    line-height: 1.5;
-    font-feature-settings: "lnum", "kern";
+    font-family: theme(fontFamily.sans);
+    color: theme(colors.bone);
+    background-color: theme(colors.void);
+    line-height: 1.55;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+
+  /* Film grain over everything — sits under content, above the ground. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: var(--grain);
+    opacity: 0.045;
+    mix-blend-mode: overlay;
+  }
+
+  #root {
+    position: relative;
+    z-index: 2;
   }
 
   h1,
   h2,
-  h3 {
+  h3,
+  h4 {
     font-family: theme(fontFamily.display);
-    font-weight: 400; /* high-contrast serifs look heavier than they are */
-    letter-spacing: 0.05em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     line-height: 1.05;
   }
 
-  /* No rounding ever — Art Deco shapes are angular. */
-  *,
-  *::before,
-  *::after {
-    border-radius: 0;
+  ::selection {
+    background: rgba(255, 106, 43, 0.35);
+    color: #fff;
   }
 
-  /* All copy zones default to centered (vertical axis enforcement). Override per-element where needed. */
-  section {
-    text-align: center;
+  :focus-visible {
+    outline: 2px solid theme(colors.ember);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  input::placeholder {
+    color: theme(colors.ash-dim);
+  }
+
+  code {
+    font-family: theme(fontFamily.mono);
+    font-size: 0.88em;
+    color: theme(colors.ember-hot);
   }
 }
 
 @layer components {
-  /* ===== Metallic gold typographic fill ===== */
+  /* ===== Type ===== */
 
-  /* The canonical Art Deco metallic gradient. Applied to text via background-clip. */
-  .gold-text {
-    color: transparent;
-    background: linear-gradient(
-      180deg,
-      #f5e6a3 0%,
-      #d4af37 40%,
-      #a67c00 60%,
-      #d4af37 80%,
-      #f5e6a3 100%
-    );
-    background-size: 100% 200%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+  .label {
+    font-family: theme(fontFamily.mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: theme(colors.ash);
   }
 
-  /* Same gradient but with a subtle shimmer loop on the hero title only. */
-  .gold-text-shimmer {
-    color: transparent;
-    background: linear-gradient(
-      180deg,
-      #f5e6a3 0%,
-      #d4af37 40%,
-      #a67c00 60%,
-      #d4af37 80%,
-      #f5e6a3 100%
-    );
-    background-size: 100% 200%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gold-shimmer 5s ease-in-out infinite;
+  .num {
+    font-family: theme(fontFamily.mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 
-  /* ===== Rule trios — the canonical Art Deco section divider ===== */
+  .ember-text {
+    background: linear-gradient(100deg, #ffd9a0 0%, #ffb547 18%, #ff6a2b 45%, #ff3d1f 62%, #ffb547 85%, #ffe3b8 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: ember-flow 7s ease-in-out infinite;
+  }
+  .spectre-text {
+    background: linear-gradient(100deg, #c9fbff 0%, #3ee7ff 40%, #2a8cff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .amethyst-text {
+    background: linear-gradient(100deg, #eadcff 0%, #b48cff 45%, #7c4dff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
 
-  .rule-trio {
+  /* ===== Panels — obsidian shards ===== */
+
+  .panel {
     position: relative;
-    height: 14px;
-    width: 100%;
+    border-radius: theme(borderRadius.shard);
+    padding: 24px;
     background:
-      linear-gradient(
-        180deg,
-        transparent 0,
-        transparent 1px,
-        #a67c00 1px,
-        #a67c00 2px,
-        transparent 2px,
-        transparent 5px,
-        #d4af37 5px,
-        #d4af37 9px,
-        transparent 9px,
-        transparent 12px,
-        #a67c00 12px,
-        #a67c00 13px,
-        transparent 13px
-      );
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.008) 40%, rgba(255, 255, 255, 0) 100%),
+      theme(colors.basalt);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: theme(boxShadow.panel);
+    isolation: isolate;
+  }
+  /* Facet glint on the top-left corner — the "cut" of the shard. */
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 22%, rgba(255, 255, 255, 0) 78%, rgba(255, 106, 43, calc(var(--heat) * 0.18)) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .panel-raised {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(255, 255, 255, 0) 100%),
+      theme(colors.basalt-2);
+  }
+  .panel-hover {
+    transition: border-color 250ms ease, transform 250ms ease, background-color 250ms ease;
+  }
+  .panel-hover:hover {
+    border-color: rgba(255, 106, 43, 0.35);
   }
 
-  /* A rule-trio with an ornamental diamond centered between the lines. */
-  .rule-trio-diamond {
-    position: relative;
+  /* Recessed input well — the stone you carve numbers into. */
+  .well {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 16px;
+    gap: 12px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.55);
+    transition: border-color 200ms ease, box-shadow 200ms ease;
   }
-  .rule-trio-diamond::before,
-  .rule-trio-diamond::after {
-    content: "";
+  .well:focus-within {
+    border-color: rgba(255, 106, 43, 0.55);
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(255, 106, 43, 0.08);
+  }
+  .well input {
+    min-width: 0;
     flex: 1;
-    height: 14px;
-    background:
-      linear-gradient(
-        180deg,
-        transparent 0,
-        transparent 1px,
-        #a67c00 1px,
-        #a67c00 2px,
-        transparent 2px,
-        transparent 5px,
-        #d4af37 5px,
-        #d4af37 9px,
-        transparent 9px,
-        transparent 12px,
-        #a67c00 12px,
-        #a67c00 13px,
-        transparent 13px
-      );
+    background: transparent;
+    outline: none;
   }
 
-  /* ===== Stepped frame-within-frame panel ===== */
+  /* ===== Buttons ===== */
 
-  /* Outer gold border + inset gold outline at 5px gap = the frame-within-frame */
-  .deco-panel {
+  .btn {
     position: relative;
-    border: 1px solid theme(colors.deco-gold);
-    padding: 28px;
-    background-color: theme(colors.deco-ground-soft);
-  }
-  .deco-panel::before {
-    content: "";
-    position: absolute;
-    inset: 5px;
-    border: 1px solid theme(colors.deco-gold);
-    pointer-events: none;
-  }
-
-  /* ===== Buttons — formal, framed, never floaty ===== */
-
-  .btn-deco {
     display: inline-flex;
     align-items: center;
-    gap: 14px;
-    padding: 16px 36px;
-    font-family: theme(fontFamily.label);
+    justify-content: center;
+    gap: 10px;
+    height: 48px;
+    padding: 0 22px;
+    border-radius: 12px;
+    font-family: theme(fontFamily.sans);
+    font-size: 14px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.25em;
-    font-size: 12px;
-    color: theme(colors.deco-gold);
-    background-color: transparent;
-    border: 1px solid theme(colors.deco-gold);
-    transition: background-color 200ms ease-out, color 200ms ease-out;
+    letter-spacing: 0.01em;
+    color: theme(colors.bone);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 220ms ease, opacity 180ms ease;
     cursor: pointer;
-    position: relative;
+    user-select: none;
+    white-space: nowrap;
+    will-change: transform;
   }
-  .btn-deco::before {
-    content: "";
-    position: absolute;
-    inset: 4px;
-    border: 1px solid theme(colors.deco-gold);
-    pointer-events: none;
-    transition: inset 200ms ease-out;
+  .btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
   }
-  .btn-deco:hover {
-    background-color: theme(colors.deco-gold);
-    color: theme(colors.deco-ground);
-  }
-  .btn-deco:hover::before {
-    inset: 2px;
-    border-color: theme(colors.deco-ground);
-  }
-  .btn-deco:focus-visible {
-    outline: 2px solid theme(colors.deco-gold);
-    outline-offset: 4px;
-  }
-  .btn-deco:disabled {
+  .btn:disabled {
     cursor: not-allowed;
+    opacity: 0.38;
+    box-shadow: none;
   }
 
-  .btn-deco-primary {
-    color: theme(colors.deco-ground);
-    background-color: theme(colors.deco-gold);
+  /* Primary: molten. Clipped corner = the carved tomb-key silhouette. */
+  .btn-primary {
+    color: #1a0802;
+    border: 0;
+    background: linear-gradient(180deg, #ffb547 0%, #ff6a2b 55%, #e2470f 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 10px 30px -10px rgba(255, 106, 43, 0.8);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    border-radius: 4px;
   }
-  .btn-deco-primary::before {
-    border-color: theme(colors.deco-ground);
+  .btn-primary:hover {
+    background: linear-gradient(180deg, #ffc76b 0%, #ff7a3d 55%, #f0541a 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 14px 40px -10px rgba(255, 106, 43, 0.95);
   }
-  .btn-deco-primary:hover {
-    background-color: theme(colors.deco-gold-light);
+  .btn-primary:disabled {
+    background: linear-gradient(180deg, #3a2a20 0%, #2a1d16 100%);
+    color: theme(colors.ash);
+    opacity: 1;
   }
 
-  /* ===== Label / ornament type ===== */
+  .btn-spectre {
+    color: #021317;
+    border: 0;
+    background: linear-gradient(180deg, #a8f6ff 0%, #3ee7ff 55%, #1bb6d9 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 10px 30px -12px rgba(62, 231, 255, 0.7);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    border-radius: 4px;
+  }
+  .btn-amethyst {
+    color: #0f0520;
+    border: 0;
+    background: linear-gradient(180deg, #e2d1ff 0%, #b48cff 55%, #8a5cff 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 10px 30px -12px rgba(180, 140, 255, 0.7);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    border-radius: 4px;
+  }
+  .btn-spectre:disabled,
+  .btn-amethyst:disabled {
+    background: linear-gradient(180deg, #22262e 0%, #181b21 100%);
+    color: theme(colors.ash);
+    opacity: 1;
+  }
 
-  .label-deco {
-    font-family: theme(fontFamily.label);
+  /* Ghost: for the path we'd rather you didn't take. Quiet on purpose. */
+  .btn-ghost {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.08);
+    color: theme(colors.bone-dim);
+  }
+  .btn-danger {
+    background: transparent;
+    border-color: rgba(255, 77, 106, 0.3);
+    color: #ff8fa2;
+  }
+  .btn-danger:hover {
+    background: rgba(255, 77, 106, 0.08);
+    border-color: rgba(255, 77, 106, 0.55);
+  }
+  .btn-sm {
+    height: 34px;
+    padding: 0 12px;
+    font-size: 12px;
+    border-radius: 9px;
+  }
+
+  /* ===== Chips / pills ===== */
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-family: theme(fontFamily.mono);
     font-size: 11px;
-    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    letter-spacing: 0.3em;
-    color: theme(colors.deco-gold);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: theme(colors.bone-dim);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .chip-ember {
+    color: #ffb547;
+    border-color: rgba(255, 106, 43, 0.4);
+    background: rgba(255, 106, 43, 0.08);
+  }
+  .chip-spectre {
+    color: #8ff1ff;
+    border-color: rgba(62, 231, 255, 0.35);
+    background: rgba(62, 231, 255, 0.07);
+  }
+  .chip-amethyst {
+    color: #d3bcff;
+    border-color: rgba(180, 140, 255, 0.4);
+    background: rgba(180, 140, 255, 0.08);
+  }
+  .chip-ok {
+    color: #7af0c2;
+    border-color: rgba(52, 227, 160, 0.35);
+    background: rgba(52, 227, 160, 0.07);
+  }
+  .chip-warn {
+    color: #ffd27a;
+    border-color: rgba(255, 194, 75, 0.35);
+    background: rgba(255, 194, 75, 0.07);
+  }
+  .chip-bad {
+    color: #ff8fa2;
+    border-color: rgba(255, 77, 106, 0.4);
+    background: rgba(255, 77, 106, 0.08);
+  }
+
+  /* ===== Dividers ===== */
+
+  .seam {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1) 20%, rgba(255, 255, 255, 0.1) 80%, transparent);
+  }
+
+  /* ===== Skeleton ===== */
+
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+    border-radius: 6px;
+  }
+
+  /* ===== Tables ===== */
+
+  .crypt-table th {
+    font-family: theme(fontFamily.mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: theme(colors.ash);
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: left;
+  }
+  .crypt-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  .crypt-table tr:last-child td {
+    border-bottom: 0;
+  }
+  .crypt-table tbody tr {
+    transition: background-color 150ms ease;
+  }
+  .crypt-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* ===== Prose (Docs) ===== */
+
+  .prose-crypt p {
+    color: theme(colors.bone-dim);
+    line-height: 1.7;
+  }
+  .prose-crypt strong {
+    color: theme(colors.bone);
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .bg-heat {
+    background: radial-gradient(120% 70% at 50% 110%, rgba(255, 90, 31, calc(0.06 + var(--heat) * 0.22)) 0%, rgba(255, 90, 31, 0) 60%),
+      radial-gradient(80% 50% at 50% -10%, rgba(62, 231, 255, calc(0.1 - var(--heat) * 0.08)) 0%, rgba(62, 231, 255, 0) 60%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

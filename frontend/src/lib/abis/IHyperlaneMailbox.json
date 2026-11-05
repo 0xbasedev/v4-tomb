@@ -1,75 +1,19 @@
 [
   {
     "type": "function",
-    "name": "localDomain",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "recipientIsm",
-    "inputs": [
-      {
-        "name": "recipient",
-        "type": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "delivered",
     "inputs": [
       {
         "name": "messageId",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "quoteDispatch",
-    "inputs": [
-      {
-        "name": "destination",
-        "type": "uint32"
-      },
-      {
-        "name": "recipient",
-        "type": "bytes32"
-      },
-      {
-        "name": "body",
-        "type": "bytes"
-      },
-      {
-        "name": "metadata",
-        "type": "bytes"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "fee",
-        "type": "uint256"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -80,27 +24,98 @@
     "inputs": [
       {
         "name": "destination",
-        "type": "uint32"
+        "type": "uint32",
+        "internalType": "uint32"
       },
       {
         "name": "recipient",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       },
       {
         "name": "body",
-        "type": "bytes"
+        "type": "bytes",
+        "internalType": "bytes"
       },
       {
         "name": "metadata",
-        "type": "bytes"
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [
       {
         "name": "messageId",
-        "type": "bytes32"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "localDomain",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "quoteDispatch",
+    "inputs": [
+      {
+        "name": "destination",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "recipient",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "body",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "metadata",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "fee",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "recipientIsm",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   }
 ]

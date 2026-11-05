@@ -3,42 +3,27 @@ import { useState } from "react";
 import { maskDecimalInput } from "@/lib/util/decimal";
 
 /**
- * SlippageChips — Art Deco chip selector for swap slippage tolerance.
- *
- * Three presets (0.5 / 1.0 / 5.0 percent) plus a Custom field that accepts
- * any decimal percent value. The value is reported as basis points (50, 100,
- * 500) so the consumer's downstream math stays in integer space.
- *
- * Style: gold-bordered rectangles, no rounding. Active chip fills with gold +
- * inverts text color (matches TabBar). Custom input mirrors the BondForm
- * input style — single-line gold-bordered well with right-aligned number.
+ * SlippageChips — presets + custom. Values above 5% turn the chip amber and
+ * name the risk, because high slippage is how users get sandwiched.
  */
 
 const PRESETS = [
   { label: "0.5%", bps: 50 },
-  { label: "1.0%", bps: 100 },
-  { label: "5.0%", bps: 500 },
-  { label: "50%", bps: 5_000 },
+  { label: "1%", bps: 100 },
+  { label: "3%", bps: 300 },
 ] as const;
 
 interface SlippageChipsProps {
-  /** Current slippage in basis points (100 = 1%). */
   valueBps: number;
   onChange: (bps: number) => void;
-  /**
-   * Optional cap on user-entered slippage, in bps. Default 9900 (99%) —
-   * needed for testnet pools where seed depth is small enough that any
-   * meaningful swap has huge price impact. Production mainnet pools would
-   * never need anywhere near this; user should normally pick 0.5–5%.
-   */
+  /** Hard cap for custom entry (bps). Testnet pools are shallow, so allow high values — but warn. */
   maxBps?: number;
 }
 
 export function SlippageChips({ valueBps, onChange, maxBps = 9_900 }: SlippageChipsProps) {
   const [customRaw, setCustomRaw] = useState("");
-
-  // "Custom" is active when valueBps doesn't match any preset.
-  const isCustomActive = !PRESETS.some((p) => p.bps === valueBps);
+  const isCustom = !PRESETS.some((p) => p.bps === valueBps);
+  const risky = valueBps > 500;
 
   function handleCustom(raw: string) {
     const masked = maskDecimalInput(raw);
@@ -46,54 +31,53 @@ export function SlippageChips({ valueBps, onChange, maxBps = 9_900 }: SlippageCh
     if (masked === "" || masked === ".") return;
     const pct = parseFloat(masked);
     if (!isFinite(pct) || pct < 0) return;
-    const bps = Math.min(Math.round(pct * 100), maxBps);
-    onChange(bps);
+    onChange(Math.min(Math.round(pct * 100), maxBps));
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      {PRESETS.map((p) => {
-        const active = p.bps === valueBps;
-        return (
-          <button
-            key={p.bps}
-            type="button"
-            onClick={() => {
-              onChange(p.bps);
-              setCustomRaw("");
-            }}
-            aria-pressed={active}
-            className={`label-deco border px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold ${
-              active
-                ? "border-deco-gold bg-deco-gold text-deco-ground"
-                : "border-deco-gold/40 text-deco-gold hover:border-deco-gold"
-            }`}
-          >
-            {p.label}
-          </button>
-        );
-      })}
-      <div
-        className={`flex items-center border bg-deco-ground ${
-          isCustomActive ? "border-deco-gold" : "border-deco-gold/40"
-        }`}
-      >
-        <input
-          type="text"
-          inputMode="decimal"
-          placeholder="Custom"
-          value={customRaw}
-          onChange={(e) => handleCustom(e.target.value)}
-          aria-label="Custom slippage tolerance (percent)"
-          className="font-display w-20 bg-transparent px-3 py-1 text-right text-sm text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none"
-        />
-        <span
-          className="font-ornament mr-2 text-xs text-deco-gold"
-          style={{ letterSpacing: "0.2em" }}
+    <div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {PRESETS.map((p) => {
+          const active = p.bps === valueBps;
+          return (
+            <button
+              key={p.bps}
+              type="button"
+              onClick={() => {
+                onChange(p.bps);
+                setCustomRaw("");
+              }}
+              aria-pressed={active}
+              className={`h-8 rounded-lg px-3 font-mono text-[12px] transition-colors ${
+                active ? "bg-white/10 text-bone" : "text-ash hover:bg-white/[0.04] hover:text-bone-dim"
+              }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        <label
+          className={`flex h-8 items-center rounded-lg border px-2 ${
+            isCustom ? (risky ? "border-warn/50" : "border-white/15") : "border-white/[0.06]"
+          }`}
         >
-          %
-        </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="Custom"
+            value={customRaw}
+            onChange={(e) => handleCustom(e.target.value)}
+            aria-label="Custom slippage tolerance (percent)"
+            className="num w-16 bg-transparent text-right text-[12px] text-bone outline-none"
+          />
+          <span className="ml-1 font-mono text-[11px] text-ash">%</span>
+        </label>
       </div>
+      {risky && (
+        <p className="mt-2 text-[12px] text-warn/90">
+          ▲ {(valueBps / 100).toFixed(1)}% slippage invites sandwich attacks. Only use on shallow testnet pools.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,0 +1,39 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_distributors",
+        "type": "address[]",
+        "internalType": "contract IDistributor[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "distribute",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "distributors",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IDistributor"
+      }
+    ],
+    "stateMutability": "view"
+  }
+]

@@ -1,63 +1,43 @@
-import { useAccount, useReadContracts } from "wagmi";
+import { useReadContracts } from "wagmi";
+import type { Address } from "viem";
 
-import { treasuryAbi, hookAbi, genesisRewardPoolAbi } from "@/lib/abis";
-import { useDeployment } from "./useDeployment";
+import { masonryGenesisLPBurnFeeAbi, masonryGenesisSettlementAbi, masonrySquareHookAbi } from "@/lib/abis/masonry";
+import { usePreview } from "@/lib/preview";
+import { useNetworkStatus } from "./useNetworkStatus";
+
+export type AdminRole = "lpBurnFee.owner" | "settlement.binder" | "squareHook.polBinder";
 
 /**
- * Detect whether the connected wallet holds an admin role on any of the
- * protocol's privileged surfaces.
- *
- * Admin slots checked:
- *   - Treasury.operator()              → setExtraFunds, setBootstrap, etc.
- *   - PegDefenseHook.trustees()         → setAutoCalculateTax, setTreasury, etc.
- *   - GenesisRewardPool.operator()      → add() to register stake tokens
- *
- * Pre-governance-rotation, all three slots typically point at the deployer EOA
- * — being "the deployer" therefore unlocks everything. Post-rotation, the
- * Timelock holds all three; an EOA gets `isAdmin: false` and the page renders
- * its restricted-access state.
- *
- * Important: this is a UI gate only. The actual security comes from the
- * onlyOperator / onlyTrustees modifiers on the contracts themselves. A
- * malicious user can route around the page; their transactions revert.
+ * Roles the connected wallet holds on the deployed contracts. Admin is only
+ * shown to a wallet with at least one. In Preview the sample wallet holds all
+ * three (`?owner=0` or the dock's Owner box shows the page as a user sees it).
  */
-export function useIsAdmin() {
-  const deployment = useDeployment();
-  const { address, isConnected } = useAccount();
-
-  const enabled = !!deployment && isConnected;
-
-  const { data, isLoading } = useReadContracts({
-    allowFailure: false,
-    contracts: enabled
+export function useIsAdmin(): { isAdmin: boolean; roles: AdminRole[]; holders: Partial<Record<AdminRole, Address>> } {
+  const preview = usePreview();
+  const net = useNetworkStatus();
+  const c = net.deployment?.contracts;
+  const reads = useReadContracts({
+    allowFailure: true,
+    contracts: c
       ? [
-          { address: deployment.treasury, abi: treasuryAbi, functionName: "operator" },
-          { address: deployment.hook, abi: hookAbi, functionName: "trustees" },
-          {
-            address: deployment.genesisRewardPool,
-            abi: genesisRewardPoolAbi,
-            functionName: "operator",
-          },
+          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "owner" },
+          { address: c.settlement, abi: masonryGenesisSettlementAbi, functionName: "binder" },
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "polBinder" },
         ]
       : [],
-    query: { enabled, refetchInterval: 30_000 },
+    query: { enabled: !!c, refetchInterval: 60_000 },
   });
-
-  const treasuryOperator = data?.[0] as `0x${string}` | undefined;
-  const hookTrustees = data?.[1] as `0x${string}` | undefined;
-  const genesisOperator = data?.[2] as `0x${string}` | undefined;
-
-  const matches = (addr: `0x${string}` | undefined): boolean =>
-    !!address && !!addr && addr.toLowerCase() === address.toLowerCase();
-
-  return {
-    isAdmin: matches(treasuryOperator) || matches(hookTrustees) || matches(genesisOperator),
-    isTreasuryOperator: matches(treasuryOperator),
-    isHookTrustees: matches(hookTrustees),
-    isGenesisOperator: matches(genesisOperator),
-    treasuryOperator,
-    hookTrustees,
-    genesisOperator,
-    isLoading,
-  };
+  if (preview.enabled) {
+    const on = preview.owner && preview.sampleWallet;
+    return { isAdmin: on, roles: on ? ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder"] : [], holders: {} };
+  }
+  const keys: AdminRole[] = ["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder"];
+  const holders: Partial<Record<AdminRole, Address>> = {};
+  keys.forEach((k, i) => {
+    const r = reads.data?.[i];
+    if (r?.status === "success") holders[k] = r.result as Address;
+  });
+  const me = net.walletAddress?.toLowerCase();
+  const roles = keys.filter((k) => me && holders[k]?.toLowerCase() === me);
+  return { isAdmin: roles.length > 0, roles, holders };
 }
