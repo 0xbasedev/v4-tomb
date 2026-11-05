@@ -143,7 +143,8 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
         endTime = config.vestingStart + config.vestingDuration;
         communityFundLastClaimed = config.vestingStart;
         devFundLastClaimed = config.vestingStart;
-        communityFundRewardRate = config.vestingDuration == 0 ? 0 : config.communityFundAllocation / config.vestingDuration;
+        communityFundRewardRate =
+            config.vestingDuration == 0 ? 0 : config.communityFundAllocation / config.vestingDuration;
         devFundRewardRate = config.vestingDuration == 0 ? 0 : config.devFundAllocation / config.vestingDuration;
         communityFund = config.communityFund;
         devFund = config.devFund;

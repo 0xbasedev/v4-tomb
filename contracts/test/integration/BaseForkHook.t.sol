@@ -87,7 +87,8 @@ contract BaseForkHookTest is BaseTest {
 
         // 1. Deploy tokens.
         money = new PegToken(address(this));
-        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
+        estate =
+            new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
         trustnote = new TrustNote(address(this));
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right

@@ -105,7 +105,8 @@ contract BaseForkHookTaxTest is BaseTest {
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
         money = new PegToken(address(this));
-        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
+        estate =
+            new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
         trustnote = new TrustNote(address(this));
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.

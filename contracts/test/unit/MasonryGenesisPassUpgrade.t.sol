@@ -19,7 +19,7 @@ contract MasonryGenesisPassUpgradeTest is Test {
         start = block.timestamp + 2 days;
         schedule = new MasonryGenesisSchedule(start, address(this));
         pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
-        usdc.mint(ALICE, 1_000e6);
+        usdc.mint(ALICE, 1000e6);
         vm.prank(ALICE);
         usdc.approve(address(pass), type(uint256).max);
     }

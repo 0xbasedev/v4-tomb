@@ -154,7 +154,9 @@ contract BoardroomInvariants is StdInvariant, Test {
 
         // 1. Deploy tokens (deployer = trustees of each).
         money = new PegToken(address(this));
-        estate = new ShareToken(ShareTokenProfiles.legacy(block.timestamp + 1 hours, communityFund, devFund, address(this)), address(this));
+        estate = new ShareToken(
+            ShareTokenProfiles.legacy(block.timestamp + 1 hours, communityFund, devFund, address(this)), address(this)
+        );
 
         // 2. Mock treasury.
         treasury = new MockTreasury();

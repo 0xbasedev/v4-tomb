@@ -123,7 +123,8 @@ contract DeployMasonryLocal is Script {
         d.level = new PegToken(d.deployer);
         // xSHARE: the Masonry profile. Vesting buckets are unset in the template, so the
         // remainder sits with the deployer here; farming (25,641) mints to the Farm later.
-        d.square = new ShareToken(ShareTokenProfiles.masonry(_shareAllocations(d), 25_641 ether, 33_333 ether), d.deployer);
+        d.square =
+            new ShareToken(ShareTokenProfiles.masonry(_shareAllocations(d), 25_641 ether, 33_333 ether), d.deployer);
 
         // Genesis clock deployed unscheduled; the deployer is the scheduler.
         d.schedule = new MasonryGenesisSchedule(0, d.deployer);
@@ -152,9 +153,10 @@ contract DeployMasonryLocal is Script {
         address hook
     ) internal pure returns (PoolKey memory) {
         bool asset0 = asset < usdc;
-        return PoolKey(
-            Currency.wrap(asset0 ? asset : usdc), Currency.wrap(asset0 ? usdc : asset), FEE, SPACING, IHooks(hook)
-        );
+        return
+            PoolKey(
+                Currency.wrap(asset0 ? asset : usdc), Currency.wrap(asset0 ? usdc : asset), FEE, SPACING, IHooks(hook)
+            );
     }
 
     /// $1 for an 18-decimal asset against 6-decimal USDC.
@@ -200,7 +202,8 @@ contract DeployMasonryLocal is Script {
         d.level.approve(address(d.liquidity), type(uint256).max);
         d.square.approve(address(d.liquidity), type(uint256).max);
         d.usdc.approve(address(d.liquidity), type(uint256).max);
-        d.liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, int256(SEED_LIQUIDITY), 0), "");
+        d.liquidity
+            .modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, int256(SEED_LIQUIDITY), 0), "");
     }
 
     function _genesis(
@@ -246,16 +249,21 @@ contract DeployMasonryLocal is Script {
         (address hookAddress, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, HOOK_FLAGS, code);
         d.squareKey = _key(address(d.square), address(d.usdc), hookAddress);
         new MasonryLevelOracle(d.squareKey.toId(), address(d.square) < address(d.usdc), 1e15, hookAddress);
-        d.squareHook = new MasonrySquareHook{salt: salt}(d.manager, oc, address(d.square), address(d.usdc), FEE, SPACING, rc);
+        d.squareHook =
+            new MasonrySquareHook{salt: salt}(d.manager, oc, address(d.square), address(d.usdc), FEE, SPACING, rc);
         require(address(d.squareHook) == hookAddress, "square hook address");
 
         bool square0 = address(d.square) < address(d.usdc);
         // xSHARE seeds at its $120 reference: 120 USDC per 1e18 xSHARE.
         // Raw price is token1 per token0 in base units: 120e6 USDC units per 1e18 xSHARE units.
-        uint160 price = uint160(square0 ? _sqrt(120e6 * (uint256(1) << 192) / 1e18) : _sqrt(1e18 * (uint256(1) << 192) / 120e6));
+        uint160 price =
+            uint160(square0 ? _sqrt(120e6 * (uint256(1) << 192) / 1e18) : _sqrt(1e18 * (uint256(1) << 192) / 120e6));
         d.manager.initialize(d.squareKey, price);
         int24 mid = TickMath.getTickAtSqrtPrice(price) / SPACING * SPACING;
-        d.liquidity.modifyLiquidity(d.squareKey, ModifyLiquidityParams(mid - 6000, mid + 6000, int256(SEED_LIQUIDITY / 100), 0), "");
+        d.liquidity
+            .modifyLiquidity(
+                d.squareKey, ModifyLiquidityParams(mid - 6000, mid + 6000, int256(SEED_LIQUIDITY / 100), 0), ""
+            );
         d.squareVault = new MasonrySquareUsdcVault(d.squareKey, mid - 6000, mid + 6000);
         d.squareHook.bindPolVault(d.squareVault);
     }
@@ -277,24 +285,61 @@ contract DeployMasonryLocal is Script {
     ) internal {
         string memory contracts = string.concat(
             "{",
-            _kv("level", address(d.level)), ",", _kv("square", address(d.square)), ",", _kv("usdc", address(d.usdc)), ",",
-            _kv("poolManager", address(d.manager)), ",", _kv("treasury", d.treasury), ",", _kv("schedule", address(d.schedule)), ","
+            _kv("level", address(d.level)),
+            ",",
+            _kv("square", address(d.square)),
+            ",",
+            _kv("usdc", address(d.usdc)),
+            ",",
+            _kv("poolManager", address(d.manager)),
+            ",",
+            _kv("treasury", d.treasury),
+            ",",
+            _kv("schedule", address(d.schedule)),
+            ","
         );
         contracts = string.concat(
             contracts,
-            _kv("pass", address(d.pass)), ",", _kv("staking", address(d.staking)), ",", _kv("settlement", address(d.settlement)), ",",
-            _kv("lpBurnFee", address(d.lpBurnFee)), ",", _kv("levelHook", address(d.levelHook)), ",",
-            _kv("levelOracle", address(d.levelHook.oracle())), ","
+            _kv("pass", address(d.pass)),
+            ",",
+            _kv("staking", address(d.staking)),
+            ",",
+            _kv("settlement", address(d.settlement)),
+            ",",
+            _kv("lpBurnFee", address(d.lpBurnFee)),
+            ",",
+            _kv("levelHook", address(d.levelHook)),
+            ",",
+            _kv("levelOracle", address(d.levelHook.oracle())),
+            ","
         );
         contracts = string.concat(
             contracts,
-            _kv("buybackGuard", address(d.guard)), ",", _kv("levelVault", address(d.levelVault)), ",",
-            _kv("squareHook", address(d.squareHook)), ",", _kv("squareVault", address(d.squareVault)), ",",
-            _kv("criticalDefense", address(d.defense)), ",", _kv("miniSwapRouter", address(d.router)), "}"
+            _kv("buybackGuard", address(d.guard)),
+            ",",
+            _kv("levelVault", address(d.levelVault)),
+            ",",
+            _kv("squareHook", address(d.squareHook)),
+            ",",
+            _kv("squareVault", address(d.squareVault)),
+            ",",
+            _kv("criticalDefense", address(d.defense)),
+            ",",
+            _kv("miniSwapRouter", address(d.router)),
+            "}"
         );
         string memory json = string.concat(
-            '{"chainId":', vm.toString(block.chainid), ',"deployBlock":"', vm.toString(block.number), '","contracts":', contracts,
-            ',"pools":{"level":', _keyJson(d.levelKey), ',"square":', _keyJson(d.squareKey), "}}"
+            '{"chainId":',
+            vm.toString(block.chainid),
+            ',"deployBlock":"',
+            vm.toString(block.number),
+            '","contracts":',
+            contracts,
+            ',"pools":{"level":',
+            _keyJson(d.levelKey),
+            ',"square":',
+            _keyJson(d.squareKey),
+            "}}"
         );
         vm.writeFile("./deployment-output/masonry-local.json", json);
         console2.log("Masonry local deployment written to deployment-output/masonry-local.json");
@@ -311,9 +356,17 @@ contract DeployMasonryLocal is Script {
         PoolKey memory k
     ) internal pure returns (string memory) {
         return string.concat(
-            '{"currency0":"', vm.toString(Currency.unwrap(k.currency0)), '","currency1":"', vm.toString(Currency.unwrap(k.currency1)),
-            '","fee":', vm.toString(uint256(k.fee)), ',"tickSpacing":', vm.toString(int256(k.tickSpacing)), ',"hooks":"',
-            vm.toString(address(k.hooks)), '"}'
+            '{"currency0":"',
+            vm.toString(Currency.unwrap(k.currency0)),
+            '","currency1":"',
+            vm.toString(Currency.unwrap(k.currency1)),
+            '","fee":',
+            vm.toString(uint256(k.fee)),
+            ',"tickSpacing":',
+            vm.toString(int256(k.tickSpacing)),
+            ',"hooks":"',
+            vm.toString(address(k.hooks)),
+            '"}'
         );
     }
 }

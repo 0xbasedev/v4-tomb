@@ -132,7 +132,8 @@ contract ShareTokenInvariants is StdInvariant, Test {
         communityFund = makeAddr("communityFund");
         devFund = makeAddr("devFund");
 
-        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
+        estate =
+            new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
         handler = new ShareTokenHandler(estate, farmingPool, communityFund, devFund);
 
         // Hand trustees to the handler so it can call distributeReward.

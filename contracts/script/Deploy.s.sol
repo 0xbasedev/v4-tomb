@@ -216,7 +216,10 @@ contract Deploy is NetworkConfig, Create3Config {
                 "estate",
                 abi.encodePacked(
                     type(ShareToken).creationCode,
-                    abi.encode(ShareTokenProfiles.legacy(g.vestingStart, g.communityFund, g.devFund, _plan.deployer), _plan.deployer)
+                    abi.encode(
+                        ShareTokenProfiles.legacy(g.vestingStart, g.communityFund, g.devFund, _plan.deployer),
+                        _plan.deployer
+                    )
                 )
             )
         );
