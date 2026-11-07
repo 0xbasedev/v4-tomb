@@ -37,7 +37,11 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /**
  * @title Deploy
- * @notice One-shot Foundry deploy script for the inherited WETH-based protocol.
+ * @notice LEGACY WETH/bond-era launch script. It is NOT Masonry launch logic and
+ *         must not be used to launch X Tomb on Robinhood Chain. Use
+ *         LaunchMasonryDryRun.s.sol (simulation only, no broadcast) instead.
+ *
+ * @dev One-shot Foundry deploy script for the inherited WETH-based protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
  *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
