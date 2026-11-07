@@ -247,6 +247,18 @@ contract MasonryGenesisStakingTest is Test {
         staking.deposit(pool, 1);
     }
 
+    function testKeeperWorksRightAfterGenesisToProUpgrade() public {
+        vm.prank(BASIC);
+        vm.expectRevert(MasonryGenesisStaking.NotEligible.selector);
+        staking.setKeeper(KEEPER, 1);
+        vm.startPrank(BASIC);
+        usdc.approve(address(pass), 50e6);
+        pass.upgrade(MasonryGenesisPass.Tier.Pro);
+        staking.setKeeper(KEEPER, 1);
+        vm.stopPrank();
+        assertEq(staking.keeper(BASIC), KEEPER);
+    }
+
     function _buy(
         address user,
         MasonryGenesisPass.Tier tier,

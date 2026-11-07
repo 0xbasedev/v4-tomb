@@ -22,7 +22,10 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     address public immutable treasury;
     MasonryGenesisSchedule public immutable schedule;
     mapping(address => Tier) public tierOf;
+    mapping(address => uint256) public tokenOf;
     uint256 private nextId;
+
+    event Upgraded(address indexed holder, uint256 indexed tokenId, Tier oldTier, Tier newTier, uint256 paid);
 
     error InvalidConfiguration();
     error InvalidPurchase();
@@ -57,8 +60,24 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
         uint256 cost = price(tier);
         tierOf[msg.sender] = tier;
         tokenId = ++nextId;
+        tokenOf[msg.sender] = tokenId;
         usdc.safeTransferFrom(msg.sender, treasury, cost);
         _safeMint(msg.sender, tokenId);
+    }
+
+    /// @notice Move the caller's pass to a strictly higher tier by paying the price difference.
+    /// @dev Same tokenId, tier changes in place; no transfer occurs, so the soulbound rule is untouched.
+    function upgrade(
+        Tier newTier
+    ) external nonReentrant returns (uint256 paid) {
+        Tier oldTier = tierOf[msg.sender];
+        if (block.timestamp >= schedule.end() || oldTier == Tier.None || newTier <= oldTier) {
+            revert InvalidPurchase();
+        }
+        paid = price(newTier) - price(oldTier);
+        tierOf[msg.sender] = newTier;
+        usdc.safeTransferFrom(msg.sender, treasury, paid);
+        emit Upgraded(msg.sender, tokenOf[msg.sender], oldTier, newTier, paid);
     }
 
     function _update(
