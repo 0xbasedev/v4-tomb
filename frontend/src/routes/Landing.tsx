@@ -1,6 +1,10 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 
+import { ChainPicker } from "@/components/ChainGate";
+import { PRIMARY } from "@/lib/networks";
+const REFERENCE_SYMBOL = PRIMARY.referenceToken?.symbol ?? "USDC";
+
 import { ConnectButton } from "@/components/ConnectButton";
 import { Wordmark } from "@/components/brand/Sigil";
 import { AnimatedNumber } from "@/components/fx/AnimatedNumber";
@@ -97,6 +101,7 @@ export function Landing() {
           <Link to="/dashboard" className="btn btn-ghost hidden h-10 sm:inline-flex">
             Open app
           </Link>
+          <ChainPicker />
           <ConnectButton compact />
         </div>
       </nav>
@@ -106,9 +111,10 @@ export function Landing() {
       <section className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-16 pt-8 md:px-8 lg:grid-cols-[1.15fr_1fr] lg:pb-24 lg:pt-14">
         <div>
           <div className="hero-fade mb-6 flex flex-wrap items-center gap-2">
-            <span className="chip chip-ember">$1 USDC peg</span>
+            <span className="chip chip-warn">Not launched yet · Robinhood Chain</span>
+            <span className="chip chip-ember">$1 {REFERENCE_SYMBOL} peg</span>
             <span className="chip">Uniswap v4</span>
-            <span className="chip">xTOMB/USDC · xSHARE/USDC</span>
+            <span className="chip">xTOMB/{REFERENCE_SYMBOL} · xSHARE/{REFERENCE_SYMBOL}</span>
           </div>
           <h1 className="whitespace-nowrap text-hero font-display font-bold text-bone" aria-label="xTOMB">
             {"xTOMB".split("").map((ch, i) => (
@@ -118,7 +124,7 @@ export function Landing() {
             ))}
           </h1>
           <p className="hero-fade mt-6 max-w-xl text-[18px] leading-relaxed text-bone-dim md:text-[20px]">
-            xTOMB targets $1 in USDC. Every official sell pays one <span className="text-ember-hot">Fire Tax</span> — 1% at peg,
+            xTOMB targets $1 in {REFERENCE_SYMBOL}. Every official sell pays one <span className="text-ember-hot">Fire Tax</span> — {pct(FIRE.baselineBps)} at peg,
             up to 12% under pressure — and xSHARE's sell tax funds <span className="text-spectre">protocol liquidity</span> or, in
             Critical Defense, <span className="text-bad">buys and burns xTOMB</span>. Genesis opens the first path in.
           </p>
@@ -194,7 +200,7 @@ export function Landing() {
               tone: "ember-text",
               ring: "hover:border-ember/40",
               role: "The peg",
-              body: `Targets $1 in USDC on the official xTOMB/USDC pool. Sells pay one Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)}); during Genesis the whole tax is burned. Buys and transfers are never taxed.`,
+              body: `Targets $1 in ${REFERENCE_SYMBOL} on the official xTOMB/${REFERENCE_SYMBOL} pool. Sells pay one Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)}); during Genesis the whole tax is burned. Buys and transfers are never taxed.`,
               want: "Swap or add liquidity",
               to: "/swap",
             },
@@ -203,7 +209,7 @@ export function Landing() {
               tone: "spectre-text",
               ring: "hover:border-spectre/40",
               role: "The claim",
-              body: `Capped at ${SQUARE_SUPPLY.cap.toLocaleString()} (configured). Its sell tax normally funds 12% protocol LP, 20% USDC reserve and 68% xSHARE reserve; in Critical Defense 100% buys and burns xTOMB.`,
+              body: `Capped at ${SQUARE_SUPPLY.cap.toLocaleString()} (configured). Its sell tax normally funds 12% protocol LP, 20% ${REFERENCE_SYMBOL} reserve and 68% xSHARE reserve; in Critical Defense 100% buys and burns xTOMB.`,
               want: "See the routing",
               to: "/dashboard",
             },

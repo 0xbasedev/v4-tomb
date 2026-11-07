@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 
 import { wagmiConfig } from "./lib/wagmi";
+import { NetworkProvider } from "./lib/networks";
 import { PreviewProvider } from "./lib/preview";
 
 import { ToastProvider } from "./components/ToastProvider";
@@ -44,7 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <PreviewProvider>
+        <NetworkProvider><PreviewProvider>
           <ToastProvider>
             <Router>
               <Routes>
@@ -74,7 +75,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               </Routes>
             </Router>
           </ToastProvider>
-        </PreviewProvider>
+        </PreviewProvider></NetworkProvider>
       </QueryClientProvider>
     </WagmiProvider>
   </React.StrictMode>,

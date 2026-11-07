@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { ChainGate, ChainPicker } from "@/components/ChainGate";
 import { ConnectButton } from "@/components/ConnectButton";
 import { Wordmark } from "@/components/brand/Sigil";
 import { EmberField } from "@/components/fx/EmberField";
@@ -11,6 +12,7 @@ import { useIsAdmin, useProtocol } from "@/lib/hooks";
 import { EPOCH_SECONDS } from "@/lib/launch";
 import { PHASE_META } from "@/lib/market";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
+import { PRIMARY } from "@/lib/networks";
 import { usePlan } from "@/lib/plan";
 
 /**
@@ -47,7 +49,7 @@ export function Layout() {
       <TopNav />
       <NetworkNote />
       <main id="main" tabIndex={-1} className="relative z-10 flex-1 outline-none">
-        <Outlet />
+        <ChainGate><Outlet /></ChainGate>
       </main>
       <Footer />
       <MobileTabBar />
@@ -93,7 +95,7 @@ function TopNav() {
 
   return (
     <nav className="sticky top-0 z-40 border-b border-white/[0.06] bg-void/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 md:px-8">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-4 md:px-8">
         <Link to="/" aria-label="xTomb home" className="shrink-0">
           <Wordmark />
         </Link>
@@ -143,6 +145,7 @@ function TopNav() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 md:gap-3">
+          <ChainPicker />
           <PriceTicker />
           <ConnectButton compact />
         </div>
@@ -280,13 +283,13 @@ export function Footer() {
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-8">
         <div className="flex items-center gap-4">
           <Wordmark />
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ash-dim">xTOMB/USDC · xSHARE/USDC on Uniswap v4</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ash-dim">xTOMB/{PRIMARY.referenceToken?.symbol} · xSHARE/{PRIMARY.referenceToken?.symbol} · planned Uniswap v4 pools</span>
         </div>
         <div className="flex flex-wrap items-center gap-5 text-[13px] text-ash">
           <Link to="/docs" className="hover:text-bone">Docs</Link>
           <Link to="/docs#risks" className="hover:text-bone">Risks</Link>
           <Link to="/bridge" className="hover:text-bone">Bridge</Link>
-          <span className="font-mono text-[11px] text-ash-dim">merge @ 7e3115f · unaudited</span>
+          <span className="font-mono text-[11px] text-ash-dim">Local development · unaudited</span>
         </div>
       </div>
     </footer>

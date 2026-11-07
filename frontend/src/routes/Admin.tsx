@@ -4,6 +4,7 @@ import { useReadContracts } from "wagmi";
 import { isAddress, zeroAddress, type Abi, type Address } from "viem";
 
 import { masonryContractKeys, masonryContractLabels, type MasonryContractKey } from "@config/masonry-deployment.mjs";
+import { GenesisSalePanel } from "@/components/admin/GenesisSalePanel";
 import { GenesisSchedulePanel } from "@/components/admin/GenesisSchedulePanel";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { Reason, SimBadge } from "@/components/Status";
@@ -187,6 +188,7 @@ export function Admin() {
           </div>
         </section>
 
+        <GenesisSalePanel />
         <GenesisSchedulePanel />
 
         <AdminActions roles={admin.roles} state={state} />

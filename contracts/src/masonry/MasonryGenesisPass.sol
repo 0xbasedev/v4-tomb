@@ -24,6 +24,10 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     mapping(address => Tier) public tierOf;
     mapping(address => uint256) public tokenOf;
     uint256 private nextId;
+    bool public saleOpen;
+
+    event SaleOpenChanged(bool open);
+    error Unauthorized();
 
     event Upgraded(address indexed holder, uint256 indexed tokenId, Tier oldTier, Tier newTier, uint256 paid);
 
@@ -44,6 +48,18 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
         schedule = schedule_;
     }
 
+    /// @notice The immutable Genesis scheduler controls the membership sale independently of staking.
+    function setSaleOpen(bool open) external {
+        if (msg.sender != schedule.scheduler()) revert Unauthorized();
+        saleOpen = open;
+        emit SaleOpenChanged(open);
+    }
+
+    function _saleAvailable() internal view returns (bool) {
+        uint256 end = schedule.end();
+        return saleOpen && (end == 0 || block.timestamp < end);
+    }
+
     function price(
         Tier tier
     ) public pure returns (uint256) {
@@ -56,7 +72,7 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     function purchase(
         Tier tier
     ) external nonReentrant returns (uint256 tokenId) {
-        if (block.timestamp >= schedule.end() || tierOf[msg.sender] != Tier.None) revert InvalidPurchase();
+        if (!_saleAvailable() || tierOf[msg.sender] != Tier.None) revert InvalidPurchase();
         uint256 cost = price(tier);
         tierOf[msg.sender] = tier;
         tokenId = ++nextId;
@@ -71,7 +87,7 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
         Tier newTier
     ) external nonReentrant returns (uint256 paid) {
         Tier oldTier = tierOf[msg.sender];
-        if (block.timestamp >= schedule.end() || oldTier == Tier.None || newTier <= oldTier) {
+        if (!_saleAvailable() || oldTier == Tier.None || newTier <= oldTier) {
             revert InvalidPurchase();
         }
         paid = price(newTier) - price(oldTier);

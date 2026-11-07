@@ -1,6 +1,7 @@
 import { useReadContracts } from "wagmi";
 import { formatUnits, zeroAddress, type Address } from "viem";
 
+import { liveDeployment, useSelectedNetwork } from "@/lib/networks";
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
 import {
   iERC20Abi,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/abis/masonry";
 import { sellTax, type TaxQuote, type TaxedAsset } from "@/lib/fireTax";
 import { genesisClock, type GenesisClock, type Tranche } from "@/lib/genesis";
-import { DEFENSE, DEPLOYMENTS, PASSES, PASS_TIER_FROM_ID, type PassTier } from "@/lib/launch";
+import { DEFENSE, PASSES, PASS_TIER_FROM_ID, type PassTier } from "@/lib/launch";
 import { marketPhase, type MarketPhase } from "@/lib/market";
 import { SIM_POOLS, SIM_SQUARE_REFERENCE, simPrices, usePreview } from "@/lib/preview";
 import type { TokenId } from "@/lib/tokens";
@@ -39,6 +40,7 @@ export interface ProtocolState {
   clock: GenesisClock | null;
   /** false: the schedule is deployed with start 0 (set once later by the scheduler). null: unknown. */
   genesisScheduled: boolean | null;
+  saleOpen: boolean | null;
   pass: PassTier | null;
   market: {
     twap: number | null;
@@ -93,8 +95,9 @@ function projectedRatio(pool: { asset: number; usdc: number }, price: number, va
 export function useProtocol(): ProtocolState {
   const preview = usePreview();
   const net = useNetworkStatus();
+  const { selected } = useSelectedNetwork();
   // Disconnected in live mode: public reads from the first verified deployment.
-  const d: MasonryDeployment | null = net.preview ? null : (net.deployment ?? (net.walletConnected ? null : (DEPLOYMENTS[0] ?? null)));
+  const d: MasonryDeployment | null = net.preview ? null : (net.deployment ?? (net.walletConnected ? null : liveDeployment(selected)));
   const live = useLiveReads(d, net.account);
 
   if (preview.enabled) {
@@ -108,6 +111,7 @@ export function useProtocol(): ProtocolState {
       account: net.account,
       clock,
       genesisScheduled: preview.scheduled,
+      saleOpen: preview.saleOpen,
       pass: connected ? preview.pass : null,
       market: {
         twap: preview.twap,
@@ -217,7 +221,8 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 36
           { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 37
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 38
-        ]
+          { address: c.pass, abi: masonryGenesisPassAbi, functionName: "saleOpen" }, // 39
+        ].map((entry) => ({ ...entry, chainId: d!.chainId }))
       : [],
     query: { enabled, refetchInterval: 15_000 },
   });
@@ -229,6 +234,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
       c && count > 0
         ? Array.from({ length: Math.min(count, 32) }, (_, i) => ({
             address: c.settlement,
+            chainId: d!.chainId,
             abi: masonryGenesisSettlementAbi,
             functionName: "tranches" as const,
             args: [user, BigInt(i)] as const,
@@ -241,7 +247,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   const squareOracle = ok<Address>(r[38]);
   const squareTwapRead = useReadContracts({
     allowFailure: true,
-    contracts: squareOracle ? [{ address: squareOracle, abi: masonryLevelOracleAbi, functionName: "latestValidatedTwap" }] : [],
+    contracts: squareOracle ? [{ address: squareOracle, chainId: d!.chainId, abi: masonryLevelOracleAbi, functionName: "latestValidatedTwap" }] : [],
     query: { enabled: !!squareOracle, refetchInterval: 15_000 },
   });
   const sq = ok<readonly [bigint, bigint, boolean]>(squareTwapRead.data?.[0]);
@@ -282,6 +288,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     sim: false,
     clock,
     genesisScheduled: start === undefined ? null : start !== 0n,
+    saleOpen: ok<boolean>(r[39]) ?? null,
     pass: tier !== undefined ? PASS_TIER_FROM_ID[tier] : null,
     market: {
       twap,

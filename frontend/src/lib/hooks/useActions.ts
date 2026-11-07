@@ -14,6 +14,7 @@ import {
 } from "@/lib/abis/masonry";
 import type { TaxedAsset } from "@/lib/fireTax";
 import { PASSES, PASS_TIER_ID, type PassTier } from "@/lib/launch";
+import { PRIMARY } from "@/lib/networks";
 import { PREVIEW_KEEPER, simulateTx, usePreview } from "@/lib/preview";
 import type { TokenId } from "@/lib/tokens";
 import { useNetworkStatus } from "./useNetworkStatus";
@@ -130,7 +131,7 @@ export function useActions() {
     sim: preview.enabled,
 
     purchasePass(tier: PassTier, onDone?: () => void) {
-      const label = `Buy ${PASSES[tier].name} pass · ${PASSES[tier].priceUsdc} USDC`;
+      const label = `Buy ${PASSES[tier].name} pass · ${PASSES[tier].priceUsdc} ${PRIMARY.referenceToken?.symbol ?? "USDC"}`;
       if (preview.enabled) return sim(label, () => preview.act.purchase(tier), onDone);
       if (!c) return run(label, []);
       return run(
@@ -147,6 +148,14 @@ export function useActions() {
         ],
         onDone,
       );
+    },
+
+    upgradePass(tier: PassTier, held: PassTier, onDone?: () => void) {
+      const cost = PASSES[tier].priceUsdc - PASSES[held].priceUsdc;
+      const label = `Upgrade to ${PASSES[tier].name} · ${cost} ${PRIMARY.referenceToken?.symbol ?? "USDC"}`;
+      if (preview.enabled) return sim(label, () => preview.act.upgrade(tier), onDone);
+      if (!c || cost <= 0) return run(label, []);
+      return run(label, [{ label: "pass upgrade", approvals: [{ token: c.usdc, spender: c.pass, amount: e6(cost) }], address: c.pass, abi: masonryGenesisPassAbi as Abi, functionName: "upgrade", args: [PASS_TIER_ID[tier]] }], onDone);
     },
 
     deposit(pool: 0 | 1, amount: number, standardAsset: Address | null, onDone?: () => void) {

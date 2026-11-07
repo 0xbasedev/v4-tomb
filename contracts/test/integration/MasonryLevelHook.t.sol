@@ -350,6 +350,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        pass.setSaleOpen(true);
         MasonryGenesisStaking staking =
             new MasonryGenesisStaking(pass, collector, IMasonryGenesisSettlement(address(this)), usdc, 7000e18);
         collector.setGenesis(address(staking));
@@ -739,6 +740,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        pass.setSaleOpen(true);
         settlement = new MasonryGenesisSettlement(vault, guard, router, TREASURY, address(this));
         staking = new MasonryGenesisStaking(pass, collector, settlement, usdc, 70e18);
         collector.setGenesis(address(staking));

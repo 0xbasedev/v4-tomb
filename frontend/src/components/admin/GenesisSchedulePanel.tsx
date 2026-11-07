@@ -146,7 +146,7 @@ export function GenesisSchedulePanel() {
       ) : (
         <>
           <p className="max-w-2xl text-[13px] text-bone-dim">
-            The schedule was deployed with no start. The scheduler{scheduler && scheduler !== "sample" && scheduler !== "someone else" ? ` (${String(scheduler).slice(0, 8)}…)` : ""} sets it exactly once — after that it's permanent. Pass sales and staking open with it.
+            The schedule was deployed with no start. The scheduler{scheduler && scheduler !== "sample" && scheduler !== "someone else" ? ` (${String(scheduler).slice(0, 8)}…)` : ""} sets it exactly once — after that it's permanent. Staking opens with it. NFT sales have their own switch.
           </p>
           <ul className="mt-4 grid grid-cols-1 gap-1.5 sm:grid-cols-2" aria-label="Readiness checks">
             {checks.map((x) => (

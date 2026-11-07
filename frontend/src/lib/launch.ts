@@ -1,6 +1,7 @@
 import launch from "@config/masonry-launch.template.json" with { type: "json" };
 import registryJson from "@config/official-infrastructure.json" with { type: "json" };
 import deploymentsJson from "@config/masonry-deployments.json" with { type: "json" };
+import { parseMasonryDeployment } from "@config/masonry-deployment.mjs";
 import type { MasonryDeployment, OfficialRegistry } from "@config/masonry-deployment.mjs";
 
 /**
@@ -16,7 +17,9 @@ import type { MasonryDeployment, OfficialRegistry } from "@config/masonry-deploy
 export const LAUNCH = launch;
 export const POLICY = launch.policy;
 export const REGISTRY = registryJson as unknown as OfficialRegistry;
-export const DEPLOYMENTS = (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
+export const DEPLOYMENTS = (deploymentsJson as { deployments: MasonryDeployment[] }).deployments.filter((record) => {
+  try { parseMasonryDeployment(record, REGISTRY); return true; } catch { return false; }
+});
 
 const bps = (n: number) => n / 10_000;
 export const pct = (b: number, digits = 2) => `${+(b / 100).toFixed(digits)}%`;

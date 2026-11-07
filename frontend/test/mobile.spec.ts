@@ -14,7 +14,7 @@ for (const width of [412, 320]) {
     await page.setViewportSize({ width, height: 860 });
     const over: string[] = [];
     for (const r of ROUTES) {
-      await page.goto(r, { waitUntil: "domcontentloaded" });
+      await page.goto(`${r}${r.includes("?") ? "&" : "?"}preview=1`, { waitUntil: "domcontentloaded" });
       await page.locator("main, body").first().waitFor();
       await page.waitForTimeout(600);
       const d = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -25,7 +25,7 @@ for (const width of [412, 320]) {
 }
 
 test("thumb bar replaces the desktop nav; More holds the rest", async ({ page }) => {
-  await page.goto("/dashboard");
+  await page.goto("/dashboard?preview=1");
   const bar = page.getByRole("navigation", { name: "Primary" });
   await expect(bar).toBeVisible();
   for (const label of ["Dashboard", "Genesis", "Swap", "Bridge"]) await expect(bar.getByRole("link", { name: label })).toBeVisible();
@@ -34,7 +34,7 @@ test("thumb bar replaces the desktop nav; More holds the rest", async ({ page })
 });
 
 test("the next move sits near the top of the Dashboard on a phone", async ({ page }) => {
-  await page.goto("/dashboard");
+  await page.goto("/dashboard?preview=1");
   const move = page.getByText("Your next move");
   await move.scrollIntoViewIfNeeded();
   const y = await move.evaluate((el) => el.getBoundingClientRect().top + window.scrollY);

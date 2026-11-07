@@ -23,6 +23,7 @@ contract MasonryGenesisPassUpgradeTest is Test {
     }
 
     function _buy(MasonryGenesisPass.Tier t) internal {
+        pass.setSaleOpen(true);
         usdc.mint(USER, 1000e6);
         vm.startPrank(USER);
         usdc.approve(address(pass), type(uint256).max);
@@ -43,6 +44,36 @@ contract MasonryGenesisPassUpgradeTest is Test {
         assertEq(pass.balanceOf(USER), 1);
     }
 
+    function testSaleClosedByDefault() public {
+        vm.prank(USER);
+        vm.expectRevert(MasonryGenesisPass.InvalidPurchase.selector);
+        pass.purchase(MasonryGenesisPass.Tier.Genesis);
+    }
+    function testSaleOpensBeforeSchedulingAndUpgrades() public {
+        schedule = new MasonryGenesisSchedule(0, address(this));
+        pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        pass.setSaleOpen(true);
+        _buy(MasonryGenesisPass.Tier.Genesis);
+        vm.prank(USER);
+        pass.upgrade(MasonryGenesisPass.Tier.Pro);
+        pass.setSaleOpen(false);
+        vm.prank(USER);
+        vm.expectRevert(MasonryGenesisPass.InvalidPurchase.selector);
+        pass.upgrade(MasonryGenesisPass.Tier.Ultra);
+    }
+    function testOnlySchedulerCanToggle() public {
+        vm.prank(USER);
+        vm.expectRevert();
+        pass.setSaleOpen(true);
+        assertFalse(pass.saleOpen());
+    }
+    function testPurchaseAtEndRevertsEvenWhenOpen() public {
+        pass.setSaleOpen(true);
+        vm.warp(schedule.end());
+        vm.prank(USER);
+        vm.expectRevert(MasonryGenesisPass.InvalidPurchase.selector);
+        pass.purchase(MasonryGenesisPass.Tier.Genesis);
+    }
     function testGenesisToPro() public { _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 50e6); }
     function testGenesisToUltra() public { _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Ultra, 450e6); }
     function testProToUltra() public { _up(MasonryGenesisPass.Tier.Pro, MasonryGenesisPass.Tier.Ultra, 400e6); }
