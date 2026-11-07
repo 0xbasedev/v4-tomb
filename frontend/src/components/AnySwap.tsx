@@ -11,7 +11,7 @@ import { useActions, useProtocol, useSwapSimulation } from "@/lib/hooks";
 import { pct } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
-import { usd } from "@/lib/peg";
+import { labelPeg, usd } from "@/lib/peg";
 import { planRoute, quoteRoute, type Leg } from "@/lib/routes";
 import { SWAP_TOKENS, TOKENS, shortLabel, type TokenId } from "@/lib/tokens";
 import { maskDecimalInput } from "@/lib/util/decimal";
@@ -203,7 +203,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
           {shown?.legs
             .filter((l) => l.kind !== "redeem")
             .map((l, i) => (
-              <Row key={`fee-${i}`} k={`Pool fee · ${l.pool}`} v={quote ? `−${usd(l.poolFeeUsd)}` : "—"} sub={`${pct(l.poolFeeBps)}${p.sim ? " · sample fee" : " · pool key"}`} />
+              <Row key={`fee-${i}`} k={`Pool fee · ${labelPeg(l.pool)}`} v={quote ? `−${usd(l.poolFeeUsd)}` : "—"} sub={`${pct(l.poolFeeBps)}${p.sim ? " · sample fee" : " · pool key"}`} />
             ))}
           <Row
             k="Fire Tax"

@@ -14,6 +14,7 @@ import { PendingPanel } from "@/components/Status";
 import { BRIDGE } from "@/lib/create3";
 import { GENESIS_DAYS, LP_DAY } from "@/lib/genesis";
 import { DEFENSE, EPOCH_SECONDS, EXPANSION, FARM_POLICY, FIRE, GENESIS_POLICY, PASSES, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
+import { PEG, pegPair } from "@/lib/peg";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
 import { useReveal } from "@/lib/motion/useReveal";
 
@@ -47,24 +48,24 @@ const USD = (n: number) => `$${n.toFixed(2)}`;
 
 const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Epoch", tag: "treasury", body: `A ${H(EPOCH_SECONDS)} checkpoint. Each one is judged on its own fresh TWAP; a missed or stale epoch is never made up later.` },
-  { term: "TWAP", tag: "treasury", body: "Time-weighted average price from the official xTOMB/USDC pool's oracle. It needs active liquidity and a recent real swap to be valid." },
+  { term: "TWAP", tag: "treasury", body: `Time-weighted average price from the official ${pegPair("xTOMB")} pool's oracle. It needs active liquidity and a recent real swap to be valid.` },
   { term: "Expansion (planned)", tag: "treasury", body: `When a fresh TWAP is strictly above ${USD(EXPANSION.gate)}, an epoch may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB. The mint isn't bound in the contracts yet. There is no bootstrap.` },
   { term: "Critical Defense", tag: "treasury", body: `Entered at or below ${USD(DEFENSE.enterAt)}. New xSHARE sell tax buys and burns xTOMB until ${DEFENSE.recoveryEpochs} checkpoints close above ${USD(DEFENSE.exitAbove)}.` },
   { term: "Fire Tax", tag: "swap", body: `The hooks' sell tax: the highest of the TWAP rate, the projected post-sale rate, the recovery floor and the Genesis floor. Baseline ${pct(FIRE.baselineBps)}, hard cap ${pct(FIRE.capBps)}. Buys and wallet transfers pay 0%.` },
   { term: "Recovery floor", tag: "swap", body: `After the tax rises, it can't fall straight back: the floor decays linearly to baseline over ${H(FIRE.recoverySeconds)}.` },
   { term: "Genesis floor", tag: "swap", body: `During Genesis, sells pay at least ${pct(FIRE.genesisFloorBps.xTOMB)} (xTOMB) or ${pct(FIRE.genesisFloorBps.xSHARE)} (xSHARE). The whole xTOMB sell tax burns during Genesis.` },
-  { term: "Sell leg", tag: "swap", body: "The part of a route that sells xTOMB or xSHARE for USDC. Only that leg pays the Fire Tax — removing liquidity to USDC taxes the sold half, not the whole position." },
+  { term: "Sell leg", tag: "swap", body: `The part of a route that sells xTOMB or xSHARE for ${PEG.symbol}. Only that leg pays the Fire Tax — removing liquidity to ${PEG.symbol} taxes the sold half, not the whole position.` },
   { term: "Pool fee", tag: "swap", body: "The Uniswap v4 LP fee on each leg. It's shown separately from the Fire Tax." },
-  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in USDC: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. No deposit fees, no upgrades.` },
+  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in ${PEG.symbol}: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. No deposit fees; upgrades cost the price difference.` },
   { term: "Standard pool", tag: "genesis", body: `Genesis pool 0. It takes every emission on Day 1 and 25% from Day ${LP_DAY}. Ultra can stake in it up to 24h before Genesis starts.` },
-  { term: "LP pool", tag: "genesis", body: `Genesis pool 1 — xTOMB/USDC vault shares. Opens on Day ${LP_DAY} with 75% of emissions.` },
+  { term: "LP pool", tag: "genesis", body: `Genesis pool 1 — ${pegPair("xTOMB")} vault shares. Opens on Day ${LP_DAY} with 75% of emissions.` },
   { term: "Liquid / vested", tag: "genesis", body: `Every reward splits ${pct(GENESIS_POLICY.liquidShare * 10_000)} liquid, the rest vested. This is separate from the 75/25 pool split.` },
   { term: "Installment", tag: "genesis", body: `Vested rewards release in ${GENESIS_POLICY.installments} claim-gated installments. The first opens ${H(GENESIS_POLICY.installmentSeconds)} after Genesis ends; each next one ${H(GENESIS_POLICY.installmentSeconds)} after you claim the last.` },
   { term: "Wallet fee", tag: "genesis", body: `${pct(GENESIS_POLICY.walletFeeBps)} of liquid claims, releases and refunds, to Treasury. A claim of 400 pays 196 to the wallet, 4 to Treasury and vests 200.` },
   { term: "LP burn fee", tag: "genesis", body: `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the LP shares a compound creates, burned.` },
   { term: "Keeper", tag: "automation", body: `An executor a Pro or Ultra holder opts into. It compounds for you, no more often than every ${H(GENESIS_POLICY.compoundCooldownSeconds)}, for ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half per run.` },
   { term: "Compound cooldown", tag: "automation", body: `${H(GENESIS_POLICY.compoundCooldownSeconds)}, shared by claims and compounds, by hand or by keeper. Withdrawals are never locked.` },
-  { term: "xSHARE routing", tag: "treasury", body: `Normal mode: ${pct(SQUARE_ROUTING.polBps)} of collected xSHARE tax to protocol LP, ${pct(SQUARE_ROUTING.usdcReserveBps)} to the USDC reserve, ${pct(SQUARE_ROUTING.squareReserveBps)} to the xSHARE reserve.` },
+  { term: "xSHARE routing", tag: "treasury", body: `Normal mode: ${pct(SQUARE_ROUTING.polBps)} of collected xSHARE tax to protocol LP, ${pct(SQUARE_ROUTING.usdcReserveBps)} to the ${PEG.symbol} reserve, ${pct(SQUARE_ROUTING.squareReserveBps)} to the xSHARE reserve.` },
   { term: "Hook", tag: "swap", body: "A Uniswap v4 contract that runs on every swap of its pool. The xTOMB and xSHARE hooks observe price, charge the Fire Tax and reject sells without a valid TWAP." },
   { term: "CREATE3 release plan", tag: "app", body: "CreateX predicts every project address from the deployment signer, a release ID and each role — the same on every chain with the canonical factory. Hooks are mined for their Uniswap v4 permission bits. Predictions aren't deployments." },
   { term: "Home chain", tag: "bridge", body: "Where original xSHARE lives and the bridge escrows it. Chosen in the Wizard; every route runs home ↔ satellite." },
@@ -154,7 +155,7 @@ export function Docs() {
             id="summary"
             numeral={num("summary")}
             title="In sixty seconds"
-            lede="xTOMB is pegged to $1 USDC. Each rule switches on at a different price, and all of them read the same validated TWAP."
+            lede={`xTOMB is pegged to $1 ${PEG.symbol}. Each rule switches on at a different price, and all of them read the same validated TWAP.`}
             facts={[
               `At every price: sells pay the Fire Tax, at least ${pct(FIRE.baselineBps)} and at most ${pct(FIRE.capBps)}. Buys and transfers pay 0%.`,
               `At or below ${USD(DEFENSE.enterAt)}: Critical Defense. New xSHARE tax buys and burns xTOMB.`,
@@ -169,10 +170,10 @@ export function Docs() {
             id="tokens"
             numeral={num("tokens")}
             title="The three tokens"
-            lede="A $1 stable, a capped share that trades against USDC, and a planned bond."
+            lede={`A $1 stable, a capped share that trades against ${PEG.symbol}, and a planned bond.`}
             facts={[
-              "xTOMB — the $1 stable. Official pair: xTOMB/USDC.",
-              `xSHARE — capped at ${SQUARE_SUPPLY.cap.toLocaleString("en-US")}. Official pair: xSHARE/USDC.`,
+              `xTOMB — the $1 stable. Official pair: ${pegPair("xTOMB")}.`,
+              `xSHARE — capped at ${SQUARE_SUPPLY.cap.toLocaleString("en-US")}. Official pair: ${pegPair("xSHARE")}.`,
               "xBOND — a planned preview. Nothing is issued.",
             ]}
           >
@@ -184,7 +185,7 @@ export function Docs() {
             numeral={num("begin")}
             title="How to begin"
             lede="Four ways in. Only Genesis is bound to contracts today; the others say what's missing."
-            facts={["Founders enter Genesis with a soulbound pass.", "Farmers will earn xSHARE on LP (pending).", "Members will stake xSHARE/USDC LP for expansion (pending).", "Bondholders: planned."]}
+            facts={["Founders enter Genesis with a soulbound pass.", "Farmers will earn xSHARE on LP (pending).", `Members will stake ${pegPair("xSHARE")} LP for expansion (pending).`, "Bondholders: planned."]}
           >
             <PathStepper />
           </DocSection>
@@ -193,12 +194,12 @@ export function Docs() {
             id="genesis"
             numeral={num("genesis")}
             title="Genesis and the passes"
-            lede={`${GENESIS_DAYS} days, two pools. Day 1 the standard pool takes every emission; from Day ${LP_DAY} the xTOMB/USDC LP pool takes 75%.`}
+            lede={`${GENESIS_DAYS} days, two pools. Day 1 the standard pool takes every emission; from Day ${LP_DAY} the ${pegPair("xTOMB")} LP pool takes 75%.`}
             facts={[
               `Each reward: ${pct(GENESIS_POLICY.liquidShare * 10_000)} liquid, the rest vested — separate from the 75/25 pool split.`,
               `Vested: ${GENESIS_POLICY.installments} claim-gated ${H(GENESIS_POLICY.installmentSeconds)} installments after Genesis ends.`,
               `${pct(GENESIS_POLICY.walletFeeBps)} wallet fee on liquid claims. 400 → 196 wallet, 4 Treasury, 200 vested.`,
-              `Passes: ${PASSES.genesis.priceUsdc} / ${PASSES.pro.priceUsdc} / ${PASSES.ultra.priceUsdc} USDC, soulbound. Same reward weighting.`,
+              `Passes: ${PASSES.genesis.priceUsdc} / ${PASSES.pro.priceUsdc} / ${PASSES.ultra.priceUsdc} ${PEG.symbol}, soulbound. Same reward weighting.`,
               "Pro and Ultra can opt into keeper compounding. Ultra can stake the standard pool 24h early.",
             ]}
             wide
@@ -235,7 +236,7 @@ export function Docs() {
             id="loop"
             numeral={num("loop")}
             title="Claim and compound"
-            lede={`Claims and compounds share one ${H(GENESIS_POLICY.compoundCooldownSeconds)} cooldown. A compound sells part of the liquid half for USDC, adds xTOMB/USDC liquidity and stakes it.`}
+            lede={`Claims and compounds share one ${H(GENESIS_POLICY.compoundCooldownSeconds)} cooldown. A compound sells part of the liquid half for ${PEG.symbol}, adds ${pegPair("xTOMB")} liquidity and stakes it.`}
             facts={[
               "The compound's sell leg can pay the Fire Tax.",
               `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the new LP shares burn.`,
@@ -272,7 +273,7 @@ export function Docs() {
             lede="Both screens exist; neither has a bound contract in the merge branch. Their actions stay disabled and say why."
             facts={[
               `Farm: xSHARE emissions over ${FARM_POLICY.emissionDays} days, ${H(FARM_POLICY.compoundCooldownSeconds)} compound limit (configured).`,
-              "Masonry: stake xSHARE/USDC LP for a share of expansion (planned).",
+              `Masonry: stake ${pegPair("xSHARE")} LP for a share of expansion (planned).`,
               "Locks, fees and automation for both are pending.",
             ]}
           >

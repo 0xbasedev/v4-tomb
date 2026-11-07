@@ -42,11 +42,11 @@ export const LEVEL_SUPPLY = {
   initial: launch.level.initial,
 };
 
-/** Fire Tax parameters shared by the xTOMB/USDC and xSHARE/USDC hooks. */
+/** Fire Tax parameters shared by the official peg and share hooks. */
 export const FIRE = {
   baselineBps: POLICY.fireTaxBaselineBps,
   capBps: POLICY.fireTaxHardCapBps,
-  /** At or below this share of the reference price the cap applies (0.85). */
+  /** At or below this share of the reference price the cap applies (0.90). */
   fullTaxAt: bps(POLICY.fullTaxAtOrBelowPegBps),
   recoverySeconds: POLICY.fireTaxRecoverySeconds,
   genesisFloorBps: { xTOMB: POLICY.genesisLevelSellMinimumBps, xSHARE: POLICY.squareGenesisSellMinimumBps } as const,

@@ -68,7 +68,7 @@ export function validateMasonryLaunch(doc) {
     genesisProNftPriceUsdc: 100,
     genesisUltraNftPriceUsdc: 500,
     genesisUltraMultiplier: 1,
-    fireTaxBaselineBps: 100,
+    fireTaxBaselineBps: 300,
     fireTaxRecoverySeconds: 25200,
     maximumExpansionPerEpochBps: 200,
     requiresFreshTwapStrictlyAbovePegBps: 10100,
@@ -96,7 +96,7 @@ export function validateMasonryLaunch(doc) {
   })) {
     if (policy[key] !== value) throw new Error(`policy.${key}: Masonry release invariant must equal ${value}`);
   }
-  if (policy.fullTaxAtOrBelowPegBps !== 8500) throw new Error('full Fire Tax threshold must be 0.85 of peg');
+  if (policy.fullTaxAtOrBelowPegBps !== 9000) throw new Error('full Fire Tax threshold must be 0.90 of peg');
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

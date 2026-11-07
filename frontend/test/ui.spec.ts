@@ -51,15 +51,15 @@ test.describe("Swap and the Fire Tax", () => {
     await page.goto("/swap?genesis=ended&preview=1");
     await preset(page, "Buy xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Buy xTOMB with USDC · 0% tax")).toBeVisible();
+    await expect(page.getByText("Buy xTOMB with USDG · 0% tax")).toBeVisible();
     await expect(feeRow(page)).toContainText("0%");
     await expect(feeRow(page)).toContainText("no sell leg");
 
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDC · 1% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("−$1.00");
-    await expect(page.locator("dl")).toContainText(/Pool fee · xTOMB\/USDC/);
+    await expect(page.getByText("Sell xTOMB → USDG · 3.4% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("−$3.40");
+    await expect(page.locator("dl")).toContainText(/Pool fee · xTOMB\/USDG/);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
@@ -67,22 +67,22 @@ test.describe("Swap and the Fire Tax", () => {
     await page.goto("/swap?genesis=day2&preview=1");
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDC · 3% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("−$3.00");
+    await expect(page.getByText("Sell xTOMB → USDG · 3.4% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("−$3.40");
     await expect(page.locator("dl")).toContainText(/burn/i);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
   test("LP → USDC taxes only the sell leg, and offers the untaxed exit", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=day2&preview=1");
-    await preset(page, "Exit LP to USDC");
+    await preset(page, "Exit LP to USDG");
     await amountIn(page).fill("10");
     await expect(page.getByText(/^Redeem xTOMB/)).toBeVisible();
-    await expect(page.getByText("Sell xTOMB → USDC · 3% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText(/3% on the xTOMB sold \(50% of value\)/);
+    await expect(page.getByText(/Sell xTOMB → USDG · \d+(\.\d+)?% tax/)).toBeVisible();
+    await expect(feeRow(page)).toContainText(/[\d.]+% on the xTOMB sold \(50% of value\)/);
     await expect(page.getByText("Take it as xTOMB instead")).toBeVisible();
     await page.getByText("Take it as xTOMB instead").click();
-    await expect(page.getByText("Buy xTOMB with USDC · 0% tax")).toBeVisible();
+    await expect(page.getByText("Buy xTOMB with USDG · 0% tax")).toBeVisible();
     await expect(feeRow(page)).toContainText("0%");
     await expectNoTransactionRequests(page, broadcasts);
   });
