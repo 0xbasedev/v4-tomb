@@ -8,6 +8,7 @@ import {IOracle} from "../../src/interfaces/IOracle.sol";
 contract MockOracle is IOracle {
     uint256 public price;
     uint256 public updateCount;
+    bool public fresh = true;
 
     constructor(
         uint256 initialPrice
@@ -19,6 +20,14 @@ contract MockOracle is IOracle {
         uint256 newPrice
     ) external {
         price = newPrice;
+    }
+
+    function setFresh(bool value) external {
+        fresh = value;
+    }
+
+    function isFresh(uint256) external view returns (bool) {
+        return fresh;
     }
 
     function update() external {

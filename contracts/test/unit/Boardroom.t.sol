@@ -358,4 +358,11 @@ contract BoardroomTest is BaseTest {
         vm.prank(owner);
         boardroom.allocateSeigniorage(amount);
     }
+
+    function test_Initialize_RejectsNonInitializer() public {
+        Boardroom fresh = new Boardroom(owner);
+        vm.prank(stranger);
+        vm.expectRevert(Boardroom.NotOperator.selector);
+        fresh.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasuryMock)));
+    }
 }

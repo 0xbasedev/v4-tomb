@@ -24,4 +24,7 @@ interface IOracle {
         address token,
         uint256 amountIn
     ) external view returns (uint144 amountOut);
+
+    /// @notice True when the last observation is initialized and no older than `maxAge`.
+    function isFresh(uint256 maxAge) external view returns (bool);
 }
