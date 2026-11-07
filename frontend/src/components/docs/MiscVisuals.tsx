@@ -103,7 +103,7 @@ const RISKS: { title: string; likelihood: number; impact: number; what: string; 
     title: "Pending backends",
     likelihood: 5,
     impact: 2,
-    what: "Farm, Masonry staking, Treasury expansion minting, xBOND and bridging have no bound contracts yet.",
+    what: "MasonryTreasury, MasonryFarm, MasonryChamber and MasonryBond exist in this checkout but have no verified launch addresses yet.",
     mitigation: "Those screens are labelled pending or planned and their actions are disabled with the reason.",
   },
   {

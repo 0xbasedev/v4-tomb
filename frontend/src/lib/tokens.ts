@@ -7,7 +7,7 @@ import { PEG } from "@/lib/peg";
  * its own Fire Tax hook. Their LP tokens are the vault shares minted by
  * MasonryLevelUsdcVault and MasonrySquareUsdcVault (one fixed tick range
  * each, redeemable for both underlying tokens). ETH is listed so the picker
- * can explain why it isn't routable; xBOND is a planned preview.
+ * can explain why it isn't routable; xBOND is implemented (MasonryBond) but not launched.
  */
 
 export type TokenId = "xTOMB" | "xSHARE" | "USDC" | "xTOMB-USDC" | "xSHARE-USDC" | "ETH" | "xBOND";
@@ -49,7 +49,7 @@ export const TOKENS: Record<TokenId, TokenDef> = {
     contract: "MasonrySquareUsdcVault",
   },
   ETH: { id: "ETH", symbol: "ETH", name: "Ether — no official pool", decimals: 18, kind: "native" },
-  xBOND: { id: "xBOND", symbol: "xBOND", name: "xBond — planned", decimals: 18, kind: "planned" },
+  xBOND: { id: "xBOND", symbol: "xBOND", name: "X Bond (MasonryBond — not launched)", decimals: 18, kind: "planned", contract: "MasonryBond" },
 };
 
 export const isLp = (id: TokenId) => TOKENS[id].kind === "lp";

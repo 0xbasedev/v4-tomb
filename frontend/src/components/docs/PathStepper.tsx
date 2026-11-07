@@ -71,7 +71,7 @@ const PATHS: Record<PathId, { title: string; who: string; icon: TokenId; to: str
     to: "/bonds",
     cta: "Open Bonds",
     status: "planned",
-    steps: ["xBOND is a planned preview", "Issuance and redemption are disabled", "No rates, caps or returns are set", "Once live, the page shows the contract's quote and why an action is blocked"],
+    steps: ["Buy below peg by burning xTOMB for xBOND", "Redeem above peg 1:1 for xTOMB (placeholder, no premium yet)", "Discounts bounded at 2×; debt and supply caps are launch placeholders", "Actions stay disabled until a verified MasonryBond address is published"],
   },
 };
 

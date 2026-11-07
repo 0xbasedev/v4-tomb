@@ -170,11 +170,11 @@ export function Docs() {
             id="tokens"
             numeral={num("tokens")}
             title="The three tokens"
-            lede={`A $1 stable, a capped share that trades against ${PEG.symbol}, and a planned bond.`}
+            lede={`A $1 stable, a capped share that trades against ${PEG.symbol}, and X Bond (MasonryBond, not launched).`}
             facts={[
               `xTOMB — the $1 stable. Official pair: ${pegPair("xTOMB")}.`,
               `xSHARE — capped at ${SQUARE_SUPPLY.cap.toLocaleString("en-US")}. Official pair: ${pegPair("xSHARE")}.`,
-              "xBOND — a planned preview. Nothing is issued.",
+              "xBOND — MasonryBond: buy below peg (burn xTOMB), redeem above peg. Not launched.",
             ]}
           >
             <TokenFlows />
@@ -185,7 +185,7 @@ export function Docs() {
             numeral={num("begin")}
             title="How to begin"
             lede="Four ways in. Only Genesis is bound to contracts today; the others say what's missing."
-            facts={["Founders enter Genesis with a soulbound pass.", "Farmers will earn xSHARE on LP (pending).", `Members will stake ${pegPair("xSHARE")} LP for expansion (pending).`, "Bondholders: planned."]}
+            facts={["Founders enter Genesis with a soulbound pass.", "Farmers earn xSHARE on LP via MasonryFarm (X Share/WETH LP is the first pool).", "Members stake X Share/WETH LP in MasonryChamber to receive expansion.", "Bondholders use MasonryBond once a verified address is published."]}
           >
             <PathStepper />
           </DocSection>
@@ -283,7 +283,7 @@ export function Docs() {
                 compounds are disabled. <Link to="/farm" className="text-ember-hot underline-offset-2 hover:underline">Open the Farm →</Link>
               </PendingPanel>
               <PendingPanel title="Masonry">
-                The contracts already route xSHARE's sell tax; Masonry staking, locks and the expansion mint aren't bound.{" "}
+                MasonryTreasury mints expansion to MasonryChamber (X Share/WETH LP stakers) when a fresh TWAP is strictly above $1.01. Contracts exist; no verified launch address is bound yet.{" "}
                 <Link to="/masonry" className="text-ember-hot underline-offset-2 hover:underline">Open the Masonry →</Link>
               </PendingPanel>
             </div>
@@ -293,7 +293,7 @@ export function Docs() {
             id="bonds"
             numeral={num("bonds")}
             title="Bonds"
-            lede="xBOND is a planned preview. Issuance and redemption are disabled, and no rates, caps, reserves or returns are set."
+            lede="MasonryBond buys below peg by burning xTOMB and redeems above peg 1:1. Issuance stays disabled until a verified address is published; discount and debt caps are placeholders."
             facts={["Once live, the page will show the contract's quote, your eligibility, remaining issuance and reserve availability.", "Every blocked action will say why."]}
           >
             <PendingPanel title="xBOND" badge="planned">

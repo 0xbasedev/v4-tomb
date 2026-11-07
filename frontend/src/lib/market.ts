@@ -4,12 +4,11 @@ import { DEFENSE, EXPANSION, SQUARE_ROUTING, pct } from "@/lib/launch";
  * Market state from the validated xTOMB TWAP (MasonryLevelOracle) and
  * Critical Defense (MasonryCriticalDefense).
  *
- *   expansion  planned rule: a fresh validated TWAP strictly above $1.01 makes
- *              an epoch eligible; at most 2% of circulating xTOMB per eligible
- *              six-hour epoch, no catch-up. Treasury mint wiring is still open
- *              on the merge branch, so this is shown as planned.
+ *   expansion  a fresh validated TWAP strictly above $1.01 makes an epoch
+ *              eligible; at most 2% of circulating xTOMB per eligible six-hour
+ *              epoch, no catch-up. MasonryTreasury mints to MasonryChamber.
  *   band       $1.00 – $1.01: no expansion, baseline Fire Tax.
- *   tax        below $1.00: the Fire Tax target rises toward 12% at $0.85.
+ *   tax        below $1.00: the Fire Tax target rises toward 12% at $0.90.
  *   defense    Critical Defense entered at a fresh TWAP ≤ $0.90. It exits only
  *              after two consecutive real six-hour checkpoints with a fresh TWAP
  *              strictly above $1.01; stale data never ends it. While active,
@@ -39,10 +38,10 @@ export const PHASE_META: Record<MarketPhase, { label: string; title: string; chi
     label: "Above gate",
     title: "Above the expansion price gate",
     chip: "chip-ember",
-    detail: `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: an epoch can mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB (planned; Treasury wiring pending).`,
+    detail: `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: MasonryTreasury may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB to the Masonry (X Share/WETH LP stakers).`,
   },
   band: { label: "At peg", title: "Inside the peg band", chip: "chip", detail: `Between $1.00 and $${EXPANSION.gate.toFixed(2)}: no expansion, baseline Fire Tax.` },
-  tax: { label: "Below peg", title: "Below peg — the Fire Tax rises", chip: "chip-amethyst", detail: "Sells pay a higher Fire Tax as the TWAP falls toward $0.85, where it reaches the 12% cap." },
+  tax: { label: "Below peg", title: "Below peg — the Fire Tax rises", chip: "chip-amethyst", detail: "Sells pay a higher Fire Tax as the TWAP falls toward $0.90, where it reaches the 12% cap." },
   defense: {
     label: "Critical Defense",
     title: "Critical Defense is active",

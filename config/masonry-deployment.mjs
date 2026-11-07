@@ -10,6 +10,7 @@ const fail = (message) => { throw new Error(`Masonry deployment: ${message}`); }
 /** Contracts every xTOMB deployment must record, in the order Admin lists them. */
 export const masonryContractKeys = [
   'level', 'square', 'usdc', 'poolManager', 'treasury',
+  'chamber', 'farm', 'xBond',
   'schedule', 'pass', 'staking', 'settlement', 'lpBurnFee',
   'levelHook', 'levelOracle', 'buybackGuard', 'levelVault',
   'squareHook', 'squareVault', 'criticalDefense', 'miniSwapRouter',
@@ -21,7 +22,10 @@ export const masonryContractLabels = {
   square: 'xSHARE token (SQUARE)',
   usdc: 'USDC (official, 6 decimals)',
   poolManager: 'Uniswap v4 PoolManager',
-  treasury: 'Treasury',
+  treasury: 'Masonry Treasury (MasonryTreasury)',
+  chamber: 'Masonry (MasonryChamber, X Share/WETH LP)',
+  farm: 'X Share farm (MasonryFarm)',
+  xBond: 'X Bond (MasonryBond)',
   schedule: 'Genesis schedule (MasonryGenesisSchedule)',
   pass: 'Genesis pass (MasonryGenesisPass)',
   staking: 'Genesis staking (MasonryGenesisStaking)',

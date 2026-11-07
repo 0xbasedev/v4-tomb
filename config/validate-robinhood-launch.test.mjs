@@ -21,6 +21,7 @@ const completeDeployment = () => {
   const pm = '0x8366a39cc670b4001a1121b8f6a443a643e40951';
   const c = {
     level: addr(1), square: addr(2), usdc: usdg, poolManager: pm, treasury: addr(5),
+    chamber: addr(19), farm: addr(20), xBond: addr(21),
     schedule: addr(6), pass: addr(7), staking: addr(8), settlement: addr(9), lpBurnFee: addr(10),
     levelHook: addr(11), levelOracle: addr(12), buybackGuard: addr(13), levelVault: addr(14),
     squareHook: addr(15), squareVault: addr(16), criticalDefense: addr(17), miniSwapRouter: addr(18),

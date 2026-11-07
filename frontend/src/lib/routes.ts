@@ -45,7 +45,7 @@ export function planRoute(input: TokenId, output: TokenId, lpAssetShare: Partial
   if (input === "ETH" || output === "ETH") {
     return { ok: false, reason: `No official ETH pool. The official pairs are xTOMB/${PEG.symbol} and xSHARE/${PEG.symbol} — swap ETH for ${PEG.symbol} elsewhere first.` };
   }
-  if (input === "xBOND" || output === "xBOND") return { ok: false, reason: "xBOND is a planned preview with no market." };
+  if (input === "xBOND" || output === "xBOND") return { ok: false, reason: "xBOND has no swap market; buy and redeem through MasonryBond once launched." };
 
   const ai = asset(input);
   const ao = asset(output);
