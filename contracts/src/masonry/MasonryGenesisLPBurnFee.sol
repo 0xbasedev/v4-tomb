@@ -207,6 +207,22 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         }
     }
 
+    /// @notice Permissionless retry of deferred share redemption and buyback-and-burn.
+    /// The burn reserve cannot be swept or reassigned; this only retries the
+    /// same irrevocable conversion path used during Genesis deposits.
+    function retryDeferredBurn() external nonReentrant {
+        if (pendingFeeShares > 0) {
+            try this.redeemPendingShares() {} catch (bytes memory reason) {
+                emit RedemptionDeferred(keccak256(reason));
+            }
+        }
+        if (pendingBurnUSDC > 0) {
+            try this.buyAndBurnPendingUSDC() {} catch (bytes memory reason) {
+                emit BuybackDeferred(keccak256(reason));
+            }
+        }
+    }
+
     /// @dev Only reachable through collectAndProcess()'s self-call.
     function redeemPendingShares() external onlySelf {
         uint256 shares = pendingFeeShares;

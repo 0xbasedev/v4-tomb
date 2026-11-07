@@ -241,4 +241,31 @@ contract MasonryGenesisLPBurnFeeTest is Test {
         assertLe(fee, uint256(gross));
         assertLe(fee * 10_000, uint256(gross) * 50);
     }
+
+    function test_RetryDeferredBurnClearsStrandedUSDCWithoutGenesisDeposit() public {
+        router.setFailSwap(true);
+        collector.collectAndProcess(GROSS);
+        assertEq(collector.pendingBurnUSDC(), 3e6);
+        assertEq(level.totalBurned(), 2e18);
+
+        router.setFailSwap(false);
+        vm.prank(address(0xBEEF));
+        collector.retryDeferredBurn();
+        assertEq(collector.pendingBurnUSDC(), 0);
+        assertEq(level.totalBurned(), 5e18);
+        assertEq(usdc.balanceOf(address(collector)), 0);
+    }
+
+    function test_RetryDeferredBurnClearsStrandedSharesWithoutGenesisDeposit() public {
+        vault.setFailRedemption(true);
+        collector.collectAndProcess(GROSS);
+        assertEq(collector.pendingFeeShares(), FEE);
+
+        vault.setFailRedemption(false);
+        vm.prank(address(0xBEEF));
+        collector.retryDeferredBurn();
+        assertEq(collector.pendingFeeShares(), 0);
+        assertEq(collector.pendingBurnUSDC(), 0);
+        assertEq(level.totalBurned(), 5e18);
+    }
 }
