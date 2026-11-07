@@ -3,10 +3,17 @@ pragma solidity 0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 
+import {MasonryBond} from "../src/masonry/MasonryBond.sol";
+import {MasonryChamber} from "../src/masonry/MasonryChamber.sol";
+import {MasonryFarm} from "../src/masonry/MasonryFarm.sol";
+import {MasonryTreasury} from "../src/masonry/MasonryTreasury.sol";
+
 /// @notice Masonry-only dry-run launcher documentation.
 /// @dev This script never broadcasts and refuses to run if PRIVATE_KEY is set.
 ///      The executable simulation lives in
-///      `contracts/test/integration/RobinhoodForkLaunch.t.sol`.
+///      `contracts/test/integration/RobinhoodForkLaunch.t.sol`, which launches
+///      MasonryTreasury, MasonryFarm, MasonryBond and MasonryChamber — not the
+///      legacy WETH Treasury / Boardroom / TrustNote / PegDefenseHook graph.
 ///
 ///      anvil --fork-url https://rpc.mainnet.chain.robinhood.com
 ///      forge test --match-contract RobinhoodForkLaunch --fork-url http://127.0.0.1:8545 -vvv
@@ -18,7 +25,13 @@ contract LaunchMasonryDryRun is Script {
     function run() external view {
         if (vm.envOr("PRIVATE_KEY", uint256(0)) != 0) revert BroadcastCredentialsPresent();
         console2.log("Masonry dry-run only. No broadcast.");
+        console2.log("Launch graph: MasonryTreasury, MasonryFarm, MasonryBond, MasonryChamber.");
         console2.log("Fork Robinhood (4663) with anvil, then run RobinhoodForkLaunch tests.");
         console2.log("Legacy Deploy.s.sol (Treasury/Boardroom/TrustNote/PegDefenseHook) is not launch logic.");
+        console2.log("Modern runtime sizes:");
+        console2.log("  MasonryTreasury", type(MasonryTreasury).creationCode.length);
+        console2.log("  MasonryFarm", type(MasonryFarm).creationCode.length);
+        console2.log("  MasonryBond", type(MasonryBond).creationCode.length);
+        console2.log("  MasonryChamber", type(MasonryChamber).creationCode.length);
     }
 }

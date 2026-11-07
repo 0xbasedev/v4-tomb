@@ -35,24 +35,79 @@ import {
 } from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
 import {MasonryCriticalDefense, IMasonryValidatedLevelTwap} from "../../src/masonry/MasonryCriticalDefense.sol";
 import {MasonryRules} from "../../src/masonry/MasonryRules.sol";
+import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
+import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
+import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
+import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
+import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 
 contract LaunchLevel is ERC20Burnable {
     constructor() ERC20("X Tomb", "xTOMB") {}
-    function mint(address to, uint256 amount) external { _mint(to, amount); }
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
+}
+
+contract LaunchShare is ERC20 {
+    constructor() ERC20("X Share", "xSHARE") {}
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
+}
+
+contract LaunchShareWethLp is ERC20 {
+    constructor() ERC20("X Share/WETH LP", "xSHARE-WETH") {}
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
 }
 
 contract LaunchVault is ERC20, IMasonryRedeemableLPVault {
     IERC20 public immutable level;
     IERC20 public immutable usdc;
     PoolKey private key;
-    constructor(IERC20 level_, IERC20 usdc_) ERC20("LP", "LP") {
+
+    constructor(
+        IERC20 level_,
+        IERC20 usdc_
+    ) ERC20("LP", "LP") {
         level = level_;
         usdc = usdc_;
     }
-    function setPoolKey(PoolKey memory key_) external { key = key_; }
-    function poolKey() external view returns (PoolKey memory) { return key; }
-    function mintShares(address to, uint256 shares) external { _mint(to, shares); }
-    function redeem(uint256 shares, address to) external returns (uint256 levelReceived, uint256 usdcReceived) {
+
+    function setPoolKey(
+        PoolKey memory key_
+    ) external {
+        key = key_;
+    }
+
+    function poolKey() external view returns (PoolKey memory) {
+        return key;
+    }
+
+    function mintShares(
+        address to,
+        uint256 shares
+    ) external {
+        _mint(to, shares);
+    }
+
+    function redeem(
+        uint256 shares,
+        address to
+    ) external returns (uint256 levelReceived, uint256 usdcReceived) {
         _burn(msg.sender, shares);
         levelReceived = shares / 2;
         usdcReceived = 0;
@@ -62,28 +117,63 @@ contract LaunchVault is ERC20, IMasonryRedeemableLPVault {
 
 contract LaunchGuard is IMasonryBuybackExecutionGuard {
     PoolId public officialPool;
-    function setPoolKey(PoolKey memory key_) external { officialPool = PoolIdLibrary.toId(key_); }
-    function minimumLevelOut(uint256) external pure returns (uint256) { return 1; }
+
+    function setPoolKey(
+        PoolKey memory key_
+    ) external {
+        officialPool = PoolIdLibrary.toId(key_);
+    }
+
+    function minimumLevelOut(
+        uint256
+    ) external pure returns (uint256) {
+        return 1;
+    }
 }
 
 contract LaunchRouter is IMasonryExactInputV4Router {
-    function swapExactIn(PoolKey calldata, bool, uint256, uint256, address) external pure returns (uint256) {
+    function swapExactIn(
+        PoolKey calldata,
+        bool,
+        uint256,
+        uint256,
+        address
+    ) external pure returns (uint256) {
         revert("dry-run router unused");
     }
 }
 
 contract LaunchSettlement is IMasonryGenesisSettlement {
     IERC20 private immutable level;
-    constructor(IERC20 level_) { level = level_; }
-    function settle(address beneficiary, uint256 reward, bool, bool, CompoundPlan calldata) external {
+
+    constructor(
+        IERC20 level_
+    ) {
+        level = level_;
+    }
+
+    function settle(
+        address beneficiary,
+        uint256 reward,
+        bool,
+        bool,
+        CompoundPlan calldata
+    ) external {
         if (reward > 0) level.transfer(beneficiary, reward);
     }
 }
 
 contract MockTwapOracle is IMasonryValidatedLevelTwap {
     uint256 public price = 1e18;
+
     function latestValidatedTwap() external view returns (uint256, uint256, bool) {
         return (price, block.timestamp, true);
+    }
+
+    function setPrice(
+        uint256 price_
+    ) external {
+        price = price_;
     }
 }
 
@@ -144,13 +234,17 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         assertFalse(defense.sync());
         assertFalse(MasonryRules.eligibleForExpansion(1e18, 1e18, true));
         assertTrue(MasonryRules.eligibleForExpansion(1.02e18, 1e18, true));
+        _wireModernRuntime(pool.level, twap, user);
     }
 
-    function _launchOfficialPool(MasonryGenesisSchedule schedule) internal returns (LivePool memory pool) {
+    function _launchOfficialPool(
+        MasonryGenesisSchedule schedule
+    ) internal returns (LivePool memory pool) {
         pool.level = new LaunchLevel();
         pool.swaps = new PoolSwapTest(IPoolManager(POOL_MANAGER));
         pool.level0 = address(pool.level) < USDG;
-        (address expected, bytes32 salt, MasonryTaxHook.OracleConfig memory oracleConfig) = _mineHook(schedule, pool.level);
+        (address expected, bytes32 salt, MasonryTaxHook.OracleConfig memory oracleConfig) =
+            _mineHook(schedule, pool.level);
         pool.key = PoolKey({
             currency0: Currency.wrap(pool.level0 ? address(pool.level) : USDG),
             currency1: Currency.wrap(pool.level0 ? USDG : address(pool.level)),
@@ -158,15 +252,17 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             tickSpacing: 60,
             hooks: IHooks(expected)
         });
-        assertEq(address(new MasonryLevelOracle(pool.key.toId(), pool.level0, 1e15, expected)), address(oracleConfig.oracle));
+        assertEq(
+            address(new MasonryLevelOracle(pool.key.toId(), pool.level0, 1e15, expected)), address(oracleConfig.oracle)
+        );
         assertEq(address(_deployHook(schedule, oracleConfig, address(pool.level), salt)), expected);
         _seedPool(pool);
     }
 
-    function _mineHook(MasonryGenesisSchedule schedule, LaunchLevel level)
-        internal view
-        returns (address expected, bytes32 salt, MasonryTaxHook.OracleConfig memory oracleConfig)
-    {
+    function _mineHook(
+        MasonryGenesisSchedule schedule,
+        LaunchLevel level
+    ) internal view returns (address expected, bytes32 salt, MasonryTaxHook.OracleConfig memory oracleConfig) {
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
             | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG
             | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG;
@@ -178,7 +274,16 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             flags,
             bytes.concat(
                 type(MasonryLevelHook).creationCode,
-                abi.encode(IPoolManager(POOL_MANAGER), schedule, oracleConfig, level, USDG, address(0xA11CE), uint24(3000), int24(60))
+                abi.encode(
+                    IPoolManager(POOL_MANAGER),
+                    schedule,
+                    oracleConfig,
+                    level,
+                    USDG,
+                    address(0xA11CE),
+                    uint24(3000),
+                    int24(60)
+                )
             )
         );
     }
@@ -194,7 +299,9 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         );
     }
 
-    function _seedPool(LivePool memory pool) internal {
+    function _seedPool(
+        LivePool memory pool
+    ) internal {
         uint160 peg = uint160(pool.level0 ? (uint256(1) << 96) / 1e6 : (uint256(1) << 96) * 1e6);
         IPoolManager(POOL_MANAGER).initialize(pool.key, peg);
         PoolModifyLiquidityTest liquidity = new PoolModifyLiquidityTest(IPoolManager(POOL_MANAGER));
@@ -207,7 +314,11 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         liquidity.modifyLiquidity(pool.key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
     }
 
-    function _buyUltra(MasonryGenesisPass pass, address user, address treasury) internal {
+    function _buyUltra(
+        MasonryGenesisPass pass,
+        address user,
+        address treasury
+    ) internal {
         vm.startPrank(user);
         IERC20(USDG).approve(address(pass), 500e6);
         uint256 tokenId = pass.purchase(MasonryGenesisPass.Tier.Ultra);
@@ -240,7 +351,11 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             address(this)
         );
         MasonryGenesisStaking staking = new MasonryGenesisStaking(
-            pass, lpFee, IMasonryGenesisSettlement(address(new LaunchSettlement(IERC20(address(pool.level))))), IERC20(USDG), 10_000e18
+            pass,
+            lpFee,
+            IMasonryGenesisSettlement(address(new LaunchSettlement(IERC20(address(pool.level))))),
+            IERC20(USDG),
+            10_000e18
         );
         lpFee.setGenesis(address(staking));
         pool.level.mint(address(this), 10_000e18);
@@ -248,48 +363,170 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         staking.fund();
         vm.warp(schedule.start());
         vm.startPrank(user);
-        IERC20(USDG).approve(address(staking), 1_000e6);
-        staking.deposit(0, 1_000e6);
+        IERC20(USDG).approve(address(staking), 1000e6);
+        staking.deposit(0, 1000e6);
         vm.stopPrank();
         (uint256 shares,,) = staking.positions(0, user);
-        assertEq(shares, 1_000e6);
+        assertEq(shares, 1000e6);
     }
 
-    function _tinyBuy(LivePool memory pool) internal {
+    function _tinyBuy(
+        LivePool memory pool
+    ) internal {
         IERC20(USDG).approve(address(pool.swaps), type(uint256).max);
-        pool.swaps.swap(
-            pool.key,
-            SwapParams({
-                zeroForOne: !pool.level0,
-                amountSpecified: -int256(100e6),
-                sqrtPriceLimitX96: pool.level0 ? TickMath.MAX_SQRT_PRICE - 1 : TickMath.MIN_SQRT_PRICE + 1
-            }),
-            PoolSwapTest.TestSettings(false, false),
-            ""
-        );
+        pool.swaps
+            .swap(
+                pool.key,
+                SwapParams({
+                    zeroForOne: !pool.level0,
+                    amountSpecified: -int256(100e6),
+                    sqrtPriceLimitX96: pool.level0 ? TickMath.MAX_SQRT_PRICE - 1 : TickMath.MIN_SQRT_PRICE + 1
+                }),
+                PoolSwapTest.TestSettings(false, false),
+                ""
+            );
     }
 
-    function _sellLevel(LivePool memory pool, address user) internal {
+    function _sellLevel(
+        LivePool memory pool,
+        address user
+    ) internal {
         _tinyBuy(pool);
         vm.warp(block.timestamp + 35 minutes);
         _tinyBuy(pool);
-        pool.level.mint(user, 1_000e18);
+        pool.level.mint(user, 1000e18);
         uint256 userLevelBefore = pool.level.balanceOf(user);
         uint256 userUsdgBefore = IERC20(USDG).balanceOf(user);
         vm.startPrank(user);
         pool.level.approve(address(pool.swaps), type(uint256).max);
-        pool.swaps.swap(
-            pool.key,
-            SwapParams({
-                zeroForOne: pool.level0,
-                amountSpecified: -int256(100e18),
-                sqrtPriceLimitX96: pool.level0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
-            }),
-            PoolSwapTest.TestSettings(false, false),
-            ""
-        );
+        pool.swaps
+            .swap(
+                pool.key,
+                SwapParams({
+                    zeroForOne: pool.level0,
+                    amountSpecified: -int256(100e18),
+                    sqrtPriceLimitX96: pool.level0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+                }),
+                PoolSwapTest.TestSettings(false, false),
+                ""
+            );
         vm.stopPrank();
         assertLt(pool.level.balanceOf(user), userLevelBefore, "sold xTOMB");
         assertGt(IERC20(USDG).balanceOf(user), userUsdgBefore, "received USDG");
+    }
+
+    struct ModernRuntime {
+        MasonryTreasury treasury;
+        MasonryFarm farm;
+        MasonryBond bond;
+        MasonryChamber chamber;
+        uint256 start;
+    }
+
+    /// @dev Launches MasonryTreasury / Farm / X Bond. Does not construct the
+    /// legacy Treasury, Boardroom, TrustNote or PegDefenseHook.
+    function _wireModernRuntime(
+        LaunchLevel level,
+        MockTwapOracle twap,
+        address user
+    ) internal {
+        ModernRuntime memory runtime = _deployModernRuntime(level, twap);
+        _stakeRuntime(runtime, user);
+        _exerciseExpansion(runtime, level, twap);
+        _exerciseFarm(runtime, user);
+        _exerciseBond(runtime, level, twap, user);
+    }
+
+    function _deployModernRuntime(
+        LaunchLevel level,
+        MockTwapOracle twap
+    ) internal returns (ModernRuntime memory runtime) {
+        runtime.start = block.timestamp + 1 hours;
+        LaunchShareWethLp slp = new LaunchShareWethLp();
+        LaunchShare share = new LaunchShare();
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        runtime.chamber = new MasonryChamber(IERC20(address(slp)), IERC20(address(level)), predicted);
+        // PLACEHOLDER requestedRateBps = policy.maximumExpansionPerEpochBps (200).
+        runtime.treasury = new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), runtime.chamber, twap, runtime.start, 200, address(this)
+        );
+        assertEq(address(runtime.treasury), predicted);
+        // PLACEHOLDER farm budget/duration from masonry-launch.template.json.
+        runtime.farm = new MasonryFarm(
+            IERC20(address(share)), runtime.start, 365 days, 25_641 ether, address(this), IERC20(address(slp)), 1000
+        );
+        // PLACEHOLDER bond caps: 100% extra discount bound, 35% debt ratio, 1_000_000 supply.
+        runtime.bond = new MasonryBond(IERC20(address(level)), runtime.treasury, twap, 10_000, 3500, 1_000_000 ether);
+        runtime.treasury.setBond(address(runtime.bond));
+        share.mint(address(this), 25_641 ether);
+        share.approve(address(runtime.farm), 25_641 ether);
+        runtime.farm.fund(25_641 ether);
+    }
+
+    function _stakeRuntime(
+        ModernRuntime memory runtime,
+        address user
+    ) internal {
+        IERC20 slp = runtime.chamber.stakeToken();
+        // The deploy function minted 200 LP to this contract (see above) — remint if needed.
+        if (slp.balanceOf(address(this)) < 200 ether) {
+            LaunchShareWethLp(address(slp)).mint(address(this), 200 ether);
+        }
+        slp.transfer(user, 200 ether);
+        vm.startPrank(user);
+        slp.approve(address(runtime.chamber), type(uint256).max);
+        runtime.chamber.stake(100 ether);
+        slp.approve(address(runtime.farm), type(uint256).max);
+        runtime.farm.deposit(0, 100 ether);
+        vm.stopPrank();
+    }
+
+    function _exerciseExpansion(
+        ModernRuntime memory runtime,
+        LaunchLevel level,
+        MockTwapOracle twap
+    ) internal {
+        twap.setPrice(1.02e18);
+        vm.warp(runtime.start + 1);
+        uint256 supply = level.totalSupply();
+        runtime.treasury.allocateExpansion();
+        assertGt(level.totalSupply(), supply, "expansion above peg");
+        vm.warp(runtime.treasury.nextEpochPoint() + 1);
+        twap.setPrice(1e18);
+        supply = level.totalSupply();
+        runtime.treasury.allocateExpansion();
+        assertEq(level.totalSupply(), supply, "no mint at peg");
+    }
+
+    function _exerciseFarm(
+        ModernRuntime memory runtime,
+        address user
+    ) internal {
+        vm.warp(runtime.start + 2 days);
+        vm.prank(user);
+        runtime.farm.harvest(0);
+        assertLe(runtime.farm.emitted(), runtime.farm.entitledTo(block.timestamp));
+        assertLe(runtime.farm.claimed(), runtime.farm.rewardBudget());
+    }
+
+    function _exerciseBond(
+        ModernRuntime memory runtime,
+        LaunchLevel level,
+        MockTwapOracle twap,
+        address user
+    ) internal {
+        level.mint(user, 1000 ether);
+        twap.setPrice(0.9e18);
+        vm.startPrank(user);
+        level.approve(address(runtime.bond), type(uint256).max);
+        runtime.bond.buy(100 ether);
+        uint256 bonds = runtime.bond.balanceOf(user);
+        vm.stopPrank();
+        assertGt(bonds, 100 ether);
+        assertLe(runtime.bond.totalSupply() * 10_000, level.totalSupply() * 3500);
+        twap.setPrice(1.05e18);
+        vm.prank(user);
+        runtime.bond.redeem(bonds);
+        assertEq(runtime.bond.balanceOf(user), 0);
     }
 }
