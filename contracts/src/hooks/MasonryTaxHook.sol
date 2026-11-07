@@ -278,7 +278,7 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     function _target(
         uint256 price
     ) private view returns (uint16) {
-        return MasonryRules.targetSellTaxBps(price, _referencePrice(), BASE_TAX, MAX_TAX_BPS, 1500);
+        return MasonryRules.targetSellTaxBps(price, _referencePrice(), BASE_TAX, MAX_TAX_BPS, MasonryRules.DEFAULT_FULL_TAX_DROP_BPS);
     }
     function _collectTax(
         uint256 amount,

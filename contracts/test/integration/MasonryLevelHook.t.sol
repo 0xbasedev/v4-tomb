@@ -38,6 +38,7 @@ import {
 } from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
+import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
 
 interface IMockLevelTwap {
     function mockTwapSettings() external view returns (uint256 price, bool enabled);
@@ -122,10 +123,23 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 120, center + 120, 1e16, 0), "");
     }
 
+    /// Aggressive curve e2e: TWAP is at peg (no floor), but a large sell whose
+    /// projected post-sale price is >=10% below peg is charged the full 12%.
+    function testAggressiveCurve_LargeSellProjectingTenPercentBelowPegPaysTwelve() public {
+        vm.warp(schedule.end() + 1);
+        twap = 1e18;
+        uint256 treasuryBefore = level.balanceOf(TREASURY);
+        _swap(level0, -1100e18);
+        (uint160 sqrtAfter,,,) = hook.poolManager().getSlot0(hook.officialPool());
+        assertLe(MasonryLevelPrice.fromSqrtPrice(sqrtAfter, level0), 0.9e18, "sale lands >=10% below peg");
+        assertEq(level.balanceOf(TREASURY) - treasuryBefore, 132e18, "12% of 1100");
+        assertEq(hook.raisedBps(), 1200);
+    }
+
     function testTaxBoundariesAndNonDuplication() public {
         vm.warp(schedule.start() - 1);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 0.1e18);
+        assertEq(level.balanceOf(TREASURY), 0.208e18);
         assertEq(level.totalBurned(), 0);
 
         vm.warp(schedule.start());
@@ -134,8 +148,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertEq(before - level.balanceOf(address(this)), 10e18);
         assertEq(level.totalBurned(), 0.3e18);
         assertEq(hook.genesisLevelBurned(), 0.3e18);
-        assertEq(level.balanceOf(TREASURY), 0.1e18);
-        assertEq(hook.raisedBps(), 100);
+        assertEq(level.balanceOf(TREASURY), 0.208e18);
+        assertEq(hook.raisedBps(), 253);
 
         vm.warp(schedule.end() - 1);
         _swap(level0, -10e18);
@@ -144,7 +158,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         vm.warp(schedule.end());
         _swap(level0, -10e18);
         assertEq(level.totalBurned(), 0.6e18);
-        assertEq(level.balanceOf(TREASURY), 0.2e18);
+        assertEq(level.balanceOf(TREASURY), 0.524e18);
     }
 
     function testBuyAndTransferAreUntaxedEvenWhenSellOracleIsUnavailable() public {
@@ -186,7 +200,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
 
         vm.warp(schedule.end() - 1 + 7 hours);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 1.299e18);
+        assertEq(level.balanceOf(TREASURY), 1.48e18);
     }
 
     function testExactOutputChargesOneTaxOnLevelInput() public {
