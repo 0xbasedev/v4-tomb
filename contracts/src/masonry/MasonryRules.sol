@@ -8,7 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 library MasonryRules {
     uint16 internal constant HARD_MAX_FIRE_TAX_BPS = 1_200;
     uint16 internal constant HARD_MAX_EXPANSION_BPS = 200;
-    uint16 internal constant DEFAULT_BASE_FIRE_TAX_BPS = 100;
+    uint16 internal constant DEFAULT_BASE_FIRE_TAX_BPS = 300;
     uint16 internal constant DEFAULT_MAX_FIRE_TAX_BPS = 1_200;
     uint16 internal constant DEFAULT_FULL_TAX_DROP_BPS = 1_000;
     uint16 internal constant EXPANSION_THRESHOLD_BPS = 10_100;

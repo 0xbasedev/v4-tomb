@@ -67,6 +67,35 @@ contract MasonryRulesTest is Test {
         assertEq(MasonryRules.effectiveSellTaxBps(twap, projected, 100), 1200);
     }
 
+    function test_ThreePercentFloorCurveBreakpoints() public pure {
+        uint16 b = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
+        uint16 m = MasonryRules.DEFAULT_MAX_FIRE_TAX_BPS;
+        uint16 d = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
+        assertEq(b, 300);
+        assertEq(MasonryRules.targetSellTaxBps(11e17, 1e18, b, m, d), 300); // above peg
+        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, b, m, d), 300); // at peg
+        assertEq(MasonryRules.targetSellTaxBps(98e16, 1e18, b, m, d), 702); // 2% below
+        assertEq(MasonryRules.targetSellTaxBps(95e16, 1e18, b, m, d), 936); // 5% below
+        assertEq(MasonryRules.targetSellTaxBps(90e16, 1e18, b, m, d), 1200); // 10% below
+        assertEq(MasonryRules.targetSellTaxBps(1, 1e18, b, m, d), 1200);
+    }
+
+    function test_ThreePercentFloorRecoveryDecaysOverSevenHours() public pure {
+        uint16 b = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
+        uint256 start = 100_000;
+        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start), 1200);
+        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 3.5 hours), 750);
+        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 7 hours - 1), 300);
+        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 7 hours), 300);
+        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 30 days), 300);
+    }
+
+    function testFuzz_ThreePercentFloorBounds(uint128 price) public pure {
+        uint16 tax = MasonryRules.targetSellTaxBps(price, 1e18, 300, 1200, 1000);
+        assertGe(tax, 300);
+        assertLe(tax, 1200);
+    }
+
     function test_SevenHourTaxRecovery() public pure {
         uint256 start = 100_000;
         assertEq(MasonryRules.recoveryFloorBps(1200, 100, start, start), 1200);

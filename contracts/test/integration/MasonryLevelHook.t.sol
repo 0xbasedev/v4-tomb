@@ -139,26 +139,26 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     function testTaxBoundariesAndNonDuplication() public {
         vm.warp(schedule.start() - 1);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 0.208e18);
+        assertEq(level.balanceOf(TREASURY), 0.388e18);
         assertEq(level.totalBurned(), 0);
 
         vm.warp(schedule.start());
         uint256 before = level.balanceOf(address(this));
         _swap(level0, -10e18);
         assertEq(before - level.balanceOf(address(this)), 10e18);
-        assertEq(level.totalBurned(), 0.3e18);
-        assertEq(hook.genesisLevelBurned(), 0.3e18);
-        assertEq(level.balanceOf(TREASURY), 0.208e18);
-        assertEq(hook.raisedBps(), 253);
+        assertEq(level.totalBurned(), 0.424e18);
+        assertEq(hook.genesisLevelBurned(), 0.424e18);
+        assertEq(level.balanceOf(TREASURY), 0.388e18);
+        assertEq(hook.raisedBps(), 424);
 
         vm.warp(schedule.end() - 1);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.6e18);
+        assertEq(level.totalBurned(), 0.876e18);
 
         vm.warp(schedule.end());
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.6e18);
-        assertEq(level.balanceOf(TREASURY), 0.524e18);
+        assertEq(level.totalBurned(), 0.876e18);
+        assertEq(level.balanceOf(TREASURY), 0.863e18);
     }
 
     function testBuyAndTransferAreUntaxedEvenWhenSellOracleIsUnavailable() public {
@@ -180,10 +180,10 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         _swap(!level0, -2000e6); // Recover spot; leave the sell recovery floor in place.
         vm.warp(schedule.start() + 3.5 hours);
         _swap(level0, -100e18);
-        assertEq(level.totalBurned(), 138.5e18);
+        assertEq(level.totalBurned(), 139.5e18);
         vm.warp(schedule.start() + 7 hours);
         _swap(level0, -100e18);
-        assertEq(level.totalBurned(), 141.5e18);
+        assertEq(level.totalBurned(), 142.5e18);
     }
 
     function testOrdinaryRecoveryPersistsAfterGenesisEnds() public {
@@ -200,7 +200,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
 
         vm.warp(schedule.end() - 1 + 7 hours);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 1.48e18);
+        assertEq(level.balanceOf(TREASURY), 1.647e18);
     }
 
     function testExactOutputChargesOneTaxOnLevelInput() public {
@@ -222,7 +222,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         vm.expectRevert();
         _swap(level0, -900_000e18);
         assertEq(level.totalBurned(), 0);
-        assertEq(hook.raisedBps(), 100);
+        assertEq(hook.raisedBps(), 300);
     }
 
     function testVaultTransferredSharesRedeemAndDirectDonationsStayUnallocated() public {
@@ -405,7 +405,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertTrue(ready);
         assertApproxEqAbs(beforePrice, 1e18, 0.0002e18);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.3e18);
+        assertEq(level.totalBurned(), 0.378e18);
 
         _swap(!level0, -1000e6);
         (uint256 afterPrice, uint256 observedAt, bool stillReady) = hook.oracle().latestValidatedTwap();
@@ -588,9 +588,9 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 treasuryUsdc = usdc.balanceOf(TREASURY);
         _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
 
-        assertEq(squareHook.polSquare(), 0.72e18);
-        assertEq(squareHook.retainedSquare(), 4.08e18);
-        assertEq(square.balanceOf(TREASURY), 4.08e18);
+        assertEq(squareHook.polSquare(), 0.8208e18);
+        assertEq(squareHook.retainedSquare(), 4.6512e18);
+        assertEq(square.balanceOf(TREASURY), 4.6512e18);
         assertEq(squareHook.usdcReserveSquare(), 0);
         assertGt(usdc.balanceOf(TREASURY), treasuryUsdc);
         assertEq(squareHook.criticalSquare(), 0);
@@ -602,8 +602,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 burnBefore = level.totalBurned();
         _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
         assertTrue(squareHook.defense().active());
-        assertEq(squareHook.polSquare(), 0.72e18);
-        assertEq(squareHook.retainedSquare(), 4.08e18);
+        assertEq(squareHook.polSquare(), 0.8208e18);
+        assertEq(squareHook.retainedSquare(), 4.6512e18);
         assertEq(squareHook.criticalSquare(), 0);
         assertGt(squareHook.levelBurned(), 0);
         assertEq(level.totalBurned() - burnBefore, squareHook.levelBurned());
@@ -654,8 +654,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 before = square.balanceOf(address(this));
         hook.poolManager().unlock(abi.encode(squareKey, square0, uint256(100e18)));
         assertEq(before - square.balanceOf(address(this)), 100e18);
-        assertEq(squareHook.deferredSquareClaims(), 1.92e18);
-        assertEq(hook.poolManager().balanceOf(TREASURY, Currency.wrap(address(square)).toId()), 4.08e18);
+        assertEq(squareHook.deferredSquareClaims(), 2.1888e18);
+        assertEq(hook.poolManager().balanceOf(TREASURY, Currency.wrap(address(square)).toId()), 4.6512e18);
 
         _swapOn(squareKey, !square0, -75e6);
         _swapOn(squareKey, square0, -50e18);
