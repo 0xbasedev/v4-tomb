@@ -157,10 +157,13 @@ abstract contract MasonryTaxHook is BaseV4Hook {
         return (IHooks.afterSwap.selector, 0);
     }
 
-    /// @notice One-shot bind of the protocol-owned range manager for this official pool.
+    /// @notice One-shot bind of the protocol-managed range manager for this official pool.
+    /// @dev Only the launch initializer may bind; the launch script also checks `rm` against the
+    ///      planned CREATE3 address. A permissionless bind would let anyone claim the Fire Tax exemption.
     function bindRangeManager(
         MasonryRangeManager rm
     ) external {
+        if (msg.sender != _initializer) revert UnauthorizedInitializer();
         if (
             rangeManager != address(0) || address(rm).code.length == 0 || rm.hook() != address(this)
                 || PoolId.unwrap(rm.poolId()) != PoolId.unwrap(officialPool) || rm.manager() != poolManager

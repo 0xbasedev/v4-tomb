@@ -9,7 +9,8 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {MasonryRangeManager} from "../../src/masonry/MasonryRangeManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
@@ -63,6 +64,23 @@ contract MockTwapLevelHook is MasonryLevelHook {
     }
 
     address private immutable testHarness = msg.sender;
+}
+
+/// Impersonates a range manager: answers every bind check with the real hook's values.
+contract FakeRangeManager {
+    address public hook;
+    bytes32 private pid;
+    address public manager;
+
+    constructor(address hook_, bytes32 pid_, address manager_) {
+        hook = hook_;
+        pid = pid_;
+        manager = manager_;
+    }
+
+    function poolId() external view returns (bytes32) {
+        return pid;
+    }
 }
 
 contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
@@ -925,5 +943,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2; y = x;
         while (z < y) { y = z; z = (x / z + z) / 2; }
+    }
+
+    function testFakeRangeManagerCannotBindFromNonInitializer() public {
+        FakeRangeManager fake = new FakeRangeManager(
+            address(hook), PoolId.unwrap(hook.officialPool()), address(hook.poolManager())
+        );
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(MasonryTaxHook.UnauthorizedInitializer.selector);
+        hook.bindRangeManager(MasonryRangeManager(address(fake)));
+        assertEq(hook.rangeManager(), address(0), "exemption slot stays empty");
     }
 }

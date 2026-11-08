@@ -3,10 +3,22 @@ pragma solidity 0.8.26;
 
 import {Create3Config} from "./Create3Config.s.sol";
 
+interface IRangeBindable {
+    function bindRangeManager(address rm) external;
+    function rangeManager() external view returns (address);
+}
+
 /// @notice Deploys one Masonry component from a reviewed plan. Initcode includes its constructor arguments.
 contract DeployMasonryComponent is Create3Config {
     error WrongChain(uint256 expected, uint256 actual);
     error UnapprovedInitCode();
+    error UnboundHook(string hookRole);
+
+    function _hookFor(bytes32 roleHash) internal pure returns (string memory) {
+        if (roleHash == keccak256("masonryLevelRangeManager")) return "masonryTaxHook";
+        if (roleHash == keccak256("masonrySquareRangeManager")) return "masonryShareTaxHook";
+        return "";
+    }
 
     function run(
         string calldata role,
@@ -30,6 +42,14 @@ contract DeployMasonryComponent is Create3Config {
         }
         vm.startBroadcast(plan.deployer);
         deployed = _deployCreate3(plan, role, nonce, expected, initCode);
+        // A range manager is bound to its hook in the same launch run, so nobody can bind a fake first.
+        string memory hookRole = _hookFor(roleHash);
+        if (bytes(hookRole).length != 0) {
+            address hook = vm.parseJsonAddress(config, string.concat(".addresses.", hookRole));
+            if (hook.code.length == 0) revert UnboundHook(hookRole);
+            IRangeBindable(hook).bindRangeManager(deployed);
+            if (IRangeBindable(hook).rangeManager() != expected) revert UnboundHook(hookRole);
+        }
         vm.stopBroadcast();
     }
 }
