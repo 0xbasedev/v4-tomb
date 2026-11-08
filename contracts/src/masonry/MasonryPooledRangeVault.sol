@@ -38,11 +38,15 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         Rebalance
     }
 
+    uint256 public constant DEAD_SHARES = 1_000;
+    address public constant DEAD = address(0xdead);
+
     IPoolManager public immutable manager;
     PoolId public immutable poolId;
     Strategy public immutable strategy;
     uint16 public immutable halfWidthBps;
     uint160 public immutable sqrtPeg;
+    uint256 public immutable redeemCooldown;
 
     PoolKey private key;
     int24 public tickLower;
@@ -53,9 +57,27 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     error NotPoolManager();
     error ZeroShares();
     error NoLiquidity();
+    error FirstDepositTooSmall();
+    error RedeemPending();
+    error RedeemNotPending();
+    error RedeemCooldownActive();
+    error ReceiptNotTransferable();
+
+    struct RedeemRequest {
+        uint256 shares;
+        uint256 availableAt;
+        uint256 receiptId;
+    }
+
+    mapping(address => RedeemRequest) public redeemRequests;
+    mapping(uint256 => address) public receiptOwner;
+    uint256 private _nextReceiptId = 1;
 
     event Deposited(address indexed user, uint256 shares, uint256 amount0, uint256 amount1);
-    event Redeemed(address indexed user, uint256 shares, uint256 amount0, uint256 amount1);
+    event RedeemRequested(address indexed user, uint256 shares, uint256 availableAt, uint256 receiptId);
+    event RedeemCompleted(address indexed user, uint256 shares, uint256 amount0, uint256 amount1, uint256 receiptId);
+    event RedeemCancelled(address indexed user, uint256 shares, uint256 receiptId);
+    event Compounded(address indexed user, uint256 unlockedShares);
     event Rebalanced(int24 tickLower, int24 tickUpper, uint128 liquidity);
 
     constructor(
@@ -63,16 +85,19 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         PoolKey memory pool,
         Strategy strategy_,
         uint16 halfWidthBps_,
-        uint160 sqrtPeg_
+        uint160 sqrtPeg_,
+        uint256 redeemCooldown_
     ) ERC20("Masonry Pooled Range Prototype", "mPRANGE") {
         MasonryRangeLib.validate(halfWidthBps_, halfWidthBps_ / 2 == 0 ? 100 : halfWidthBps_ / 2, 1800, 300);
         if (address(manager_) == address(0) || sqrtPeg_ == 0) revert MasonryRangeLib.InvalidRangeConfig();
+        if (redeemCooldown_ < 60 || redeemCooldown_ > 1 days) revert MasonryRangeLib.InvalidRangeConfig();
         manager = manager_;
         key = pool;
         poolId = pool.toId();
         strategy = strategy_;
         halfWidthBps = halfWidthBps_;
         sqrtPeg = sqrtPeg_;
+        redeemCooldown = redeemCooldown_;
     }
 
     function poolKey() external view returns (PoolKey memory) {
@@ -112,7 +137,14 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         (uint256 after0, uint256 after1) = inventory();
         uint256 afterValue = MasonryRangeLib.valueInCurrency1(after0, after1, sqrtBefore);
         uint256 added = afterValue > beforeValue ? afterValue - beforeValue : 0;
-        shares = supply == 0 || beforeValue == 0 ? added : added * supply / beforeValue;
+        if (added == 0) revert ZeroShares();
+        if (supply == 0 || beforeValue == 0) {
+            if (added <= DEAD_SHARES) revert FirstDepositTooSmall();
+            _mint(DEAD, DEAD_SHARES);
+            shares = added - DEAD_SHARES;
+        } else {
+            shares = added * supply / beforeValue;
+        }
         if (shares == 0) revert ZeroShares();
         _mint(msg.sender, shares);
         uint256 used0 = before0 > after0 ? 0 : after0 - before0;
@@ -120,26 +152,75 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         emit Deposited(msg.sender, shares, used0, used1);
     }
 
-    function redeem(uint256 shares) external nonReentrant returns (uint256 amount0, uint256 amount1) {
+    function requestRedeem(uint256 shares) external nonReentrant returns (uint256 receiptId) {
         if (shares == 0 || shares > balanceOf(msg.sender)) revert ZeroShares();
+        if (redeemRequests[msg.sender].shares != 0) revert RedeemPending();
+        _transfer(msg.sender, address(this), shares);
+        receiptId = ++_nextReceiptId;
+        uint256 availableAt = block.timestamp + redeemCooldown;
+        redeemRequests[msg.sender] = RedeemRequest(shares, availableAt, receiptId);
+        receiptOwner[receiptId] = msg.sender;
+        emit RedeemRequested(msg.sender, shares, availableAt, receiptId);
+    }
+
+    function completeRedeem() external nonReentrant returns (uint256 amount0, uint256 amount1) {
+        RedeemRequest memory req = redeemRequests[msg.sender];
+        if (req.shares == 0) revert RedeemNotPending();
+        if (block.timestamp < req.availableAt) revert RedeemCooldownActive();
+        delete redeemRequests[msg.sender];
+        delete receiptOwner[req.receiptId];
         uint256 supplyBefore = totalSupply();
         IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
         IERC20 token1 = IERC20(Currency.unwrap(key.currency1));
         uint256 idle0 = token0.balanceOf(address(this));
         uint256 idle1 = token1.balanceOf(address(this));
-        _burn(msg.sender, shares);
-        _redeemShares = shares;
+        _burn(address(this), req.shares);
+        _redeemShares = req.shares;
         _redeemSupply = supplyBefore;
         _run(Op.Redeem);
         _redeemShares = 0;
         _redeemSupply = 0;
         uint256 withdrawn0 = token0.balanceOf(address(this)) - idle0;
         uint256 withdrawn1 = token1.balanceOf(address(this)) - idle1;
-        amount0 = withdrawn0 + idle0 * shares / supplyBefore;
-        amount1 = withdrawn1 + idle1 * shares / supplyBefore;
+        amount0 = withdrawn0 + idle0 * req.shares / supplyBefore;
+        amount1 = withdrawn1 + idle1 * req.shares / supplyBefore;
         if (amount0 != 0) token0.safeTransfer(msg.sender, amount0);
         if (amount1 != 0) token1.safeTransfer(msg.sender, amount1);
-        emit Redeemed(msg.sender, shares, amount0, amount1);
+        emit RedeemCompleted(msg.sender, req.shares, amount0, amount1, req.receiptId);
+    }
+
+    function cancelRedeem() external nonReentrant {
+        _unlockPending(msg.sender);
+    }
+
+    /// @notice Cancels a pending withdrawal and deploys idle fees back into the band.
+    function compound() external nonReentrant {
+        uint256 unlocked;
+        if (redeemRequests[msg.sender].shares != 0) {
+            unlocked = redeemRequests[msg.sender].shares;
+            _unlockPending(msg.sender);
+        }
+        if (seeded) _run(Op.Deposit);
+        emit Compounded(msg.sender, unlocked);
+    }
+
+    function transferRedeemReceipt(address, uint256) external pure {
+        revert ReceiptNotTransferable();
+    }
+
+    function cooldownRemaining(address user) external view returns (uint256) {
+        RedeemRequest memory req = redeemRequests[user];
+        if (req.shares == 0 || block.timestamp >= req.availableAt) return 0;
+        return req.availableAt - block.timestamp;
+    }
+
+    function _unlockPending(address user) private {
+        RedeemRequest memory req = redeemRequests[user];
+        if (req.shares == 0) revert RedeemNotPending();
+        delete redeemRequests[user];
+        delete receiptOwner[req.receiptId];
+        _transfer(address(this), user, req.shares);
+        emit RedeemCancelled(user, req.shares, req.receiptId);
     }
 
     function rebalance() external nonReentrant {

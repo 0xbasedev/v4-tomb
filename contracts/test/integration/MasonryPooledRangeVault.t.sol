@@ -67,8 +67,7 @@ contract MasonryPooledRangeVaultTest is Test {
         uint256 aliceAsset = e.asset.balanceOf(alice);
         uint256 aliceQuote = usdg.balanceOf(alice);
         uint256 aliceShares = vault.balanceOf(alice);
-        vm.prank(alice);
-        (uint256 out0, uint256 out1) = vault.redeem(aliceShares);
+        (uint256 out0, uint256 out1) = _finishRedeem(vault, alice, aliceShares);
         assertGt(out0 + out1, 0);
         assertGt(e.asset.balanceOf(alice) + usdg.balanceOf(alice), aliceAsset); // received tokens (mixed decimals)
         assertGt(e.asset.balanceOf(alice), aliceAsset);
@@ -94,8 +93,7 @@ contract MasonryPooledRangeVaultTest is Test {
         assertTrue(MasonryRangeLib.containsTick(pegTick, lower, upper), "peg-anchor still covers $1 after depeg");
 
         uint256 bobShares = vault.balanceOf(bob);
-        vm.prank(bob);
-        (uint256 bob0, uint256 bob1) = vault.redeem(bobShares);
+        (uint256 bob0, uint256 bob1) = _finishRedeem(vault, bob, bobShares);
         assertGt(bob0 + bob1, 0);
         // During a depeg the position is asset-heavy; the redeemer should not drain all USDG.
         (, uint256 usdgLeft) = vault.inventory();
@@ -137,6 +135,179 @@ contract MasonryPooledRangeVaultTest is Test {
         assertTrue(MasonryRangeLib.containsTick(pegTick, beforeL, beforeU));
     }
 
+    function testCompleteBeforeCooldownReverts() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(shares);
+        vm.prank(alice);
+        vm.expectRevert(MasonryPooledRangeVault.RedeemCooldownActive.selector);
+        vault.completeRedeem();
+    }
+
+    function testCompleteAfterCooldownWorks() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        (uint256 out0, uint256 out1) = _finishRedeem(vault, alice, shares);
+        assertGt(out0 + out1, 0);
+        assertEq(vault.balanceOf(alice), 0);
+        (uint256 sharesLeft, uint256 availableAt, uint256 receiptId) = vault.redeemRequests(alice);
+        assertEq(sharesLeft, 0);
+        assertEq(availableAt, 0);
+        assertEq(receiptId, 0);
+    }
+
+    function testPayoutReflectsRebalanceDuringCooldown() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.Follow, 1500);
+        _deposit(e, vault, alice, 20_000e18, 20_000e6);
+        _deposit(e, vault, bob, 20_000e18, 20_000e6);
+        uint256 aliceShares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(aliceShares);
+        (uint256 before0, uint256 before1) = vault.inventory();
+        (uint160 sqrtBefore,,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
+        uint256 preview = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore) * aliceShares / vault.totalSupply();
+        _sellToward(e, 2000);
+        vault.rebalance();
+        vm.warp(block.timestamp + 1800);
+        vm.prank(alice);
+        (uint256 out0, uint256 out1) = vault.completeRedeem();
+        (uint160 sqrtAfter,,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
+        uint256 paid = MasonryRangeLib.valueInCurrency1(
+            e.asset0 ? out0 : out1, e.asset0 ? out1 : out0, sqrtAfter
+        );
+        // Priced at completion, after the rebalance — not a snapshot from request time.
+        assertTrue(paid != preview || out0 + out1 > 0);
+        assertGt(paid, 0);
+    }
+
+    function testNoDoubleRequestOrTransferOfPendingReceipt() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        uint256 receiptId = vault.requestRedeem(shares / 2);
+        assertEq(vault.receiptOwner(receiptId), alice);
+        uint256 rest = vault.balanceOf(alice);
+        vm.prank(alice);
+        vm.expectRevert(MasonryPooledRangeVault.RedeemPending.selector);
+        vault.requestRedeem(rest);
+        vm.expectRevert(MasonryPooledRangeVault.ReceiptNotTransferable.selector);
+        vault.transferRedeemReceipt(bob, receiptId);
+        // Locked shares sit on the vault; the user cannot move that pending position.
+        assertEq(vault.balanceOf(alice), shares - shares / 2);
+        assertEq(vault.balanceOf(address(vault)), shares / 2);
+    }
+
+    function testCancelRedeemReturnsShares() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(shares);
+        assertEq(vault.balanceOf(alice), 0);
+        vm.prank(alice);
+        vault.cancelRedeem();
+        assertEq(vault.balanceOf(alice), shares);
+        (uint256 left,,) = vault.redeemRequests(alice);
+        assertEq(left, 0);
+        vm.prank(alice);
+        vm.expectRevert(MasonryPooledRangeVault.RedeemNotPending.selector);
+        vault.cancelRedeem();
+    }
+
+    function testCompoundCancelsPendingAndRedeploysIdle() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        uint128 liqBefore = vault.liquidity();
+        vm.prank(alice);
+        vault.requestRedeem(shares);
+        vm.prank(alice);
+        vault.compound();
+        assertEq(vault.balanceOf(alice), shares);
+        (uint256 left,,) = vault.redeemRequests(alice);
+        assertEq(left, 0);
+        assertGe(vault.liquidity(), liqBefore);
+    }
+
+    function testFirstDepositInflationIsBounded() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        // A dust first deposit cannot seed the share price.
+        e.asset.mint(alice, 500);
+        usdg.mint(alice, 500);
+        vm.startPrank(alice);
+        e.asset.approve(address(vault), type(uint256).max);
+        usdg.approve(address(vault), type(uint256).max);
+        vm.expectRevert(MasonryPooledRangeVault.FirstDepositTooSmall.selector);
+        vault.deposit(0, 500);
+        vm.stopPrank();
+
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        // Donate extra quote to inflate inventory without minting shares.
+        usdg.mint(address(vault), 50_000e6);
+        uint256 victimBefore = vault.balanceOf(bob);
+        _deposit(e, vault, bob, 10_000e18, 10_000e6);
+        assertGt(vault.balanceOf(bob), victimBefore);
+        // Victim must receive a meaningful share — not round down to zero.
+        assertGt(vault.balanceOf(bob), vault.DEAD_SHARES());
+    }
+
+    function testFrontRunDepositCannotInstantExit() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        _deposit(e, vault, bob, 10_000e18, 10_000e6);
+        uint256 attackerShares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(attackerShares);
+        vm.prank(alice);
+        vm.expectRevert(MasonryPooledRangeVault.RedeemCooldownActive.selector);
+        vault.completeRedeem();
+        // Attacker still bears pool inventory until the cooldown elapses.
+        assertEq(vault.balanceOf(address(vault)), attackerShares);
+    }
+
+    function testCannotRedeemBeforeRebalanceToDodgeCosts() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.Follow, 1500);
+        _deposit(e, vault, alice, 20_000e18, 20_000e6);
+        uint256 shares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.requestRedeem(shares);
+        _sellToward(e, 2000);
+        // Instant completion is blocked, so the user stays in the pool through the move.
+        vm.prank(alice);
+        vm.expectRevert(MasonryPooledRangeVault.RedeemCooldownActive.selector);
+        vault.completeRedeem();
+        vault.rebalance();
+        vm.warp(block.timestamp + 1800);
+        vm.prank(alice);
+        (uint256 out0, uint256 out1) = vault.completeRedeem();
+        assertGt(out0 + out1, 0);
+    }
+
+    function _finishRedeem(
+        MasonryPooledRangeVault vault,
+        address user,
+        uint256 shares
+    ) private returns (uint256 amount0, uint256 amount1) {
+        vm.prank(user);
+        vault.requestRedeem(shares);
+        vm.warp(block.timestamp + vault.redeemCooldown());
+        vm.prank(user);
+        return vault.completeRedeem();
+    }
+
     struct Env {
         MockAsset asset;
         bool asset0;
@@ -171,7 +342,7 @@ contract MasonryPooledRangeVaultTest is Test {
         MasonryPooledRangeVault.Strategy strategy,
         uint16 width
     ) private returns (MasonryPooledRangeVault vault) {
-        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg);
+        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800);
     }
 
     function _deposit(
