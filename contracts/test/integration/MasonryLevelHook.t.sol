@@ -901,6 +901,14 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         m.lpFee = (_fg(manager) - m.fg) * m.liq / (1 << 128);
         uint256 ideal = 10e18 * m.spot / 1e18 / 1e12;
         uint256 totalBps = (ideal - m.out) * 10_000 / ideal;
+        emit log_named_uint("RAW in_xTOMB_wei", 10e18);
+        emit log_named_uint("RAW spot_1e18", m.spot);
+        emit log_named_uint("RAW in_value_usdg_6dp", ideal);
+        emit log_named_uint("RAW tax_xTOMB_wei", m.tax);
+        emit log_named_uint("RAW to_pool_xTOMB_wei", 10e18 - m.tax);
+        emit log_named_uint("RAW lpfee_xTOMB_wei", m.lpFee);
+        emit log_named_uint("RAW out_usdg_6dp", m.out);
+        emit log_named_uint("RAW noimpact_out_usdg_6dp", (10e18 - m.tax - m.lpFee) * m.spot / 1e18 / 1e12);
         emit log_named_uint("target price (1e18)", target);
         emit log_named_uint("  spot before (1e18)", m.spot);
         emit log_named_uint("  fire tax bps of input", m.tax * 1000 / 1e18);
