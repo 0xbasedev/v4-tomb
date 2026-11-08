@@ -20,6 +20,7 @@ import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
 import {MasonryRules} from "../masonry/MasonryRules.sol";
 import {IMasonryRangeNudge} from "../masonry/IMasonryPolSink.sol";
 import {MasonryRangeManager} from "../masonry/MasonryRangeManager.sol";
+import {MasonryRangeLib} from "../masonry/MasonryRangeLib.sol";
 
 /// @notice Shared sell-only tax, recovery and price observation for official USDC pools.
 abstract contract MasonryTaxHook is BaseV4Hook {
@@ -143,13 +144,14 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     }
 
     function afterSwap(
-        address,
+        address sender,
         PoolKey calldata key,
         SwapParams calldata params,
         BalanceDelta,
         bytes calldata
     ) external override onlyPoolManager returns (bytes4, int128) {
         _recordPool(true);
+        if (sender == rangeManager) return (IHooks.afterSwap.selector, 0);
         if (params.zeroForOne == assetIsCurrency0) _afterSell(key);
         _nudgeRange();
         return (IHooks.afterSwap.selector, 0);
@@ -168,8 +170,11 @@ abstract contract MasonryTaxHook is BaseV4Hook {
 
     function _nudgeRange() internal {
         address rm = rangeManager;
-        if (rm == address(0) || gasleft() < 200_000) return;
-        try IMasonryRangeNudge(rm).nudge{gas: 180_000}() {} catch {}
+        if (
+            rm == address(0)
+                || gasleft() < MasonryRangeLib.NUDGE_STIPEND + MasonryRangeLib.NUDGE_HOOK_BUFFER
+        ) return;
+        try IMasonryRangeNudge(rm).nudge{gas: MasonryRangeLib.NUDGE_STIPEND}() {} catch {}
     }
 
     /// @notice Saves a history checkpoint without refreshing the last-price-change time.
@@ -188,12 +193,15 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     }
 
     function beforeSwap(
-        address,
+        address sender,
         PoolKey calldata key,
         SwapParams calldata params,
         bytes calldata
     ) external override onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(officialPool)) revert UnknownPool();
+        if (sender == rangeManager) {
+            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
         if (params.zeroForOne != assetIsCurrency0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }

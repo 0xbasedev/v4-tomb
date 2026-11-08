@@ -65,4 +65,15 @@ contract MasonryRangeLibTest is Test {
         assertGt(MasonryRangeLib.deviationBps(1.05e18, 1e18), 300);
         assertEq(MasonryRangeLib.deviationBps(0, 0), type(uint256).max);
     }
+
+    function testSqrtPriceLimitAndValueLoss() public pure {
+        uint160 peg = uint160(1 << 96);
+        uint160 down = MasonryRangeLib.sqrtPriceLimit(peg, 300, true);
+        uint160 up = MasonryRangeLib.sqrtPriceLimit(peg, 300, false);
+        assertLt(down, peg);
+        assertGt(up, peg);
+        assertFalse(MasonryRangeLib.exceedsLoss(1e18, 1e18 - 1e18 * 50 / 10_000, 100));
+        assertTrue(MasonryRangeLib.exceedsLoss(1e18, 1e18 - 1e18 * 200 / 10_000, 100));
+    }
 }
+

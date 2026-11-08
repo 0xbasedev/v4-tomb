@@ -12,8 +12,9 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
-import {ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
+import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 import {IMasonryPolSink, IMasonryRangeNudge} from "./IMasonryPolSink.sol";
 import {MasonryRangeLib} from "./MasonryRangeLib.sol";
 import {MasonryLevelPrice} from "./MasonryLevelPrice.sol";
@@ -30,7 +31,6 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
 
-    uint256 private constant NUDGE_GAS = 180_000;
 
     enum Op {
         Fund,
@@ -59,6 +59,7 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     error Unauthorized();
     error NotPoolManager();
     error UnsafeRebalance();
+    error SlippageExceeded();
     error NoRecenterNeeded();
     error SameBlockRebalance();
     error CooldownActive();
@@ -146,7 +147,7 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
 
     /// @notice Keeper/hook entry that never reverts on a no-op or safety miss.
     function nudge() external override {
-        if (gasleft() < NUDGE_GAS) return;
+        if (gasleft() < MasonryRangeLib.NUDGE_MIN_GAS) return;
         if (!_safeToMoveView() || !shouldRebalance()) return;
         try this.rebalance() {} catch {}
     }
@@ -214,9 +215,18 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         Op op
     ) private {
         if (op == Op.Rebalance) {
+            (uint256 before0, uint256 before1) = _inventory();
+            (uint160 sqrtBefore,,,) = manager.getSlot0(poolId);
+            uint256 beforeValue = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore);
             _removePosition();
             _setBandFromSpot();
+            _rebalanceInventory();
             _addFromBalance();
+            (uint256 after0, uint256 after1) = _inventory();
+            uint256 afterValue = MasonryRangeLib.valueInCurrency1(after0, after1, sqrtBefore);
+            if (MasonryRangeLib.exceedsLoss(beforeValue, afterValue, MasonryRangeLib.MAX_INVENTORY_LOSS_BPS)) {
+                revert SlippageExceeded();
+            }
             lastRebalanceAt = block.timestamp;
             lastRebalanceBlock = block.number;
             (, int24 tick,,) = manager.getSlot0(poolId);
@@ -246,6 +256,59 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
         uint256 spot = MasonryLevelPrice.fromSqrtPrice(sqrtPrice, assetIsCurrency0);
         if (MasonryRangeLib.deviationBps(spot, twap) > maxTwapDeviationBps) revert UnsafeRebalance();
+    }
+
+
+    function _rebalanceInventory() private {
+        IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
+        IERC20 token1 = IERC20(Currency.unwrap(key.currency1));
+        uint256 bal0 = token0.balanceOf(address(this));
+        uint256 bal1 = token1.balanceOf(address(this));
+        if (bal0 == 0 && bal1 == 0) return;
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        uint160 sa = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sb = TickMath.getSqrtPriceAtTick(tickUpper);
+        uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0(sqrtPrice, sb, bal0);
+        uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1(sa, sqrtPrice, bal1);
+        if (liquidity0 == liquidity1) return;
+        if (liquidity0 > liquidity1) {
+            uint256 used0 = SqrtPriceMath.getAmount0Delta(sqrtPrice, sb, liquidity1, true);
+            if (bal0 > used0) _swap(true, bal0 - used0, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, true));
+        } else {
+            uint256 used1 = SqrtPriceMath.getAmount1Delta(sa, sqrtPrice, liquidity0, true);
+            if (bal1 > used1) {
+                _swap(false, bal1 - used1, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, false));
+            }
+        }
+    }
+
+    function _swap(bool zeroForOne, uint256 amountIn, uint160 limit) private {
+        if (amountIn == 0) return;
+        BalanceDelta delta = manager.swap(
+            key,
+            SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountIn), sqrtPriceLimitX96: limit}),
+            ""
+        );
+        // _settleNegative also takes a positive credit so each currency is settled once.
+        _settleNegative(key.currency0, delta.amount0());
+        _settleNegative(key.currency1, delta.amount1());
+    }
+
+    function _inventory() private view returns (uint256 amount0, uint256 amount1) {
+        amount0 = IERC20(Currency.unwrap(key.currency0)).balanceOf(address(this));
+        amount1 = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+        if (liquidity == 0) return (amount0, amount1);
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        uint160 sa = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sb = TickMath.getSqrtPriceAtTick(tickUpper);
+        if (sqrtPrice <= sa) {
+            amount0 += SqrtPriceMath.getAmount0Delta(sa, sb, liquidity, false);
+        } else if (sqrtPrice >= sb) {
+            amount1 += SqrtPriceMath.getAmount1Delta(sa, sb, liquidity, false);
+        } else {
+            amount0 += SqrtPriceMath.getAmount0Delta(sqrtPrice, sb, liquidity, false);
+            amount1 += SqrtPriceMath.getAmount1Delta(sa, sqrtPrice, liquidity, false);
+        }
     }
 
     function _removePosition() private {

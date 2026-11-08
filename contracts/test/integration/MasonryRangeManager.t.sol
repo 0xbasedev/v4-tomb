@@ -117,6 +117,35 @@ contract MasonryRangeManagerTest is Test {
         _exercisePool("xSHARE");
     }
 
+    function testNudgeNeverRevertsAndCanRecenterWithStipend() public {
+        Env memory e = _boot("xTOMB");
+        e.rm.nudge();
+        _sellToward(e, 1300);
+        (uint160 sqrtAfter,,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
+        e.twap.set(MasonryLevelPrice.fromSqrtPrice(sqrtAfter, e.asset0), true);
+        assertTrue(e.rm.shouldRebalance());
+        int24 oldLower = e.rm.tickLower();
+        e.rm.nudge{gas: MasonryRangeLib.NUDGE_STIPEND}();
+        assertTrue(e.rm.tickLower() != oldLower);
+        assertGt(e.rm.liquidity(), 0);
+        assertFalse(e.rm.shouldRebalance());
+    }
+
+    function testThinPoolAndUnauthorizedDeposit() public {
+        Env memory e = _boot("xSHARE");
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(MasonryRangeManager.Unauthorized.selector);
+        e.rm.depositFromHook(1, 1, address(this));
+
+        MasonryRangeManager thin = new MasonryRangeManager(
+            manager, e.key, e.twap, address(this), e.asset0, 1500, 1000, 1800, 300, type(uint128).max
+        );
+        e.asset.approve(address(thin), type(uint256).max);
+        usdg.approve(address(thin), type(uint256).max);
+        vm.expectRevert(MasonryRangeManager.ThinPool.selector);
+        thin.donate(100e18, 100e6);
+    }
+
     struct Env {
         MockAsset asset;
         bool asset0;
@@ -207,9 +236,13 @@ contract MasonryRangeManagerTest is Test {
         assertTrue(e.rm.tickLower() != oldLower || e.rm.tickUpper() != oldUpper);
         assertFalse(e.rm.shouldRebalance());
         (uint256 after0, uint256 after1) = _inventory(e.rm, e.key);
-        // No internal swap: each token can only rise by collected fees or drop by rounding dust.
-        assertGe(after0 + 1000, before0, "token0 leaked");
-        assertGe(after1 + 1000, before1, "token1 leaked");
+        uint256 beforeValue = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtAfter);
+        uint256 afterValue = MasonryRangeLib.valueInCurrency1(after0, after1, sqrtAfter);
+        assertFalse(
+            MasonryRangeLib.exceedsLoss(beforeValue, afterValue, MasonryRangeLib.MAX_INVENTORY_LOSS_BPS),
+            "rebalance lost more than the inventory slippage bound"
+        );
+        assertGt(e.rm.liquidity(), 0, "recenter must redeploy liquidity into the new band");
         vm.expectRevert(MasonryRangeManager.SameBlockRebalance.selector);
         e.rm.rebalance();
     }

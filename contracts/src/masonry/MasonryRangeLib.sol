@@ -15,6 +15,10 @@ library MasonryRangeLib {
     uint16 internal constant MIN_TWAP_DEV_BPS = 1;
     uint16 internal constant MAX_TWAP_DEV_BPS = 1000;
     uint256 internal constant BPS = 10_000;
+    uint256 internal constant NUDGE_STIPEND = 500_000;
+    uint256 internal constant NUDGE_MIN_GAS = 150_000;
+    uint256 internal constant NUDGE_HOOK_BUFFER = 50_000;
+    uint16 internal constant MAX_INVENTORY_LOSS_BPS = 100;
 
     error InvalidRangeConfig();
 
@@ -89,5 +93,31 @@ library MasonryRangeLib {
         if (twap == 0) return type(uint256).max;
         uint256 diff = spot > twap ? spot - twap : twap - spot;
         return FullMath.mulDiv(diff, BPS, twap);
+    }
+
+    /// @notice sqrtPrice limit that stays within `deviationBps` of the current price.
+    function sqrtPriceLimit(uint160 sqrtPrice, uint16 maxDeviationBps, bool zeroForOne) internal pure returns (uint160) {
+        if (maxDeviationBps == 0 || maxDeviationBps >= BPS) revert InvalidRangeConfig();
+        uint256 scale = Math.sqrt(BPS * 1e12);
+        if (zeroForOne) {
+            uint256 lowerLim = FullMath.mulDiv(sqrtPrice, Math.sqrt((BPS - maxDeviationBps) * 1e12), scale);
+            if (lowerLim <= TickMath.MIN_SQRT_PRICE) return TickMath.MIN_SQRT_PRICE + 1;
+            return uint160(lowerLim);
+        }
+        uint256 upperLim = FullMath.mulDiv(sqrtPrice, Math.sqrt((BPS + maxDeviationBps) * 1e12), scale);
+        if (upperLim >= TickMath.MAX_SQRT_PRICE) return TickMath.MAX_SQRT_PRICE - 1;
+        return uint160(upperLim);
+    }
+
+    /// @notice Inventory valued in currency1 units at `sqrtPrice` (pool decimals).
+    function valueInCurrency1(uint256 amount0, uint256 amount1, uint160 sqrtPrice) internal pure returns (uint256) {
+        uint256 amount0As1 =
+            FullMath.mulDiv(FullMath.mulDiv(amount0, sqrtPrice, uint256(1) << 96), sqrtPrice, uint256(1) << 96);
+        return amount0As1 + amount1;
+    }
+
+    function exceedsLoss(uint256 beforeValue, uint256 afterValue, uint16 maxLossBps) internal pure returns (bool) {
+        if (afterValue >= beforeValue || beforeValue == 0) return false;
+        return FullMath.mulDiv(beforeValue - afterValue, BPS, beforeValue) > maxLossBps;
     }
 }

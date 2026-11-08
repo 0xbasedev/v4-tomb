@@ -43,6 +43,7 @@ import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MasonryLaunchConfig, MasonryLaunchParams} from "../../script/MasonryLaunchConfig.sol";
 import {MasonryRangeManager, IMasonryRangeTwap} from "../../src/masonry/MasonryRangeManager.sol";
 import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
+import {MasonryRangeLib} from "../../src/masonry/MasonryRangeLib.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 contract LaunchLevel is ERC20Burnable {
@@ -596,16 +597,68 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         (uint160 sqrtPrice,,,) = StateLibrary.getSlot0(pm, pool.key.toId());
         rangeTwap.setPrice(MasonryLevelPrice.fromSqrtPrice(sqrtPrice, pool.level0));
         MasonryRangeManager levelRm = new MasonryRangeManager(
-            pm, pool.key, IMasonryRangeTwap(address(rangeTwap)), address(this), pool.level0, 1500, 1000, 1800, 300, 1e12
+            pm,
+            pool.key,
+            IMasonryRangeTwap(address(rangeTwap)),
+            address(pool.key.hooks),
+            pool.level0,
+            1500,
+            1000,
+            1800,
+            300,
+            1e12
         );
+        MasonryTaxHook(address(pool.key.hooks)).bindRangeManager(levelRm);
         pool.level.mint(address(this), 50_000e18);
         deal(USDG, address(this), IERC20(USDG).balanceOf(address(this)) + 50_000e6);
         IERC20(address(pool.level)).approve(address(levelRm), type(uint256).max);
         IERC20(USDG).approve(address(levelRm), type(uint256).max);
         levelRm.donate(10_000e18, 10_000e6);
         assertTrue(levelRm.seeded());
+        assertGt(levelRm.liquidity(), 0);
+        (int24 previewLower, int24 previewUpper) = levelRm.previewRange();
+        assertEq(previewLower % 60, 0);
+        assertEq(previewUpper % 60, 0);
         vm.expectRevert(MasonryRangeManager.NoRecenterNeeded.selector);
         levelRm.rebalance();
+        levelRm.nudge();
+
+        // Refresh the hook oracle the same way `_sellLevel` does so the user swap is valid.
+        _tinyBuy(pool);
+        vm.warp(block.timestamp + 35 minutes);
+        _tinyBuy(pool);
+
+        PoolSwapTest swaps = new PoolSwapTest(pm);
+        pool.level.mint(address(this), 5_000e18);
+        IERC20(address(pool.level)).approve(address(swaps), type(uint256).max);
+        IERC20(USDG).approve(address(swaps), type(uint256).max);
+        uint256 levelBefore = pool.level.balanceOf(address(this));
+        swaps.swap(
+            pool.key,
+            SwapParams({
+                zeroForOne: pool.level0,
+                amountSpecified: -int256(100e18),
+                sqrtPriceLimitX96: pool.level0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            }),
+            PoolSwapTest.TestSettings(false, false),
+            ""
+        );
+        assertLt(pool.level.balanceOf(address(this)), levelBefore, "hooked sell still succeeds with range manager bound");
+        (uint160 sqrtAfter,,,) = StateLibrary.getSlot0(pm, pool.key.toId());
+        uint256 spotAfter = MasonryLevelPrice.fromSqrtPrice(sqrtAfter, pool.level0);
+        (uint256 twapNow,,) = rangeTwap.latestValidatedTwap();
+        if (MasonryRangeLib.deviationBps(spotAfter, twapNow) > 300) {
+            vm.expectRevert(MasonryRangeManager.UnsafeRebalance.selector);
+            levelRm.rebalance();
+        }
+        rangeTwap.setPrice(spotAfter);
+        if (levelRm.shouldRebalance()) {
+            int24 oldLower = levelRm.tickLower();
+            levelRm.rebalance();
+            assertTrue(levelRm.tickLower() != oldLower);
+            assertGt(levelRm.liquidity(), 0);
+            assertFalse(levelRm.shouldRebalance());
+        }
     }
 
     function _exerciseShareRange() internal {
