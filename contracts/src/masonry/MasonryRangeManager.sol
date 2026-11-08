@@ -67,7 +67,18 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     error InvalidRecipient();
 
     event RangeSeeded(int24 tickLower, int24 tickUpper, uint128 liquidity);
-    event RangeRebalanced(int24 tickLower, int24 tickUpper, uint128 liquidity, int24 tick);
+    event RangeRebalanced(
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liquidity,
+        int24 tick,
+        uint256 principal0,
+        uint256 principal1,
+        uint256 fees0,
+        uint256 fees1,
+        int256 swap0,
+        int256 swap1
+    );
     event RangeFunded(uint128 added, uint256 amount0, uint256 amount1);
 
     constructor(
@@ -218,9 +229,9 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
             (uint256 before0, uint256 before1) = _inventory();
             (uint160 sqrtBefore,,,) = manager.getSlot0(poolId);
             uint256 beforeValue = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore);
-            _removePosition();
+            (uint256 principal0, uint256 principal1, uint256 fees0, uint256 fees1) = _removePosition();
             _setBandFromSpot();
-            _rebalanceInventory();
+            (int256 swap0, int256 swap1) = _rebalanceInventory();
             _addFromBalance();
             (uint256 after0, uint256 after1) = _inventory();
             uint256 afterValue = MasonryRangeLib.valueInCurrency1(after0, after1, sqrtBefore);
@@ -230,7 +241,7 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
             lastRebalanceAt = block.timestamp;
             lastRebalanceBlock = block.number;
             (, int24 tick,,) = manager.getSlot0(poolId);
-            emit RangeRebalanced(tickLower, tickUpper, liquidity, tick);
+            emit RangeRebalanced(tickLower, tickUpper, liquidity, tick, principal0, principal1, fees0, fees1, swap0, swap1);
             return;
         }
         if (!seeded) _setBandFromSpot();
@@ -259,31 +270,33 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     }
 
 
-    function _rebalanceInventory() private {
+    function _rebalanceInventory() private returns (int256 swap0, int256 swap1) {
         IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
         IERC20 token1 = IERC20(Currency.unwrap(key.currency1));
         uint256 bal0 = token0.balanceOf(address(this));
         uint256 bal1 = token1.balanceOf(address(this));
-        if (bal0 == 0 && bal1 == 0) return;
+        if (bal0 == 0 && bal1 == 0) return (0, 0);
         (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
         uint160 sa = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sb = TickMath.getSqrtPriceAtTick(tickUpper);
         uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0(sqrtPrice, sb, bal0);
         uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1(sa, sqrtPrice, bal1);
-        if (liquidity0 == liquidity1) return;
+        if (liquidity0 == liquidity1) return (0, 0);
         if (liquidity0 > liquidity1) {
             uint256 used0 = SqrtPriceMath.getAmount0Delta(sqrtPrice, sb, liquidity1, true);
-            if (bal0 > used0) _swap(true, bal0 - used0, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, true));
+            if (bal0 > used0) {
+                return _swap(true, bal0 - used0, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, true));
+            }
         } else {
             uint256 used1 = SqrtPriceMath.getAmount1Delta(sa, sqrtPrice, liquidity0, true);
             if (bal1 > used1) {
-                _swap(false, bal1 - used1, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, false));
+                return _swap(false, bal1 - used1, MasonryRangeLib.sqrtPriceLimit(sqrtPrice, maxTwapDeviationBps, false));
             }
         }
     }
 
-    function _swap(bool zeroForOne, uint256 amountIn, uint160 limit) private {
-        if (amountIn == 0) return;
+    function _swap(bool zeroForOne, uint256 amountIn, uint160 limit) private returns (int256 amount0, int256 amount1) {
+        if (amountIn == 0) return (0, 0);
         BalanceDelta delta = manager.swap(
             key,
             SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountIn), sqrtPriceLimitX96: limit}),
@@ -292,6 +305,8 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         // _settleNegative also takes a positive credit so each currency is settled once.
         _settleNegative(key.currency0, delta.amount0());
         _settleNegative(key.currency1, delta.amount1());
+        amount0 = delta.amount0();
+        amount1 = delta.amount1();
     }
 
     function _inventory() private view returns (uint256 amount0, uint256 amount1) {
@@ -311,14 +326,27 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         }
     }
 
-    function _removePosition() private {
-        if (liquidity == 0) return;
-        (BalanceDelta delta,) = manager.modifyLiquidity(
+    function _removePosition()
+        private
+        returns (uint256 principal0, uint256 principal1, uint256 fees0, uint256 fees1)
+    {
+        if (liquidity == 0) return (0, 0, 0, 0);
+        (BalanceDelta delta, BalanceDelta feesAccrued) = manager.modifyLiquidity(
             key, ModifyLiquidityParams(tickLower, tickUpper, -int256(uint256(liquidity)), bytes32(0)), ""
         );
         liquidity = 0;
         _takePositive(key.currency0, delta.amount0());
         _takePositive(key.currency1, delta.amount1());
+        fees0 = _positive(feesAccrued.amount0());
+        fees1 = _positive(feesAccrued.amount1());
+        uint256 total0 = _positive(delta.amount0());
+        uint256 total1 = _positive(delta.amount1());
+        principal0 = total0 > fees0 ? total0 - fees0 : 0;
+        principal1 = total1 > fees1 ? total1 - fees1 : 0;
+    }
+
+    function _positive(int128 amount) private pure returns (uint256) {
+        return amount > 0 ? uint256(uint128(amount)) : 0;
     }
 
     function _addFromBalance() private returns (uint256 paid0, uint256 paid1) {

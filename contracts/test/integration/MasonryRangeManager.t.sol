@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -232,7 +232,9 @@ contract MasonryRangeManagerTest is Test {
         (uint256 before0, uint256 before1) = _inventory(e.rm, e.key);
         int24 oldLower = e.rm.tickLower();
         int24 oldUpper = e.rm.tickUpper();
+        vm.recordLogs();
         e.rm.rebalance();
+        _assertRebalanceAccounting(e);
         assertTrue(e.rm.tickLower() != oldLower || e.rm.tickUpper() != oldUpper);
         assertFalse(e.rm.shouldRebalance());
         (uint256 after0, uint256 after1) = _inventory(e.rm, e.key);
@@ -271,6 +273,44 @@ contract MasonryRangeManagerTest is Test {
         assertGt(shares, 0);
         assertTrue(assetIn > 0 || quoteIn > 0);
         e.rm.nudge();
+    }
+
+
+    function _assertRebalanceAccounting(
+        Env memory e
+    ) private {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = keccak256(
+            "RangeRebalanced(int24,int24,uint128,int24,uint256,uint256,uint256,uint256,int256,int256)"
+        );
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(e.rm) || logs[i].topics[0] != topic) continue;
+            (
+                int24 reportedLower,
+                int24 reportedUpper,
+                uint128 reportedLiq,
+                ,
+                uint256 principal0,
+                uint256 principal1,
+                uint256 fees0,
+                uint256 fees1,
+                int256 swap0,
+                int256 swap1
+            ) = abi.decode(
+                logs[i].data, (int24, int24, uint128, int24, uint256, uint256, uint256, uint256, int256, int256)
+            );
+            assertEq(reportedLower, e.rm.tickLower());
+            assertEq(reportedUpper, e.rm.tickUpper());
+            assertEq(reportedLiq, e.rm.liquidity());
+            assertTrue(principal0 > 0 || principal1 > 0, "rebalance must report withdrawn principal");
+            assertTrue(fees0 > 0 || fees1 > 0, "rebalance must report fees collected while the last band was active");
+            // Inventory swap may be a no-op if the leftover mix already matches; the legs are still reported.
+            swap0;
+            swap1;
+            found = true;
+        }
+        assertTrue(found, "RangeRebalanced accounting event missing");
     }
 
     function _asAssetValue(
