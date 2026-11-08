@@ -527,7 +527,9 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         address user
     ) internal {
         vm.warp(runtime.start + 2 days);
+        // Jesse's policy: farm X Share can't go to a wallet (farmClaimToWallet=false); only Zap into Masonry.
         vm.prank(user);
+        vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
         runtime.farm.harvest(0);
         assertLe(runtime.farm.emitted(), runtime.farm.entitledTo(block.timestamp));
         assertLe(runtime.farm.claimed(), runtime.farm.rewardBudget());
