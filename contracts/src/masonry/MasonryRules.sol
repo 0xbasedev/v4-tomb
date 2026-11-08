@@ -93,6 +93,25 @@ library MasonryRules {
         return selected > recoveryFloor ? selected : recoveryFloor;
     }
 
+    /// @notice Liquidity withdraw fee: Fire Tax curve on the validated TWAP
+    /// only (no spot / projected execution price), floored by 7-hour recovery.
+    /// Spot is omitted so a single-block sandwich cannot spike the withdraw fee.
+    function withdrawFeeBps(
+        uint256 twapPrice,
+        uint256 peg,
+        uint16 baselineBps,
+        uint16 maximumBps,
+        uint16 fullTaxDropBps,
+        uint16 raisedBps_,
+        uint256 raisedAt,
+        uint256 nowTs
+    ) internal pure returns (uint16) {
+        if (twapPrice == 0) revert InvalidParameters();
+        uint16 recovery = recoveryFloorBps(raisedBps_, baselineBps, raisedAt, nowTs);
+        uint16 twapRate = targetSellTaxBps(twapPrice, peg, baselineBps, maximumBps, fullTaxDropBps);
+        return effectiveSellTaxBps(twapRate, twapRate, recovery);
+    }
+
     /// @notice Expansion only from a fresh validated TWAP strictly above
     /// 1.01 of the configured peg. Never authorize expansion via spot alone.
     function eligibleForExpansion(uint256 twapPrice, uint256 pegPrice, bool hasFreshValidatedTwap)

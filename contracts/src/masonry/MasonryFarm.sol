@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IMasonryFireTax} from "./IMasonryFireTax.sol";
 
 /// @notice Linear X Share farm. The first pool is the X Share/WETH LP.
 /// `rewardBudget` and `duration` are PLACEHOLDER launch-config values
@@ -26,7 +27,7 @@ contract MasonryFarm is ReentrancyGuard {
         address daoWallet;
         address masonry;
         address zapper;
-        uint16 withdrawFeeBps;
+        IMasonryFireTax fireTax;
     }
 
     struct WithdrawRequest {
@@ -44,8 +45,8 @@ contract MasonryFarm is ReentrancyGuard {
     address public immutable daoWallet;
     address public immutable masonry;
     address public immutable zapper;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_000;
-    uint16 public withdrawFeeBps;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_200;
+    IMasonryFireTax public immutable fireTax;
 
     uint256 public funded;
     uint256 public emitted;
@@ -70,7 +71,7 @@ contract MasonryFarm is ReentrancyGuard {
     event WithdrawCompleted(address indexed user, uint256 indexed pid, uint256 amount, uint256 forfeited);
     event WithdrawCancelled(address indexed user, uint256 indexed pid, uint256 amount);
     event WithdrawFeePaid(address indexed user, uint256 indexed pid, uint256 fee, address indexed daoWallet);
-    event WithdrawFeeUpdated(uint16 bps);
+    event WithdrawFeeUpdated(uint16 bps); // unused: fee is the live Fire Tax rate
 
     error ZeroAddress();
     error InvalidConfiguration();
@@ -115,9 +116,9 @@ contract MasonryFarm is ReentrancyGuard {
         withdrawCooldown = policy.withdrawCooldown;
         daoWallet = policy.daoWallet;
         masonry = policy.masonry;
-        if (policy.withdrawFeeBps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
+        if (address(policy.fireTax) == address(0)) revert ZeroAddress();
         zapper = policy.zapper;
-        withdrawFeeBps = policy.withdrawFeeBps;
+        fireTax = policy.fireTax;
         _addPool(shareWethLp, shareWethLpAllocPoints);
     }
 
@@ -221,7 +222,7 @@ contract MasonryFarm is ReentrancyGuard {
         pools[pid].totalStaked -= req.amount;
         userStake[pid][msg.sender] -= req.amount;
         userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
-        uint256 fee = req.amount * uint256(withdrawFeeBps) / 10_000;
+        uint256 fee = req.amount * uint256(_chargeWithdrawFeeBps()) / 10_000;
         uint256 net = req.amount - fee;
         if (fee != 0) {
             pools[pid].stakeToken.safeTransfer(daoWallet, fee);
@@ -232,11 +233,16 @@ contract MasonryFarm is ReentrancyGuard {
         emit Withdrawn(msg.sender, pid, req.amount);
     }
 
-    function setWithdrawFeeBps(uint16 bps) external {
-        if (msg.sender != admin) revert Unauthorized();
+    /// @notice Live Fire Tax rate (TWAP + recovery), hard-capped at 12%.
+    function withdrawFeeBps() public view returns (uint16) {
+        uint16 bps = fireTax.currentWithdrawFeeBps();
         if (bps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
-        withdrawFeeBps = bps;
-        emit WithdrawFeeUpdated(bps);
+        return bps;
+    }
+
+    function _chargeWithdrawFeeBps() internal returns (uint16) {
+        fireTax.syncWithdrawFeeBps();
+        return withdrawFeeBps();
     }
 
     function cancelWithdraw(uint256 pid) external nonReentrant {

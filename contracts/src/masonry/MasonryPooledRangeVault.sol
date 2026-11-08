@@ -17,6 +17,7 @@ import {ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 import {MasonryRangeLib} from "./MasonryRangeLib.sol";
+import {IMasonryFireTax} from "./IMasonryFireTax.sol";
 
 /// @notice Local prototype: users share one concentrated v4 band and can redeem.
 /// @dev Not wired into launch. Compares Follow, FixedPeg and PegAnchor inventories.
@@ -58,8 +59,8 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     }
     address public immutable owner;
     address public immutable daoWallet;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_000;
-    uint16 public withdrawFeeBps;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_200;
+    IMasonryFireTax public immutable fireTax;
 
     PoolKey private key;
     int24 public tickLower;
@@ -107,7 +108,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         uint256 redeemCooldown_,
         address owner_,
         address daoWallet_,
-        uint16 withdrawFeeBps_,
+        IMasonryFireTax fireTax_,
         RangeGuards memory guards
     ) ERC20("Masonry Pooled Range Prototype", "mPRANGE") {
         // Range guards come from launch config (policy.liquidityVault*), not literals.
@@ -119,7 +120,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
             revert MasonryRangeLib.InvalidRangeConfig();
         }
         if (redeemCooldown_ < 60 || redeemCooldown_ > 1 days) revert MasonryRangeLib.InvalidRangeConfig();
-        if (withdrawFeeBps_ > MAX_WITHDRAW_FEE_BPS) revert FeeCapExceeded();
+        if (address(fireTax_) == address(0)) revert MasonryRangeLib.InvalidRangeConfig();
         manager = manager_;
         key = pool;
         poolId = pool.toId();
@@ -129,14 +130,19 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         redeemCooldown = redeemCooldown_;
         owner = owner_;
         daoWallet = daoWallet_;
-        withdrawFeeBps = withdrawFeeBps_;
+        fireTax = fireTax_;
     }
 
-    function setWithdrawFeeBps(uint16 bps) external {
-        if (msg.sender != owner) revert Unauthorized();
+    /// @notice Live Fire Tax rate (TWAP + recovery), hard-capped at 12%.
+    function withdrawFeeBps() public view returns (uint16) {
+        uint16 bps = fireTax.currentWithdrawFeeBps();
         if (bps > MAX_WITHDRAW_FEE_BPS) revert FeeCapExceeded();
-        withdrawFeeBps = bps;
-        emit WithdrawFeeUpdated(bps);
+        return bps;
+    }
+
+    function _chargeWithdrawFeeBps() internal returns (uint16) {
+        fireTax.syncWithdrawFeeBps();
+        return withdrawFeeBps();
     }
 
     function poolKey() external view returns (PoolKey memory) {
@@ -223,8 +229,9 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         uint256 withdrawn1 = token1.balanceOf(address(this)) - idle1;
         amount0 = withdrawn0 + idle0 * req.shares / supplyBefore;
         amount1 = withdrawn1 + idle1 * req.shares / supplyBefore;
-        uint256 fee0 = amount0 * uint256(withdrawFeeBps) / 10_000;
-        uint256 fee1 = amount1 * uint256(withdrawFeeBps) / 10_000;
+        uint16 feeBps = _chargeWithdrawFeeBps();
+        uint256 fee0 = amount0 * uint256(feeBps) / 10_000;
+        uint256 fee1 = amount1 * uint256(feeBps) / 10_000;
         amount0 -= fee0;
         amount1 -= fee1;
         if (fee0 != 0) token0.safeTransfer(daoWallet, fee0);

@@ -31,6 +31,7 @@ struct MasonryLaunchParams {
     bool farmClaimToWallet;
     uint256 farmWithdrawCooldownSeconds;
     uint256 liquidityWithdrawFeeBps;
+    uint256 shareSellTaxBps;
 }
 
 /// @notice Reads `config/masonry-launch.template.json` and scales whole-token
@@ -72,6 +73,7 @@ library MasonryLaunchConfig {
         p.farmClaimToWallet = raw.readBool(".policy.farmClaimToWallet");
         p.farmWithdrawCooldownSeconds = raw.readUint(".policy.farmWithdrawCooldownSeconds");
         p.liquidityWithdrawFeeBps = raw.readUint(".policy.liquidityWithdrawFeeBps");
+        p.shareSellTaxBps = raw.readUint(".policy.shareSellTaxBps");
         validate(p);
     }
 
@@ -106,7 +108,7 @@ library MasonryLaunchConfig {
         if (p.farmWithdrawCooldownSeconds < 60 || p.farmWithdrawCooldownSeconds > 1 days) {
             revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");
         }
-        if (p.liquidityWithdrawFeeBps > 1000) revert InvalidLaunchConfig("liquidityWithdrawFeeBps");
+        if (p.shareSellTaxBps == 0 || p.shareSellTaxBps > 1200) revert InvalidLaunchConfig("shareSellTaxBps");
         if (p.rangeLevelPegAnchor) {
             _validateRange(
                 p.rangeLevelLowerHalfWidthBps < p.rangeLevelUpperHalfWidthBps

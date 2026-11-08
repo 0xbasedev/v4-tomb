@@ -21,9 +21,11 @@ import {MasonryRules} from "../masonry/MasonryRules.sol";
 import {IMasonryRangeNudge} from "../masonry/IMasonryPolSink.sol";
 import {MasonryRangeManager} from "../masonry/MasonryRangeManager.sol";
 import {MasonryRangeLib} from "../masonry/MasonryRangeLib.sol";
+import {IMasonryFireTax} from "../masonry/IMasonryFireTax.sol";
 
-/// @notice Shared sell-only tax, recovery and price observation for official USDC pools.
-abstract contract MasonryTaxHook is BaseV4Hook {
+/// @notice Official-pool hook: oracle/range binding, optional share sell tax, and the
+/// live Fire Tax withdraw-fee view. X Tomb sells are not taxed.
+abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -41,6 +43,9 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     uint160 private recordedSqrtPrice;
     address public rangeManager;
     address public immutable asset;
+    address public immutable quoteToken;
+    uint24 public immutable poolFee;
+    int24 public immutable poolSpacing;
     PoolId public immutable officialPool;
     bool public immutable assetIsCurrency0;
 
@@ -70,6 +75,9 @@ abstract contract MasonryTaxHook is BaseV4Hook {
                 || IERC20Metadata(usdc).decimals() != 6
         ) revert InvalidConfiguration();
         asset = asset_;
+        quoteToken = usdc;
+        poolFee = lpFee;
+        poolSpacing = tickSpacing;
         assetIsCurrency0 = asset_ < usdc;
         officialPool = PoolKey({
             currency0: Currency.wrap(assetIsCurrency0 ? asset_ : usdc),
@@ -193,6 +201,17 @@ abstract contract MasonryTaxHook is BaseV4Hook {
         bool priceChanged = swap && sqrtPrice != recordedSqrtPrice;
         recordedSqrtPrice = sqrtPrice;
         oracle.record(tick, poolManager.getLiquidity(officialPool), priceChanged);
+        _observeFireTax();
+    }
+
+    function officialPoolKey() public view returns (PoolKey memory) {
+        return PoolKey({
+            currency0: Currency.wrap(assetIsCurrency0 ? asset : quoteToken),
+            currency1: Currency.wrap(assetIsCurrency0 ? quoteToken : asset),
+            fee: poolFee,
+            tickSpacing: poolSpacing,
+            hooks: IHooks(address(this))
+        });
     }
 
     function beforeSwap(
@@ -209,7 +228,13 @@ abstract contract MasonryTaxHook is BaseV4Hook {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        (uint256 fee, uint16 rate) = _quote(key, params, _bootstrapFloor());
+        // X Tomb (and any hook that leaves _sellTaxBps at 0) charges no swap tax.
+        // X Share overrides this with a flat, config-driven sell tax.
+        uint16 rate = _sellTaxBps();
+        if (rate == 0) {
+            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        }
+        uint256 fee = _flatTaxFee(key, params, rate);
         if (fee == 0) return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         if (fee > uint256(uint128(type(int128).max))) revert InvalidConfiguration();
 
@@ -223,54 +248,63 @@ abstract contract MasonryTaxHook is BaseV4Hook {
         );
     }
 
-    function _quote(
+    function _flatTaxFee(
         PoolKey calldata key,
         SwapParams calldata params,
-        uint16 bootstrapFloor
-    ) private returns (uint256 fee, uint16 rate) {
+        uint16 rate
+    ) private returns (uint256 fee) {
         bool exactInput = params.amountSpecified < 0;
-        uint16 recovery = MasonryRules.recoveryFloorBps(raisedBps, BASE_TAX, raisedAt, block.timestamp);
-        uint256 twap = _validatedTwap();
-        if (twap == 0) revert InvalidOraclePrice();
-        uint16 ordinaryFloor = MasonryRules.effectiveSellTaxBps(_target(twap), recovery, BASE_TAX);
-        uint16 minimum = ordinaryFloor < bootstrapFloor ? bootstrapFloor : ordinaryFloor;
-
-        // The largest possible net asset input gives a conservative post-sale price.
-        // Any higher tax can only reduce the executed net input and price impact.
-        SwapParams memory preview = params;
         if (exactInput) {
-            uint256 gross = uint256(-params.amountSpecified);
-            preview.amountSpecified += int256(FullMath.mulDiv(gross, minimum, BPS));
+            return FullMath.mulDiv(uint256(-params.amountSpecified), rate, BPS);
         }
-        (uint256 input, uint160 sqrtPrice) = _project(key, preview);
-        uint16 target = MasonryRules.effectiveSellTaxBps(
-            _target(twap), _target(MasonryLevelPrice.fromSqrtPrice(sqrtPrice, assetIsCurrency0)), BASE_TAX
-        );
+        (uint256 input,) = _project(key, params);
+        return FullMath.mulDiv(input, rate, BPS - rate);
+    }
+
+    /// @notice 0 = no swap sell tax (X Tomb). Share hook returns the flat configured rate.
+    function _sellTaxBps() internal view virtual returns (uint16) {
+        return 0;
+    }
+
+    function peekValidatedTwap() public view returns (uint256) {
+        return _validatedTwap();
+    }
+
+    function _observeFireTax() internal {
+        uint256 twap;
+        try this.peekValidatedTwap() returns (uint256 price) {
+            twap = price;
+        } catch {
+            return;
+        }
+        if (twap == 0) return;
+        uint16 target = _target(twap);
         if (target > raisedBps || (block.timestamp - raisedAt >= MasonryRules.FIRE_TAX_RECOVERY && target > BASE_TAX)) {
             raisedBps = target;
             raisedAt = block.timestamp;
         }
-        rate = target > minimum ? target : minimum;
-
-        // Exact-output specifies USDC, so gross up the simulated net asset input
-        // to make the rate a share of the total asset paid.
-        uint256 taxBase = exactInput ? uint256(-params.amountSpecified) : input;
-        fee = _taxAmount(taxBase, rate, bootstrapFloor, exactInput);
     }
 
-    function _taxAmount(
-        uint256 taxBase,
-        uint16 rate,
-        uint16 bootstrapFloor,
-        bool exactInput
-    ) private pure returns (uint256 fee) {
-        fee = FullMath.mulDiv(taxBase, rate, exactInput ? BPS : BPS - rate);
-        if (bootstrapFloor != 0) {
-            uint256 floor = FullMath.mulDivRoundingUp(taxBase, bootstrapFloor, exactInput ? BPS : BPS - bootstrapFloor);
-            uint256 ceiling = FullMath.mulDiv(taxBase, MAX_TAX_BPS, exactInput ? BPS : BPS - MAX_TAX_BPS);
-            if (floor > ceiling) revert UnrepresentableTax();
-            if (fee < floor) fee = floor;
-        }
+    /// @inheritdoc IMasonryFireTax
+    function currentWithdrawFeeBps() public view returns (uint16) {
+        uint256 twap = _validatedTwap();
+        if (twap == 0) revert InvalidOraclePrice();
+        return MasonryRules.withdrawFeeBps(
+            twap,
+            _referencePrice(),
+            BASE_TAX,
+            MAX_TAX_BPS,
+            MasonryRules.DEFAULT_FULL_TAX_DROP_BPS,
+            raisedBps,
+            raisedAt,
+            block.timestamp
+        );
+    }
+
+    /// @inheritdoc IMasonryFireTax
+    function syncWithdrawFeeBps() external returns (uint16) {
+        _observeFireTax();
+        return currentWithdrawFeeBps();
     }
 
     function simulate(

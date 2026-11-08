@@ -9,6 +9,7 @@ import {MasonryFarm} from "../src/masonry/MasonryFarm.sol";
 import {MasonryPooledRangeVault} from "../src/masonry/MasonryPooledRangeVault.sol";
 import {MasonryShareWethZapper, IShareWethAmm, IZapTwap} from "../src/masonry/MasonryShareWethZapper.sol";
 import {MasonryRangeManager, IMasonryRangeTwap} from "../src/masonry/MasonryRangeManager.sol";
+import {IMasonryFireTax} from "../src/masonry/IMasonryFireTax.sol";
 
 /// @notice Builds reviewed initcode for the liquidity-layer roles. Every policy value comes from
 /// MasonryLaunchParams (config/masonry-launch*.json); every address from the CREATE3 plan.
@@ -44,7 +45,7 @@ library MasonryLaunchInitCode {
                     daoWallet: p.daoWallet,
                     masonry: a.chamber,
                     zapper: a.zapper,
-                    withdrawFeeBps: uint16(p.liquidityWithdrawFeeBps)
+                    fireTax: IMasonryFireTax(a.levelHook)
                 })
             )
         );
@@ -68,7 +69,7 @@ library MasonryLaunchInitCode {
             abi.encode(
                 a.poolManager, levelKey,
                 p.rangeLevelPegAnchor ? MasonryPooledRangeVault.Strategy.PegAnchor : MasonryPooledRangeVault.Strategy.FixedPeg, uint16(p.rangeLevelHalfWidthBps),
-                sqrtPeg, p.farmWithdrawCooldownSeconds, a.admin, p.daoWallet, uint16(p.liquidityWithdrawFeeBps),
+                sqrtPeg, p.farmWithdrawCooldownSeconds, a.admin, p.daoWallet, IMasonryFireTax(a.levelHook),
                 MasonryPooledRangeVault.RangeGuards(
                     uint16(p.rangeLevelRecenterBps), p.rangeLevelCooldownSeconds, uint16(p.rangeLevelMaxTwapDeviationBps)
                 )
