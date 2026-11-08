@@ -4,6 +4,8 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {MasonryRangeLib} from "../../src/masonry/MasonryRangeLib.sol";
+import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract MasonryRangeLibTest is Test {
     function checkConfig(
@@ -101,5 +103,44 @@ contract MasonryRangeLibTest is Test {
         assertTrue(MasonryRangeLib.containsTick(pegTick, anchorL, anchorU), "peg-anchor keeps the recovery path");
         (int24 expectedFixedL,) = MasonryRangeLib.bandTicks(peg, 1500, 60);
         assertEq(fixedL, expectedFixedL);
+    }
+
+    /// @dev Price-space high edge of peg-anchor (-18% / +10%) stays at or
+    /// above $1 when spot is $0.70 or $0.80, for both token orderings.
+    /// (Tick-upper is the cheap side when the level token is currency1.)
+    function testPegAnchorUpperEdgeStaysAtOrAbovePegOnDeepDepeg() public pure {
+        _assertPegAnchorHighEdge(70e16, true);
+        _assertPegAnchorHighEdge(70e16, false);
+        _assertPegAnchorHighEdge(80e16, true);
+        _assertPegAnchorHighEdge(80e16, false);
+    }
+
+    function _assertPegAnchorHighEdge(uint256 spotPriceWad, bool levelIsCurrency0) private pure {
+        uint160 peg = levelIsCurrency0 ? uint160((uint256(1) << 96) / 1e6) : uint160((uint256(1) << 96) * 1e6);
+        assertApproxEqAbs(MasonryLevelPrice.fromSqrtPrice(peg, levelIsCurrency0), 1e18, 10);
+
+        uint256 ratioSqrtWad = Math.sqrt(spotPriceWad * 1e18);
+        uint160 spot = levelIsCurrency0
+            ? uint160(uint256(peg) * ratioSqrtWad / 1e18)
+            : uint160(uint256(peg) * 1e18 / ratioSqrtWad);
+
+        uint256 reconstructed = MasonryLevelPrice.fromSqrtPrice(spot, levelIsCurrency0);
+        // Allow a few wei of rounding from the integer square root.
+        if (reconstructed > spotPriceWad) {
+            assertLe(reconstructed - spotPriceWad, 1e10);
+        } else {
+            assertLe(spotPriceWad - reconstructed, 1e10);
+        }
+
+        (int24 lower, int24 upper) = MasonryRangeLib.pegAnchorTicks(spot, peg, 1800, 1000, 60);
+        uint256 priceLower = MasonryLevelPrice.fromSqrtPrice(TickMath.getSqrtPriceAtTick(lower), levelIsCurrency0);
+        uint256 priceUpper = MasonryLevelPrice.fromSqrtPrice(TickMath.getSqrtPriceAtTick(upper), levelIsCurrency0);
+        uint256 highEdge = priceLower > priceUpper ? priceLower : priceUpper;
+        int24 pegTick = TickMath.getTickAtSqrtPrice(peg);
+        int24 spotTick = TickMath.getTickAtSqrtPrice(spot);
+
+        assertTrue(MasonryRangeLib.containsTick(pegTick, lower, upper), "recovery path through $1");
+        assertTrue(MasonryRangeLib.containsTick(spotTick, lower, upper), "spot stays inside the book");
+        assertGe(highEdge, 1e18, "price-space upper edge stays at or above $1");
     }
 }

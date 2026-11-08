@@ -112,11 +112,19 @@ def needs_recenter(tick: int, lower: int, upper: int, half_width: int, recenter:
 
 
 def fire_tax_bps(price: float) -> int:
+    """MasonryRules.targetSellTaxBps: 300 at/above peg, 1200 at or below a
+    10% drop, square-root curve in between. Matches HARD_MAX_FIRE_TAX_BPS.
+    This inventory sweep does not mint seigniorage (no bootstrap 28x4.5%
+    and no gated expansion).
+    """
     if price >= PEG:
         return 300
-    drop = (PEG - price) * BPS
-    extra = min(900.0, 900.0 * drop / 1000.0)
-    return int(round(300 + extra))
+    drop_frac = (PEG - price) / PEG
+    if drop_frac >= 0.10:
+        return 1200
+    progress = drop_frac / 0.10 * 10_000
+    nonlinear = math.sqrt(progress * 10_000)
+    return int(300 + 900 * nonlinear / 10_000)
 
 
 def amounts_for_L(L: float, sqrt_p: float, sqrt_a: float, sqrt_b: float) -> tuple[float, float]:
@@ -495,6 +503,7 @@ def run_path(prices: np.ndarray, cfg: dict, token: str, kind: str) -> dict:
         "recov_depth_sum": 0.0, "recov_depth_n": 0, "recov_cov_sum": 0.0,
         "recov_cov_n": 0, "support_sum": 0.0, "support_n": 0,
         "fail_reverts": 0, "below_peg": 0, "usdg_depeg_sum": 0.0, "usdg_depeg_n": 0,
+        "below_099": 0, "below_095": 0, "max_drawdown": 0.0, "drawdowns": [],
     }
 
     # Use copies inside try_rebalance to honor revert semantics.
@@ -536,6 +545,15 @@ def run_path(prices: np.ndarray, cfg: dict, token: str, kind: str) -> dict:
             state["below_peg"] += 1
             state["usdg_depeg_sum"] += _snapshot_amounts(state, price)[1]
             state["usdg_depeg_n"] += 1
+        if token == "tomb":
+            dd = max(PEG - price, 0.0)
+            state["drawdowns"].append(dd)
+            if dd > state["max_drawdown"]:
+                state["max_drawdown"] = dd
+            if price < 0.99:
+                state["below_099"] += 1
+            if price < 0.95:
+                state["below_095"] += 1
 
         user_in = 0.0
         if token == "tomb" and user["L"] and user["lower"] < tick < user["upper"]:
@@ -608,8 +626,17 @@ def run_path(prices: np.ndarray, cfg: dict, token: str, kind: str) -> dict:
         "end_amt0": e0,
         "end_amt1": e1,
         "time_below_peg": state["below_peg"] / max(state["steps"], 1),
+        "hours_below_099": float(state["below_099"]),
+        "hours_below_095": float(state["below_095"]),
+        "max_drawdown": state["max_drawdown"],
+        "p50_drawdown": float(np.median(state["drawdowns"])) if state["drawdowns"] else 0.0,
         "usdg_reserves": usdg_reserves,
         "user_redeem_value": user_redeem_value,
+        # USDG returned / USDG deposited after Fire Tax, 30bp pool fee, and impact.
+        "redemption_value_definition": (
+            "USDG received on redeem (quote side + xTOMB sold through the pool "
+            "after Fire Tax, 30 bp fee and impact) / USDG-marked deposit value"
+        ),
         "net_pnl": (end_val - START_VALUE) / START_VALUE,
         "vs_hodl": end_val / hodl_val - 1.0 if hodl_val > 0 else 0.0,
         "fees": state["fees"],
@@ -738,12 +765,14 @@ def summarize(rows: list[dict]) -> dict:
             "mean": float(a.mean()),
             "median": float(np.median(a)),
             "p10": float(np.percentile(a, 10)),
+            "max": float(a.max()),
         }
 
     out = {k: stats(k) for k in (
         "net_pnl", "vs_hodl", "fees", "rebalances", "rebal_cost", "hyp_tax",
         "hyp_tax_pct", "time_in_range", "avg_slip", "peg_slip", "recovery_depth",
         "recovery_coverage", "support_1pct", "end_value", "time_below_peg",
+        "hours_below_099", "hours_below_095", "max_drawdown", "p50_drawdown",
         "usdg_reserves", "user_redeem_value",
     )}
     out["n"] = len(rows)
@@ -949,8 +978,13 @@ def dump_brief(r: dict) -> dict:
         "recovery_coverage": r.get("recovery_coverage"),
         "support_1pct": r["support_1pct"],
         "time_below_peg": r.get("time_below_peg"),
+        "hours_below_099": r.get("hours_below_099"),
+        "hours_below_095": r.get("hours_below_095"),
+        "max_drawdown": r.get("max_drawdown"),
+        "p50_drawdown": r.get("p50_drawdown"),
         "usdg_reserves": r.get("usdg_reserves"),
         "user_redeem_value": r.get("user_redeem_value"),
+        "ending_usdg": r.get("usdg_reserves"),
         "n": r["n"],
     }
 
@@ -992,6 +1026,8 @@ def self_check() -> None:
     assert needs_recenter(1100, -1500, 1500, 1500, 1000)
     assert fire_tax_bps(1.0) == 300
     assert fire_tax_bps(0.90) == 1200
+    assert fire_tax_bps(0.70) == 1200
+    assert abs(fire_tax_bps(0.95) - 936) <= 1  # square-root, not linear 750
     plo, phi = peg_anchor_ticks(0.85, 1500, 1500)
     assert tick_to_price(phi) >= 1.0 * 0.99
     print("self-check ok", {"band": (lo, hi), "peg_anchor_at_0.85": (plo, phi, tick_to_price(phi))})
@@ -1049,9 +1085,17 @@ def main():
             "seeds_phase1": args.seeds, "seeds_refine": args.refine_seeds,
             "fee": FEE, "ext_fraction": EXT_FRACTION,
             "fire_tax_note": (
-                "Rebalance swaps that sell xTOMB are Fire-Tax-exempt when "
-                "MasonryTaxHook.rangeManager is bound (sender == rangeManager). "
-                "hyp_tax is the hypothetical USDG-marked tax if that bind were missing."
+                "Fire Tax matches MasonryRules square-root curve (3% at peg, "
+                "12% at or below a 10% drop). This sweep does not model Treasury "
+                "bootstrap minting or gated expansion. Rebalance swaps that sell "
+                "xTOMB are Fire-Tax-exempt when MasonryTaxHook.rangeManager is bound "
+                "(sender == rangeManager). hyp_tax is the hypothetical USDG-marked "
+                "tax if that bind were missing."
+            ),
+            "redemption_value_definition": (
+                "USDG received on redeem (quote side + xTOMB sold through the pool "
+                "after Fire Tax, 30 bp fee and impact, after any rebalance costs "
+                "already reflected in book depth) / USDG-marked deposit value"
             ),
         },
         "tomb": {
