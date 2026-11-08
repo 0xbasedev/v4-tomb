@@ -68,6 +68,47 @@ library MasonryRangeLib {
         if (lower >= upper) revert InvalidRangeConfig();
     }
 
+    /// @notice Same as `bandTicks`, named for the fixed-$1 baseline (pass the peg sqrt price).
+    function fixedPegTicks(
+        uint160 sqrtPeg,
+        uint16 halfWidthBps,
+        int24 spacing
+    ) internal pure returns (int24 lower, int24 upper) {
+        return bandTicks(sqrtPeg, halfWidthBps, spacing);
+    }
+
+    /// @notice Follows spot but always spans the pool-price path between spot and peg.
+    /// The lower wing is taken from min(spot, peg) and the upper wing from max(spot, peg).
+    function pegAnchorTicks(
+        uint160 sqrtSpot,
+        uint160 sqrtPeg,
+        uint16 downBps,
+        uint16 upBps,
+        int24 spacing
+    ) internal pure returns (int24 lower, int24 upper) {
+        if (sqrtSpot == 0 || sqrtPeg == 0 || downBps >= BPS || upBps >= BPS) revert InvalidRangeConfig();
+        uint160 lo = sqrtSpot < sqrtPeg ? sqrtSpot : sqrtPeg;
+        uint160 hi = sqrtSpot < sqrtPeg ? sqrtPeg : sqrtSpot;
+        uint256 scale = Math.sqrt(BPS * 1e12);
+        uint256 lowerSqrt = FullMath.mulDiv(lo, Math.sqrt((BPS - downBps) * 1e12), scale);
+        uint256 upperSqrt = FullMath.mulDiv(hi, Math.sqrt((BPS + upBps) * 1e12), scale);
+        if (lowerSqrt < TickMath.MIN_SQRT_PRICE) lowerSqrt = TickMath.MIN_SQRT_PRICE;
+        if (upperSqrt >= TickMath.MAX_SQRT_PRICE) upperSqrt = uint256(TickMath.MAX_SQRT_PRICE) - 1;
+        lower = align(TickMath.getTickAtSqrtPrice(uint160(lowerSqrt)), spacing, false);
+        upper = align(TickMath.getTickAtSqrtPrice(uint160(upperSqrt)), spacing, true);
+        if (lower >= upper) {
+            lower = align(TickMath.getTickAtSqrtPrice(sqrtSpot) - spacing, spacing, false);
+            upper = lower + spacing;
+        }
+        if (lower < TickMath.MIN_TICK) lower = align(TickMath.MIN_TICK, spacing, true);
+        if (upper > TickMath.MAX_TICK) upper = align(TickMath.MAX_TICK, spacing, false);
+        if (lower >= upper) revert InvalidRangeConfig();
+    }
+
+    function containsTick(int24 tick, int24 lower, int24 upper) internal pure returns (bool) {
+        return tick > lower && tick < upper;
+    }
+
     /// @notice Recenter when the tick is outside the position or outside the inner band.
     function needsRecenter(
         int24 tick,

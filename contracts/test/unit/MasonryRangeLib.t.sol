@@ -34,6 +34,8 @@ contract MasonryRangeLibTest is Test {
 
     function testValidateAcceptsDefaults() public pure {
         MasonryRangeLib.validate(1500, 1000, 1800, 300);
+        MasonryRangeLib.validate(2000, 1600, 1800, 300);
+        MasonryRangeLib.validate(800, 640, 1800, 300);
     }
 
     function testBandTicksAreSpacingAlignedAndContainSpot() public pure {
@@ -75,5 +77,29 @@ contract MasonryRangeLibTest is Test {
         assertFalse(MasonryRangeLib.exceedsLoss(1e18, 1e18 - 1e18 * 50 / 10_000, 100));
         assertTrue(MasonryRangeLib.exceedsLoss(1e18, 1e18 - 1e18 * 200 / 10_000, 100));
     }
-}
 
+    function testFixedAndFollowAndPegAnchorBaselinesAtDepeg() public pure {
+        // asset-as-token0 peg sqrt used by the official xTOMB/USDG tests
+        uint160 peg = uint160((uint256(1) << 96) / 1e6);
+        // ~18% below peg in asset price (pool sqrt rises by ~1/sqrt(0.82))
+        uint160 spot = uint160(uint256(peg) * 110432 / 100000);
+        int24 pegTick = TickMath.getTickAtSqrtPrice(peg);
+        int24 spotTick = TickMath.getTickAtSqrtPrice(spot);
+        assertTrue(spotTick != pegTick);
+
+        (int24 followL, int24 followU) = MasonryRangeLib.bandTicks(spot, 1500, 60);
+        (int24 fixedL, int24 fixedU) = MasonryRangeLib.fixedPegTicks(peg, 1500, 60);
+        (int24 anchorL, int24 anchorU) = MasonryRangeLib.pegAnchorTicks(spot, peg, 1500, 1500, 60);
+
+        assertTrue(MasonryRangeLib.containsTick(spotTick, followL, followU));
+        assertFalse(MasonryRangeLib.containsTick(pegTick, followL, followU), "follow around a depeg abandons $1");
+
+        assertTrue(MasonryRangeLib.containsTick(pegTick, fixedL, fixedU), "fixed book stays on $1");
+        assertFalse(MasonryRangeLib.containsTick(spotTick, fixedL, fixedU), "tight fixed book is idle below its lower edge");
+
+        assertTrue(MasonryRangeLib.containsTick(spotTick, anchorL, anchorU));
+        assertTrue(MasonryRangeLib.containsTick(pegTick, anchorL, anchorU), "peg-anchor keeps the recovery path");
+        (int24 expectedFixedL,) = MasonryRangeLib.bandTicks(peg, 1500, 60);
+        assertEq(fixedL, expectedFixedL);
+    }
+}

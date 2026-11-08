@@ -1,0 +1,251 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
+import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
+import {MasonryRangeLib} from "./MasonryRangeLib.sol";
+
+/// @notice Local prototype: users share one concentrated v4 band and can redeem.
+/// @dev Not wired into launch. Compares Follow, FixedPeg and PegAnchor inventories.
+contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
+    using SafeERC20 for IERC20;
+    using PoolIdLibrary for PoolKey;
+    using StateLibrary for IPoolManager;
+    using TransientStateLibrary for IPoolManager;
+
+    enum Strategy {
+        Follow,
+        FixedPeg,
+        PegAnchor
+    }
+
+    enum Op {
+        Deposit,
+        Redeem,
+        Rebalance
+    }
+
+    IPoolManager public immutable manager;
+    PoolId public immutable poolId;
+    Strategy public immutable strategy;
+    uint16 public immutable halfWidthBps;
+    uint160 public immutable sqrtPeg;
+
+    PoolKey private key;
+    int24 public tickLower;
+    int24 public tickUpper;
+    uint128 public liquidity;
+    bool public seeded;
+
+    error NotPoolManager();
+    error ZeroShares();
+    error NoLiquidity();
+
+    event Deposited(address indexed user, uint256 shares, uint256 amount0, uint256 amount1);
+    event Redeemed(address indexed user, uint256 shares, uint256 amount0, uint256 amount1);
+    event Rebalanced(int24 tickLower, int24 tickUpper, uint128 liquidity);
+
+    constructor(
+        IPoolManager manager_,
+        PoolKey memory pool,
+        Strategy strategy_,
+        uint16 halfWidthBps_,
+        uint160 sqrtPeg_
+    ) ERC20("Masonry Pooled Range Prototype", "mPRANGE") {
+        MasonryRangeLib.validate(halfWidthBps_, halfWidthBps_ / 2 == 0 ? 100 : halfWidthBps_ / 2, 1800, 300);
+        if (address(manager_) == address(0) || sqrtPeg_ == 0) revert MasonryRangeLib.InvalidRangeConfig();
+        manager = manager_;
+        key = pool;
+        poolId = pool.toId();
+        strategy = strategy_;
+        halfWidthBps = halfWidthBps_;
+        sqrtPeg = sqrtPeg_;
+    }
+
+    function poolKey() external view returns (PoolKey memory) {
+        return key;
+    }
+
+    function previewBand() public view returns (int24 lower, int24 upper) {
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        return _band(sqrtPrice);
+    }
+
+    function inventory() public view returns (uint256 amount0, uint256 amount1) {
+        amount0 = IERC20(Currency.unwrap(key.currency0)).balanceOf(address(this));
+        amount1 = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+        if (liquidity == 0) return (amount0, amount1);
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        uint160 sa = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sb = TickMath.getSqrtPriceAtTick(tickUpper);
+        if (sqrtPrice <= sa) {
+            amount0 += SqrtPriceMath.getAmount0Delta(sa, sb, liquidity, false);
+        } else if (sqrtPrice >= sb) {
+            amount1 += SqrtPriceMath.getAmount1Delta(sa, sb, liquidity, false);
+        } else {
+            amount0 += SqrtPriceMath.getAmount0Delta(sqrtPrice, sb, liquidity, false);
+            amount1 += SqrtPriceMath.getAmount1Delta(sa, sqrtPrice, liquidity, false);
+        }
+    }
+
+    function deposit(uint256 max0, uint256 max1) external nonReentrant returns (uint256 shares) {
+        if (max0 == 0 && max1 == 0) revert ZeroShares();
+        uint256 supply = totalSupply();
+        (uint256 before0, uint256 before1) = inventory();
+        (uint160 sqrtBefore,,,) = manager.getSlot0(poolId);
+        uint256 beforeValue = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore);
+        _pull(max0, max1);
+        _run(Op.Deposit);
+        (uint256 after0, uint256 after1) = inventory();
+        uint256 afterValue = MasonryRangeLib.valueInCurrency1(after0, after1, sqrtBefore);
+        uint256 added = afterValue > beforeValue ? afterValue - beforeValue : 0;
+        shares = supply == 0 || beforeValue == 0 ? added : added * supply / beforeValue;
+        if (shares == 0) revert ZeroShares();
+        _mint(msg.sender, shares);
+        uint256 used0 = before0 > after0 ? 0 : after0 - before0;
+        uint256 used1 = before1 > after1 ? 0 : after1 - before1;
+        emit Deposited(msg.sender, shares, used0, used1);
+    }
+
+    function redeem(uint256 shares) external nonReentrant returns (uint256 amount0, uint256 amount1) {
+        if (shares == 0 || shares > balanceOf(msg.sender)) revert ZeroShares();
+        uint256 supplyBefore = totalSupply();
+        IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
+        IERC20 token1 = IERC20(Currency.unwrap(key.currency1));
+        uint256 idle0 = token0.balanceOf(address(this));
+        uint256 idle1 = token1.balanceOf(address(this));
+        _burn(msg.sender, shares);
+        _redeemShares = shares;
+        _redeemSupply = supplyBefore;
+        _run(Op.Redeem);
+        _redeemShares = 0;
+        _redeemSupply = 0;
+        uint256 withdrawn0 = token0.balanceOf(address(this)) - idle0;
+        uint256 withdrawn1 = token1.balanceOf(address(this)) - idle1;
+        amount0 = withdrawn0 + idle0 * shares / supplyBefore;
+        amount1 = withdrawn1 + idle1 * shares / supplyBefore;
+        if (amount0 != 0) token0.safeTransfer(msg.sender, amount0);
+        if (amount1 != 0) token1.safeTransfer(msg.sender, amount1);
+        emit Redeemed(msg.sender, shares, amount0, amount1);
+    }
+
+    function rebalance() external nonReentrant {
+        if (strategy == Strategy.FixedPeg && seeded) return;
+        _run(Op.Rebalance);
+        emit Rebalanced(tickLower, tickUpper, liquidity);
+    }
+
+    uint256 private _redeemShares;
+    uint256 private _redeemSupply;
+
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        if (msg.sender != address(manager)) revert NotPoolManager();
+        _execute(abi.decode(data, (Op)));
+        return "";
+    }
+
+    function _run(Op op) private {
+        if (manager.isUnlocked()) _execute(op);
+        else manager.unlock(abi.encode(op));
+    }
+
+    function _execute(Op op) private {
+        if (op == Op.Rebalance) {
+            _removeAll();
+            _setBand();
+            _addFromBalance();
+            return;
+        }
+        if (op == Op.Redeem) {
+            if (liquidity != 0 && _redeemSupply != 0) {
+                uint256 take = uint256(liquidity) * _redeemShares / _redeemSupply;
+                if (take != 0) _removeLiquidity(uint128(take));
+            }
+            return;
+        }
+        if (!seeded) _setBand();
+        _addFromBalance();
+    }
+
+    function _band(uint160 sqrtPrice) private view returns (int24 lower, int24 upper) {
+        if (strategy == Strategy.FixedPeg) {
+            return MasonryRangeLib.fixedPegTicks(sqrtPeg, halfWidthBps, key.tickSpacing);
+        }
+        if (strategy == Strategy.PegAnchor) {
+            return MasonryRangeLib.pegAnchorTicks(sqrtPrice, sqrtPeg, halfWidthBps, halfWidthBps, key.tickSpacing);
+        }
+        return MasonryRangeLib.bandTicks(sqrtPrice, halfWidthBps, key.tickSpacing);
+    }
+
+    function _setBand() private {
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        (tickLower, tickUpper) = _band(sqrtPrice);
+        seeded = true;
+    }
+
+    function _removeAll() private {
+        if (liquidity != 0) _removeLiquidity(liquidity);
+    }
+
+    function _removeLiquidity(uint128 liq) private {
+        (BalanceDelta delta,) = manager.modifyLiquidity(
+            key, ModifyLiquidityParams(tickLower, tickUpper, -int256(uint256(liq)), bytes32(0)), ""
+        );
+        liquidity -= liq;
+        _takePositive(key.currency0, delta.amount0());
+        _takePositive(key.currency1, delta.amount1());
+    }
+
+    function _addFromBalance() private {
+        IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
+        IERC20 token1 = IERC20(Currency.unwrap(key.currency1));
+        uint256 bal0 = token0.balanceOf(address(this));
+        uint256 bal1 = token1.balanceOf(address(this));
+        if (bal0 == 0 && bal1 == 0) return;
+        (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
+        uint128 add = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPrice, TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), bal0, bal1
+        );
+        if (add == 0) return;
+        (BalanceDelta delta,) = manager.modifyLiquidity(
+            key, ModifyLiquidityParams(tickLower, tickUpper, int256(uint256(add)), bytes32(0)), ""
+        );
+        _settleNegative(key.currency0, delta.amount0());
+        _settleNegative(key.currency1, delta.amount1());
+        liquidity += add;
+    }
+
+    function _takePositive(Currency currency, int128 amount) private {
+        if (amount > 0) manager.take(currency, address(this), uint256(uint128(amount)));
+    }
+
+    function _settleNegative(Currency currency, int128 amount) private {
+        if (amount > 0) {
+            manager.take(currency, address(this), uint256(uint128(amount)));
+            return;
+        }
+        if (amount == 0) return;
+        uint256 paid = uint256(uint128(-amount));
+        manager.sync(currency);
+        IERC20(Currency.unwrap(currency)).safeTransfer(address(manager), paid);
+        manager.settle();
+    }
+
+    function _pull(uint256 amount0, uint256 amount1) private {
+        if (amount0 != 0) IERC20(Currency.unwrap(key.currency0)).safeTransferFrom(msg.sender, address(this), amount0);
+        if (amount1 != 0) IERC20(Currency.unwrap(key.currency1)).safeTransferFrom(msg.sender, address(this), amount1);
+    }
+}

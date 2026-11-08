@@ -132,13 +132,14 @@ under a “Not launched yet” banner.
 
 ## Validation (8 November 2026, America/New_York)
 
-- Foundry: **460 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
+- Foundry: **465 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
   - `MasonryTreasury.t.sol` (7)
   - `MasonryFarm.t.sol` (4)
   - `MasonryBond.t.sol` (7)
   - `MasonryChamber.t.sol` (4, including Exit Now / no LEVEL paid to the user)
   - `MasonryProductionInvariants.t.sol` fuzz (4 × 256)
-  - `MasonryRangeLib.t.sol` (6) and `MasonryRangeManager.t.sol` (6, both official pool shapes, plus nudge stipend / thin-pool / unauthorized deposit, and RangeRebalanced principal/fee/swap accounting)
+  - `MasonryRangeLib.t.sol` (7, including follow vs fixed-peg vs peg-anchor coverage at a depeg) and `MasonryRangeManager.t.sol` (6, both official pool shapes, plus nudge stipend / thin-pool / unauthorized deposit, and RangeRebalanced principal/fee/swap accounting)
+  - `MasonryPooledRangeVault.t.sol` (4, local share-vault prototype: two-user redeem, depeg redemption wave, follow abandoning peg, fixed band staying on peg)
 - Config: `node --test config/*.test.mjs` — **61 passed**, including per-pool range-manager bound checks.
 - Frontend: `pnpm typecheck` passed. Playwright: **79 passed** (desktop + mobile, including protocol range status).
 

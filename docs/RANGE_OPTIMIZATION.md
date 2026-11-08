@@ -189,3 +189,22 @@ Uniswap impact during a rebalance is modeled as constant-product against
 residual liquidity after the protocol position is pulled. Recalibrate
 width, recenter, and cooldown with observed Robinhood volume, user LP
 share, and actual depeg paths after launch.
+
+
+## Local prototype (not launched)
+
+`MasonryRangeLib` now exposes the two xTOMB baselines next to the live
+follow helper:
+
+- `fixedPegTicks` — band around the peg sqrt price (does not follow spot)
+- `pegAnchorTicks` — follows spot but always spans the path between spot
+  and peg (lower wing from `min(spot, peg)`, upper wing from `max(spot, peg)`)
+
+`MasonryPooledRangeVault` is a local, share-based prototype (not wired into
+the launch config) where several users sit in one band and can redeem.
+Tests cover two-user deposits, a redemption wave during a depeg (remaining
+USDG stays in the vault), follow abandoning $1 after a deep depeg
+rebalance, and a fixed band that stays on peg.
+
+The live `MasonryRangeManager` is unchanged: it still follows spot, with
+the per-pool defaults in the table above.
