@@ -65,3 +65,14 @@ test('repeated contract addresses are rejected', () => {
   dup.contracts.squareVault = dup.contracts.levelVault;
   assert.throws(() => parseMasonryDeployment(dup, registry), /repeats/);
 });
+
+test('officialChain fails closed when the peg token is not named or disagrees with usdc', () => {
+  const rh = officialChain(registry, 4663);
+  assert.equal(rh.pegTokenSymbol, 'USDG');
+  const broken = structuredClone(registry);
+  delete broken.chains.find((c) => c.id === 4663).pegTokenDecimals;
+  assert.throws(() => officialChain(broken, 4663), /pegToken/);
+  const mismatch = structuredClone(registry);
+  mismatch.chains.find((c) => c.id === 4663).usdc = '0x' + '1'.repeat(40);
+  assert.throws(() => officialChain(mismatch, 4663), /pegToken/);
+});

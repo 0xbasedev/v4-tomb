@@ -119,3 +119,16 @@ for (const [description, change, expected] of [
     await assert.rejects(publishDeployment(p.document, p.artifact, p.broadcast, 0, p.rpc), expected);
   });
 }
+
+test('Robinhood 4663 uses USDG as pegToken and bad pegToken fails', async () => {
+  const { readFileSync } = await import('node:fs');
+  const doc = JSON.parse(readFileSync(new URL('./networks.json', import.meta.url)));
+  const rh = parseNetworks(doc).find((n) => n.id === 4663);
+  assert.equal(rh.pegToken.symbol, 'USDG');
+  assert.equal(rh.pegToken.decimals, 6);
+  for (const bad of [{ ...rh.pegToken, decimals: 6.5 }, { ...rh.pegToken, address: '0x' + '0'.repeat(40) }, { symbol: 'USDG' }]) {
+    const copy = structuredClone(doc);
+    copy.networks.find((n) => n.id === 4663).pegToken = bad;
+    assert.throws(() => parseNetworks(copy), /pegToken/);
+  }
+});

@@ -97,5 +97,13 @@ export function parseMasonryDeployment(record, registry) {
 /** The registry entry for a chain, or undefined when xTOMB can't launch there. */
 export function officialChain(registry, chainId) {
   if (!object(registry) || !Array.isArray(registry.chains)) fail('registry must list chains');
-  return registry.chains.find((chain) => chain.id === chainId);
+  const chain = registry.chains.find((entry) => entry.id === chainId);
+  if (!chain) return undefined;
+  // Fail closed: the peg token must be named explicitly and the legacy usdc alias must agree.
+  if (!isAddress(chain.pegToken) || typeof chain.pegTokenSymbol !== 'string' || !chain.pegTokenSymbol
+    || !Number.isInteger(chain.pegTokenDecimals) || chain.pegTokenDecimals < 0 || chain.pegTokenDecimals > 36
+    || (chain.usdc && chain.usdc.toLowerCase() !== chain.pegToken.toLowerCase())) {
+    fail(`chain ${chainId}: pegToken, pegTokenSymbol and pegTokenDecimals must be set and match usdc`);
+  }
+  return chain;
 }

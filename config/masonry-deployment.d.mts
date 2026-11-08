@@ -12,7 +12,7 @@ export interface MasonryDeployment {
   contracts: Record<MasonryContractKey, Address>;
   pools: { level: PoolKey; square: PoolKey };
 }
-export interface OfficialChain { id: number; name: string; testnet: boolean; poolManager: Address; usdc: Address }
+export interface OfficialChain { id: number; name: string; testnet: boolean; poolManager: Address; usdc: Address; pegToken: Address; pegTokenSymbol: string; pegTokenDecimals: number }
 export interface OfficialRegistry { schemaVersion: 1; note: string; sources: Record<string, string>; chains: OfficialChain[] }
 export const masonryContractKeys: MasonryContractKey[];
 export const masonryContractLabels: Record<MasonryContractKey, string>;
