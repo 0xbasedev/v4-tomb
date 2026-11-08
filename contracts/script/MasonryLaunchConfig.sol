@@ -16,10 +16,14 @@ struct MasonryLaunchParams {
     uint256 oracleMaxAgeSeconds;
     uint256 fireTaxBaselineBps;
     uint256 fireTaxHardCapBps;
-    uint256 rangeHalfWidthBps;
-    uint256 rangeRecenterBps;
-    uint256 rangeCooldownSeconds;
-    uint256 rangeMaxTwapDeviationBps;
+    uint256 rangeLevelHalfWidthBps;
+    uint256 rangeLevelRecenterBps;
+    uint256 rangeLevelCooldownSeconds;
+    uint256 rangeLevelMaxTwapDeviationBps;
+    uint256 rangeSquareHalfWidthBps;
+    uint256 rangeSquareRecenterBps;
+    uint256 rangeSquareCooldownSeconds;
+    uint256 rangeSquareMaxTwapDeviationBps;
 }
 
 /// @notice Reads `config/masonry-launch.template.json` and scales whole-token
@@ -44,10 +48,14 @@ library MasonryLaunchConfig {
         p.oracleMaxAgeSeconds = raw.readUint(".policy.criticalOracleMaxAgeSeconds");
         p.fireTaxBaselineBps = raw.readUint(".policy.fireTaxBaselineBps");
         p.fireTaxHardCapBps = raw.readUint(".policy.fireTaxHardCapBps");
-        p.rangeHalfWidthBps = raw.readUint(".policy.rangeHalfWidthBps");
-        p.rangeRecenterBps = raw.readUint(".policy.rangeRecenterBps");
-        p.rangeCooldownSeconds = raw.readUint(".policy.rangeCooldownSeconds");
-        p.rangeMaxTwapDeviationBps = raw.readUint(".policy.rangeMaxTwapDeviationBps");
+        p.rangeLevelHalfWidthBps = raw.readUint(".policy.rangeLevel.halfWidthBps");
+        p.rangeLevelRecenterBps = raw.readUint(".policy.rangeLevel.recenterBps");
+        p.rangeLevelCooldownSeconds = raw.readUint(".policy.rangeLevel.cooldownSeconds");
+        p.rangeLevelMaxTwapDeviationBps = raw.readUint(".policy.rangeLevel.maxTwapDeviationBps");
+        p.rangeSquareHalfWidthBps = raw.readUint(".policy.rangeSquare.halfWidthBps");
+        p.rangeSquareRecenterBps = raw.readUint(".policy.rangeSquare.recenterBps");
+        p.rangeSquareCooldownSeconds = raw.readUint(".policy.rangeSquare.cooldownSeconds");
+        p.rangeSquareMaxTwapDeviationBps = raw.readUint(".policy.rangeSquare.maxTwapDeviationBps");
         validate(p);
     }
 
@@ -78,15 +86,26 @@ library MasonryLaunchConfig {
         }
         if (p.bondMaxSupplyWholeTokens == 0) revert InvalidLaunchConfig("bondMaxSupply");
         if (p.bondRedeemPremiumBps > 10_000) revert InvalidLaunchConfig("bondRedeemPremiumBps");
-        if (p.rangeHalfWidthBps < 500 || p.rangeHalfWidthBps > 3000) revert InvalidLaunchConfig("rangeHalfWidthBps");
-        if (p.rangeRecenterBps < 100 || p.rangeRecenterBps >= p.rangeHalfWidthBps) {
-            revert InvalidLaunchConfig("rangeRecenterBps");
-        }
-        if (p.rangeCooldownSeconds < 60 || p.rangeCooldownSeconds > 1 days) {
-            revert InvalidLaunchConfig("rangeCooldownSeconds");
-        }
-        if (p.rangeMaxTwapDeviationBps == 0 || p.rangeMaxTwapDeviationBps > 1000) {
-            revert InvalidLaunchConfig("rangeMaxTwapDeviationBps");
-        }
+        _validateRange(
+            p.rangeLevelHalfWidthBps, p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
+            p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
+        );
+        _validateRange(
+            p.rangeSquareHalfWidthBps, p.rangeSquareRecenterBps, p.rangeSquareCooldownSeconds,
+            p.rangeSquareMaxTwapDeviationBps, "rangeSquare"
+        );
+    }
+
+    function _validateRange(
+        uint256 halfWidthBps,
+        uint256 recenterBps,
+        uint256 cooldownSeconds,
+        uint256 maxTwapDeviationBps,
+        string memory label
+    ) private pure {
+        if (halfWidthBps < 500 || halfWidthBps > 3000) revert InvalidLaunchConfig(label);
+        if (recenterBps < 100 || recenterBps >= halfWidthBps) revert InvalidLaunchConfig(label);
+        if (cooldownSeconds < 60 || cooldownSeconds > 1 days) revert InvalidLaunchConfig(label);
+        if (maxTwapDeviationBps == 0 || maxTwapDeviationBps > 1000) revert InvalidLaunchConfig(label);
     }
 }

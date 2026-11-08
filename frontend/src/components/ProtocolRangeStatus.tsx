@@ -20,23 +20,32 @@ export function ProtocolRangeStatus() {
         <span className="font-mono text-[10.5px] text-ash">read-only · follows spot</span>
       </div>
       <p className="mb-4 text-[12.5px] leading-relaxed text-bone-dim">
-        Official protocol liquidity is a concentrated band around the current price
-        (±{pct(RANGE_POLICY.halfWidthBps)}), recentered when price drifts past ±{pct(RANGE_POLICY.recenterBps)}{" "}
-        or out of range. A keeper (or the hook, when gas allows) calls rebalance after
-        a TWAP check (max {pct(RANGE_POLICY.maxTwapDeviationBps)} from spot) and a{" "}
-        {RANGE_POLICY.cooldownSeconds / 60}-minute cooldown. User Genesis LP vaults and
+        Official protocol liquidity follows spot with a different band on each pool:
+        xTOMB/USDG ±{pct(RANGE_POLICY.level.halfWidthBps)} (recenter at ±{pct(RANGE_POLICY.level.recenterBps)}),
+        xSHARE/USDG ±{pct(RANGE_POLICY.square.halfWidthBps)} (recenter at ±{pct(RANGE_POLICY.square.recenterBps)}).
+        A keeper (or the hook, when gas allows) calls rebalance after a TWAP check
+        (max {pct(RANGE_POLICY.level.maxTwapDeviationBps)} from spot) and a{" "}
+        {RANGE_POLICY.level.cooldownSeconds / 60}-minute cooldown. User Genesis LP vaults and
         Masonry X Share/WETH staking stay on fixed ticks so wrapping and chamber
         staking stay compatible.
       </p>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <RangeCard title="xTOMB / USDG" address={c?.levelRangeManager as Address | undefined} />
-        <RangeCard title="xSHARE / USDG" address={c?.squareRangeManager as Address | undefined} />
+        <RangeCard title="xTOMB / USDG" address={c?.levelRangeManager as Address | undefined} fallback={RANGE_POLICY.level} />
+        <RangeCard title="xSHARE / USDG" address={c?.squareRangeManager as Address | undefined} fallback={RANGE_POLICY.square} />
       </div>
     </section>
   );
 }
 
-function RangeCard({ title, address }: { title: string; address?: Address }) {
+function RangeCard({
+  title,
+  address,
+  fallback,
+}: {
+  title: string;
+  address?: Address;
+  fallback: { halfWidthBps: number; recenterBps: number; cooldownSeconds: number; maxTwapDeviationBps: number };
+}) {
   const reads = useReadContracts({
     allowFailure: true,
     contracts: address
@@ -54,9 +63,9 @@ function RangeCard({ title, address }: { title: string; address?: Address }) {
     | readonly [bigint, bigint, bigint, bigint, boolean, boolean, bigint, bigint]
     | undefined;
   const launched = Boolean(address && status);
-  const width = reads.data?.[1]?.result ?? RANGE_POLICY.halfWidthBps;
-  const inner = reads.data?.[2]?.result ?? RANGE_POLICY.recenterBps;
-  const cooldown = Number(reads.data?.[3]?.result ?? RANGE_POLICY.cooldownSeconds);
+  const width = reads.data?.[1]?.result ?? fallback.halfWidthBps;
+  const inner = reads.data?.[2]?.result ?? fallback.recenterBps;
+  const cooldown = Number(reads.data?.[3]?.result ?? fallback.cooldownSeconds);
   const inRange = launched ? Boolean(status?.[4]) : null;
   const needsMove = launched ? Boolean(status?.[5]) : null;
   return (
@@ -90,7 +99,7 @@ function RangeCard({ title, address }: { title: string; address?: Address }) {
             <span className="text-ash">Status</span>
             <span className="text-right text-bone">Centered on spot after launch</span>
             <span className="text-ash">Cooldown</span>
-            <span className="font-mono text-right text-bone">{RANGE_POLICY.cooldownSeconds / 60} min</span>
+            <span className="font-mono text-right text-bone">{fallback.cooldownSeconds / 60} min</span>
           </>
         )}
       </div>

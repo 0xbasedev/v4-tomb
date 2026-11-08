@@ -26,6 +26,20 @@ const positiveRawAmount = (n, path) => {
  * Amounts are WHOLE tokens in this wizard view; scaling to base units occurs
  * only when deployment artifacts are generated. No mainnet deploy wiring yet.
  */
+function validateRangeKnobs(range, label) {
+  if (!range || typeof range !== 'object') throw new Error(`${label}: missing range knobs`);
+  const halfWidth = nonnegative(range.halfWidthBps, `${label}.halfWidthBps`);
+  if (halfWidth < 500 || halfWidth > 3000) throw new Error(`${label}.halfWidthBps: must be 500–3000 (±5% to ±30%)`);
+  const recenter = nonnegative(range.recenterBps, `${label}.recenterBps`);
+  if (recenter < 100 || recenter >= halfWidth) {
+    throw new Error(`${label}.recenterBps: must be 100–halfWidth (inner band)`);
+  }
+  const rangeCooldown = nonnegative(range.cooldownSeconds, `${label}.cooldownSeconds`);
+  if (rangeCooldown < 60 || rangeCooldown > 86400) throw new Error(`${label}.cooldownSeconds: must be 60–86400`);
+  const twapDev = nonnegative(range.maxTwapDeviationBps, `${label}.maxTwapDeviationBps`);
+  if (twapDev < 1 || twapDev > 1000) throw new Error(`${label}.maxTwapDeviationBps: must be 1–1000`);
+}
+
 export function validateMasonryLaunch(doc) {
   const d = obj(doc, 'document');
   if (d.schemaVersion !== 1 || d.protocol !== 'masonry') throw new Error('unsupported Masonry launch schema');
@@ -123,16 +137,8 @@ export function validateMasonryLaunch(doc) {
   if (premium > 10000) throw new Error('policy.bondRedeemPremiumBps: cannot exceed 10000');
 
 
-  const halfWidth = nonnegative(policy.rangeHalfWidthBps, 'policy.rangeHalfWidthBps');
-  if (halfWidth < 500 || halfWidth > 3000) throw new Error('policy.rangeHalfWidthBps: must be 500–3000 (±5% to ±30%)');
-  const recenter = nonnegative(policy.rangeRecenterBps, 'policy.rangeRecenterBps');
-  if (recenter < 100 || recenter >= halfWidth) {
-    throw new Error('policy.rangeRecenterBps: must be 100–halfWidth (inner band)');
-  }
-  const rangeCooldown = nonnegative(policy.rangeCooldownSeconds, 'policy.rangeCooldownSeconds');
-  if (rangeCooldown < 60 || rangeCooldown > 86400) throw new Error('policy.rangeCooldownSeconds: must be 60–86400');
-  const twapDev = nonnegative(policy.rangeMaxTwapDeviationBps, 'policy.rangeMaxTwapDeviationBps');
-  if (twapDev < 1 || twapDev > 1000) throw new Error('policy.rangeMaxTwapDeviationBps: must be 1–1000');
+  validateRangeKnobs(policy.rangeLevel, 'policy.rangeLevel');
+  validateRangeKnobs(policy.rangeSquare, 'policy.rangeSquare');
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

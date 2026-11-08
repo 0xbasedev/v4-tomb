@@ -76,10 +76,11 @@ position that recenters with spot, not a full-range or fixed-tick book.
   `rebalance()` / `nudge()`; `donate()` and hook `depositFromHook` add
   inventory. There is no admin withdrawal; leftovers stay idle until they
   can be deployed again.
-- Defaults (config + constructor bounds): half-width **1500 bps (±15%)**,
-  recenter at **1000 bps (±10%)**, cooldown **1800s**, max TWAP deviation
-  **300 bps**. Bounds: width 500–3000, recenter 100–width, cooldown 60–86400,
-  deviation 1–1000.
+- Defaults are now **per pool** (see `docs/RANGE_OPTIMIZATION.md`): xTOMB/USDG
+  half-width **2000 bps (±20%)**, recenter **1600 bps (±16%)**; xSHARE/USDG
+  half-width **800 bps (±8%)**, recenter **640 bps (±6.4%)**. Both use
+  cooldown **1800s** and max TWAP deviation **300 bps**. Bounds: width 500–3000,
+  recenter 100–width, cooldown 60–86400, deviation 1–1000.
 - Safety: valid TWAP, spot within max deviation, pool liquidity floor,
   cooldown, same-block guard. Recentering uses the current tick only after
   those checks (spot ≈ TWAP). After removing the old band the manager
@@ -101,10 +102,14 @@ position that recenters with spot, not a full-range or fixed-tick book.
 
 | Knob | Default | Bounds |
 | --- | --- | --- |
-| `policy.rangeHalfWidthBps` | 1500 | 500–3000 |
-| `policy.rangeRecenterBps` | 1000 | 100–(half width − 1) |
-| `policy.rangeCooldownSeconds` | 1800 | 60–86400 |
-| `policy.rangeMaxTwapDeviationBps` | 300 | 1–1000 |
+| `policy.rangeLevel.halfWidthBps` | 2000 | 500–3000 |
+| `policy.rangeLevel.recenterBps` | 1600 | 100–(half width − 1) |
+| `policy.rangeLevel.cooldownSeconds` | 1800 | 60–86400 |
+| `policy.rangeLevel.maxTwapDeviationBps` | 300 | 1–1000 |
+| `policy.rangeSquare.halfWidthBps` | 800 | 500–3000 |
+| `policy.rangeSquare.recenterBps` | 640 | 100–(half width − 1) |
+| `policy.rangeSquare.cooldownSeconds` | 1800 | 60–86400 |
+| `policy.rangeSquare.maxTwapDeviationBps` | 300 | 1–1000 |
 
 ### Exit Now (handoff 2026-11-07)
 
@@ -133,8 +138,8 @@ under a “Not launched yet” banner.
   - `MasonryBond.t.sol` (7)
   - `MasonryChamber.t.sol` (4, including Exit Now / no LEVEL paid to the user)
   - `MasonryProductionInvariants.t.sol` fuzz (4 × 256)
-  - `MasonryRangeLib.t.sol` (6) and `MasonryRangeManager.t.sol` (6, both official pool shapes, plus nudge stipend / thin-pool / unauthorized deposit)
-- Config: `node --test config/*.test.mjs` — **60 passed**, including range-manager bound checks.
+  - `MasonryRangeLib.t.sol` (6) and `MasonryRangeManager.t.sol` (6, both official pool shapes, plus nudge stipend / thin-pool / unauthorized deposit, and RangeRebalanced principal/fee/swap accounting)
+- Config: `node --test config/*.test.mjs` — **61 passed**, including per-pool range-manager bound checks.
 - Frontend: `pnpm typecheck` passed. Playwright: **79 passed** (desktop + mobile, including protocol range status).
 
 No private keys, no broadcast, no push, no live launch.

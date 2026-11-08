@@ -581,10 +581,14 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         LivePool memory pool
     ) internal {
         MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
-        assertEq(cfg.rangeHalfWidthBps, 1500);
-        assertEq(cfg.rangeRecenterBps, 1000);
-        assertEq(cfg.rangeCooldownSeconds, 1800);
-        assertEq(cfg.rangeMaxTwapDeviationBps, 300);
+        assertEq(cfg.rangeLevelHalfWidthBps, 2000);
+        assertEq(cfg.rangeLevelRecenterBps, 1600);
+        assertEq(cfg.rangeLevelCooldownSeconds, 1800);
+        assertEq(cfg.rangeLevelMaxTwapDeviationBps, 300);
+        assertEq(cfg.rangeSquareHalfWidthBps, 800);
+        assertEq(cfg.rangeSquareRecenterBps, 640);
+        assertEq(cfg.rangeSquareCooldownSeconds, 1800);
+        assertEq(cfg.rangeSquareMaxTwapDeviationBps, 300);
         _exerciseLevelRange(pool);
         _exerciseShareRange();
     }
@@ -592,6 +596,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
     function _exerciseLevelRange(
         LivePool memory pool
     ) internal {
+        MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
         IPoolManager pm = IPoolManager(POOL_MANAGER);
         MockTwapOracle rangeTwap = new MockTwapOracle();
         (uint160 sqrtPrice,,,) = StateLibrary.getSlot0(pm, pool.key.toId());
@@ -602,10 +607,10 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             IMasonryRangeTwap(address(rangeTwap)),
             address(pool.key.hooks),
             pool.level0,
-            1500,
-            1000,
-            1800,
-            300,
+            uint16(cfg.rangeLevelHalfWidthBps),
+            uint16(cfg.rangeLevelRecenterBps),
+            cfg.rangeLevelCooldownSeconds,
+            uint16(cfg.rangeLevelMaxTwapDeviationBps),
             1e12
         );
         MasonryTaxHook(address(pool.key.hooks)).bindRangeManager(levelRm);
@@ -682,8 +687,18 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         liquidity.modifyLiquidity(shareKey, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
         MockTwapOracle rangeTwap = new MockTwapOracle();
         rangeTwap.setPrice(1e18);
+        MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
         MasonryRangeManager shareRm = new MasonryRangeManager(
-            pm, shareKey, IMasonryRangeTwap(address(rangeTwap)), address(this), share0, 1500, 1000, 1800, 300, 1e12
+            pm,
+            shareKey,
+            IMasonryRangeTwap(address(rangeTwap)),
+            address(this),
+            share0,
+            uint16(cfg.rangeSquareHalfWidthBps),
+            uint16(cfg.rangeSquareRecenterBps),
+            cfg.rangeSquareCooldownSeconds,
+            uint16(cfg.rangeSquareMaxTwapDeviationBps),
+            1e12
         );
         share.approve(address(shareRm), type(uint256).max);
         IERC20(USDG).approve(address(shareRm), type(uint256).max);

@@ -120,14 +120,6 @@ test('out-of-bounds configurable tokenomics are rejected', () => {
     ['bondMaxDebtRatioBps', 10001, /bondMaxDebtRatioBps/],
     ['bondMaxSupply', 0, /bondMaxSupply/],
     ['bondRedeemPremiumBps', 10001, /bondRedeemPremiumBps/],
-    ['rangeHalfWidthBps', 400, /500–3000/],
-    ['rangeHalfWidthBps', 3500, /500–3000/],
-    ['rangeRecenterBps', 50, /inner band/],
-    ['rangeRecenterBps', 1500, /inner band/],
-    ['rangeCooldownSeconds', 10, /60–86400/],
-    ['rangeCooldownSeconds', 90000, /60–86400/],
-    ['rangeMaxTwapDeviationBps', 0, /1–1000/],
-    ['rangeMaxTwapDeviationBps', 1500, /1–1000/],
   ];
   for (const [key, value, pattern] of cases) {
     const cfg = complete();
@@ -152,4 +144,23 @@ test('stricter in-bound tokenomics defaults are accepted', () => {
   cfg.policy.bondMaxSupply = 500000;
   cfg.policy.bondRedeemPremiumBps = 0;
   assert.equal(validateMasonryLaunch(cfg).squareCap, 33333);
+});
+
+test('per-pool range knobs are required and bounded independently', () => {
+  const cases = [
+    ['rangeLevel', 'halfWidthBps', 400, /500–3000/],
+    ['rangeLevel', 'halfWidthBps', 3500, /500–3000/],
+    ['rangeSquare', 'halfWidthBps', 400, /500–3000/],
+    ['rangeLevel', 'recenterBps', 50, /inner band/],
+    ['rangeSquare', 'recenterBps', 800, /inner band/],
+    ['rangeLevel', 'cooldownSeconds', 10, /60–86400/],
+    ['rangeSquare', 'cooldownSeconds', 90000, /60–86400/],
+    ['rangeLevel', 'maxTwapDeviationBps', 0, /1–1000/],
+    ['rangeSquare', 'maxTwapDeviationBps', 1500, /1–1000/],
+  ];
+  for (const [pool, key, value, pattern] of cases) {
+    const cfg = complete();
+    cfg.policy[pool][key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), pattern, `${pool}.${key}=${value}`);
+  }
 });
