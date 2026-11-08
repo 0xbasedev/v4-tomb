@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
 
 contract MockShare is ERC20 {
     constructor() ERC20("X Share", "xSHARE") {}
@@ -78,6 +79,7 @@ contract MasonryFarmTest is BaseTest {
     MockFarmZapper internal zapper;
     address internal daoWallet;
     uint256 internal startTime;
+    MockFireTax internal fireTax;
 
     function setUp() public override {
         super.setUp();
@@ -86,6 +88,7 @@ contract MasonryFarmTest is BaseTest {
         share = new MockShare();
         lp = new MockShareWethLp();
         daoWallet = makeAddr("daoWallet");
+        fireTax = new MockFireTax();
         MintableZapperLp masonryLp = new MintableZapperLp();
         chamber = new MasonryChamber(
             IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage")
@@ -105,7 +108,7 @@ contract MasonryFarmTest is BaseTest {
                 daoWallet: daoWallet,
                 masonry: address(chamber),
                 zapper: address(zapper),
-                withdrawFeeBps: 200
+                fireTax: fireTax
             })
         );
         chamber.bindFarm(address(farm));
@@ -199,21 +202,36 @@ contract MasonryFarmTest is BaseTest {
         assertEq(share.balanceOf(daoWallet) - daoBefore, pendingAtComplete, "exact forfeit to daoWallet");
         assertEq(share.balanceOf(alice), aliceShareBefore, "no X Share reaches the wallet");
         assertEq(farm.pending(0, alice), 0);
-        uint256 lpFee = 100 ether * 200 / 10_000;
+        uint256 lpFee = 100 ether * uint256(fireTax.currentWithdrawFeeBps()) / 10_000;
         assertEq(lp.balanceOf(alice), 100 ether - lpFee);
         assertEq(lp.balanceOf(daoWallet), lpFee);
     }
 
-    function test_WithdrawFeeCapOwnerOnlyAndSixDecimalRounding() public {
-        assertEq(uint256(1_000_001) * 200 / 10_000, 20_000);
-        vm.prank(alice);
-        vm.expectRevert(MasonryFarm.Unauthorized.selector);
-        farm.setWithdrawFeeBps(100);
+    function test_WithdrawFeeFollowsLiveFireTaxAndSixDecimalRounding() public {
+        assertEq(uint256(1_000_001) * 300 / 10_000, 30_000);
+        assertEq(farm.withdrawFeeBps(), 300);
+        fireTax.set(1200);
+        assertEq(farm.withdrawFeeBps(), 1200);
+        fireTax.set(1201);
         vm.expectRevert(MasonryFarm.InvalidConfiguration.selector);
-        farm.setWithdrawFeeBps(1001);
-        farm.setWithdrawFeeBps(1000);
-        assertEq(farm.withdrawFeeBps(), 1000);
-        farm.setWithdrawFeeBps(200);
+        farm.withdrawFeeBps();
+        fireTax.set(1);
+        assertEq(uint256(1) * 1 / 10_000, 0);
+        fireTax.set(300);
+    }
+
+    function test_DustWithdrawalCanRoundFeeToZero() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 1);
+        vm.prank(alice);
+        farm.requestWithdraw(0, 1);
+        vm.warp(block.timestamp + 1800);
+        uint256 dao = lp.balanceOf(daoWallet);
+        vm.prank(alice);
+        farm.completeWithdraw(0);
+        assertEq(lp.balanceOf(daoWallet), dao);
+        assertEq(lp.balanceOf(alice), 100 ether);
     }
 
     function test_ExitNowDoesNotBypassFarmWithdrawFee() public {
@@ -231,7 +249,7 @@ contract MasonryFarmTest is BaseTest {
         uint256 daoLp = lp.balanceOf(daoWallet);
         vm.prank(alice);
         farm.completeWithdraw(0);
-        assertEq(lp.balanceOf(daoWallet) - daoLp, 100 ether * 200 / 10_000);
+        assertEq(lp.balanceOf(daoWallet) - daoLp, 100 ether * uint256(fireTax.currentWithdrawFeeBps()) / 10_000);
         assertEq(farm.userStake(0, alice), 0);
     }
 

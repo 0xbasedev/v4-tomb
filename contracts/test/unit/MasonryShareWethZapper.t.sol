@@ -10,6 +10,7 @@ import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryShareWethZapper, IShareWethAmm, IZapTwap} from "../../src/masonry/MasonryShareWethZapper.sol";
 import {MockShare, MockShareWethLp} from "./MasonryFarm.t.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
 
 contract MockWeth is ERC20 {
     constructor() ERC20("WETH", "WETH") {}
@@ -155,7 +156,7 @@ contract MasonryShareWethZapperTest is BaseTest {
                 daoWallet: daoWallet,
                 masonry: address(chamber),
                 zapper: address(zapper),
-                withdrawFeeBps: 200
+                fireTax: new MockFireTax()
             })
         );
         vm.prank(makeAddr("stranger"));

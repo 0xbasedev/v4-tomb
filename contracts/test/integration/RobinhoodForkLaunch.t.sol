@@ -40,6 +40,8 @@ import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {DummyShareZapper} from "../utils/DummyShareZapper.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
+import {IMasonryFireTax} from "../../src/masonry/IMasonryFireTax.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MasonryLaunchConfig, MasonryLaunchParams} from "../../script/MasonryLaunchConfig.sol";
 import {MasonryRangeManager, IMasonryRangeTwap} from "../../src/masonry/MasonryRangeManager.sol";
@@ -774,6 +776,6 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         policy.daoWallet = daoWallet;
         policy.masonry = masonry;
         policy.zapper = address(new DummyShareZapper());
-        policy.withdrawFeeBps = 200;
+        policy.fireTax = IMasonryFireTax(address(new MockFireTax()));
     }
 }

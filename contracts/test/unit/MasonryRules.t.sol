@@ -103,6 +103,26 @@ contract MasonryRulesTest is Test {
         assertEq(MasonryRules.recoveryFloorBps(1200, 100, start, start + 7 hours), 100);
     }
 
+    function test_WithdrawFeeMatchesFireTaxAtPegTenPercentAndDecay() public pure {
+        uint256 peg = 1e18;
+        uint16 b = 300;
+        uint16 m = 1200;
+        uint16 d = 1000;
+        uint256 t0 = 1_000_000;
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, b, t0, t0), 300);
+        assertEq(MasonryRules.withdrawFeeBps(90e16, peg, b, m, d, b, t0, t0), 1200);
+        assertEq(MasonryRules.withdrawFeeBps(70e16, peg, b, m, d, b, t0, t0), 1200);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0), 1200);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0 + 3.5 hours), 750);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0 + 7 hours), 300);
+    }
+
+    function testFuzz_WithdrawFeeNeverExceedsTwelvePercent(uint128 price, uint32 elapsed) public pure {
+        uint16 fee = MasonryRules.withdrawFeeBps(price == 0 ? 1 : uint256(price), 1e18, 300, 1200, 1000, 1200, 0, elapsed);
+        assertGe(fee, 300);
+        assertLe(fee, 1200);
+    }
+
     function test_ExpansionRequiresStrictlyAboveOnePointZeroOne() public pure {
         assertFalse(MasonryRules.eligibleForExpansion(101e16, 1e18, true));
         assertTrue(MasonryRules.eligibleForExpansion(101e16 + 1, 1e18, true));

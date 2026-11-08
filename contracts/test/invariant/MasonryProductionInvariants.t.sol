@@ -13,6 +13,7 @@ import {MasonryRules} from "../../src/masonry/MasonryRules.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MockLevel, MockLp, MockTwap} from "../unit/MasonryTreasury.t.sol";
 import {MockShare, MockShareWethLp} from "../unit/MasonryFarm.t.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
 
 contract MasonryProductionInvariantsTest is BaseTest {
     uint256 internal constant FARM_BUDGET = 25_641 ether;
@@ -64,7 +65,7 @@ contract MasonryProductionInvariantsTest is BaseTest {
                 daoWallet: makeAddr("daoWallet"),
                 masonry: address(chamber),
                 zapper: address(new DummyShareZapper()),
-                withdrawFeeBps: 200
+                fireTax: new MockFireTax()
             })
         );
         share.mint(address(this), FARM_BUDGET);

@@ -18,6 +18,8 @@ import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.
 import {MasonryPooledRangeVault} from "../../src/masonry/MasonryPooledRangeVault.sol";
 import {MasonryRangeLib} from "../../src/masonry/MasonryRangeLib.sol";
 import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
+import {IMasonryFireTax} from "../../src/masonry/IMasonryFireTax.sol";
 
 contract MockAsset is ERC20 {
     constructor(string memory name_) ERC20(name_, name_) {}
@@ -51,18 +53,20 @@ contract MasonryPooledRangeVaultTest is Test {
     address private alice = address(0xA11CE);
     address private bob = address(0xB0B);
     address private vaultDao = address(0xDA0);
+    MockFireTax private fireTax;
 
     function setUp() public {
         manager = new PoolManager(address(this));
         swaps = new PoolSwapTest(manager);
         liqRouter = new PoolModifyLiquidityTest(manager);
         usdg = new MockQuote();
+        fireTax = new MockFireTax();
     }
 
     function testRangeGuardsComeFromConstructorAndAreValidated() public {
         Env memory e = _boot();
         MasonryPooledRangeVault v = new MasonryPooledRangeVault(
-            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, 200,
+            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, fireTax,
             MasonryPooledRangeVault.RangeGuards(400, 900, 150)
         );
         assertEq(v.recenterBps(), 400);
@@ -70,7 +74,7 @@ contract MasonryPooledRangeVaultTest is Test {
         assertEq(v.maxTwapDeviationBps(), 150);
         vm.expectRevert(); // recenter >= half-width
         new MasonryPooledRangeVault(
-            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, 200,
+            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, fireTax,
             MasonryPooledRangeVault.RangeGuards(1500, 900, 150)
         );
     }
@@ -333,15 +337,14 @@ contract MasonryPooledRangeVaultTest is Test {
     }
 
     function testWithdrawFeeSixDecimalRoundingAndCap() public {
-        assertEq(uint256(1_000_001) * 200 / 10_000, 20_000);
+        assertEq(uint256(1_000_001) * 300 / 10_000, 30_000);
         Env memory e = _boot();
         MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        assertEq(vault.withdrawFeeBps(), 300);
+        fireTax.set(1201);
         vm.expectRevert(MasonryPooledRangeVault.FeeCapExceeded.selector);
-        vault.setWithdrawFeeBps(1001);
-        vm.prank(alice);
-        vm.expectRevert(MasonryPooledRangeVault.Unauthorized.selector);
-        vault.setWithdrawFeeBps(100);
-        vault.setWithdrawFeeBps(200);
+        vault.withdrawFeeBps();
+        fireTax.set(300);
         _deposit(e, vault, alice, 10_000e18, 10_000e6);
         IERC20 token0 = IERC20(e.asset0 ? address(e.asset) : address(usdg));
         IERC20 token1 = IERC20(e.asset0 ? address(usdg) : address(e.asset));
@@ -350,9 +353,25 @@ contract MasonryPooledRangeVaultTest is Test {
         (uint256 out0, uint256 out1) = _finishRedeem(vault, alice, vault.balanceOf(alice));
         uint256 fee0 = token0.balanceOf(vaultDao) - dao0;
         uint256 fee1 = token1.balanceOf(vaultDao) - dao1;
-        assertEq(fee0, (out0 + fee0) * 200 / 10_000);
-        assertEq(fee1, (out1 + fee1) * 200 / 10_000);
+        assertEq(fee0, (out0 + fee0) * 300 / 10_000);
+        assertEq(fee1, (out1 + fee1) * 300 / 10_000);
         assertGt(fee0 + fee1, 0);
+    }
+
+    function testDustRedeemCanRoundFeeToZero() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        fireTax.set(300);
+        uint256 dust = 1;
+        vm.prank(alice);
+        vault.transfer(bob, dust);
+        IERC20 token0 = IERC20(e.asset0 ? address(e.asset) : address(usdg));
+        uint256 dao0 = token0.balanceOf(vaultDao);
+        (uint256 out0, uint256 out1) = _finishRedeem(vault, bob, dust);
+        // 1 * 300 / 10000 = 0; remaining value may also floor to 0 amounts.
+        assertEq(token0.balanceOf(vaultDao), dao0);
+        assertTrue(out0 + out1 < 1e12);
     }
 
     function testNoInstantRedeemBypassesWithdrawFee() public {
@@ -413,7 +432,7 @@ contract MasonryPooledRangeVaultTest is Test {
         MasonryPooledRangeVault.Strategy strategy,
         uint16 width
     ) private returns (MasonryPooledRangeVault vault) {
-        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800, address(this), vaultDao, 200,
+        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800, address(this), vaultDao, fireTax,
             MasonryPooledRangeVault.RangeGuards(uint16(width / 2 == 0 ? 100 : width / 2), 1800, 300));
     }
 
