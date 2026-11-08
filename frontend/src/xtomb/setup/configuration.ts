@@ -216,4 +216,4 @@ export function buildInputs(fields: Fields, requireFuture = true) {
   return { network, launch, release, withBridge };
 }
 
-export type LaunchPlan = ReturnType<typeof buildInputs> & { masonry: MasonryPlan; bridge: BridgePlan | null };
+export type LaunchPlan = ReturnType<typeof buildInputs> & { masonry: MasonryPlan; bridge: BridgePlan | null; blockers?: string[] };
