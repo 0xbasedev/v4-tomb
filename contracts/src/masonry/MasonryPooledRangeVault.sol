@@ -47,6 +47,15 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     uint16 public immutable halfWidthBps;
     uint160 public immutable sqrtPeg;
     uint256 public immutable redeemCooldown;
+    uint16 public immutable recenterBps;
+    uint256 public immutable rangeCooldown;
+    uint16 public immutable maxTwapDeviationBps;
+
+    struct RangeGuards {
+        uint16 recenterBps;
+        uint256 cooldown;
+        uint16 maxTwapDeviationBps;
+    }
     address public immutable owner;
     address public immutable daoWallet;
     uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_000;
@@ -98,9 +107,14 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         uint256 redeemCooldown_,
         address owner_,
         address daoWallet_,
-        uint16 withdrawFeeBps_
+        uint16 withdrawFeeBps_,
+        RangeGuards memory guards
     ) ERC20("Masonry Pooled Range Prototype", "mPRANGE") {
-        MasonryRangeLib.validate(halfWidthBps_, halfWidthBps_ / 2 == 0 ? 100 : halfWidthBps_ / 2, 1800, 300);
+        // Range guards come from launch config (policy.liquidityVault*), not literals.
+        MasonryRangeLib.validate(halfWidthBps_, guards.recenterBps, guards.cooldown, guards.maxTwapDeviationBps);
+        recenterBps = guards.recenterBps;
+        rangeCooldown = guards.cooldown;
+        maxTwapDeviationBps = guards.maxTwapDeviationBps;
         if (address(manager_) == address(0) || sqrtPeg_ == 0 || owner_ == address(0) || daoWallet_ == address(0)) {
             revert MasonryRangeLib.InvalidRangeConfig();
         }

@@ -59,6 +59,22 @@ contract MasonryPooledRangeVaultTest is Test {
         usdg = new MockQuote();
     }
 
+    function testRangeGuardsComeFromConstructorAndAreValidated() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault v = new MasonryPooledRangeVault(
+            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, 200,
+            MasonryPooledRangeVault.RangeGuards(400, 900, 150)
+        );
+        assertEq(v.recenterBps(), 400);
+        assertEq(v.rangeCooldown(), 900);
+        assertEq(v.maxTwapDeviationBps(), 150);
+        vm.expectRevert(); // recenter >= half-width
+        new MasonryPooledRangeVault(
+            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, 200,
+            MasonryPooledRangeVault.RangeGuards(1500, 900, 150)
+        );
+    }
+
     function testTwoUsersDepositAndRedeemAtPeg() public {
         Env memory e = _boot();
         MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
@@ -397,7 +413,8 @@ contract MasonryPooledRangeVaultTest is Test {
         MasonryPooledRangeVault.Strategy strategy,
         uint16 width
     ) private returns (MasonryPooledRangeVault vault) {
-        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800, address(this), vaultDao, 200);
+        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800, address(this), vaultDao, 200,
+            MasonryPooledRangeVault.RangeGuards(uint16(width / 2 == 0 ? 100 : width / 2), 1800, 300));
     }
 
     function _deposit(
