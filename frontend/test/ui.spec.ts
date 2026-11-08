@@ -128,6 +128,7 @@ test.describe("Wallet and network states", () => {
     await page.getByRole("button", { name: "Connect wallet" }).click();
     await expect(note(page)).toContainText(/unsupported network/);
     await expect(page.getByRole("heading", { name: /Coming soon on/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Genesis", exact: true, level: 1 })).toBeVisible();
     await expectNoTransactionRequests(page, broadcasts);
   });
 
@@ -197,6 +198,7 @@ test.describe("Bridge and release plan", () => {
     await page.getByRole("button", { name: "Connect wallet" }).click();
     await expect(note(page)).toContainText(/BNB Smart Chain is an xSHARE bridge network/);
     await expect(page.getByRole("heading", { name: /Coming soon on/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Genesis", exact: true, level: 1 })).toBeVisible();
     await expectNoTransactionRequests(page, broadcasts);
   });
 

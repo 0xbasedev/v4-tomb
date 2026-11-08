@@ -58,10 +58,10 @@ const PATHS: Record<PathId, { title: string; who: string; icon: TokenId; to: str
     cta: "Open the Masonry",
     status: "pending",
     steps: [
-      "Pair xSHARE with USDC and stake the LP in the Masonry (planned stake asset)",
+      "Stake X Share/WETH LP in MasonryChamber",
       `When a fresh TWAP sits above $${EXPANSION.gate.toFixed(2)}, an epoch may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB`,
-      "Expansion xTOMB is shared across stakers",
-      "Staking, locks and the expansion mint aren't bound in the contracts yet",
+      "A manual deposit resets a 6-hour withdraw lock; claims have a separate 6-hour cooldown",
+      "Exit Now returns 50% of LP, sends 50% to Treasury, and forfeits pending xTOMB to Arbitrage",
     ],
   },
   bondholder: {
@@ -71,7 +71,7 @@ const PATHS: Record<PathId, { title: string; who: string; icon: TokenId; to: str
     to: "/bonds",
     cta: "Open Bonds",
     status: "planned",
-    steps: ["Buy below peg by burning xTOMB for xBOND", "Redeem above peg 1:1 for xTOMB (placeholder, no premium yet)", "Discounts bounded at 2×; debt and supply caps are launch placeholders", "Actions stay disabled until a verified MasonryBond address is published"],
+    steps: ["Buy below peg by burning xTOMB for xBOND", "Redeem above peg for xTOMB; redeem premium defaults to 0", "Discounts, debt ratio and supply cap come from launch config", "Actions stay disabled until a verified MasonryBond address is published"],
   },
 };
 

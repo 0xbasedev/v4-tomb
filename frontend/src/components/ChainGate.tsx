@@ -17,6 +17,7 @@ export function ChainPicker() {
     </div>}
   </div>;
 }
+
 export function ChainGate({ children }: { children: ReactNode }) {
   const { selected } = useSelectedNetwork();
   const { chainId, isConnected } = useAccount();
@@ -26,15 +27,49 @@ export function ChainGate({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState(false);
   const wrong = selected !== PRIMARY.id || (isConnected && chainId !== PRIMARY.id);
   const unavailable = !liveDeployment(selected);
-  if (!wrong && (preview.enabled || !unavailable)) return <>{children}</>;
   const name = chainName(selected !== PRIMARY.id ? selected : chainId);
-  return <section className="mx-auto my-16 max-w-xl rounded-3xl border border-white/10 bg-basalt-2/80 p-8 text-center md:my-24" aria-label="Chain availability">
-    <span className="font-mono text-xs uppercase tracking-widest text-ember">xTOMB / xSHARE</span>
-    <h1 className="mt-5 text-3xl text-bone">{wrong ? `Coming soon on ${name}` : "Not launched yet"}</h1>
-    <p className="mt-4 text-ash">{wrong ? "This chain is not active for xTOMB yet." : "Robinhood Chain is the first home for xTOMB. Verified protocol addresses are not available yet. Trading, staking and Genesis participation are disabled."}</p>
-    <p className="mt-4 text-sm text-ash">{PRIMARY.name} · Mainnet · {PRIMARY.nativeCurrency?.symbol} gas · {PRIMARY.referenceToken?.symbol} reference token ({PRIMARY.referenceToken?.decimals} decimals). No simulated balances or live prices are shown.</p>
-    {wrong ? <button type="button" disabled={pending} className="btn btn-primary mt-6" onClick={async () => { setPending(true); setError(""); try { await back(); } catch { setError("Network switch was not completed. Check your wallet and try again. Nothing was sent."); } finally { setPending(false); } }}>Switch back to Robinhood Chain</button> : <button type="button" disabled className="btn btn-primary mt-6">Not launched yet</button>}
-    {error && <p role="alert" className="mt-4 text-warn">{error}</p>}
-    <p className="mt-5 font-mono text-xs text-ash-dim">RH icon placeholder · TODO official logo</p>
-  </section>;
+  const showWrongBanner = wrong && !preview.enabled;
+  const showUnlaunchedBanner = !wrong && unavailable && !preview.enabled;
+
+  return (
+    <>
+      {showWrongBanner && (
+        <section className="mx-auto mt-4 max-w-7xl px-4 md:mt-6 md:px-8" aria-label="Chain availability">
+          <div className="rounded-2xl border border-ember/40 bg-ember/10 p-5 md:p-6">
+            <span className="font-mono text-xs uppercase tracking-widest text-ember">Read-only · not the live chain</span>
+            <h1 className="mt-2 font-display text-2xl text-bone md:text-3xl">Coming soon on {name}</h1>
+            <p className="mt-2 text-sm text-ash">You can still browse every page. Writes stay disabled until you are on live Robinhood Chain.</p>
+            <button
+              type="button"
+              disabled={pending}
+              className="btn btn-primary mt-4"
+              onClick={async () => {
+                setPending(true);
+                setError("");
+                try { await back(); }
+                catch { setError("Network switch was not completed. Check your wallet and try again. Nothing was sent."); }
+                finally { setPending(false); }
+              }}
+            >
+              Switch back to Robinhood Chain
+            </button>
+            {error && <p role="alert" className="mt-3 text-warn">{error}</p>}
+          </div>
+        </section>
+      )}
+      {showUnlaunchedBanner && (
+        <section className="mx-auto mt-4 max-w-7xl px-4 md:mt-6 md:px-8" aria-label="Chain availability">
+          <div className="rounded-2xl border border-white/10 bg-basalt-2/80 p-5 md:p-6">
+            <span className="font-mono text-xs uppercase tracking-widest text-ember">xTOMB / xSHARE</span>
+            <h1 className="mt-2 font-display text-2xl text-bone md:text-3xl">Not launched yet</h1>
+            <p className="mt-2 text-sm text-ash">Robinhood Chain is the first home for xTOMB. Verified protocol addresses are not available yet, so every page below is read-only. Trading, staking and Genesis writes stay disabled.</p>
+            <p className="mt-2 text-sm text-ash">{PRIMARY.name} · Mainnet · {PRIMARY.nativeCurrency?.symbol} gas · {PRIMARY.referenceToken?.symbol} reference token ({PRIMARY.referenceToken?.decimals} decimals).</p>
+            <button type="button" disabled className="btn btn-primary mt-4">Not launched yet</button>
+            <p className="mt-3 font-mono text-xs text-ash-dim">RH icon placeholder · TODO official logo</p>
+          </div>
+        </section>
+      )}
+      {children}
+    </>
+  );
 }

@@ -11,6 +11,8 @@ test("Robinhood is unlaunched by default; expansions show coming soon", async ({
   await page.screenshot({ path: `/workspace/v4-assess/shots/chain-dropdown-${testInfo.project.name}.png`, fullPage: true });
   await page.getByRole("button", { name: /Base · Coming soon/ }).click();
   await expect(page.getByRole("heading", { name: "Coming soon on Base" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Genesis", exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mint Pro" })).toBeDisabled();
   await page.screenshot({ path: `/workspace/v4-assess/shots/coming-soon-base-${testInfo.project.name}.png`, fullPage: true });
   await page.getByRole("button", { name: "Switch back to Robinhood Chain" }).click();
   await expect(page.getByRole("heading", { name: "Not launched yet" })).toBeVisible();
@@ -22,6 +24,7 @@ test("wrong wallet chain returns to Robinhood without a transaction", async ({ p
   await page.goto("/swap");
   await page.getByRole("button", { name: "Connect wallet" }).click();
   await expect(page.getByRole("heading", { name: "Coming soon on Base" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Official pools only" })).toBeVisible();
   await page.getByRole("button", { name: "Switch back to Robinhood Chain" }).click();
   await expect(page.getByRole("heading", { name: "Not launched yet" })).toBeVisible();
   await expectNoTransactionRequests(page, broadcasts);
