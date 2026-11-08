@@ -20,11 +20,29 @@ contract MasonryFarm is ReentrancyGuard {
         uint256 lastRewardTime;
     }
 
+    struct Policy {
+        bool claimToWallet;
+        uint256 withdrawCooldown;
+        address daoWallet;
+        address masonry;
+        address zapper;
+    }
+
+    struct WithdrawRequest {
+        uint256 amount;
+        uint256 availableAt;
+    }
+
     IERC20 public immutable share;
     uint256 public immutable startTime;
     uint256 public immutable duration;
     uint256 public immutable rewardBudget;
     address public immutable admin;
+    bool public immutable claimToWallet;
+    uint256 public immutable withdrawCooldown;
+    address public immutable daoWallet;
+    address public immutable masonry;
+    address public immutable zapper;
 
     uint256 public funded;
     uint256 public emitted;
@@ -34,12 +52,19 @@ contract MasonryFarm is ReentrancyGuard {
 
     mapping(uint256 => mapping(address => uint256)) public userStake;
     mapping(uint256 => mapping(address => uint256)) public userRewardDebt;
+    mapping(uint256 => mapping(address => uint256)) public storedReward;
+    mapping(uint256 => mapping(address => WithdrawRequest)) public withdrawRequests;
 
     event Funded(address indexed from, uint256 amount);
     event PoolAdded(uint256 indexed pid, address stakeToken, uint256 allocPoints);
     event Deposited(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdrawn(address indexed user, uint256 indexed pid, uint256 amount);
     event Harvested(address indexed user, uint256 indexed pid, uint256 amount);
+    event ZappedIntoMasonry(address indexed user, uint256 indexed pid, uint256 shareIn, uint256 lpStaked, uint256 shareDust);
+    event RewardsForfeited(address indexed user, uint256 indexed pid, uint256 amount, address indexed daoWallet);
+    event WithdrawRequested(address indexed user, uint256 indexed pid, uint256 amount, uint256 availableAt);
+    event WithdrawCompleted(address indexed user, uint256 indexed pid, uint256 amount, uint256 forfeited);
+    event WithdrawCancelled(address indexed user, uint256 indexed pid, uint256 amount);
 
     error ZeroAddress();
     error InvalidConfiguration();
@@ -47,6 +72,12 @@ contract MasonryFarm is ReentrancyGuard {
     error InvalidAmount();
     error OverFunded();
     error UnknownPool();
+    error ClaimToWalletDisabled();
+    error WithdrawPending();
+    error WithdrawNotPending();
+    error WithdrawCooldownActive();
+    error UnsafeZap();
+    error SlippageExceeded();
 
     constructor(
         IERC20 share_,
@@ -55,7 +86,8 @@ contract MasonryFarm is ReentrancyGuard {
         uint256 rewardBudget_,
         address admin_,
         IERC20 shareWethLp,
-        uint256 shareWethLpAllocPoints
+        uint256 shareWethLpAllocPoints,
+        Policy memory policy
     ) {
         if (address(share_) == address(0) || admin_ == address(0) || address(shareWethLp) == address(0)) {
             revert ZeroAddress();
@@ -63,11 +95,21 @@ contract MasonryFarm is ReentrancyGuard {
         if (startTime_ == 0 || duration_ == 0 || rewardBudget_ == 0 || shareWethLpAllocPoints == 0) {
             revert InvalidConfiguration();
         }
+        if (policy.daoWallet == address(0)) revert ZeroAddress();
+        if (policy.withdrawCooldown < 60 || policy.withdrawCooldown > 1 days) revert InvalidConfiguration();
+        if (!policy.claimToWallet && (policy.masonry == address(0) || policy.zapper == address(0))) {
+            revert InvalidConfiguration();
+        }
         share = share_;
         startTime = startTime_;
         duration = duration_;
         rewardBudget = rewardBudget_;
         admin = admin_;
+        claimToWallet = policy.claimToWallet;
+        withdrawCooldown = policy.withdrawCooldown;
+        daoWallet = policy.daoWallet;
+        masonry = policy.masonry;
+        zapper = policy.zapper;
         _addPool(shareWethLp, shareWethLpAllocPoints);
     }
 
@@ -102,7 +144,7 @@ contract MasonryFarm is ReentrancyGuard {
                 acc += shareOfPool * 1e18 / pool.totalStaked;
             }
         }
-        return userStake[pid][user] * acc / 1e18 - userRewardDebt[pid][user];
+        return storedReward[pid][user] + userStake[pid][user] * acc / 1e18 - userRewardDebt[pid][user];
     }
 
     function fund(
@@ -132,7 +174,7 @@ contract MasonryFarm is ReentrancyGuard {
         if (pid >= pools.length) revert UnknownPool();
         if (amount == 0) revert InvalidAmount();
         _updateAll();
-        _harvest(pid, msg.sender);
+        _settle(pid, msg.sender);
         pools[pid].stakeToken.safeTransferFrom(msg.sender, address(this), amount);
         pools[pid].totalStaked += amount;
         userStake[pid][msg.sender] += amount;
@@ -140,28 +182,78 @@ contract MasonryFarm is ReentrancyGuard {
         emit Deposited(msg.sender, pid, amount);
     }
 
-    function withdraw(
-        uint256 pid,
-        uint256 amount
-    ) external nonReentrant {
-        if (pid >= pools.length) revert UnknownPool();
-        if (amount == 0 || amount > userStake[pid][msg.sender]) revert InvalidAmount();
+    function update() external {
         _updateAll();
-        _harvest(pid, msg.sender);
-        pools[pid].totalStaked -= amount;
-        userStake[pid][msg.sender] -= amount;
-        userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
-        pools[pid].stakeToken.safeTransfer(msg.sender, amount);
-        emit Withdrawn(msg.sender, pid, amount);
     }
 
-    function harvest(
-        uint256 pid
-    ) external nonReentrant {
+    function requestWithdraw(uint256 pid, uint256 amount) external nonReentrant {
+        if (pid >= pools.length) revert UnknownPool();
+        if (amount == 0 || amount > userStake[pid][msg.sender]) revert InvalidAmount();
+        if (withdrawRequests[pid][msg.sender].amount != 0) revert WithdrawPending();
+        _updateAll();
+        _settle(pid, msg.sender);
+        withdrawRequests[pid][msg.sender] =
+            WithdrawRequest({amount: amount, availableAt: block.timestamp + withdrawCooldown});
+        emit WithdrawRequested(msg.sender, pid, amount, block.timestamp + withdrawCooldown);
+    }
+
+    function completeWithdraw(uint256 pid) external nonReentrant {
+        if (pid >= pools.length) revert UnknownPool();
+        WithdrawRequest memory req = withdrawRequests[pid][msg.sender];
+        if (req.amount == 0) revert WithdrawNotPending();
+        if (block.timestamp < req.availableAt) revert WithdrawCooldownActive();
+        delete withdrawRequests[pid][msg.sender];
+        _updateAll();
+        uint256 forfeited = _takeRewards(pid, msg.sender);
+        if (forfeited != 0) {
+            claimed += forfeited;
+            share.safeTransfer(daoWallet, forfeited);
+            emit RewardsForfeited(msg.sender, pid, forfeited, daoWallet);
+        }
+        pools[pid].totalStaked -= req.amount;
+        userStake[pid][msg.sender] -= req.amount;
+        userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
+        pools[pid].stakeToken.safeTransfer(msg.sender, req.amount);
+        emit WithdrawCompleted(msg.sender, pid, req.amount, forfeited);
+        emit Withdrawn(msg.sender, pid, req.amount);
+    }
+
+    function cancelWithdraw(uint256 pid) external nonReentrant {
+        WithdrawRequest memory req = withdrawRequests[pid][msg.sender];
+        if (req.amount == 0) revert WithdrawNotPending();
+        delete withdrawRequests[pid][msg.sender];
+        emit WithdrawCancelled(msg.sender, pid, req.amount);
+    }
+
+    /// @notice Cancels a pending liquidity withdrawal and zaps pending X Share into Masonry.
+    function compound(uint256 pid, uint256 minWethOut, uint256 minLpOut) external nonReentrant {
+        if (withdrawRequests[pid][msg.sender].amount != 0) {
+            uint256 amount = withdrawRequests[pid][msg.sender].amount;
+            delete withdrawRequests[pid][msg.sender];
+            emit WithdrawCancelled(msg.sender, pid, amount);
+        }
+        _zap(pid, msg.sender, minWethOut, minLpOut);
+    }
+
+    function harvest(uint256 pid) external nonReentrant {
+        if (!claimToWallet) revert ClaimToWalletDisabled();
         if (pid >= pools.length) revert UnknownPool();
         _updateAll();
-        _harvest(pid, msg.sender);
-        userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
+        uint256 amount = _takeRewards(pid, msg.sender);
+        if (amount == 0) return;
+        claimed += amount;
+        share.safeTransfer(msg.sender, amount);
+        emit Harvested(msg.sender, pid, amount);
+    }
+
+    function zapIntoMasonry(uint256 pid, uint256 minWethOut, uint256 minLpOut) external nonReentrant {
+        _zap(pid, msg.sender, minWethOut, minLpOut);
+    }
+
+    function cooldownRemaining(uint256 pid, address user) external view returns (uint256) {
+        WithdrawRequest memory req = withdrawRequests[pid][user];
+        if (req.amount == 0 || block.timestamp >= req.availableAt) return 0;
+        return req.availableAt - block.timestamp;
     }
 
     function _addPool(
@@ -228,15 +320,46 @@ contract MasonryFarm is ReentrancyGuard {
         emitted += assigned;
     }
 
-    function _harvest(
-        uint256 pid,
-        address user
-    ) internal {
-        uint256 amount = userStake[pid][user] * pools[pid].accRewardPerShare / 1e18 - userRewardDebt[pid][user];
-        if (amount == 0) return;
+    function _settle(uint256 pid, address user) internal {
+        uint256 unpaid = userStake[pid][user] * pools[pid].accRewardPerShare / 1e18 - userRewardDebt[pid][user];
+        if (unpaid != 0) storedReward[pid][user] += unpaid;
         userRewardDebt[pid][user] = userStake[pid][user] * pools[pid].accRewardPerShare / 1e18;
-        claimed += amount;
-        share.safeTransfer(user, amount);
-        emit Harvested(user, pid, amount);
     }
+
+    function _takeRewards(uint256 pid, address user) internal returns (uint256 amount) {
+        _settle(pid, user);
+        amount = storedReward[pid][user];
+        storedReward[pid][user] = 0;
+    }
+
+    function _zap(uint256 pid, address user, uint256 minWethOut, uint256 minLpOut) internal {
+        if (pid >= pools.length) revert UnknownPool();
+        if (zapper == address(0) || masonry == address(0)) revert InvalidConfiguration();
+        _updateAll();
+        uint256 amount = _takeRewards(pid, user);
+        if (amount < 2) revert InvalidAmount();
+        claimed += amount;
+        share.safeTransfer(zapper, amount);
+        (uint256 lpOut, uint256 shareDust,) =
+            IMasonryShareZapper(zapper).zap(user, amount, minWethOut, minLpOut);
+        if (shareDust != 0) {
+            claimed -= shareDust;
+            storedReward[pid][user] += shareDust;
+        }
+        IERC20 lp = IERC20(IMasonryShareZapper(zapper).lpToken());
+        lp.forceApprove(masonry, lpOut);
+        IMasonryChamberStake(masonry).stakeFor(user, lpOut);
+        emit ZappedIntoMasonry(user, pid, amount - shareDust, lpOut, shareDust);
+    }
+}
+
+interface IMasonryShareZapper {
+    function zap(address user, uint256 shareAmount, uint256 minWethOut, uint256 minLpOut)
+        external
+        returns (uint256 lpOut, uint256 shareDust, uint256 wethDust);
+    function lpToken() external view returns (address);
+}
+
+interface IMasonryChamberStake {
+    function stakeFor(address user, uint256 amount) external;
 }

@@ -15,7 +15,7 @@ contract MasonryChamberTest is BaseTest {
     MockTwap internal oracle;
     MasonryChamber internal chamber;
     MasonryTreasury internal treasury;
-    address internal protocolTreasury;
+    address internal daoWallet;
     address internal arbitrage;
     uint256 internal startTime;
 
@@ -26,11 +26,11 @@ contract MasonryChamberTest is BaseTest {
         level = new MockLevel();
         lp = new MockLp();
         oracle = new MockTwap();
-        protocolTreasury = makeAddr("protocolTreasury");
+        daoWallet = makeAddr("daoWallet");
         arbitrage = makeAddr("arbitrage");
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         chamber =
-            new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted, protocolTreasury, arbitrage);
+            new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted, daoWallet, arbitrage);
         treasury = new MasonryTreasury(
             IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
         );
@@ -93,7 +93,7 @@ contract MasonryChamberTest is BaseTest {
         assertEq(chamber.balanceOf(alice), 0);
         assertEq(chamber.pending(alice), 0);
         assertEq(lp.balanceOf(alice), userLpBefore + staked / 2);
-        assertEq(lp.balanceOf(protocolTreasury), staked - staked / 2);
+        assertEq(lp.balanceOf(daoWallet), staked - staked / 2);
         assertEq(level.balanceOf(arbitrage), pending);
         assertEq(level.balanceOf(alice), userLevelBefore, "no LEVEL paid to user - not a Fire Tax exit");
         assertEq(lp.balanceOf(address(chamber)), 0);

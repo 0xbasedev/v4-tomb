@@ -95,7 +95,22 @@ export const GENESIS_POLICY = {
 export const FARM_POLICY = {
   compoundCooldownSeconds: POLICY.farmsCompoundCooldownSeconds,
   emissionDays: POLICY.farmEmissionDays,
+  claimToWallet: POLICY.farmClaimToWallet,
+  withdrawCooldownSeconds: POLICY.farmWithdrawCooldownSeconds,
+  zapLabel: POLICY.farmZapLabel,
+  zapNotice: POLICY.farmZapNotice,
+  withdrawTitle: POLICY.farmWithdrawTitle,
+  cooldownNotice: POLICY.farmCooldownNotice,
+  forfeitNotice: POLICY.farmForfeitNotice,
+  cancelHint: POLICY.farmCancelHint,
+  compoundLabel: POLICY.farmCompoundLabel,
+  cancelLabel: POLICY.farmCancelLabel,
+  completeWithdrawLabel: POLICY.farmCompleteWithdrawLabel,
+  fireTaxNote: POLICY.farmFireTaxNote,
 };
+
+/** Single destination for protocol fees and forfeits (UI label: DAO wallet). */
+export const DAO_WALLET = launch.daoWallet as string;
 
 /** Pass tiers, matching MasonryGenesisPass.Tier: None = 0, Genesis = 1, Pro = 2, Ultra = 3. */
 export type PassTier = "genesis" | "pro" | "ultra";

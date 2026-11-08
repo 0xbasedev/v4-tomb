@@ -28,7 +28,7 @@ export function Masonry() {
         eyebrow="Masonry · not launched"
         token="xSHARE"
         title={<span className="spectre-text">Masonry</span>}
-        lede="Stake X Share/WETH LP for expansion xTOMB. Manual deposits reset a 6-hour withdraw lock; claims have their own 6-hour cooldown. Exit Now bypasses both locks by returning half your LP, sending the other half to Treasury, and forfeiting pending xTOMB to Arbitrage."
+        lede="Stake X Share/WETH LP for expansion xTOMB. Manual deposits reset a 6-hour withdraw lock; claims have their own 6-hour cooldown. Exit Now bypasses both locks by returning half your LP, sending the other half to the DAO wallet, and forfeiting pending xTOMB to Arbitrage."
         aside={
           <div className="panel p-5">
             <div className="mb-2 flex items-center justify-between">

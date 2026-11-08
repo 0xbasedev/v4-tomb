@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
+import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 
 contract MockShare is ERC20 {
     constructor() ERC20("X Share", "xSHARE") {}
@@ -29,6 +30,42 @@ contract MockShareWethLp is ERC20 {
     }
 }
 
+contract MintableZapperLp is ERC20 {
+    constructor() ERC20("X Share/WETH LP", "SLP") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+contract MockFarmZapper {
+    IERC20 public share;
+    MintableZapperLp public lp;
+
+    constructor(IERC20 share_, MintableZapperLp lp_) {
+        share = share_;
+        lp = lp_;
+    }
+
+    function lpToken() external view returns (address) {
+        return address(lp);
+    }
+
+    function zap(address, uint256 shareAmount, uint256, uint256 minLpOut)
+        external
+        returns (uint256 lpOut, uint256 shareDust, uint256 wethDust)
+    {
+        uint256 bal = share.balanceOf(address(this));
+        if (bal < shareAmount) shareAmount = bal;
+        shareDust = shareAmount > 10 ? 1 : 0;
+        lpOut = shareAmount - shareDust;
+        if (lpOut < minLpOut) revert("slippage");
+        lp.mint(msg.sender, lpOut);
+        if (shareDust != 0) IERC20(share).transfer(msg.sender, shareDust);
+        return (lpOut, shareDust, 0);
+    }
+}
+
 contract MasonryFarmTest is BaseTest {
     // PLACEHOLDER values from config/masonry-launch.template.json
     uint256 internal constant BUDGET = 25_641 ether;
@@ -37,6 +74,9 @@ contract MasonryFarmTest is BaseTest {
     MockShare internal share;
     MockShareWethLp internal lp;
     MasonryFarm internal farm;
+    MasonryChamber internal chamber;
+    MockFarmZapper internal zapper;
+    address internal daoWallet;
     uint256 internal startTime;
 
     function setUp() public override {
@@ -45,9 +85,29 @@ contract MasonryFarmTest is BaseTest {
         startTime = block.timestamp + 1 hours;
         share = new MockShare();
         lp = new MockShareWethLp();
-        farm = new MasonryFarm(
-            IERC20(address(share)), startTime, DURATION, BUDGET, address(this), IERC20(address(lp)), 1000
+        daoWallet = makeAddr("daoWallet");
+        MintableZapperLp masonryLp = new MintableZapperLp();
+        chamber = new MasonryChamber(
+            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage")
         );
+        zapper = new MockFarmZapper(IERC20(address(share)), masonryLp);
+        farm = new MasonryFarm(
+            IERC20(address(share)),
+            startTime,
+            DURATION,
+            BUDGET,
+            address(this),
+            IERC20(address(lp)),
+            1000,
+            MasonryFarm.Policy({
+                claimToWallet: false,
+                withdrawCooldown: 1800,
+                daoWallet: daoWallet,
+                masonry: address(chamber),
+                zapper: address(zapper)
+            })
+        );
+        chamber.bindFarm(address(farm));
         share.mint(address(this), BUDGET);
         share.approve(address(farm), BUDGET);
         farm.fund(BUDGET);
@@ -75,17 +135,20 @@ contract MasonryFarmTest is BaseTest {
         assertLe(pending, farm.entitledTo(block.timestamp));
         assertEq(farm.entitledTo(block.timestamp), BUDGET / 2);
 
-        vm.prank(alice);
-        farm.harvest(0);
-        assertLe(farm.claimed(), farm.entitledTo(block.timestamp));
+        farm.update();
+        uint256 earned = farm.pending(0, alice);
+        assertGt(earned, 0);
         assertLe(farm.emitted(), farm.entitledTo(block.timestamp));
         assertLe(farm.emitted(), BUDGET);
-        assertEq(share.balanceOf(alice), farm.claimed());
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
+        farm.harvest(0);
+        assertEq(share.balanceOf(alice), 0, "no claim-to-wallet path");
     }
 
     function test_EmptyFarmDoesNotCatchUpLaterStakers() public {
         vm.warp(startTime + DURATION / 2);
-        farm.harvest(0); // permissionless schedule advance via harvest? requires stake - use add dummy update
+        farm.update();
         // deposit after half the schedule: first deposit triggers _updateAll while empty
         vm.prank(alice);
         farm.deposit(0, 100 ether);
@@ -103,5 +166,105 @@ contract MasonryFarmTest is BaseTest {
         share.approve(address(farm), 1);
         vm.expectRevert(MasonryFarm.OverFunded.selector);
         farm.fund(1);
+    }
+
+    function test_CompleteWithdrawForfeitsExactRewardsToDaoWallet() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.warp(startTime + 10 days);
+        farm.update();
+        uint256 pending = farm.pending(0, alice);
+        assertGt(pending, 0);
+        uint256 aliceShareBefore = share.balanceOf(alice);
+        uint256 daoBefore = share.balanceOf(daoWallet);
+
+        vm.prank(alice);
+        farm.requestWithdraw(0, 100 ether);
+        vm.warp(block.timestamp + 60); // still inside the 30-minute window; rewards keep accruing
+        farm.update();
+        assertGt(farm.pending(0, alice), pending);
+
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.WithdrawCooldownActive.selector);
+        farm.completeWithdraw(0);
+
+        vm.warp(block.timestamp + 1800);
+        farm.update();
+        uint256 pendingAtComplete = farm.pending(0, alice);
+        vm.prank(alice);
+        farm.completeWithdraw(0);
+
+        assertEq(share.balanceOf(daoWallet) - daoBefore, pendingAtComplete, "exact forfeit to daoWallet");
+        assertEq(share.balanceOf(alice), aliceShareBefore, "no X Share reaches the wallet");
+        assertEq(farm.pending(0, alice), 0);
+        assertEq(lp.balanceOf(alice), 100 ether);
+    }
+
+    function test_CompoundOrCancelKeepsRewardsAndNoWalletPayout() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.warp(startTime + 5 days);
+        uint256 pending = farm.pending(0, alice);
+        vm.prank(alice);
+        farm.requestWithdraw(0, 40 ether);
+        vm.prank(alice);
+        farm.cancelWithdraw(0);
+        assertEq(farm.pending(0, alice), pending);
+        (uint256 amt,) = farm.withdrawRequests(0, alice);
+        assertEq(amt, 0);
+
+        vm.prank(alice);
+        farm.requestWithdraw(0, 40 ether);
+        uint256 masonryBefore = chamber.balanceOf(alice);
+        vm.prank(alice);
+        farm.compound(0, 0, 0);
+        assertEq(share.balanceOf(alice), 0);
+        assertGt(chamber.balanceOf(alice), masonryBefore);
+        (amt,) = farm.withdrawRequests(0, alice);
+        assertEq(amt, 0);
+    }
+
+    function test_CannotRequestWithdrawTwiceAndDepositDoesNotPayWallet() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 50 ether);
+        vm.warp(startTime + 3 days);
+        vm.prank(alice);
+        farm.requestWithdraw(0, 10 ether);
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.WithdrawPending.selector);
+        farm.requestWithdraw(0, 10 ether);
+
+        uint256 before = share.balanceOf(alice);
+        lp.mint(alice, 10 ether);
+        vm.prank(alice);
+        farm.deposit(0, 10 ether);
+        assertEq(share.balanceOf(alice), before);
+    }
+
+    function test_ZapStakesLpForUserAndNeverSendsShareToWallet() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.warp(startTime + 7 days);
+        uint256 pending = farm.pending(0, alice);
+        uint256 before = share.balanceOf(alice);
+        vm.prank(alice);
+        farm.zapIntoMasonry(0, 0, 0);
+        assertEq(share.balanceOf(alice), before);
+        assertGt(chamber.balanceOf(alice), 0);
+        // leftover dust stays as stored farm rewards, never the wallet
+        assertLt(farm.pending(0, alice), pending);
+    }
+
+    function test_ZeroZapReverts() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.InvalidAmount.selector);
+        farm.zapIntoMasonry(0, 0, 0);
     }
 }

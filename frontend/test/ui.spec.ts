@@ -295,3 +295,23 @@ test.describe("Deferred Genesis scheduling", () => {
   });
 });
 
+
+test.describe("Farm zap and withdraw cooldown", () => {
+  test("replaces Claim with Zap into Masonry and shows the forfeit countdown", async ({ page, broadcasts }) => {
+    await page.goto("/farm?preview=1");
+    await expect(page.getByRole("button", { name: "Zap into Masonry" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Claim" })).toHaveCount(0);
+    await expect(page.getByText("This is for protocol stability. All X Share earned in the farm must be aged in the Masonry before it can be claimed.").first()).toBeVisible();
+    await page.getByRole("button", { name: "Withdraw" }).first().click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByTestId("withdraw-countdown")).toBeVisible();
+    await expect(page.getByTestId("withdraw-live-rewards")).toContainText("xSHARE");
+    await expect(page.getByText(/forfeited to the DAO wallet/i)).toBeVisible();
+    await expect(page.getByText("You can cancel this timer by hitting Compound or Cancel.")).toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("button", { name: "Compound" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Complete withdrawal" })).toBeDisabled();
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+});

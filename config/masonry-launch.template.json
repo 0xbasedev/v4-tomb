@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "protocol": "masonry",
+  "daoWallet": "0x0000000000000000000000000000000000000001",
   "note": "INCOMPLETE TEMPLATE: select all vesting amounts and authorized LEVEL launch supply before deployment. Never deploy from null fields.",
   "square": {
     "maxSupply": 33333,
@@ -79,6 +80,18 @@
       "cooldownSeconds": 1800,
       "maxTwapDeviationBps": 300
     },
+    "farmClaimToWallet": false,
+    "farmWithdrawCooldownSeconds": 1800,
+    "farmZapLabel": "Zap into Masonry",
+    "farmZapNotice": "This is for protocol stability. All X Share earned in the farm must be aged in the Masonry before it can be claimed.",
+    "farmWithdrawTitle": "Withdraw liquidity",
+    "farmCooldownNotice": "A 30-minute cooldown protects protocol health and helps prevent price manipulation.",
+    "farmForfeitNotice": "These rewards, including those still adding up, will be forfeited to the DAO wallet unless you Cancel or Compound. Completing a liquidity withdrawal forfeits all pending X Share.",
+    "farmCancelHint": "You can cancel this timer by hitting Compound or Cancel.",
+    "farmCompoundLabel": "Compound",
+    "farmCancelLabel": "Cancel",
+    "farmCompleteWithdrawLabel": "Complete withdrawal",
+    "farmFireTaxNote": "This zap sells about half of your pending X Share for WETH on the X Share/WETH pool (the Masonry LP pair). Fire Tax applies to official X Share/USDG sells, not this pool, so the zap does not pay Fire Tax.",
     "governanceTimelocksEnabled": false,
     "ownerTradingPauseEnabled": false
   },

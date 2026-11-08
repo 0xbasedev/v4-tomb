@@ -24,6 +24,9 @@ struct MasonryLaunchParams {
     uint256 rangeSquareRecenterBps;
     uint256 rangeSquareCooldownSeconds;
     uint256 rangeSquareMaxTwapDeviationBps;
+    address daoWallet;
+    bool farmClaimToWallet;
+    uint256 farmWithdrawCooldownSeconds;
 }
 
 /// @notice Reads `config/masonry-launch.template.json` and scales whole-token
@@ -56,6 +59,9 @@ library MasonryLaunchConfig {
         p.rangeSquareRecenterBps = raw.readUint(".policy.rangeSquare.recenterBps");
         p.rangeSquareCooldownSeconds = raw.readUint(".policy.rangeSquare.cooldownSeconds");
         p.rangeSquareMaxTwapDeviationBps = raw.readUint(".policy.rangeSquare.maxTwapDeviationBps");
+        p.daoWallet = raw.readAddress(".daoWallet");
+        p.farmClaimToWallet = raw.readBool(".policy.farmClaimToWallet");
+        p.farmWithdrawCooldownSeconds = raw.readUint(".policy.farmWithdrawCooldownSeconds");
         validate(p);
     }
 
@@ -86,6 +92,10 @@ library MasonryLaunchConfig {
         }
         if (p.bondMaxSupplyWholeTokens == 0) revert InvalidLaunchConfig("bondMaxSupply");
         if (p.bondRedeemPremiumBps > 10_000) revert InvalidLaunchConfig("bondRedeemPremiumBps");
+        if (p.daoWallet == address(0)) revert InvalidLaunchConfig("daoWallet");
+        if (p.farmWithdrawCooldownSeconds < 60 || p.farmWithdrawCooldownSeconds > 1 days) {
+            revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");
+        }
         _validateRange(
             p.rangeLevelHalfWidthBps, p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
             p.rangeLevelMaxTwapDeviationBps, "rangeLevel"

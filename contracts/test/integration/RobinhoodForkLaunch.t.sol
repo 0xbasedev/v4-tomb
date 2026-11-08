@@ -39,6 +39,7 @@ import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
 import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
+import {DummyShareZapper} from "../utils/DummyShareZapper.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MasonryLaunchConfig, MasonryLaunchParams} from "../../script/MasonryLaunchConfig.sol";
 import {MasonryRangeManager, IMasonryRangeTwap} from "../../src/masonry/MasonryRangeManager.sol";
@@ -457,7 +458,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         LaunchShare share = new LaunchShare();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         runtime.chamber = new MasonryChamber(
-            IERC20(address(slp)), IERC20(address(level)), predicted, address(0xA11CE), address(0xA2B)
+            IERC20(address(slp)), IERC20(address(level)), predicted, cfg.daoWallet, address(0xA2B)
         );
         runtime.treasury = new MasonryTreasury(
             IMasonryMintableLevel(address(level)),
@@ -469,15 +470,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             address(this)
         );
         assertEq(address(runtime.treasury), predicted);
-        runtime.farm = new MasonryFarm(
-            IERC20(address(share)),
-            runtime.start,
-            cfg.farmEmissionDays * 1 days,
-            farmBudget,
-            address(this),
-            IERC20(address(slp)),
-            cfg.farmShareWethLpAllocPoints
-        );
+        runtime.farm = _makeFarm(share, slp, runtime.start, farmBudget, cfg, address(runtime.chamber));
         runtime.bond = new MasonryBond(
             IERC20(address(level)),
             runtime.treasury,
@@ -574,7 +567,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         assertEq(runtime.chamber.balanceOf(user), 0);
         assertEq(level.balanceOf(user), userLevel, "Exit Now is not a tax-free LEVEL exit");
         assertEq(level.balanceOf(address(0xA2B)), pending);
-        assertEq(runtime.chamber.stakeToken().balanceOf(address(0xA11CE)), staked - staked / 2);
+        assertEq(runtime.chamber.stakeToken().balanceOf(runtime.chamber.daoWallet()), staked - staked / 2);
     }
 
     function _exerciseRangeManagers(
@@ -732,5 +725,33 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         shareRm.rebalance();
         assertTrue(shareRm.tickLower() != oldLower);
         assertFalse(shareRm.shouldRebalance());
+    }
+
+    function _makeFarm(
+        LaunchShare share,
+        LaunchShareWethLp slp,
+        uint256 start,
+        uint256 budget,
+        MasonryLaunchParams memory cfg,
+        address masonry
+    ) private returns (MasonryFarm) {
+        return new MasonryFarm(
+            IERC20(address(share)),
+            start,
+            cfg.farmEmissionDays * 1 days,
+            budget,
+            address(this),
+            IERC20(address(slp)),
+            cfg.farmShareWethLpAllocPoints,
+            _farmPolicy(cfg.daoWallet, masonry)
+        );
+    }
+
+    function _farmPolicy(address daoWallet, address masonry) private returns (MasonryFarm.Policy memory policy) {
+        policy.claimToWallet = false;
+        policy.withdrawCooldown = 1800;
+        policy.daoWallet = daoWallet;
+        policy.masonry = masonry;
+        policy.zapper = address(new DummyShareZapper());
     }
 }

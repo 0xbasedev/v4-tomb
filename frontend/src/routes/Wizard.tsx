@@ -53,6 +53,8 @@ const POLICY_LABEL: Record<string, string> = {
   genesisLevelUsdcLpBurnFeeBps: "Genesis LP burn fee",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
   farmsCompoundCooldownSeconds: "Farm compound cooldown",
+  farmClaimToWallet: "Farm claim to wallet",
+  farmWithdrawCooldownSeconds: "Farm withdraw cooldown",
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",

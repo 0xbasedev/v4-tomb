@@ -28,7 +28,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     IERC20 public immutable stakeToken;
     IERC20 public immutable rewardToken;
     address public immutable treasury;
-    address public immutable protocolTreasury;
+    address public immutable daoWallet;
     address public immutable arbitrage;
 
     uint256 public totalSupply;
@@ -38,8 +38,10 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     mapping(address => uint256) public storedReward;
     mapping(address => uint256) public stakeUnlockAt;
     mapping(address => uint256) public claimUnlockAt;
+    address public farm;
 
     event Staked(address indexed user, uint256 amount);
+    event FarmBound(address indexed farm);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 amount);
     event SeigniorageAllocated(uint256 amount);
@@ -51,22 +53,23 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     error EmptyMasonry();
     error StakeLocked();
     error ClaimLocked();
+    error FarmAlreadyBound();
 
     constructor(
         IERC20 stakeToken_,
         IERC20 rewardToken_,
         address treasury_,
-        address protocolTreasury_,
+        address daoWallet_,
         address arbitrage_
     ) {
         if (
             address(stakeToken_) == address(0) || address(rewardToken_) == address(0) || treasury_ == address(0)
-                || protocolTreasury_ == address(0) || arbitrage_ == address(0)
+                || daoWallet_ == address(0) || arbitrage_ == address(0)
         ) revert ZeroAddress();
         stakeToken = stakeToken_;
         rewardToken = rewardToken_;
         treasury = treasury_;
-        protocolTreasury = protocolTreasury_;
+        daoWallet = daoWallet_;
         arbitrage = arbitrage_;
     }
 
@@ -87,17 +90,37 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         emit SeigniorageAllocated(amount);
     }
 
+    function bindFarm(address farm_) external {
+        if (msg.sender != treasury) revert Unauthorized();
+        if (farm_ == address(0)) revert ZeroAddress();
+        if (farm != address(0)) revert FarmAlreadyBound();
+        farm = farm_;
+        emit FarmBound(farm_);
+    }
+
     function stake(
         uint256 amount
     ) external nonReentrant {
+        _stakeFor(msg.sender, amount, true);
+    }
+
+    /// @notice Credits LP to `user` and starts Masonry aging (stake cooldown).
+    /// Only the bound farm / zap path may deposit on someone else's behalf.
+    function stakeFor(address user, uint256 amount) external nonReentrant {
+        if (msg.sender != farm) revert Unauthorized();
+        if (user == address(0)) revert ZeroAddress();
+        _stakeFor(user, amount, false);
+    }
+
+    function _stakeFor(address user, uint256 amount, bool pullFromUser) private {
         if (amount == 0) revert InvalidAmount();
-        _accrue(msg.sender);
-        stakeToken.safeTransferFrom(msg.sender, address(this), amount);
+        _accrue(user);
+        stakeToken.safeTransferFrom(pullFromUser ? user : msg.sender, address(this), amount);
         totalSupply += amount;
-        balanceOf[msg.sender] += amount;
-        rewardDebt[msg.sender] = balanceOf[msg.sender] * accRewardPerShare / 1e18;
-        stakeUnlockAt[msg.sender] = block.timestamp + STAKE_COOLDOWN;
-        emit Staked(msg.sender, amount);
+        balanceOf[user] += amount;
+        rewardDebt[user] = balanceOf[user] * accRewardPerShare / 1e18;
+        stakeUnlockAt[user] = block.timestamp + STAKE_COOLDOWN;
+        emit Staked(user, amount);
     }
 
     function withdraw(
@@ -138,7 +161,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         uint256 toUser = staked / 2;
         uint256 toTreasury = staked - toUser;
         if (toUser > 0) stakeToken.safeTransfer(msg.sender, toUser);
-        if (toTreasury > 0) stakeToken.safeTransfer(protocolTreasury, toTreasury);
+        if (toTreasury > 0) stakeToken.safeTransfer(daoWallet, toTreasury);
         if (rewards > 0) rewardToken.safeTransfer(arbitrage, rewards);
         emit ExitNow(msg.sender, toUser, toTreasury, rewards);
     }

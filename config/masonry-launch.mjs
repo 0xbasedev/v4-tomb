@@ -14,6 +14,17 @@ const obj = (x, path) => {
   return x;
 };
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
+const addressField = (value, path) => {
+  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)) {
+    throw new Error(`${path}: must be a 20-byte hex address`);
+  }
+  if (/^0x0{40}$/i.test(value)) throw new Error(`${path}: cannot be the zero address`);
+  return value;
+};
+const requiredText = (value, path) => {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${path}: must be non-empty text`);
+  return value;
+};
 const positiveRawAmount = (n, path) => {
   if (typeof n !== 'string' || !/^[1-9][0-9]*$/.test(n) || BigInt(n) > (1n << 256n) - 1n) {
     throw new Error(`${path}: expected a positive uint256 decimal string`);
@@ -139,6 +150,21 @@ export function validateMasonryLaunch(doc) {
 
   validateRangeKnobs(policy.rangeLevel, 'policy.rangeLevel');
   validateRangeKnobs(policy.rangeSquare, 'policy.rangeSquare');
+
+  addressField(d.daoWallet, 'daoWallet');
+  if (typeof policy.farmClaimToWallet !== 'boolean') {
+    throw new Error('policy.farmClaimToWallet: must be a boolean');
+  }
+  const farmWithdraw = nonnegative(policy.farmWithdrawCooldownSeconds, 'policy.farmWithdrawCooldownSeconds');
+  if (farmWithdraw < 60 || farmWithdraw > 86400) {
+    throw new Error('policy.farmWithdrawCooldownSeconds: must be 60–86400');
+  }
+  for (const key of [
+    'farmZapLabel', 'farmZapNotice', 'farmWithdrawTitle', 'farmCooldownNotice', 'farmForfeitNotice',
+    'farmCancelHint', 'farmCompoundLabel', 'farmCancelLabel', 'farmCompleteWithdrawLabel', 'farmFireTaxNote',
+  ]) {
+    requiredText(policy[key], `policy.${key}`);
+  }
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

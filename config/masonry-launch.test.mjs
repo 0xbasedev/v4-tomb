@@ -164,3 +164,18 @@ test('per-pool range knobs are required and bounded independently', () => {
     assert.throws(() => validateMasonryLaunch(cfg), pattern, `${pool}.${key}=${value}`);
   }
 });
+
+test('daoWallet rejects the zero address and missing farm copy', () => {
+  const zero = complete();
+  zero.daoWallet = '0x0000000000000000000000000000000000000000';
+  assert.throws(() => validateMasonryLaunch(zero), /zero address/);
+  const missing = complete();
+  missing.daoWallet = 'not-an-address';
+  assert.throws(() => validateMasonryLaunch(missing), /20-byte hex address/);
+  const noCopy = complete();
+  noCopy.policy.farmZapNotice = '';
+  assert.throws(() => validateMasonryLaunch(noCopy), /farmZapNotice/);
+  const cd = complete();
+  cd.policy.farmWithdrawCooldownSeconds = 10;
+  assert.throws(() => validateMasonryLaunch(cd), /60–86400/);
+});

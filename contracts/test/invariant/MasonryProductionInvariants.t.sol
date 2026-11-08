@@ -8,6 +8,7 @@ import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
 import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
+import {DummyShareZapper} from "../utils/DummyShareZapper.sol";
 import {MasonryRules} from "../../src/masonry/MasonryRules.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MockLevel, MockLp, MockTwap} from "../unit/MasonryTreasury.t.sol";
@@ -50,7 +51,20 @@ contract MasonryProductionInvariantsTest is BaseTest {
         share = new MockShare();
         shareLp = new MockShareWethLp();
         farm = new MasonryFarm(
-            IERC20(address(share)), startTime, FARM_DURATION, FARM_BUDGET, address(this), IERC20(address(shareLp)), 1000
+            IERC20(address(share)),
+            startTime,
+            FARM_DURATION,
+            FARM_BUDGET,
+            address(this),
+            IERC20(address(shareLp)),
+            1000,
+            MasonryFarm.Policy({
+                claimToWallet: false,
+                withdrawCooldown: 1800,
+                daoWallet: makeAddr("daoWallet"),
+                masonry: address(chamber),
+                zapper: address(new DummyShareZapper())
+            })
         );
         share.mint(address(this), FARM_BUDGET);
         share.approve(address(farm), FARM_BUDGET);
@@ -94,13 +108,16 @@ contract MasonryProductionInvariantsTest is BaseTest {
         farm.deposit(0, depositAmount);
         vm.warp(startTime + elapsed);
         uint256 pending = farm.pending(0, alice);
-        vm.prank(alice);
-        farm.harvest(0);
+        farm.update();
+        pending = farm.pending(0, alice);
         assertLe(farm.emitted(), farm.entitledTo(block.timestamp));
         assertLe(farm.claimed(), farm.emitted());
         assertLe(farm.claimed(), FARM_BUDGET);
         assertLe(pending, FARM_BUDGET);
-        assertEq(share.balanceOf(alice), farm.claimed());
+        assertEq(share.balanceOf(alice), 0, "farm X Share never pays the wallet");
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
+        farm.harvest(0);
     }
 
     function testFuzz_BondDebtRespectsCaps(
