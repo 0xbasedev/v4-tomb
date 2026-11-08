@@ -65,8 +65,10 @@ contract MasonryShareWethZapper is ReentrancyGuard {
         maxTwapDeviationBps = maxTwapDeviationBps_;
     }
 
+    /// @dev Launch passes the planned CREATE3 farm address to the constructor; this late bind
+    ///      is DAO-wallet-only so a stranger can't claim the zapper first.
     function bindFarm(address farm_) external {
-        if (farm != address(0) || farm_ == address(0)) revert Unauthorized();
+        if (msg.sender != daoWallet || farm != address(0) || farm_ == address(0)) revert Unauthorized();
         farm = farm_;
     }
 

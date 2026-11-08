@@ -158,6 +158,10 @@ contract MasonryShareWethZapperTest is BaseTest {
                 withdrawFeeBps: 200
             })
         );
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(MasonryShareWethZapper.Unauthorized.selector);
+        zapper.bindFarm(address(farm));
+        vm.prank(daoWallet);
         zapper.bindFarm(address(farm));
         chamber.bindFarm(address(farm));
         share.mint(address(this), BUDGET + 2_000_000 ether);
