@@ -7,7 +7,7 @@ import { Modal } from "@/components/Modal";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { PendingBadge, PendingPanel, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
-import { masonryFarmAbi } from "@/lib/abis/masonry";
+import { masonryChamberAbi, masonryFarmAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
 import { DAO_WALLET, FARM_POLICY, FIRE, pct, SQUARE_SUPPLY } from "@/lib/launch";
 import { withdrawFee } from "@/lib/fireTax";
@@ -15,8 +15,8 @@ import { useReveal } from "@/lib/motion/useReveal";
 
 /**
  * Farm — after Genesis, xSHARE emissions for official LP. For first launch,
- * pending xSHARE cannot be claimed to the wallet; the only outlet is a zap
- * that stakes X Share/WETH LP into Masonry.
+ * pending xSHARE cannot be claimed to the wallet; the only outlet is
+ * Send to Masonry, which stakes X Share/WETH LP into Masonry.
  *
  * Compound is restyled (not blocked) from each pool's on-chain lastCompoundAt.
  * The 3-hour window is policy.farmsCompoundCooldownSeconds (10800).
@@ -90,7 +90,7 @@ function CompoundControl({
       })
     : "";
   const title = ready
-    ? "Compound is ready"
+    ? "Send to Masonry is ready"
     : `Green returns at ${returnAt} America/New_York (${formatWindowLeft(left)})`;
   return (
     <div className="flex flex-col items-start gap-1">
@@ -135,7 +135,7 @@ export function Farm() {
         eyebrow="Farm · xSHARE emissions · pending"
         token="xSHARE"
         title={<span className="spectre-text">Farm</span>}
-        lede={`After Genesis, official LP earns xSHARE: ${SQUARE_SUPPLY.farming.toLocaleString()} xSHARE over ${FARM_POLICY.emissionDays} days (≈${perDay.toFixed(1)} a day). Pending xSHARE is zapped into Masonry rather than claimed to your wallet.`}
+        lede={`After Genesis, official LP earns xSHARE: ${SQUARE_SUPPLY.farming.toLocaleString()} xSHARE over ${FARM_POLICY.emissionDays} days (≈${perDay.toFixed(1)} a day). Pending xSHARE must be sent to Masonry rather than claimed to your wallet.`}
         aside={
           <div className="panel p-5">
             <div className="mb-2 flex items-center justify-between">
@@ -252,8 +252,25 @@ function WithdrawCooldownModal({
   onCompound: () => void;
   onClose: () => void;
 }) {
+  const p = useProtocol();
+  const farm = p.net.deployment?.contracts?.farm as Address | undefined;
+  const chamber = p.net.deployment?.contracts?.chamber as Address | undefined;
+  const farmFee = useReadContract({
+    address: farm,
+    abi: masonryFarmAbi,
+    functionName: "withdrawFeeBps",
+    query: { enabled: Boolean(farm) },
+  });
+  const masonryFee = useReadContract({
+    address: chamber,
+    abi: masonryChamberAbi,
+    functionName: "withdrawFeeBps",
+    query: { enabled: Boolean(chamber) },
+  });
   const quoted = withdrawFee({ twap: 1, raisedBps: FIRE.baselineBps, raisedAt: 0, now: 0 });
-  const liveWithdrawFeeBps = quoted.rateBps ?? FIRE.baselineBps;
+  const fallbackBps = quoted.rateBps ?? FIRE.baselineBps;
+  const liveWithdrawFeeBps = farmFee.data !== undefined ? Number(farmFee.data) : fallbackBps;
+  const masonryWithdrawFeeBps = masonryFee.data !== undefined ? Number(masonryFee.data) : fallbackBps;
   const total = FARM_POLICY.withdrawCooldownSeconds;
   const [left, setLeft] = useState(total);
   const [rewards, setRewards] = useState(1.25);
@@ -286,7 +303,8 @@ function WithdrawCooldownModal({
           <p className="mt-2 text-[12.5px] text-ash">{FARM_POLICY.cancelHint}</p>
           <p className="mt-1 text-[11px] text-ash">DAO wallet · {DAO_WALLET}</p>
           <p className="mt-2 text-[13px] text-bone" data-testid="withdraw-fee">
-            Withdrawal fee: {pct(liveWithdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
+            Farm withdrawal fee: {pct(liveWithdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
+            Masonry ordinary withdrawals use the same live Fire Tax ({pct(masonryWithdrawFeeBps)}).
             This is the live Fire Tax on the official X Tomb TWAP ({pct(FIRE.baselineBps)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Not a swap tax.
           </p>
         </div>

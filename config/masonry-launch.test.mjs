@@ -178,6 +178,9 @@ test('daoWallet rejects the zero address and missing farm copy', () => {
   const cd = complete();
   cd.policy.farmWithdrawCooldownSeconds = 10;
   assert.throws(() => validateMasonryLaunch(cd), /60–86400/);
+  const claim = complete();
+  claim.policy.farmClaimToWallet = true;
+  assert.throws(() => validateMasonryLaunch(claim), /farmClaimToWallet/);
 });
 
 test('share sell tax is required and capped at 1200 bps', () => {

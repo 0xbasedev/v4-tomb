@@ -169,6 +169,9 @@ export function validateMasonryLaunch(doc) {
   if (typeof policy.farmClaimToWallet !== 'boolean') {
     throw new Error('policy.farmClaimToWallet: must be a boolean');
   }
+  if (policy.farmClaimToWallet !== false) {
+    throw new Error('policy.farmClaimToWallet: farm-earned X Share cannot be claimed to a wallet');
+  }
   const farmWithdraw = nonnegative(policy.farmWithdrawCooldownSeconds, 'policy.farmWithdrawCooldownSeconds');
   if (farmWithdraw < 60 || farmWithdraw > 86400) {
     throw new Error('policy.farmWithdrawCooldownSeconds: must be 60–86400');
