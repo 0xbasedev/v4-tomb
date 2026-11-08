@@ -861,4 +861,61 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             abi.encode("untrusted router data")
         );
     }
+
+    /// Measured deduction breakdown on the official xTOMB/USDG pool (fee 3000, tax ceiling untouched).
+    /// Spot is moved to the target with a price-limited sell, TWAP is set to match, then a
+    /// 10 xTOMB sell is measured: Fire Tax = treasury delta; LP fee = feeGrowthGlobal delta * L;
+    /// total = 1 - (USDG out / no-deduction spot value), all in bps of input.
+    function testMeasuredSellDeductionsAtPegNinetyAndSeventy() public {
+        vm.warp(schedule.end() + 1);
+        uint256[3] memory targets = [uint256(1e18), 0.9e18, 0.7e18];
+        for (uint256 i; i < 3; ++i) {
+            uint256 snap = vm.snapshotState();
+            _measure(targets[i]);
+            vm.revertToState(snap);
+        }
+    }
+
+    struct M { uint256 spot; uint256 liq; uint256 fg; uint256 tax; uint256 out; uint256 lpFee; }
+
+    function _measure(uint256 target) private {
+        IPoolManager manager = hook.poolManager();
+        if (target < 1e18) {
+            for (uint256 n; n < 2000; ++n) {
+                (uint160 sp,,,) = manager.getSlot0(key.toId());
+                if (MasonryLevelPrice.fromSqrtPrice(sp, level0) <= target) break;
+                _swap(level0, -20e18);
+            }
+        }
+        twap = target;
+        M memory m;
+        (uint160 sqrtP,,,) = manager.getSlot0(key.toId());
+        m.spot = MasonryLevelPrice.fromSqrtPrice(sqrtP, level0);
+        m.liq = manager.getLiquidity(key.toId());
+        m.fg = _fg(manager);
+        m.tax = level.balanceOf(TREASURY);
+        m.out = usdc.balanceOf(address(this));
+        _swap(level0, -int256(10e18));
+        m.tax = level.balanceOf(TREASURY) - m.tax;
+        m.out = usdc.balanceOf(address(this)) - m.out;
+        m.lpFee = (_fg(manager) - m.fg) * m.liq / (1 << 128);
+        uint256 ideal = 10e18 * m.spot / 1e18 / 1e12;
+        uint256 totalBps = (ideal - m.out) * 10_000 / ideal;
+        emit log_named_uint("target price (1e18)", target);
+        emit log_named_uint("  spot before (1e18)", m.spot);
+        emit log_named_uint("  fire tax bps of input", m.tax * 1000 / 1e18);
+        emit log_named_uint("  LP fee bps of input", m.lpFee * 1000 / 1e18);
+        emit log_named_uint("  total deduction bps (vs pre-trade spot)", totalBps);
+    }
+
+    function _fg(IPoolManager manager) private view returns (uint256) {
+        (uint256 a, uint256 b) = manager.getFeeGrowthGlobals(key.toId());
+        return level0 ? a : b;
+    }
+
+    function _sqrt(uint256 x) private pure returns (uint256 y) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2; y = x;
+        while (z < y) { y = z; z = (x / z + z) / 2; }
+    }
 }
