@@ -11,7 +11,6 @@ import { masonryFarmAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
 import { DAO_WALLET, FARM_POLICY, pct, SQUARE_SUPPLY } from "@/lib/launch";
 import { useReveal } from "@/lib/motion/useReveal";
-import type { TokenId } from "@/lib/tokens";
 
 /**
  * Farm — after Genesis, xSHARE emissions for official LP. For first launch,
