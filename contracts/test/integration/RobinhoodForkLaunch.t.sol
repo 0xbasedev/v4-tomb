@@ -458,9 +458,10 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         runtime.start = block.timestamp + 1 hours;
         LaunchShareWethLp slp = new LaunchShareWethLp();
         LaunchShare share = new LaunchShare();
+        MockFireTax taxOracle = new MockFireTax();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         runtime.chamber = new MasonryChamber(
-            IERC20(address(slp)), IERC20(address(level)), predicted, cfg.daoWallet, address(0xA2B)
+            IERC20(address(slp)), IERC20(address(level)), predicted, cfg.daoWallet, address(0xA2B), taxOracle
         );
         runtime.treasury = new MasonryTreasury(
             IMasonryMintableLevel(address(level)),
@@ -529,7 +530,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         address user
     ) internal {
         vm.warp(runtime.start + 2 days);
-        // Jesse's policy: farm X Share can't go to a wallet (farmClaimToWallet=false); only Zap into Masonry.
+        // Jesse's policy: farm X Share can't go to a wallet (farmClaimToWallet=false); only Send to Masonry.
         vm.prank(user);
         vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
         runtime.farm.harvest(0);

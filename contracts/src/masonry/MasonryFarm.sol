@@ -104,7 +104,9 @@ contract MasonryFarm is ReentrancyGuard {
         }
         if (policy.daoWallet == address(0)) revert ZeroAddress();
         if (policy.withdrawCooldown < 60 || policy.withdrawCooldown > 1 days) revert InvalidConfiguration();
-        if (!policy.claimToWallet && (policy.masonry == address(0) || policy.zapper == address(0))) {
+        // Farm-earned X Share is never claimable to a wallet.
+        if (policy.claimToWallet) revert InvalidConfiguration();
+        if (policy.masonry == address(0) || policy.zapper == address(0)) {
             revert InvalidConfiguration();
         }
         share = share_;
@@ -112,7 +114,7 @@ contract MasonryFarm is ReentrancyGuard {
         duration = duration_;
         rewardBudget = rewardBudget_;
         admin = admin_;
-        claimToWallet = policy.claimToWallet;
+        claimToWallet = false;
         withdrawCooldown = policy.withdrawCooldown;
         daoWallet = policy.daoWallet;
         masonry = policy.masonry;
@@ -263,15 +265,15 @@ contract MasonryFarm is ReentrancyGuard {
         lastCompoundAt[pid][msg.sender] = block.timestamp;
     }
 
-    function harvest(uint256 pid) external nonReentrant {
-        if (!claimToWallet) revert ClaimToWalletDisabled();
-        if (pid >= pools.length) revert UnknownPool();
-        _updateAll();
-        uint256 amount = _takeRewards(pid, msg.sender);
-        if (amount == 0) return;
-        claimed += amount;
-        share.safeTransfer(msg.sender, amount);
-        emit Harvested(msg.sender, pid, amount);
+    /// @notice Farm-earned X Share cannot be paid to a wallet. Use sendToMasonry.
+    function harvest(uint256) external pure {
+        revert ClaimToWalletDisabled();
+    }
+
+    /// @notice Zap pending X Share into X Share/WETH LP and stake it in Masonry
+    /// for the caller, resetting that user's Masonry clocks.
+    function sendToMasonry(uint256 pid, uint256 minWethOut, uint256 minLpOut) external nonReentrant {
+        _zap(pid, msg.sender, minWethOut, minLpOut);
     }
 
     function zapIntoMasonry(uint256 pid, uint256 minWethOut, uint256 minLpOut) external nonReentrant {

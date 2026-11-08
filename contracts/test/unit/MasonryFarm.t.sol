@@ -91,7 +91,7 @@ contract MasonryFarmTest is BaseTest {
         fireTax = new MockFireTax();
         MintableZapperLp masonryLp = new MintableZapperLp();
         chamber = new MasonryChamber(
-            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage")
+            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage"), fireTax
         );
         zapper = new MockFarmZapper(IERC20(address(share)), masonryLp);
         farm = new MasonryFarm(
@@ -347,5 +347,122 @@ contract MasonryFarmTest is BaseTest {
         farm.compound(1, 0, 0);
         assertEq(farm.lastCompoundAt(0, alice), first);
         assertEq(farm.lastCompoundAt(1, alice), block.timestamp);
+    }
+
+    function test_ClaimToWalletCannotBeEnabled() public {
+        vm.expectRevert(MasonryFarm.InvalidConfiguration.selector);
+        new MasonryFarm(
+            IERC20(address(share)),
+            startTime,
+            DURATION,
+            BUDGET,
+            address(this),
+            IERC20(address(lp)),
+            1000,
+            MasonryFarm.Policy({
+                claimToWallet: true,
+                withdrawCooldown: 1800,
+                daoWallet: daoWallet,
+                masonry: address(chamber),
+                zapper: address(zapper),
+                fireTax: fireTax
+            })
+        );
+    }
+
+    function test_SendToMasonryResetsOwnClocksOnlyAndNeverPaysWallet() public {
+        MintableZapperLp masonryLp = MintableZapperLp(address(chamber.stakeToken()));
+        masonryLp.mint(bob, 50 ether);
+        vm.startPrank(bob);
+        masonryLp.approve(address(chamber), type(uint256).max);
+        chamber.stake(50 ether);
+        vm.stopPrank();
+        uint256 bobStake = chamber.stakeUnlockAt(bob);
+        uint256 bobClaim = chamber.claimUnlockAt(bob);
+
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.warp(startTime + 7 days);
+        uint256 pending = farm.pending(0, alice);
+        assertGt(pending, 10);
+        uint256 beforeShare = share.balanceOf(alice);
+        vm.prank(alice);
+        farm.sendToMasonry(0, 0, 0);
+        assertEq(share.balanceOf(alice), beforeShare, "no X Share to wallet");
+        // MockFarmZapper returns dust=1 when shareAmount > 10.
+        assertEq(farm.pending(0, alice), 1);
+        assertEq(chamber.balanceOf(alice), pending - 1);
+        assertEq(chamber.stakeUnlockAt(alice), block.timestamp + 6 hours);
+        assertEq(chamber.claimUnlockAt(alice), block.timestamp + 6 hours);
+        assertEq(chamber.stakeUnlockAt(bob), bobStake, "must not grief other users");
+        assertEq(chamber.claimUnlockAt(bob), bobClaim);
+        vm.prank(alice);
+        vm.expectRevert(MasonryChamber.StakeLocked.selector);
+        chamber.withdraw(1);
+        vm.prank(alice);
+        vm.expectRevert(MasonryChamber.ClaimLocked.selector);
+        chamber.claim();
+    }
+
+    function testFuzz_NoFarmPathPaysShareToWallet(uint8 action, uint256 elapsedRaw, uint256 amountRaw) public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        uint256 elapsed = bound(elapsedRaw, 1, DURATION);
+        vm.warp(startTime + elapsed);
+        farm.update();
+        uint256 pick = action % 8;
+        if (pick == 0) {
+            vm.prank(alice);
+            vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
+            farm.harvest(0);
+        } else if (pick == 1) {
+            uint256 pending = farm.pending(0, alice);
+            vm.prank(alice);
+            if (pending < 2) {
+                vm.expectRevert(MasonryFarm.InvalidAmount.selector);
+            }
+            farm.sendToMasonry(0, 0, 0);
+        } else if (pick == 2) {
+            uint256 pending = farm.pending(0, alice);
+            vm.prank(alice);
+            if (pending < 2) {
+                vm.expectRevert(MasonryFarm.InvalidAmount.selector);
+            }
+            farm.compound(0, 0, 0);
+        } else if (pick == 3) {
+            uint256 amt = bound(amountRaw, 1, 100 ether);
+            vm.prank(alice);
+            farm.requestWithdraw(0, amt);
+        } else if (pick == 4) {
+            uint256 amt = bound(amountRaw, 1, farm.userStake(0, alice));
+            if (amt == 0) amt = 1;
+            vm.prank(alice);
+            farm.requestWithdraw(0, amt);
+            vm.warp(block.timestamp + 1800);
+            vm.prank(alice);
+            farm.completeWithdraw(0);
+        } else if (pick == 5) {
+            uint256 amt = bound(amountRaw, 1, farm.userStake(0, alice));
+            if (amt == 0) amt = 1;
+            vm.prank(alice);
+            farm.requestWithdraw(0, amt);
+            vm.prank(alice);
+            farm.cancelWithdraw(0);
+        } else if (pick == 6) {
+            vm.prank(alice);
+            vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
+            farm.harvest(0);
+            vm.prank(alice);
+            try farm.zapIntoMasonry(0, 0, 0) {} catch {}
+        } else {
+            vm.prank(stranger);
+            vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
+            farm.harvest(0);
+        }
+        assertEq(share.balanceOf(alice), 0, "no path pays X Share to the user wallet");
+        assertEq(share.balanceOf(stranger), 0);
+        assertEq(share.balanceOf(bob), 0);
     }
 }

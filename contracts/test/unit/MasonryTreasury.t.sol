@@ -10,6 +10,7 @@ import {IMasonryValidatedLevelTwap} from "../../src/masonry/MasonryCriticalDefen
 import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
 import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
+import {MockFireTax} from "../utils/MockFireTax.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 
 contract MockLevel is ERC20Burnable {
@@ -69,9 +70,10 @@ contract MasonryTreasuryTest is BaseTest {
         level = new MockLevel();
         lp = new MockLp();
         oracle = new MockTwap();
+        MockFireTax taxOracle = new MockFireTax();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         chamber = new MasonryChamber(
-            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage"), taxOracle
         );
         treasury = new MasonryTreasury(
             IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
@@ -154,9 +156,10 @@ contract MasonryTreasuryTest is BaseTest {
     }
 
     function test_RequestedRateCap() public {
+        MockFireTax taxOracle = new MockFireTax();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         MasonryChamber next = new MasonryChamber(
-            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage"), taxOracle
         );
         vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
         new MasonryTreasury(
@@ -165,9 +168,10 @@ contract MasonryTreasuryTest is BaseTest {
     }
 
     function test_OracleAgeCap() public {
+        MockFireTax taxOracle = new MockFireTax();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         MasonryChamber next = new MasonryChamber(
-            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage"), taxOracle
         );
         vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
         new MasonryTreasury(

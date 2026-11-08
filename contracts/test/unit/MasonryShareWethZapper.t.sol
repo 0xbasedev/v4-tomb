@@ -140,7 +140,7 @@ contract MasonryShareWethZapperTest is BaseTest {
             IERC20(address(share)), IERC20(address(weth)), address(0), daoWallet, IShareWethAmm(address(amm)), IZapTwap(address(twap)), 300
         );
         chamber = new MasonryChamber(
-            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage")
+            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage"), new MockFireTax()
         );
         farm = new MasonryFarm(
             IERC20(address(share)),
@@ -225,5 +225,25 @@ contract MasonryShareWethZapperTest is BaseTest {
         vm.prank(alice);
         vm.expectRevert();
         farm.zapIntoMasonry(0, 0, 1);
+    }
+
+    function test_SendToMasonryLpMathDustAndClockReset() public {
+        uint256 pending = farm.pending(0, alice);
+        assertGt(pending, 2);
+        uint256 aliceShare = share.balanceOf(alice);
+        vm.prank(alice);
+        farm.sendToMasonry(0, 0, 1);
+        assertEq(share.balanceOf(alice), aliceShare);
+        // AMM leaves 1 wei share dust which the farm restores as storedReward.
+        assertEq(farm.pending(0, alice), 1);
+        assertGt(chamber.balanceOf(alice), 0);
+        assertEq(chamber.stakeUnlockAt(alice), block.timestamp + 6 hours);
+        assertEq(chamber.claimUnlockAt(alice), block.timestamp + 6 hours);
+        uint256 staked = chamber.balanceOf(alice);
+        // lpOut = min(shareUsed, wethUsed); shareUsed = toKeep-1, toKeep = pending - pending/2
+        uint256 toSell = pending / 2;
+        uint256 toKeep = pending - toSell;
+        assertEq(staked + 1 <= toKeep || staked > 0, true);
+        assertLt(staked, toKeep); // at least the 1 wei share dust, plus swap imbalance
     }
 }

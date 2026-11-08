@@ -6,19 +6,21 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {IMasonrySeigniorageSink} from "./IMasonryRuntime.sol";
+import {IMasonryFireTax} from "./IMasonryFireTax.sol";
 
 /// @notice Masonry stake room: holders of the configured stake token
 /// (product: X Share/WETH LP) earn expansion X Tomb.
 ///
-/// Locks (from the 2026-11-07 handoff): a 6-hour global manual-deposit
-/// resettable stake cooldown and an independent 6-hour claim cooldown.
-/// Auto-compound, if added later, MUST NOT reset the manual stake lock.
+/// Locks: a 6-hour stake cooldown and a 6-hour claim cooldown. Every
+/// deposit — including farm "Send to Masonry" via stakeFor — resets both
+/// clocks for that user only, as if it were a fresh deposit.
 ///
 /// Exit Now bypasses both locks: 50% of the user's staked LP returns to
 /// them, 50% is sent to the protocol treasury, and 100% of pending X Tomb
-/// is forfeited to Arbitrage. Ordinary eligible withdrawals (after the
-/// stake cooldown) still return 100% of remaining LP; this path does not
-/// redeem LP or sell X Tomb, so it cannot be used as a tax-free Fire Tax exit.
+/// is forfeited to Arbitrage. Exit Now does not also charge the Fire Tax
+/// withdraw fee (the 50% split is the exit penalty). Ordinary eligible
+/// withdrawals charge the live Fire Tax rate on withdrawn LP to daoWallet.
+/// This path does not redeem LP or sell X Tomb.
 contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -30,6 +32,8 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     address public immutable treasury;
     address public immutable daoWallet;
     address public immutable arbitrage;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_200;
+    IMasonryFireTax public immutable fireTax;
 
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
@@ -46,6 +50,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     event RewardPaid(address indexed user, uint256 amount);
     event SeigniorageAllocated(uint256 amount);
     event ExitNow(address indexed user, uint256 lpToUser, uint256 lpToTreasury, uint256 rewardsToArbitrage);
+    event WithdrawFeePaid(address indexed user, uint256 fee, address indexed daoWallet);
 
     error ZeroAddress();
     error InvalidAmount();
@@ -54,23 +59,38 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     error StakeLocked();
     error ClaimLocked();
     error FarmAlreadyBound();
+    error InvalidConfiguration();
 
     constructor(
         IERC20 stakeToken_,
         IERC20 rewardToken_,
         address treasury_,
         address daoWallet_,
-        address arbitrage_
+        address arbitrage_,
+        IMasonryFireTax fireTax_
     ) {
         if (
             address(stakeToken_) == address(0) || address(rewardToken_) == address(0) || treasury_ == address(0)
-                || daoWallet_ == address(0) || arbitrage_ == address(0)
+                || daoWallet_ == address(0) || arbitrage_ == address(0) || address(fireTax_) == address(0)
         ) revert ZeroAddress();
         stakeToken = stakeToken_;
         rewardToken = rewardToken_;
         treasury = treasury_;
         daoWallet = daoWallet_;
         arbitrage = arbitrage_;
+        fireTax = fireTax_;
+    }
+
+    /// @notice Live Fire Tax rate (TWAP + recovery), hard-capped at 12%.
+    function withdrawFeeBps() public view returns (uint16) {
+        uint16 bps = fireTax.currentWithdrawFeeBps();
+        if (bps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
+        return bps;
+    }
+
+    function _chargeWithdrawFeeBps() internal returns (uint16) {
+        fireTax.syncWithdrawFeeBps();
+        return withdrawFeeBps();
     }
 
     function pending(
@@ -104,8 +124,9 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         _stakeFor(msg.sender, amount, true);
     }
 
-    /// @notice Credits LP to `user` and starts Masonry aging (stake cooldown).
-    /// Only the bound farm / zap path may deposit on someone else's behalf.
+    /// @notice Credits LP to `user` and restarts Masonry aging (stake and claim
+    /// cooldowns) for `user` only. Only the bound farm / Send-to-Masonry path
+    /// may deposit on someone else's behalf.
     function stakeFor(address user, uint256 amount) external nonReentrant {
         if (msg.sender != farm) revert Unauthorized();
         if (user == address(0)) revert ZeroAddress();
@@ -120,6 +141,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         balanceOf[user] += amount;
         rewardDebt[user] = balanceOf[user] * accRewardPerShare / 1e18;
         stakeUnlockAt[user] = block.timestamp + STAKE_COOLDOWN;
+        claimUnlockAt[user] = block.timestamp + CLAIM_COOLDOWN;
         emit Staked(user, amount);
     }
 
@@ -132,7 +154,13 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         totalSupply -= amount;
         balanceOf[msg.sender] -= amount;
         rewardDebt[msg.sender] = balanceOf[msg.sender] * accRewardPerShare / 1e18;
-        stakeToken.safeTransfer(msg.sender, amount);
+        uint256 fee = amount * uint256(_chargeWithdrawFeeBps()) / 10_000;
+        uint256 net = amount - fee;
+        if (fee != 0) {
+            stakeToken.safeTransfer(daoWallet, fee);
+            emit WithdrawFeePaid(msg.sender, fee, daoWallet);
+        }
+        if (net != 0) stakeToken.safeTransfer(msg.sender, net);
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -148,6 +176,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     }
 
     /// @notice Instant lock bypass. Does not redeem LP or sell X Tomb.
+    /// Does not charge the ordinary Fire Tax withdraw fee.
     function exitNow() external nonReentrant {
         _accrue(msg.sender);
         uint256 staked = balanceOf[msg.sender];

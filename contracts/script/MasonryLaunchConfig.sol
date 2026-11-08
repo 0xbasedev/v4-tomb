@@ -108,6 +108,7 @@ library MasonryLaunchConfig {
         if (p.farmWithdrawCooldownSeconds < 60 || p.farmWithdrawCooldownSeconds > 1 days) {
             revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");
         }
+        if (p.farmClaimToWallet) revert InvalidLaunchConfig("farmClaimToWallet");
         if (p.shareSellTaxBps == 0 || p.shareSellTaxBps > 1200) revert InvalidLaunchConfig("shareSellTaxBps");
         if (p.rangeLevelPegAnchor) {
             _validateRange(
