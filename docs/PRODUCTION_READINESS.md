@@ -42,44 +42,68 @@ forge test --match-contract RobinhoodForkLaunch --fork-url http://127.0.0.1:8545
 
 The test also accepts the public RPC directly via `vm.createSelectFork`. It mines the LEVEL hook, seeds the official pool from anvil/`deal` balances, buys an Ultra pass with real USDG, deposits into Genesis, warms the native TWAP, sells through the hook, ticks Critical Defense / the expansion gate, then launches MasonryTreasury + MasonryChamber + MasonryFarm + MasonryBond and exercises expansion, farm harvest and a below-peg buy / above-peg redeem.
 
-## Modern Masonry runtime (7 November 2026, America/New_York)
+## Modern Masonry runtime (8 November 2026, America/New_York)
 
-| Piece | What it does | Key lines |
+Configurable tokenomics live in `config/masonry-launch.template.json` and are
+checked by `validateMasonryLaunch` and the Solidity constructors /
+`MasonryLaunchConfig.load`. Whole-token amounts (`square.farming`,
+`policy.bondMaxSupply`) are scaled by on-chain decimals in the dry-run.
+The launch dry-run and `RobinhoodForkLaunch` read that file.
+
+| Knob | Default | Bounds |
 | --- | --- | --- |
-| MasonryTreasury | Peg-token (USDG) TWAP expansion. Fresh validated TWAP strictly above 1.01; 30-minute freshness; fast-forward `epoch` so missed periods are not minted; skip when MasonryChamber `totalSupply() == 0`. Rate is a constructor PLACEHOLDER capped by `HARD_MAX_EXPANSION_BPS` (200). | `MasonryTreasury.sol:19-23`, `:29-31`, `:95-121` |
-| MasonryChamber | Stake room for the configured X Share/WETH LP. Receives minted X Tomb. | `MasonryChamber.sol:53-61`, `:64-73` |
-| MasonryFarm | Linear X Share emissions. First pool is X Share/WETH LP. Budget/duration PLACEHOLDERS from `square.farming` (25,641 whole tokens) and `policy.farmEmissionDays` (365). Empty periods do not catch up later stakers. | `MasonryFarm.sol:51-72`, `:78-84`, `:202-228` |
-| MasonryBond | Buy below peg by burning X Tomb; redeem above peg 1:1 (PLACEHOLDER, no premium). Discount extra capped at `maxDiscountBps` ≤ 10_000 (2×). Debt cap `totalSupply <= circulating * maxDebtRatioBps / 10_000`. Absolute `maxBondSupply`. | `MasonryBond.sol:17-21`, `:82-118` |
+| `policy.maximumExpansionPerEpochBps` | 200 | 1–200 (2% hard cap) |
+| `square.farming` | 25,641 whole X Share | > 0; must reconcile with SQUARE cap |
+| `policy.farmEmissionDays` | 365 | 1–3650 |
+| `policy.farmShareWethLpAllocPoints` | 1000 | ≥ 1 |
+| `policy.bondMaxDiscountBps` | 10000 | 0–10000 (2×) |
+| `policy.bondMaxDebtRatioBps` | 3500 | 1–10000 |
+| `policy.bondMaxSupply` | 1,000,000 whole xBOND | ≥ 1 |
+| `policy.bondRedeemPremiumBps` | 0 | 0–10000 |
+| `policy.criticalOracleMaxAgeSeconds` | 1800 | 1–1800 |
+| `policy.fireTaxBaselineBps` | 300 | ≥ 300 (3% floor) and ≤ hard cap |
+| `policy.fireTaxHardCapBps` | 1200 | ≥ baseline and ≤ 1200 (12% max) |
+| `policy.fullTaxAtOrBelowPegBps` | 9000 | fixed (12% at 10% below peg) |
 
-PLACEHOLDER values used in tests and the fork dry-run (not approved tokenomics):
+### Exit Now (handoff 2026-11-07)
 
-- `requestedRateBps = 200` (`policy.maximumExpansionPerEpochBps`)
-- Farm budget `25_641 ether`, duration `365 days`
-- Bond `maxDiscountBps = 10_000`, `maxDebtRatioBps = 3_500`, `maxBondSupply = 1_000_000 ether`
-- Redemption price 1:1
+`MasonryChamber.exitNow` (`MasonryChamber.sol`): bypasses the 6-hour
+manual-deposit stake lock and the independent 6-hour claim lock. Returns
+50% of that user's staked X Share/WETH LP, sends the other 50% to the
+protocol treasury, and forfeits 100% of pending X Tomb to Arbitrage.
+Ordinary withdraw after the stake cooldown still returns 100% of remaining
+LP and does not pay LEVEL. Exit Now does not redeem LP or transfer X Tomb
+to the user, so it is not a tax-free Fire Tax exit.
 
-Frontend: `treasury` / new keys `chamber`, `farm`, `xBond` in `config/masonry-deployment.mjs`; ABIs `masonryTreasuryAbi`, `masonryFarmAbi`, `masonryBondAbi`, `masonryChamberAbi`. Bond Office and Docs describe MasonryBond but keep actions disabled until a verified address exists.
+### Wrong-chain UI
 
-## Validation (7 November 2026, America/New_York)
+`ChainGate` no longer replaces the page. Off Robinhood (or a wallet on
+another chain) the current page stays visible in read-only mode under a
+banner: “Coming soon on {chain}” plus “Switch back to Robinhood Chain”.
+Writes stay disabled until the user is on live Robinhood with a verified
+deployment. On Robinhood without a deployment the pages also stay visible
+under a “Not launched yet” banner.
 
-- Foundry: **442 passed, 0 failed, 7 skipped** (network-gated Base fork tests without `BASE_RPC_URL`). Includes the Robinhood dry-run (`test_DryRunMasonryLaunchAgainstRobinhoodInfra` passed against live chain 4663) and:
-  - `MasonryTreasury.t.sol` (6)
+## Validation (8 November 2026, America/New_York)
+
+- Foundry: **448 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
+  - `MasonryTreasury.t.sol` (7)
   - `MasonryFarm.t.sol` (4)
-  - `MasonryBond.t.sol` (6)
-  - `MasonryProductionInvariants.t.sol` fuzz: no mint at/below peg, emissions ≤ schedule, bond debt ≤ cap, tax ≤ 12% (4 tests × 256 runs)
-- Config: `node --test config/*.test.mjs` — **58 passed**.
-- Frontend: `pnpm typecheck` and `pnpm build` passed (existing Vite chunk-size warning). Playwright: **77 passed**.
+  - `MasonryBond.t.sol` (7)
+  - `MasonryChamber.t.sol` (4, including Exit Now / no LEVEL paid to the user)
+  - `MasonryProductionInvariants.t.sol` fuzz (4 × 256)
+- Config: `node --test config/*.test.mjs` — **60 passed**, including out-of-bounds tokenomics rejects.
+- Frontend: `pnpm typecheck` and `pnpm build` passed (existing Vite chunk-size warning). Playwright: **77 passed**. Screenshots refreshed in `/workspace/v4-assess/shots/`.
 
 No private keys, no broadcast, no push, no live launch.
 
 ## Remaining blockers only Jesse can resolve
 
-1. **Independent security audit** of the Masonry hooks, oracle, vaults, Genesis stack and the patched Treasury gates.
-2. **Real launch keys and operator/scheduler signers**, plus a rehearsed key ceremony. This branch must not ship with an implicit first-caller operator.
-3. **Verified on-chain addresses** written into `config/masonry-deployments.json` after a reviewed launch. Until then the UI stays on "Not launched yet".
-4. **Official USDG vs USDC decision is settled for Robinhood (USDG)** but other chains still need their own official 6-decimal reference token before they can be enabled.
-5. **Tokenomics numbers that this branch only placeholders:** bond `maxDebtRatioBps` / `maxBondSupply` / whether redemption should pay a premium; farm alloc-point splits beyond the required X Share/WETH LP pool; any expansion rate below the 2% hard cap. `requestedRateBps = 200`, farm `25_641` over 365 days, bond debt 35% and 1:1 redeem are test/dry-run fixtures, not signed policy.
-6. **Exit Now / extra distributor wiring** is still open relative to the broader product list.
-7. **Oracle / liquidity calibration** on Robinhood (min active liquidity, vault ranges, hook gas, warmup procedure) before users can sell safely at launch.
-8. **Placeholder chain icons** (including the Robinhood logo) and expansion networks marked coming soon until those forks are live.
-9. **Explicit go-ahead to push or launch.** Nothing in this work is a production launch.
+1. **Independent security audit** of the Masonry hooks, oracle, vaults, Genesis stack, Treasury, Farm, Bond and Chamber.
+2. **Real launch keys and operator/scheduler signers**, plus a rehearsed key ceremony.
+3. **Verified on-chain addresses** written into `config/masonry-deployments.json`. Until then writes stay disabled.
+4. **Other-chain peg tokens**: Robinhood uses USDG; other chains still need their own official 6-decimal reference token before they can be enabled.
+5. **Sign off or replace the configurable defaults** in the table above (especially bond debt ratio / supply, redeem premium, farm alloc splits beyond the required X Share/WETH LP pool, and any expansion rate below 2%).
+6. **Oracle / liquidity calibration** on Robinhood before users can sell safely at launch.
+7. **Placeholder chain icons** (including the official Robinhood logo).
+8. **Explicit go-ahead to push or launch.** Nothing in this work is a production launch.
