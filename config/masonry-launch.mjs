@@ -39,11 +39,25 @@ const positiveRawAmount = (n, path) => {
  */
 function validateRangeKnobs(range, label) {
   if (!range || typeof range !== 'object') throw new Error(`${label}: missing range knobs`);
-  const halfWidth = nonnegative(range.halfWidthBps, `${label}.halfWidthBps`);
-  if (halfWidth < 500 || halfWidth > 3000) throw new Error(`${label}.halfWidthBps: must be 500–3000 (±5% to ±30%)`);
+  const mode = range.mode ?? 'follow';
   const recenter = nonnegative(range.recenterBps, `${label}.recenterBps`);
-  if (recenter < 100 || recenter >= halfWidth) {
-    throw new Error(`${label}.recenterBps: must be 100–halfWidth (inner band)`);
+  if (mode === 'pegAnchor') {
+    const lower = nonnegative(range.lowerHalfWidthBps, `${label}.lowerHalfWidthBps`);
+    const upper = nonnegative(range.upperHalfWidthBps, `${label}.upperHalfWidthBps`);
+    if (lower < 500 || lower > 3000) throw new Error(`${label}.lowerHalfWidthBps: must be 500–3000`);
+    if (upper < 500 || upper > 3000) throw new Error(`${label}.upperHalfWidthBps: must be 500–3000`);
+    const tighter = Math.min(lower, upper);
+    if (recenter < 100 || recenter >= tighter) {
+      throw new Error(`${label}.recenterBps: must be 100–min(lower,upper) (inner band)`);
+    }
+  } else if (mode === 'follow') {
+    const halfWidth = nonnegative(range.halfWidthBps, `${label}.halfWidthBps`);
+    if (halfWidth < 500 || halfWidth > 3000) throw new Error(`${label}.halfWidthBps: must be 500–3000 (±5% to ±30%)`);
+    if (recenter < 100 || recenter >= halfWidth) {
+      throw new Error(`${label}.recenterBps: must be 100–halfWidth (inner band)`);
+    }
+  } else {
+    throw new Error(`${label}.mode: must be follow or pegAnchor`);
   }
   const rangeCooldown = nonnegative(range.cooldownSeconds, `${label}.cooldownSeconds`);
   if (rangeCooldown < 60 || rangeCooldown > 86400) throw new Error(`${label}.cooldownSeconds: must be 60–86400`);
@@ -165,6 +179,8 @@ export function validateMasonryLaunch(doc) {
   ]) {
     requiredText(policy[key], `policy.${key}`);
   }
+  const withdrawFee = nonnegative(policy.liquidityWithdrawFeeBps, 'policy.liquidityWithdrawFeeBps');
+  if (withdrawFee > 1000) throw new Error('policy.liquidityWithdrawFeeBps: cannot exceed 1000');
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

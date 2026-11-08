@@ -154,7 +154,8 @@ contract MasonryShareWethZapperTest is BaseTest {
                 withdrawCooldown: 1800,
                 daoWallet: daoWallet,
                 masonry: address(chamber),
-                zapper: address(zapper)
+                zapper: address(zapper),
+                withdrawFeeBps: 200
             })
         );
         zapper.bindFarm(address(farm));

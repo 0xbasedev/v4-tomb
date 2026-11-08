@@ -69,17 +69,21 @@
     "bondMaxSupply": 1000000,
     "bondRedeemPremiumBps": 0,
     "rangeLevel": {
-      "halfWidthBps": 2000,
-      "recenterBps": 1600,
+      "mode": "pegAnchor",
+      "lowerHalfWidthBps": 1800,
+      "upperHalfWidthBps": 1000,
+      "recenterBps": 666,
       "cooldownSeconds": 1800,
       "maxTwapDeviationBps": 300
     },
     "rangeSquare": {
+      "mode": "follow",
       "halfWidthBps": 800,
       "recenterBps": 640,
       "cooldownSeconds": 1800,
       "maxTwapDeviationBps": 300
     },
+    "liquidityWithdrawFeeBps": 200,
     "farmClaimToWallet": false,
     "farmWithdrawCooldownSeconds": 1800,
     "farmZapLabel": "Zap into Masonry",

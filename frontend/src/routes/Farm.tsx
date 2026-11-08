@@ -6,7 +6,7 @@ import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { PendingBadge, PendingPanel, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
 import { useProtocol } from "@/lib/hooks";
-import { DAO_WALLET, FARM_POLICY, SQUARE_SUPPLY } from "@/lib/launch";
+import { DAO_WALLET, FARM_POLICY, pct, SQUARE_SUPPLY } from "@/lib/launch";
 import { useReveal } from "@/lib/motion/useReveal";
 import type { TokenId } from "@/lib/tokens";
 
@@ -152,6 +152,9 @@ function WithdrawCooldownModal({ pool, onClose }: { pool: string; onClose: () =>
           <p className="mt-2 text-[13px] leading-relaxed text-ok/90">{FARM_POLICY.forfeitNotice}</p>
           <p className="mt-2 text-[12.5px] text-ash">{FARM_POLICY.cancelHint}</p>
           <p className="mt-1 text-[11px] text-ash">DAO wallet · {DAO_WALLET}</p>
+          <p className="mt-2 text-[13px] text-bone" data-testid="withdraw-fee">
+            Withdrawal fee: {pct(FARM_POLICY.withdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn border-ok/40 bg-ok/15 text-ok hover:bg-ok/25">

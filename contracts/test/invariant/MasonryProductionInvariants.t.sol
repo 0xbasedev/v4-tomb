@@ -63,7 +63,8 @@ contract MasonryProductionInvariantsTest is BaseTest {
                 withdrawCooldown: 1800,
                 daoWallet: makeAddr("daoWallet"),
                 masonry: address(chamber),
-                zapper: address(new DummyShareZapper())
+                zapper: address(new DummyShareZapper()),
+                withdrawFeeBps: 200
             })
         );
         share.mint(address(this), FARM_BUDGET);

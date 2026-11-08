@@ -17,6 +17,9 @@ struct MasonryLaunchParams {
     uint256 fireTaxBaselineBps;
     uint256 fireTaxHardCapBps;
     uint256 rangeLevelHalfWidthBps;
+    uint256 rangeLevelLowerHalfWidthBps;
+    uint256 rangeLevelUpperHalfWidthBps;
+    bool rangeLevelPegAnchor;
     uint256 rangeLevelRecenterBps;
     uint256 rangeLevelCooldownSeconds;
     uint256 rangeLevelMaxTwapDeviationBps;
@@ -27,6 +30,7 @@ struct MasonryLaunchParams {
     address daoWallet;
     bool farmClaimToWallet;
     uint256 farmWithdrawCooldownSeconds;
+    uint256 liquidityWithdrawFeeBps;
 }
 
 /// @notice Reads `config/masonry-launch.template.json` and scales whole-token
@@ -51,7 +55,12 @@ library MasonryLaunchConfig {
         p.oracleMaxAgeSeconds = raw.readUint(".policy.criticalOracleMaxAgeSeconds");
         p.fireTaxBaselineBps = raw.readUint(".policy.fireTaxBaselineBps");
         p.fireTaxHardCapBps = raw.readUint(".policy.fireTaxHardCapBps");
-        p.rangeLevelHalfWidthBps = raw.readUint(".policy.rangeLevel.halfWidthBps");
+        p.rangeLevelPegAnchor = keccak256(bytes(raw.readString(".policy.rangeLevel.mode"))) == keccak256("pegAnchor");
+        p.rangeLevelLowerHalfWidthBps = raw.readUint(".policy.rangeLevel.lowerHalfWidthBps");
+        p.rangeLevelUpperHalfWidthBps = raw.readUint(".policy.rangeLevel.upperHalfWidthBps");
+        p.rangeLevelHalfWidthBps = p.rangeLevelLowerHalfWidthBps > p.rangeLevelUpperHalfWidthBps
+            ? p.rangeLevelLowerHalfWidthBps
+            : p.rangeLevelUpperHalfWidthBps;
         p.rangeLevelRecenterBps = raw.readUint(".policy.rangeLevel.recenterBps");
         p.rangeLevelCooldownSeconds = raw.readUint(".policy.rangeLevel.cooldownSeconds");
         p.rangeLevelMaxTwapDeviationBps = raw.readUint(".policy.rangeLevel.maxTwapDeviationBps");
@@ -62,6 +71,7 @@ library MasonryLaunchConfig {
         p.daoWallet = raw.readAddress(".daoWallet");
         p.farmClaimToWallet = raw.readBool(".policy.farmClaimToWallet");
         p.farmWithdrawCooldownSeconds = raw.readUint(".policy.farmWithdrawCooldownSeconds");
+        p.liquidityWithdrawFeeBps = raw.readUint(".policy.liquidityWithdrawFeeBps");
         validate(p);
     }
 
@@ -96,10 +106,27 @@ library MasonryLaunchConfig {
         if (p.farmWithdrawCooldownSeconds < 60 || p.farmWithdrawCooldownSeconds > 1 days) {
             revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");
         }
-        _validateRange(
-            p.rangeLevelHalfWidthBps, p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
-            p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
-        );
+        if (p.liquidityWithdrawFeeBps > 1000) revert InvalidLaunchConfig("liquidityWithdrawFeeBps");
+        if (p.rangeLevelPegAnchor) {
+            _validateRange(
+                p.rangeLevelLowerHalfWidthBps < p.rangeLevelUpperHalfWidthBps
+                    ? p.rangeLevelLowerHalfWidthBps
+                    : p.rangeLevelUpperHalfWidthBps,
+                p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
+                p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
+            );
+            if (p.rangeLevelLowerHalfWidthBps < 500 || p.rangeLevelLowerHalfWidthBps > 3000) {
+                revert InvalidLaunchConfig("rangeLevel");
+            }
+            if (p.rangeLevelUpperHalfWidthBps < 500 || p.rangeLevelUpperHalfWidthBps > 3000) {
+                revert InvalidLaunchConfig("rangeLevel");
+            }
+        } else {
+            _validateRange(
+                p.rangeLevelHalfWidthBps, p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
+                p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
+            );
+        }
         _validateRange(
             p.rangeSquareHalfWidthBps, p.rangeSquareRecenterBps, p.rangeSquareCooldownSeconds,
             p.rangeSquareMaxTwapDeviationBps, "rangeSquare"

@@ -43,6 +43,10 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     PoolId public immutable poolId;
     bool public immutable assetIsCurrency0;
     uint16 public immutable halfWidthBps;
+    uint16 public immutable lowerHalfWidthBps;
+    uint16 public immutable upperHalfWidthBps;
+    uint160 public immutable sqrtPeg;
+    bool public immutable pegAnchor;
     uint16 public immutable recenterBps;
     uint256 public immutable cooldown;
     uint16 public immutable maxTwapDeviationBps;
@@ -55,6 +59,18 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     bool public seeded;
     uint256 public lastRebalanceAt;
     uint256 public lastRebalanceBlock;
+
+    struct RangeConfig {
+        uint16 halfWidthBps;
+        uint16 recenterBps;
+        uint256 cooldown;
+        uint16 maxTwapDeviationBps;
+        uint128 minPoolLiquidity;
+        uint16 lowerHalfWidthBps;
+        uint16 upperHalfWidthBps;
+        uint160 sqrtPeg;
+        bool pegAnchor;
+    }
 
     error Unauthorized();
     error NotPoolManager();
@@ -87,14 +103,33 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         IMasonryRangeTwap twapOracle_,
         address hook_,
         bool assetIsCurrency0_,
-        uint16 halfWidthBps_,
-        uint16 recenterBps_,
-        uint256 cooldown_,
-        uint16 maxTwapDeviationBps_,
-        uint128 minPoolLiquidity_
+        RangeConfig memory cfg
     ) {
-        MasonryRangeLib.validate(halfWidthBps_, recenterBps_, cooldown_, maxTwapDeviationBps_);
-        if (address(manager_) == address(0) || address(twapOracle_) == address(0) || minPoolLiquidity_ == 0) {
+        if (cfg.pegAnchor) {
+            if (
+                cfg.sqrtPeg == 0 || cfg.lowerHalfWidthBps < 500 || cfg.upperHalfWidthBps < 500
+                    || cfg.lowerHalfWidthBps > 3000 || cfg.upperHalfWidthBps > 3000
+            ) {
+                revert MasonryRangeLib.InvalidRangeConfig();
+            }
+            uint16 tighter = cfg.lowerHalfWidthBps < cfg.upperHalfWidthBps
+                ? cfg.lowerHalfWidthBps
+                : cfg.upperHalfWidthBps;
+            MasonryRangeLib.validate(tighter, cfg.recenterBps, cfg.cooldown, cfg.maxTwapDeviationBps);
+            halfWidthBps = cfg.lowerHalfWidthBps > cfg.upperHalfWidthBps
+                ? cfg.lowerHalfWidthBps
+                : cfg.upperHalfWidthBps;
+            lowerHalfWidthBps = cfg.lowerHalfWidthBps;
+            upperHalfWidthBps = cfg.upperHalfWidthBps;
+            sqrtPeg = cfg.sqrtPeg;
+        } else {
+            MasonryRangeLib.validate(cfg.halfWidthBps, cfg.recenterBps, cfg.cooldown, cfg.maxTwapDeviationBps);
+            halfWidthBps = cfg.halfWidthBps;
+            lowerHalfWidthBps = cfg.halfWidthBps;
+            upperHalfWidthBps = cfg.halfWidthBps;
+            sqrtPeg = 0;
+        }
+        if (address(manager_) == address(0) || address(twapOracle_) == address(0) || cfg.minPoolLiquidity == 0) {
             revert MasonryRangeLib.InvalidRangeConfig();
         }
         manager = manager_;
@@ -103,11 +138,11 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         twapOracle = twapOracle_;
         hook = hook_;
         assetIsCurrency0 = assetIsCurrency0_;
-        halfWidthBps = halfWidthBps_;
-        recenterBps = recenterBps_;
-        cooldown = cooldown_;
-        maxTwapDeviationBps = maxTwapDeviationBps_;
-        minPoolLiquidity = minPoolLiquidity_;
+        pegAnchor = cfg.pegAnchor;
+        recenterBps = cfg.recenterBps;
+        cooldown = cfg.cooldown;
+        maxTwapDeviationBps = cfg.maxTwapDeviationBps;
+        minPoolLiquidity = cfg.minPoolLiquidity;
     }
 
     function poolKey() external view override returns (PoolKey memory) {
@@ -171,7 +206,7 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
 
     function previewRange() external view returns (int24 lower, int24 upper) {
         (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
-        return MasonryRangeLib.bandTicks(sqrtPrice, halfWidthBps, key.tickSpacing);
+        return _bandTicks(sqrtPrice);
     }
 
     function cooldownRemaining() public view returns (uint256) {
@@ -256,8 +291,15 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     function _setBandFromSpot() private {
         _requireHonestSpot();
         (uint160 sqrtPrice,,,) = manager.getSlot0(poolId);
-        (tickLower, tickUpper) = MasonryRangeLib.bandTicks(sqrtPrice, halfWidthBps, key.tickSpacing);
+        (tickLower, tickUpper) = _bandTicks(sqrtPrice);
         seeded = true;
+    }
+
+    function _bandTicks(uint160 sqrtPrice) private view returns (int24 lower, int24 upper) {
+        if (pegAnchor) {
+            return MasonryRangeLib.pegAnchorTicks(sqrtPrice, sqrtPeg, lowerHalfWidthBps, upperHalfWidthBps, key.tickSpacing);
+        }
+        return MasonryRangeLib.bandTicks(sqrtPrice, halfWidthBps, key.tickSpacing);
     }
 
     function _requireHonestSpot() private view {

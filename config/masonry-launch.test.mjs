@@ -148,8 +148,8 @@ test('stricter in-bound tokenomics defaults are accepted', () => {
 
 test('per-pool range knobs are required and bounded independently', () => {
   const cases = [
-    ['rangeLevel', 'halfWidthBps', 400, /500–3000/],
-    ['rangeLevel', 'halfWidthBps', 3500, /500–3000/],
+    ['rangeLevel', 'lowerHalfWidthBps', 400, /500–3000/],
+    ['rangeLevel', 'upperHalfWidthBps', 3500, /500–3000/],
     ['rangeSquare', 'halfWidthBps', 400, /500–3000/],
     ['rangeLevel', 'recenterBps', 50, /inner band/],
     ['rangeSquare', 'recenterBps', 800, /inner band/],
@@ -178,4 +178,13 @@ test('daoWallet rejects the zero address and missing farm copy', () => {
   const cd = complete();
   cd.policy.farmWithdrawCooldownSeconds = 10;
   assert.throws(() => validateMasonryLaunch(cd), /60–86400/);
+});
+
+test('liquidity withdraw fee is capped at 1000 bps', () => {
+  const cfg = complete();
+  cfg.policy.liquidityWithdrawFeeBps = 1001;
+  assert.throws(() => validateMasonryLaunch(cfg), /1000/);
+  const ok = complete();
+  ok.policy.liquidityWithdrawFeeBps = 1000;
+  assert.equal(validateMasonryLaunch(ok).squareCap, 33333);
 });

@@ -26,6 +26,7 @@ contract MasonryFarm is ReentrancyGuard {
         address daoWallet;
         address masonry;
         address zapper;
+        uint16 withdrawFeeBps;
     }
 
     struct WithdrawRequest {
@@ -43,6 +44,8 @@ contract MasonryFarm is ReentrancyGuard {
     address public immutable daoWallet;
     address public immutable masonry;
     address public immutable zapper;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_000;
+    uint16 public withdrawFeeBps;
 
     uint256 public funded;
     uint256 public emitted;
@@ -65,6 +68,8 @@ contract MasonryFarm is ReentrancyGuard {
     event WithdrawRequested(address indexed user, uint256 indexed pid, uint256 amount, uint256 availableAt);
     event WithdrawCompleted(address indexed user, uint256 indexed pid, uint256 amount, uint256 forfeited);
     event WithdrawCancelled(address indexed user, uint256 indexed pid, uint256 amount);
+    event WithdrawFeePaid(address indexed user, uint256 indexed pid, uint256 fee, address indexed daoWallet);
+    event WithdrawFeeUpdated(uint16 bps);
 
     error ZeroAddress();
     error InvalidConfiguration();
@@ -109,7 +114,9 @@ contract MasonryFarm is ReentrancyGuard {
         withdrawCooldown = policy.withdrawCooldown;
         daoWallet = policy.daoWallet;
         masonry = policy.masonry;
+        if (policy.withdrawFeeBps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
         zapper = policy.zapper;
+        withdrawFeeBps = policy.withdrawFeeBps;
         _addPool(shareWethLp, shareWethLpAllocPoints);
     }
 
@@ -213,9 +220,22 @@ contract MasonryFarm is ReentrancyGuard {
         pools[pid].totalStaked -= req.amount;
         userStake[pid][msg.sender] -= req.amount;
         userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
-        pools[pid].stakeToken.safeTransfer(msg.sender, req.amount);
+        uint256 fee = req.amount * uint256(withdrawFeeBps) / 10_000;
+        uint256 net = req.amount - fee;
+        if (fee != 0) {
+            pools[pid].stakeToken.safeTransfer(daoWallet, fee);
+            emit WithdrawFeePaid(msg.sender, pid, fee, daoWallet);
+        }
+        if (net != 0) pools[pid].stakeToken.safeTransfer(msg.sender, net);
         emit WithdrawCompleted(msg.sender, pid, req.amount, forfeited);
         emit Withdrawn(msg.sender, pid, req.amount);
+    }
+
+    function setWithdrawFeeBps(uint16 bps) external {
+        if (msg.sender != admin) revert Unauthorized();
+        if (bps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
+        withdrawFeeBps = bps;
+        emit WithdrawFeeUpdated(bps);
     }
 
     function cancelWithdraw(uint256 pid) external nonReentrant {

@@ -20,9 +20,11 @@ export function ProtocolRangeStatus() {
         <span className="font-mono text-[10.5px] text-ash">read-only · follows spot</span>
       </div>
       <p className="mb-4 text-[12.5px] leading-relaxed text-bone-dim">
-        Official protocol liquidity follows spot with a different band on each pool:
-        xTOMB/USDG ±{pct(RANGE_POLICY.level.halfWidthBps)} (recenter at ±{pct(RANGE_POLICY.level.recenterBps)}),
-        xSHARE/USDG ±{pct(RANGE_POLICY.square.halfWidthBps)} (recenter at ±{pct(RANGE_POLICY.square.recenterBps)}).
+        Official protocol liquidity uses a different band on each pool:
+        xTOMB/USDG −{pct(RANGE_POLICY.level.lowerHalfWidthBps)} / +{pct(RANGE_POLICY.level.upperHalfWidthBps)} peg-anchor
+        (recenter at ±{pct(RANGE_POLICY.level.recenterBps)}),
+        xSHARE/USDG ±{pct(RANGE_POLICY.square.halfWidthBps)} follow
+        (recenter at ±{pct(RANGE_POLICY.square.recenterBps)}).
         A keeper (or the hook, when gas allows) calls rebalance after a TWAP check
         (max {pct(RANGE_POLICY.level.maxTwapDeviationBps)} from spot) and a{" "}
         {RANGE_POLICY.level.cooldownSeconds / 60}-minute cooldown. User Genesis LP vaults and
@@ -44,7 +46,15 @@ function RangeCard({
 }: {
   title: string;
   address?: Address;
-  fallback: { halfWidthBps: number; recenterBps: number; cooldownSeconds: number; maxTwapDeviationBps: number };
+  fallback: {
+    mode?: string;
+    halfWidthBps?: number;
+    lowerHalfWidthBps?: number;
+    upperHalfWidthBps?: number;
+    recenterBps: number;
+    cooldownSeconds: number;
+    maxTwapDeviationBps: number;
+  };
 }) {
   const reads = useReadContracts({
     allowFailure: true,
@@ -78,7 +88,11 @@ function RangeCard({
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] text-bone-dim">
         <span className="text-ash">Width</span>
-        <span className="font-mono text-right text-bone">±{pct(Number(width))}</span>
+        <span className="font-mono text-right text-bone">
+          {fallback.mode === "pegAnchor"
+            ? `−${pct(Number(fallback.lowerHalfWidthBps))} / +${pct(Number(fallback.upperHalfWidthBps))}`
+            : `±${pct(Number(width))}`}
+        </span>
         <span className="text-ash">Recenter band</span>
         <span className="font-mono text-right text-bone">±{pct(Number(inner))}</span>
         {launched ? (

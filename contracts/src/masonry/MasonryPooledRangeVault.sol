@@ -47,6 +47,10 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     uint16 public immutable halfWidthBps;
     uint160 public immutable sqrtPeg;
     uint256 public immutable redeemCooldown;
+    address public immutable owner;
+    address public immutable daoWallet;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_000;
+    uint16 public withdrawFeeBps;
 
     PoolKey private key;
     int24 public tickLower;
@@ -62,6 +66,8 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     error RedeemNotPending();
     error RedeemCooldownActive();
     error ReceiptNotTransferable();
+    error Unauthorized();
+    error FeeCapExceeded();
 
     struct RedeemRequest {
         uint256 shares;
@@ -78,6 +84,8 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     event RedeemCompleted(address indexed user, uint256 shares, uint256 amount0, uint256 amount1, uint256 receiptId);
     event RedeemCancelled(address indexed user, uint256 shares, uint256 receiptId);
     event Compounded(address indexed user, uint256 unlockedShares);
+    event WithdrawFeePaid(address indexed user, uint256 fee0, uint256 fee1, address indexed daoWallet);
+    event WithdrawFeeUpdated(uint16 bps);
     event Rebalanced(int24 tickLower, int24 tickUpper, uint128 liquidity);
 
     constructor(
@@ -86,11 +94,17 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         Strategy strategy_,
         uint16 halfWidthBps_,
         uint160 sqrtPeg_,
-        uint256 redeemCooldown_
+        uint256 redeemCooldown_,
+        address owner_,
+        address daoWallet_,
+        uint16 withdrawFeeBps_
     ) ERC20("Masonry Pooled Range Prototype", "mPRANGE") {
         MasonryRangeLib.validate(halfWidthBps_, halfWidthBps_ / 2 == 0 ? 100 : halfWidthBps_ / 2, 1800, 300);
-        if (address(manager_) == address(0) || sqrtPeg_ == 0) revert MasonryRangeLib.InvalidRangeConfig();
+        if (address(manager_) == address(0) || sqrtPeg_ == 0 || owner_ == address(0) || daoWallet_ == address(0)) {
+            revert MasonryRangeLib.InvalidRangeConfig();
+        }
         if (redeemCooldown_ < 60 || redeemCooldown_ > 1 days) revert MasonryRangeLib.InvalidRangeConfig();
+        if (withdrawFeeBps_ > MAX_WITHDRAW_FEE_BPS) revert FeeCapExceeded();
         manager = manager_;
         key = pool;
         poolId = pool.toId();
@@ -98,6 +112,16 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         halfWidthBps = halfWidthBps_;
         sqrtPeg = sqrtPeg_;
         redeemCooldown = redeemCooldown_;
+        owner = owner_;
+        daoWallet = daoWallet_;
+        withdrawFeeBps = withdrawFeeBps_;
+    }
+
+    function setWithdrawFeeBps(uint16 bps) external {
+        if (msg.sender != owner) revert Unauthorized();
+        if (bps > MAX_WITHDRAW_FEE_BPS) revert FeeCapExceeded();
+        withdrawFeeBps = bps;
+        emit WithdrawFeeUpdated(bps);
     }
 
     function poolKey() external view returns (PoolKey memory) {
@@ -184,6 +208,13 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         uint256 withdrawn1 = token1.balanceOf(address(this)) - idle1;
         amount0 = withdrawn0 + idle0 * req.shares / supplyBefore;
         amount1 = withdrawn1 + idle1 * req.shares / supplyBefore;
+        uint256 fee0 = amount0 * uint256(withdrawFeeBps) / 10_000;
+        uint256 fee1 = amount1 * uint256(withdrawFeeBps) / 10_000;
+        amount0 -= fee0;
+        amount1 -= fee1;
+        if (fee0 != 0) token0.safeTransfer(daoWallet, fee0);
+        if (fee1 != 0) token1.safeTransfer(daoWallet, fee1);
+        if (fee0 != 0 || fee1 != 0) emit WithdrawFeePaid(msg.sender, fee0, fee1, daoWallet);
         if (amount0 != 0) token0.safeTransfer(msg.sender, amount0);
         if (amount1 != 0) token1.safeTransfer(msg.sender, amount1);
         emit RedeemCompleted(msg.sender, req.shares, amount0, amount1, req.receiptId);

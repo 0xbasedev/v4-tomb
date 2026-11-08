@@ -107,6 +107,7 @@ export const FARM_POLICY = {
   cancelLabel: POLICY.farmCancelLabel,
   completeWithdrawLabel: POLICY.farmCompleteWithdrawLabel,
   fireTaxNote: POLICY.farmFireTaxNote,
+  withdrawFeeBps: POLICY.liquidityWithdrawFeeBps,
 };
 
 /** Single destination for protocol fees and forfeits (UI label: DAO wallet). */

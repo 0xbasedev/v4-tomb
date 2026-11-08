@@ -104,7 +104,8 @@ contract MasonryFarmTest is BaseTest {
                 withdrawCooldown: 1800,
                 daoWallet: daoWallet,
                 masonry: address(chamber),
-                zapper: address(zapper)
+                zapper: address(zapper),
+                withdrawFeeBps: 200
             })
         );
         chamber.bindFarm(address(farm));
@@ -198,7 +199,40 @@ contract MasonryFarmTest is BaseTest {
         assertEq(share.balanceOf(daoWallet) - daoBefore, pendingAtComplete, "exact forfeit to daoWallet");
         assertEq(share.balanceOf(alice), aliceShareBefore, "no X Share reaches the wallet");
         assertEq(farm.pending(0, alice), 0);
-        assertEq(lp.balanceOf(alice), 100 ether);
+        uint256 lpFee = 100 ether * 200 / 10_000;
+        assertEq(lp.balanceOf(alice), 100 ether - lpFee);
+        assertEq(lp.balanceOf(daoWallet), lpFee);
+    }
+
+    function test_WithdrawFeeCapOwnerOnlyAndSixDecimalRounding() public {
+        assertEq(uint256(1_000_001) * 200 / 10_000, 20_000);
+        vm.prank(alice);
+        vm.expectRevert(MasonryFarm.Unauthorized.selector);
+        farm.setWithdrawFeeBps(100);
+        vm.expectRevert(MasonryFarm.InvalidConfiguration.selector);
+        farm.setWithdrawFeeBps(1001);
+        farm.setWithdrawFeeBps(1000);
+        assertEq(farm.withdrawFeeBps(), 1000);
+        farm.setWithdrawFeeBps(200);
+    }
+
+    function test_ExitNowDoesNotBypassFarmWithdrawFee() public {
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        uint256 staked = farm.userStake(0, alice);
+        vm.prank(alice);
+        vm.expectRevert(MasonryChamber.InvalidAmount.selector);
+        chamber.exitNow();
+        assertEq(farm.userStake(0, alice), staked);
+        vm.prank(alice);
+        farm.requestWithdraw(0, 100 ether);
+        vm.warp(block.timestamp + 1800);
+        uint256 daoLp = lp.balanceOf(daoWallet);
+        vm.prank(alice);
+        farm.completeWithdraw(0);
+        assertEq(lp.balanceOf(daoWallet) - daoLp, 100 ether * 200 / 10_000);
+        assertEq(farm.userStake(0, alice), 0);
     }
 
     function test_CompoundOrCancelKeepsRewardsAndNoWalletPayout() public {

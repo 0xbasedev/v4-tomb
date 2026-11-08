@@ -55,6 +55,7 @@ const POLICY_LABEL: Record<string, string> = {
   farmsCompoundCooldownSeconds: "Farm compound cooldown",
   farmClaimToWallet: "Farm claim to wallet",
   farmWithdrawCooldownSeconds: "Farm withdraw cooldown",
+  liquidityWithdrawFeeBps: "Liquidity withdrawal fee",
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",

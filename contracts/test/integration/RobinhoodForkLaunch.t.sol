@@ -574,8 +574,10 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         LivePool memory pool
     ) internal {
         MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
-        assertEq(cfg.rangeLevelHalfWidthBps, 2000);
-        assertEq(cfg.rangeLevelRecenterBps, 1600);
+        assertTrue(cfg.rangeLevelPegAnchor);
+        assertEq(cfg.rangeLevelLowerHalfWidthBps, 1800);
+        assertEq(cfg.rangeLevelUpperHalfWidthBps, 1000);
+        assertEq(cfg.rangeLevelRecenterBps, 666);
         assertEq(cfg.rangeLevelCooldownSeconds, 1800);
         assertEq(cfg.rangeLevelMaxTwapDeviationBps, 300);
         assertEq(cfg.rangeSquareHalfWidthBps, 800);
@@ -600,11 +602,17 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             IMasonryRangeTwap(address(rangeTwap)),
             address(pool.key.hooks),
             pool.level0,
-            uint16(cfg.rangeLevelHalfWidthBps),
-            uint16(cfg.rangeLevelRecenterBps),
-            cfg.rangeLevelCooldownSeconds,
-            uint16(cfg.rangeLevelMaxTwapDeviationBps),
-            1e12
+            MasonryRangeManager.RangeConfig({
+                halfWidthBps: uint16(cfg.rangeLevelHalfWidthBps),
+                recenterBps: uint16(cfg.rangeLevelRecenterBps),
+                cooldown: cfg.rangeLevelCooldownSeconds,
+                maxTwapDeviationBps: uint16(cfg.rangeLevelMaxTwapDeviationBps),
+                minPoolLiquidity: 1e12,
+                lowerHalfWidthBps: uint16(cfg.rangeLevelLowerHalfWidthBps),
+                upperHalfWidthBps: uint16(cfg.rangeLevelUpperHalfWidthBps),
+                sqrtPeg: pool.level0 ? uint160(uint256(1) << 96) / 1e6 : uint160(uint256(1) << 96) * 1e6,
+                pegAnchor: cfg.rangeLevelPegAnchor
+            })
         );
         MasonryTaxHook(address(pool.key.hooks)).bindRangeManager(levelRm);
         pool.level.mint(address(this), 50_000e18);
@@ -614,6 +622,9 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         levelRm.donate(10_000e18, 10_000e6);
         assertTrue(levelRm.seeded());
         assertGt(levelRm.liquidity(), 0);
+        assertTrue(levelRm.pegAnchor());
+        assertEq(levelRm.lowerHalfWidthBps(), 1800);
+        assertEq(levelRm.upperHalfWidthBps(), 1000);
         (int24 previewLower, int24 previewUpper) = levelRm.previewRange();
         assertEq(previewLower % 60, 0);
         assertEq(previewUpper % 60, 0);
@@ -687,16 +698,24 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             IMasonryRangeTwap(address(rangeTwap)),
             address(this),
             share0,
-            uint16(cfg.rangeSquareHalfWidthBps),
-            uint16(cfg.rangeSquareRecenterBps),
-            cfg.rangeSquareCooldownSeconds,
-            uint16(cfg.rangeSquareMaxTwapDeviationBps),
-            1e12
+            MasonryRangeManager.RangeConfig({
+                halfWidthBps: uint16(cfg.rangeSquareHalfWidthBps),
+                recenterBps: uint16(cfg.rangeSquareRecenterBps),
+                cooldown: cfg.rangeSquareCooldownSeconds,
+                maxTwapDeviationBps: uint16(cfg.rangeSquareMaxTwapDeviationBps),
+                minPoolLiquidity: 1e12,
+                lowerHalfWidthBps: 0,
+                upperHalfWidthBps: 0,
+                sqrtPeg: 0,
+                pegAnchor: false
+            })
         );
         share.approve(address(shareRm), type(uint256).max);
         IERC20(USDG).approve(address(shareRm), type(uint256).max);
         shareRm.donate(10_000e18, 10_000e6);
         assertTrue(shareRm.seeded());
+        assertFalse(shareRm.pegAnchor());
+        assertEq(shareRm.halfWidthBps(), 800);
         assertGt(shareRm.liquidity(), 0);
         vm.expectRevert(MasonryRangeManager.NoRecenterNeeded.selector);
         shareRm.rebalance();
@@ -753,5 +772,6 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         policy.daoWallet = daoWallet;
         policy.masonry = masonry;
         policy.zapper = address(new DummyShareZapper());
+        policy.withdrawFeeBps = 200;
     }
 }

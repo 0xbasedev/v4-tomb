@@ -96,11 +96,17 @@ contract MasonryRangeManagerTest is Test {
             IMasonryRangeTwap(address(1)),
             address(this),
             true,
-            400,
-            200,
-            1800,
-            300,
-            1
+            MasonryRangeManager.RangeConfig({
+                halfWidthBps: 400,
+                recenterBps: 200,
+                cooldown: 1800,
+                maxTwapDeviationBps: 300,
+                minPoolLiquidity: 1,
+                lowerHalfWidthBps: 0,
+                upperHalfWidthBps: 0,
+                sqrtPeg: 0,
+                pegAnchor: false
+            })
         );
     }
 
@@ -138,7 +144,18 @@ contract MasonryRangeManagerTest is Test {
         e.rm.depositFromHook(1, 1, address(this));
 
         MasonryRangeManager thin = new MasonryRangeManager(
-            manager, e.key, e.twap, address(this), e.asset0, 1500, 1000, 1800, 300, type(uint128).max
+            manager, e.key, e.twap, address(this), e.asset0,
+            MasonryRangeManager.RangeConfig({
+                halfWidthBps: 1500,
+                recenterBps: 1000,
+                cooldown: 1800,
+                maxTwapDeviationBps: 300,
+                minPoolLiquidity: type(uint128).max,
+                lowerHalfWidthBps: 0,
+                upperHalfWidthBps: 0,
+                sqrtPeg: 0,
+                pegAnchor: false
+            })
         );
         e.asset.approve(address(thin), type(uint256).max);
         usdg.approve(address(thin), type(uint256).max);
@@ -187,7 +204,17 @@ contract MasonryRangeManagerTest is Test {
         int24 center = TickMath.getTickAtSqrtPrice(peg) / 60 * 60;
         liqRouter.modifyLiquidity(e.key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
         e.twap = new MockRangeTwap();
-        e.rm = new MasonryRangeManager(manager, e.key, e.twap, address(this), e.asset0, 1500, 1000, 1800, 300, 1e12);
+        e.rm = new MasonryRangeManager(manager, e.key, e.twap, address(this), e.asset0, MasonryRangeManager.RangeConfig({
+                halfWidthBps: 1500,
+                recenterBps: 1000,
+                cooldown: 1800,
+                maxTwapDeviationBps: 300,
+                minPoolLiquidity: 1e12,
+                lowerHalfWidthBps: 0,
+                upperHalfWidthBps: 0,
+                sqrtPeg: 0,
+                pegAnchor: false
+            }));
         e.asset.approve(address(e.rm), type(uint256).max);
         usdg.approve(address(e.rm), type(uint256).max);
         e.rm.donate(20_000e18, 20_000e6);
