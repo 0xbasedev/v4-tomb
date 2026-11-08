@@ -57,7 +57,7 @@ test.describe("Swap and the Fire Tax", () => {
     await expect(page.getByText("±8%").first()).toBeVisible();
   });
 
-  test("buys pay 0%, sells pay one Fire Tax (baseline after Genesis)", async ({ page, broadcasts }) => {
+  test("buys pay 0%, xTOMB sells pay no Fire Tax (pool fee only)", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=ended&preview=1");
     await preset(page, "Buy xTOMB");
     await amountIn(page).fill("100");
@@ -67,33 +67,29 @@ test.describe("Swap and the Fire Tax", () => {
 
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDG · 3.4% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("−$3.40");
+    await expect(page.getByText("Sell xTOMB → USDG · 0% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("0%");
     await expect(page.locator("dl")).toContainText(/Pool fee · xTOMB\/USDG/);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("during Genesis an xTOMB sell pays the 3% floor and it burns", async ({ page, broadcasts }) => {
+  test("during Genesis an xTOMB sell is still untaxed and does not burn", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=day2&preview=1");
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDG · 3.4% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("−$3.40");
-    await expect(page.locator("dl")).toContainText(/burn/i);
+    await expect(page.getByText("Sell xTOMB → USDG · 0% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("0%");
+    await expect(page.locator("dl")).not.toContainText(/burned in full/i);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("LP → USDC taxes only the sell leg, and offers the untaxed exit", async ({ page, broadcasts }) => {
+  test("LP → USDC has no xTOMB sell tax on the sell leg", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=day2&preview=1");
     await preset(page, "Exit LP to USDG");
     await amountIn(page).fill("10");
     await expect(page.getByText(/^Redeem xTOMB/)).toBeVisible();
-    await expect(page.getByText(/Sell xTOMB → USDG · \d+(\.\d+)?% tax/)).toBeVisible();
-    await expect(feeRow(page)).toContainText(/[\d.]+% on the xTOMB sold \(50% of value\)/);
-    await expect(page.getByText("Take it as xTOMB instead")).toBeVisible();
-    await page.getByText("Take it as xTOMB instead").click();
-    await expect(page.getByText("Buy xTOMB with USDG · 0% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("0%");
+    await expect(page.getByText(/Sell xTOMB → USDG · 0% tax/)).toBeVisible();
+    await expect(feeRow(page)).toContainText(/0% on the xTOMB sold \(50% of value\)/);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
@@ -107,13 +103,12 @@ test.describe("Swap and the Fire Tax", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("stale oracle: sells are rejected, buys still go through", async ({ page, broadcasts }) => {
+  test("stale oracle: xTOMB sells still go through, buys still go through", async ({ page, broadcasts }) => {
     await page.goto("/swap?oracle=stale&preview=1");
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("10");
-    await expect(feeRow(page)).toContainText("sell rejected");
-    await expect(page.getByRole("button", { name: "Sell rejected" })).toBeDisabled();
-    await expect(page.getByText(/no valid TWAP/i).first()).toBeVisible();
+    await expect(feeRow(page)).toContainText("0%");
+    await expect(page.getByRole("button", { name: /^Sell.*\(simulated\)$|^Swap \(simulated\)$/ })).toBeEnabled();
 
     await preset(page, "Buy xTOMB");
     await amountIn(page).fill("10");

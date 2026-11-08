@@ -124,7 +124,7 @@ export function Landing() {
             ))}
           </h1>
           <p className="hero-fade mt-6 max-w-xl text-[18px] leading-relaxed text-bone-dim md:text-[20px]">
-            xTOMB targets $1 in {REFERENCE_SYMBOL}. Every official sell pays one <span className="text-ember-hot">Fire Tax</span> — {pct(FIRE.baselineBps)} at peg,
+            xTOMB targets $1 in {REFERENCE_SYMBOL}. Liquidity withdrawals pay one <span className="text-ember-hot">Fire Tax</span> — {pct(FIRE.baselineBps)} at peg,
             up to 12% under pressure — and xSHARE's sell tax funds <span className="text-spectre">protocol liquidity</span> or, in
             Critical Defense, <span className="text-bad">buys and burns xTOMB</span>. Genesis opens the first path in.
           </p>
@@ -200,7 +200,7 @@ export function Landing() {
               tone: "ember-text",
               ring: "hover:border-ember/40",
               role: "The peg",
-              body: `Targets $1 in ${REFERENCE_SYMBOL} on the official xTOMB/${REFERENCE_SYMBOL} pool. Sells pay one Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)}); during Genesis the whole tax is burned. Buys and transfers are never taxed.`,
+              body: `Targets $1 in ${REFERENCE_SYMBOL} on the official xTOMB/${REFERENCE_SYMBOL} pool. X Tomb swaps are not taxed. Completing a liquidity withdrawal charges the live Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)} on the TWAP). Official X Share sells pay a flat 3% that buys and burns X Tomb.`,
               want: "Swap or add liquidity",
               to: "/swap",
             },

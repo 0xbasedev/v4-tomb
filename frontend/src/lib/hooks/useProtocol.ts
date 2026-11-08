@@ -15,7 +15,7 @@ import {
   masonryLevelOracleAbi,
   masonrySquareHookAbi,
 } from "@/lib/abis/masonry";
-import { sellTax, type TaxQuote, type TaxedAsset } from "@/lib/fireTax";
+import { officialSellTax, type TaxQuote, type TaxedAsset } from "@/lib/fireTax";
 import { genesisClock, type GenesisClock, type Tranche } from "@/lib/genesis";
 import { DEFENSE, PASSES, PASS_TIER_FROM_ID, type PassTier } from "@/lib/launch";
 import { marketPhase, type MarketPhase } from "@/lib/market";
@@ -86,12 +86,6 @@ export interface ProtocolState {
 const n18 = (v: unknown) => (typeof v === "bigint" ? Number(formatUnits(v, 18)) : null);
 const ok = <T,>(r: { status: string; result?: unknown } | undefined): T | undefined => (r && r.status === "success" ? (r.result as T) : undefined);
 
-/** Post-sale price ÷ pre-sale price for selling `valueUsd` of the asset into a constant-product pool. */
-function projectedRatio(pool: { asset: number; usdc: number }, price: number, valueUsd: number): number {
-  const x = valueUsd / price;
-  return (pool.asset / (pool.asset + x)) ** 2;
-}
-
 export function useProtocol(): ProtocolState {
   const preview = usePreview();
   const net = useNetworkStatus();
@@ -152,19 +146,7 @@ export function useProtocol(): ProtocolState {
       poolFeeBps: { xTOMB: SIM_POOLS.xTOMB.feeBps, xSHARE: SIM_POOLS.xSHARE.feeBps },
       lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
       now: preview.now,
-      taxFor: (asset, valueUsd) => {
-        const ratio = asset === "xTOMB" ? preview.twap : preview.squareRatio;
-        const price = prices[asset];
-        return sellTax({
-          asset,
-          twap: preview.oracleFresh ? ratio : null,
-          projected: preview.oracleFresh ? ratio * projectedRatio(SIM_POOLS[asset], price, valueUsd) : null,
-          raisedBps: preview.raised[asset].bps,
-          raisedAt: preview.raised[asset].at,
-          now: preview.now,
-          genesisActive: !!clock?.active,
-        });
-      },
+      taxFor: (asset, _valueUsd) => officialSellTax(asset),
     };
     void twap;
     return p;
@@ -253,6 +235,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   const sq = ok<readonly [bigint, bigint, boolean]>(squareTwapRead.data?.[0]);
   const squareTwap = sq ? n18(sq[0]) : null;
   const squareFresh = !!sq?.[2];
+  void squareFresh;
 
   const nowSec = Math.floor(Date.now() / 1000);
   const start = ok<bigint>(r[0]);
@@ -337,17 +320,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     poolFeeBps: { xTOMB: (d?.pools.level.fee ?? 0) / 100, xSHARE: (d?.pools.square.fee ?? 0) / 100 },
     lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
     now: nowSec,
-    taxFor: (asset, _valueUsd) =>
-      sellTax({
-        asset,
-        twap: asset === "xTOMB" ? (fresh ? twap : null) : squareFresh && squareTwap !== null && ref ? squareTwap / ref : null,
-        // The hook projects the post-sale price itself; the swap simulation shows the result.
-        projected: null,
-        raisedBps: asset === "xTOMB" ? raisedX : raisedS,
-        raisedAt: asset === "xTOMB" ? raisedAtX : raisedAtS,
-        now: nowSec,
-        genesisActive: !!clock?.active,
-      }),
+    taxFor: (asset, _valueUsd) => officialSellTax(asset),
   };
 }
 

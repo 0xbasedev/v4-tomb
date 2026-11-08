@@ -9,7 +9,8 @@ import { PendingBadge, PendingPanel, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
 import { masonryFarmAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
-import { DAO_WALLET, FARM_POLICY, pct, SQUARE_SUPPLY } from "@/lib/launch";
+import { DAO_WALLET, FARM_POLICY, FIRE, pct, SQUARE_SUPPLY } from "@/lib/launch";
+import { withdrawFee } from "@/lib/fireTax";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
@@ -251,6 +252,8 @@ function WithdrawCooldownModal({
   onCompound: () => void;
   onClose: () => void;
 }) {
+  const quoted = withdrawFee({ twap: 1, raisedBps: FIRE.baselineBps, raisedAt: 0, now: 0 });
+  const liveWithdrawFeeBps = quoted.rateBps ?? FIRE.baselineBps;
   const total = FARM_POLICY.withdrawCooldownSeconds;
   const [left, setLeft] = useState(total);
   const [rewards, setRewards] = useState(1.25);
@@ -283,7 +286,8 @@ function WithdrawCooldownModal({
           <p className="mt-2 text-[12.5px] text-ash">{FARM_POLICY.cancelHint}</p>
           <p className="mt-1 text-[11px] text-ash">DAO wallet · {DAO_WALLET}</p>
           <p className="mt-2 text-[13px] text-bone" data-testid="withdraw-fee">
-            Withdrawal fee: {pct(FARM_POLICY.withdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
+            Withdrawal fee: {pct(liveWithdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
+            This is the live Fire Tax on the official X Tomb TWAP ({pct(FIRE.baselineBps)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Not a swap tax.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">

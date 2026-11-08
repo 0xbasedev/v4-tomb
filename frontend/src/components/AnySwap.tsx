@@ -225,7 +225,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
             }
             tone={!sellLeg ? "text-ok" : heavy ? "text-bad" : notable ? "text-warn" : "text-bone-dim"}
           />
-          {sellLeg && sellLeg.tax?.rateBps !== null && (
+          {sellLeg && !!sellLeg.tax?.rateBps && (
             <Row k="Tax goes to" v={taxDestination(sellLeg.asset, !!p.clock?.active, p.market.defense.active)} />
           )}
           {quote?.amountOut != null && (

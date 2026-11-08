@@ -1,9 +1,16 @@
-import { FIRE } from "@/lib/launch";
+import { FIRE, SHARE_SELL_TAX_BPS } from "@/lib/launch";
 import { PEG } from "@/lib/peg";
 
 /**
- * Fire Tax — one sell tax per sale, computed the way the hooks do it
- * (MasonryRules + MasonryTaxHook._quote on the merge branch):
+ * Fire Tax now prices liquidity withdrawals (farm / pooled vault), not X Tomb
+ * swaps. X Tomb sells are untaxed. The withdraw fee is:
+ *
+ *   rate = max( target(validated TWAP), recovery floor )
+ *
+ * Official X Share sells pay a separate flat `shareSellTaxBps` (default 3%)
+ * that accumulates for an X Tomb buy-and-burn outside the user swap.
+ *
+ * Historical sell-tax quote (kept for share-sale UI / docs):
  *
  *   rate = max( target(validated TWAP),
  *               target(projected post-sale price),
@@ -74,6 +81,24 @@ export interface TaxQuote {
   blocked?: string;
 }
 
+/** On-swap tax: X Tomb pays none; X Share pays the flat configured sell tax. */
+export function officialSellTax(asset: TaxedAsset): TaxQuote {
+  if (asset === "xTOMB") {
+    return {
+      rateBps: 0,
+      driver: "baseline",
+      parts: { baseline: 0, twap: 0, projected: 0, recovery: 0, genesis: 0 },
+      burned: false,
+    };
+  }
+  return {
+    rateBps: SHARE_SELL_TAX_BPS,
+    driver: "baseline",
+    parts: { baseline: SHARE_SELL_TAX_BPS, twap: 0, projected: 0, recovery: 0, genesis: 0 },
+    burned: false,
+  };
+}
+
 export function sellTax(i: TaxInputs): TaxQuote {
   const genesis = i.genesisActive ? FIRE.genesisFloorBps[i.asset] : 0;
   const parts: Record<TaxDriver, number> = {
@@ -101,6 +126,19 @@ export function sellTax(i: TaxInputs): TaxQuote {
   // is what pinned it there (xTOMB's Genesis floor now equals the 3% baseline).
   if (rate <= FIRE.baselineBps && driver !== "genesis") driver = "baseline";
   return { rateBps: Math.min(rate, FIRE.capBps), driver, parts, burned: i.asset === "xTOMB" && i.genesisActive && FIRE.genesisBurnShare >= 1 };
+}
+
+/** Withdraw fee: TWAP + recovery only (no projected spot, which is sandwichable). */
+export function withdrawFee(i: Pick<TaxInputs, "twap" | "raisedBps" | "raisedAt" | "now">): TaxQuote {
+  return sellTax({
+    asset: "xTOMB",
+    twap: i.twap,
+    projected: i.twap,
+    raisedBps: i.raisedBps,
+    raisedAt: i.raisedAt,
+    now: i.now,
+    genesisActive: false,
+  });
 }
 
 export const DRIVER_LABEL: Record<TaxDriver, string> = {

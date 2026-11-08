@@ -42,7 +42,7 @@ export const LEVEL_SUPPLY = {
   initial: launch.level.initial,
 };
 
-/** Fire Tax parameters shared by the official peg and share hooks. */
+/** Fire Tax parameters: the live liquidity withdraw fee (not an X Tomb swap tax). */
 export const FIRE = {
   baselineBps: POLICY.fireTaxBaselineBps,
   capBps: POLICY.fireTaxHardCapBps,
@@ -55,6 +55,9 @@ export const FIRE = {
 };
 
 /** Normal xSHARE fee routing — shares of collected tax, never of the gross sale. */
+/** Flat official X Share sell tax (config-driven, hard-capped at 12%). */
+export const SHARE_SELL_TAX_BPS = POLICY.shareSellTaxBps as number;
+
 export const SQUARE_ROUTING = {
   polBps: POLICY.squareTaxPolBps,
   usdcReserveBps: POLICY.squareTaxUsdcReserveBps,

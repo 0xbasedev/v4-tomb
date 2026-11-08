@@ -306,7 +306,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     compound: (pool, automated) => {
       const reward = settle(pool);
       const tax = sellTax({ asset: "xTOMB", twap: oracleFresh ? twap : null, projected: twap, raisedBps: raised.xTOMB.bps, raisedAt: raised.xTOMB.at, now, genesisActive: clock.active });
-      const s = compoundSplit(reward, { automated, taxBps: tax.rateBps ?? 0 });
+      const s = compoundSplit(reward, { automated, taxBps: 0 }); // X Tomb sells are no longer taxed
       const lpPrice = 2 * twap;
       const shares = (s.net * twap) / lpPrice;
       setPositions((p) => {

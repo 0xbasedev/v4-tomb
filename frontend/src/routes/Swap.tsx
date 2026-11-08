@@ -17,7 +17,7 @@ import { useReveal } from "@/lib/motion/useReveal";
 /** One-tap starting points — each is just a pair in the same card. */
 const PRESETS: { title: string; detail: string; pair: SwapPair }[] = [
   { title: "Buy xTOMB", detail: `${PEG.symbol} → xTOMB · never taxed`, pair: { input: "USDC", output: "xTOMB" } },
-  { title: "Sell xTOMB", detail: `xTOMB → ${PEG.symbol} · one Fire Tax`, pair: { input: "xTOMB", output: "USDC" } },
+  { title: "Sell xTOMB", detail: `xTOMB → ${PEG.symbol} · no sell tax`, pair: { input: "xTOMB", output: "USDC" } },
   { title: "Exit LP to " + PEG.symbol, detail: "redeem, then sell the xTOMB half", pair: { input: "xTOMB-USDC", output: "USDC" } },
   { title: "Exit LP to xTOMB", detail: `redeem, then buy with the ${PEG.symbol} half`, pair: { input: "xTOMB-USDC", output: "xTOMB" } },
 ];
@@ -44,7 +44,7 @@ export function Swap() {
       <PageHeader
         eyebrow={p.sim ? "Swap · simulated" : "Swap"}
         title="Official pools only"
-        lede={`The official ${PEG.symbol} pairs on Uniswap v4. Buys and wallet transfers pay no Fire Tax; every sell pays one rate, shown before you sign, with pool fees itemized separately.`}
+        lede={`The official ${PEG.symbol} pairs on Uniswap v4. X Tomb swaps are not taxed. Official X Share sells pay a flat 3% that later buys and burns X Tomb. Liquidity withdrawals use the live Fire Tax rate. Pool fees are itemized separately.`}
       />
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
