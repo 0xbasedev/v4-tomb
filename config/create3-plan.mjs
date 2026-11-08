@@ -10,6 +10,7 @@ export const masonryRoles = [
   'masonryBuybackGuard', 'masonryCompoundGate', 'masonryCriticalDefense', 'masonryLevelOracle',
   'masonryTaxHook', 'masonryShareTaxHook', 'masonryShareOracle',
   'masonryVestingTeam', 'masonryVestingDeveloper', 'masonryVestingTreasury', 'masonryVestingArbitrage',
+  'masonryLevelRangeManager', 'masonrySquareRangeManager', 'masonryPooledRangeVault', 'masonryShareWethZapper', 'masonryFarm',
 ];
 export const bridgeRoles = ['xshareBridge', 'bridgedShare'];
 const hookFlags = { hook: 0x1088, masonryTaxHook: 0x35c8, masonryShareTaxHook: 0x35c8 };

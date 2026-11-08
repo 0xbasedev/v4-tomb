@@ -43,7 +43,7 @@ library MasonryLaunchConfig {
     function load(
         Vm vm
     ) internal view returns (MasonryLaunchParams memory p) {
-        string memory raw = vm.readFile(string.concat(vm.projectRoot(), "/../config/masonry-launch.template.json"));
+        string memory raw = vm.readFile(vm.envOr("MASONRY_LAUNCH_CONFIG", string.concat(vm.projectRoot(), "/../config/masonry-launch.template.json")));
         p.expansionRateBps = raw.readUint(".policy.maximumExpansionPerEpochBps");
         p.farmEmissionDays = raw.readUint(".policy.farmEmissionDays");
         p.farmWholeTokens = raw.readUint(".square.farming");
