@@ -56,6 +56,7 @@ function RangeCard({ title, address }: { title: string; address?: Address }) {
   const launched = Boolean(address && status);
   const width = reads.data?.[1]?.result ?? RANGE_POLICY.halfWidthBps;
   const inner = reads.data?.[2]?.result ?? RANGE_POLICY.recenterBps;
+  const cooldown = Number(reads.data?.[3]?.result ?? RANGE_POLICY.cooldownSeconds);
   const inRange = launched ? Boolean(status?.[4]) : null;
   const needsMove = launched ? Boolean(status?.[5]) : null;
   return (
@@ -77,10 +78,12 @@ function RangeCard({ title, address }: { title: string; address?: Address }) {
             <span className="font-mono text-right text-bone">{String(status?.[0])} → {String(status?.[1])}</span>
             <span className="text-ash">Current tick</span>
             <span className="font-mono text-right text-bone">{String(status?.[3])}</span>
+            <span className="text-ash">Liquidity</span>
+            <span className="font-mono text-right text-bone">{String(status?.[2])}</span>
             <span className="text-ash">Needs recenter</span>
             <span className="font-mono text-right text-bone">{needsMove ? "yes" : "no"}</span>
             <span className="text-ash">Cooldown left</span>
-            <span className="font-mono text-right text-bone">{String(status?.[7])}s</span>
+            <span className="font-mono text-right text-bone">{String(status?.[7])}s / {cooldown / 60} min</span>
           </>
         ) : (
           <>

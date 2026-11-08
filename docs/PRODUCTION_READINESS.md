@@ -82,12 +82,18 @@ position that recenters with spot, not a full-range or fixed-tick book.
   deviation 1–1000.
 - Safety: valid TWAP, spot within max deviation, pool liquidity floor,
   cooldown, same-block guard. Recentering uses the current tick only after
-  those checks (spot ≈ TWAP). No inventory swap in the manager; single-sided
-  leftovers are held.
+  those checks (spot ≈ TWAP). After removing the old band the manager
+  swaps leftover inventory through the official pool (price-limited to the
+  TWAP-deviation band) so the new range can be two-sided. Inventory value
+  at the pre-rebalance spot cannot fall more than 100 bps
+  (`MAX_INVENTORY_LOSS_BPS`). The swap pays the pool LP fee, never Fire Tax:
+  `MasonryTaxHook` skips tax and nested `nudge` when the swap sender is the
+  bound range manager.
 - SquareHook `bindPolVault` now takes `IMasonryPolSink`, so POL deposits
   go into the managed position when that is bound. `MasonryTaxHook` can
   one-shot `bindRangeManager` and will try `nudge()` after a swap without
-  reverting the user swap.
+  reverting the user swap (500k gas stipend; skipped if the swap is low on
+  gas or `nudge` would revert).
 - User Genesis `MasonryLevelUsdcVault` / redeemable `MasonrySquareUsdcVault`
   stay fixed-range so Genesis redeem/burn and `V4PositionWrapper` exact-tick
   wrapping stay compatible. MasonryChamber continues to stake user
@@ -121,13 +127,13 @@ under a “Not launched yet” banner.
 
 ## Validation (8 November 2026, America/New_York)
 
-- Foundry: **457 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
+- Foundry: **460 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
   - `MasonryTreasury.t.sol` (7)
   - `MasonryFarm.t.sol` (4)
   - `MasonryBond.t.sol` (7)
   - `MasonryChamber.t.sol` (4, including Exit Now / no LEVEL paid to the user)
   - `MasonryProductionInvariants.t.sol` fuzz (4 × 256)
-  - `MasonryRangeLib.t.sol` (5) and `MasonryRangeManager.t.sol` (4, both official pool shapes)
+  - `MasonryRangeLib.t.sol` (6) and `MasonryRangeManager.t.sol` (6, both official pool shapes, plus nudge stipend / thin-pool / unauthorized deposit)
 - Config: `node --test config/*.test.mjs` — **60 passed**, including range-manager bound checks.
 - Frontend: `pnpm typecheck` passed. Playwright: **79 passed** (desktop + mobile, including protocol range status).
 
