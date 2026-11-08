@@ -13,7 +13,7 @@ export const masonryContractKeys = [
   'chamber', 'farm', 'xBond',
   'schedule', 'pass', 'staking', 'settlement', 'lpBurnFee',
   'levelHook', 'levelOracle', 'buybackGuard', 'levelVault',
-  'squareHook', 'squareVault', 'criticalDefense', 'miniSwapRouter',
+  'squareHook', 'squareVault', 'levelRangeManager', 'squareRangeManager', 'criticalDefense', 'miniSwapRouter',
 ];
 
 /** Human labels for the same keys (UI uses these; contract names in parentheses). */
@@ -37,6 +37,8 @@ export const masonryContractLabels = {
   levelVault: 'xTOMB/USDC LP vault (MasonryLevelUsdcVault)',
   squareHook: 'xSHARE/USDC hook (MasonrySquareHook)',
   squareVault: 'xSHARE/USDC LP vault (MasonrySquareUsdcVault)',
+  levelRangeManager: 'xTOMB/USDG protocol range (MasonryRangeManager)',
+  squareRangeManager: 'xSHARE/USDG protocol range (MasonryRangeManager)',
   criticalDefense: 'Critical Defense (MasonryCriticalDefense)',
   miniSwapRouter: 'Swap router (MiniSwapRouter)',
 };

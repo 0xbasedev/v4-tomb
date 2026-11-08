@@ -33,6 +33,7 @@ export { masonryLevelHookAbi } from "./MasonryLevelHook";
 export { masonryLevelOracleAbi } from "./MasonryLevelOracle";
 export { masonryLevelUsdcVaultAbi } from "./MasonryLevelUsdcVault";
 export { masonryLinearVestingAbi } from "./MasonryLinearVesting";
+export { masonryRangeManagerAbi } from "./MasonryRangeManager";
 export { masonryRulesAbi } from "./MasonryRules";
 export { masonrySquareHookAbi } from "./MasonrySquareHook";
 export { masonrySquareUsdcVaultAbi } from "./MasonrySquareUsdcVault";

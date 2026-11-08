@@ -24,7 +24,7 @@ const completeDeployment = () => {
     chamber: addr(19), farm: addr(20), xBond: addr(21),
     schedule: addr(6), pass: addr(7), staking: addr(8), settlement: addr(9), lpBurnFee: addr(10),
     levelHook: addr(11), levelOracle: addr(12), buybackGuard: addr(13), levelVault: addr(14),
-    squareHook: addr(15), squareVault: addr(16), criticalDefense: addr(17), miniSwapRouter: addr(18),
+    squareHook: addr(15), squareVault: addr(16), levelRangeManager: addr(22), squareRangeManager: addr(23), criticalDefense: addr(17), miniSwapRouter: addr(18),
   };
   const sort = (a, b) => BigInt(a) < BigInt(b) ? [a, b] : [b, a];
   const [l0, l1] = sort(c.level, c.usdc);

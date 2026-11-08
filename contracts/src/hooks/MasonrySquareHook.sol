@@ -18,7 +18,7 @@ import {MasonryGenesisSchedule} from "../masonry/MasonryGenesisSchedule.sol";
 import {MasonryCriticalDefense} from "../masonry/MasonryCriticalDefense.sol";
 import {MasonryFeeAllocation} from "../masonry/MasonryFeeAllocation.sol";
 import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
-import {MasonrySquareUsdcVault} from "../masonry/MasonrySquareUsdcVault.sol";
+import {IMasonryPolSink} from "../masonry/IMasonryPolSink.sol";
 import {MasonryLevelOracle} from "../masonry/MasonryLevelOracle.sol";
 import {IMasonryBurnableLevel} from "../masonry/MasonryGenesisLPBurnFee.sol";
 
@@ -52,7 +52,7 @@ contract MasonrySquareHook is MasonryTaxHook {
     uint16 public immutable maxDeviationBps;
 
     address public immutable polBinder;
-    MasonrySquareUsdcVault public polVault;
+    IMasonryPolSink public polVault;
     PoolKey private levelPool;
     uint256 public polSquare;
     uint256 public polUsdc;
@@ -107,7 +107,7 @@ contract MasonrySquareHook is MasonryTaxHook {
     }
 
     function bindPolVault(
-        MasonrySquareUsdcVault vault
+        IMasonryPolSink vault
     ) external {
         if (
             msg.sender != polBinder || address(polVault) != address(0) || address(vault).code.length == 0

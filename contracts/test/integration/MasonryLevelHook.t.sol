@@ -28,6 +28,7 @@ import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.s
 import {MockMasonryLevel, MockMasonryUSDC, MockMasonryBurnGuard} from "../unit/MasonryGenesisLPBurnFee.t.sol";
 import {MasonryBuybackGuard} from "../../src/masonry/MasonryBuybackGuard.sol";
 import {MasonrySquareUsdcVault} from "../../src/masonry/MasonrySquareUsdcVault.sol";
+import {IMasonryPolSink} from "../../src/masonry/IMasonryPolSink.sol";
 import {MasonryLevelUsdcVault, MasonryUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
 import {MasonryGenesisPass} from "../../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisStaking.sol";
@@ -617,8 +618,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         MasonrySquareUsdcVault pol = new MasonrySquareUsdcVault(squareKey, midpoint - 6000, midpoint + 6000);
         vm.prank(makeAddr("not deployer"));
         vm.expectRevert(MasonryTaxHook.InvalidConfiguration.selector);
-        squareHook.bindPolVault(pol);
-        squareHook.bindPolVault(pol);
+        squareHook.bindPolVault(IMasonryPolSink(address(pol)));
+        squareHook.bindPolVault(IMasonryPolSink(address(pol)));
 
         vm.warp(schedule.start());
         squareHook.checkpoint();

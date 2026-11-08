@@ -4,7 +4,7 @@ export type MasonryContractKey =
   | 'chamber' | 'farm' | 'xBond'
   | 'schedule' | 'pass' | 'staking' | 'settlement' | 'lpBurnFee'
   | 'levelHook' | 'levelOracle' | 'buybackGuard' | 'levelVault'
-  | 'squareHook' | 'squareVault' | 'criticalDefense' | 'miniSwapRouter';
+  | 'squareHook' | 'squareVault' | 'levelRangeManager' | 'squareRangeManager' | 'criticalDefense' | 'miniSwapRouter';
 export interface PoolKey { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address }
 export interface MasonryDeployment {
   chainId: number;

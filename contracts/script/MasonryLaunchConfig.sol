@@ -16,6 +16,10 @@ struct MasonryLaunchParams {
     uint256 oracleMaxAgeSeconds;
     uint256 fireTaxBaselineBps;
     uint256 fireTaxHardCapBps;
+    uint256 rangeHalfWidthBps;
+    uint256 rangeRecenterBps;
+    uint256 rangeCooldownSeconds;
+    uint256 rangeMaxTwapDeviationBps;
 }
 
 /// @notice Reads `config/masonry-launch.template.json` and scales whole-token
@@ -40,6 +44,10 @@ library MasonryLaunchConfig {
         p.oracleMaxAgeSeconds = raw.readUint(".policy.criticalOracleMaxAgeSeconds");
         p.fireTaxBaselineBps = raw.readUint(".policy.fireTaxBaselineBps");
         p.fireTaxHardCapBps = raw.readUint(".policy.fireTaxHardCapBps");
+        p.rangeHalfWidthBps = raw.readUint(".policy.rangeHalfWidthBps");
+        p.rangeRecenterBps = raw.readUint(".policy.rangeRecenterBps");
+        p.rangeCooldownSeconds = raw.readUint(".policy.rangeCooldownSeconds");
+        p.rangeMaxTwapDeviationBps = raw.readUint(".policy.rangeMaxTwapDeviationBps");
         validate(p);
     }
 
@@ -70,5 +78,15 @@ library MasonryLaunchConfig {
         }
         if (p.bondMaxSupplyWholeTokens == 0) revert InvalidLaunchConfig("bondMaxSupply");
         if (p.bondRedeemPremiumBps > 10_000) revert InvalidLaunchConfig("bondRedeemPremiumBps");
+        if (p.rangeHalfWidthBps < 500 || p.rangeHalfWidthBps > 3000) revert InvalidLaunchConfig("rangeHalfWidthBps");
+        if (p.rangeRecenterBps < 100 || p.rangeRecenterBps >= p.rangeHalfWidthBps) {
+            revert InvalidLaunchConfig("rangeRecenterBps");
+        }
+        if (p.rangeCooldownSeconds < 60 || p.rangeCooldownSeconds > 1 days) {
+            revert InvalidLaunchConfig("rangeCooldownSeconds");
+        }
+        if (p.rangeMaxTwapDeviationBps == 0 || p.rangeMaxTwapDeviationBps > 1000) {
+            revert InvalidLaunchConfig("rangeMaxTwapDeviationBps");
+        }
     }
 }

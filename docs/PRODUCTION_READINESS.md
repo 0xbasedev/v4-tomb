@@ -65,6 +65,41 @@ The launch dry-run and `RobinhoodForkLaunch` read that file.
 | `policy.fireTaxHardCapBps` | 1200 | ≥ baseline and ≤ 1200 (12% max) |
 | `policy.fullTaxAtOrBelowPegBps` | 9000 | fixed (12% at 10% below peg) |
 
+
+### Protocol-owned range manager (8 November 2026, America/New_York)
+
+Official POL for xTOMB/USDG and xSHARE/USDG is a concentrated Uniswap v4
+position that recenters with spot, not a full-range or fixed-tick book.
+
+- `MasonryRangeLib.sol` — width, alignment, inner-band and TWAP-deviation math.
+- `MasonryRangeManager.sol` — one instance per official pool. Permissionless
+  `rebalance()` / `nudge()`; `donate()` and hook `depositFromHook` add
+  inventory. There is no admin withdrawal; leftovers stay idle until they
+  can be deployed again.
+- Defaults (config + constructor bounds): half-width **1500 bps (±15%)**,
+  recenter at **1000 bps (±10%)**, cooldown **1800s**, max TWAP deviation
+  **300 bps**. Bounds: width 500–3000, recenter 100–width, cooldown 60–86400,
+  deviation 1–1000.
+- Safety: valid TWAP, spot within max deviation, pool liquidity floor,
+  cooldown, same-block guard. Recentering uses the current tick only after
+  those checks (spot ≈ TWAP). No inventory swap in the manager; single-sided
+  leftovers are held.
+- SquareHook `bindPolVault` now takes `IMasonryPolSink`, so POL deposits
+  go into the managed position when that is bound. `MasonryTaxHook` can
+  one-shot `bindRangeManager` and will try `nudge()` after a swap without
+  reverting the user swap.
+- User Genesis `MasonryLevelUsdcVault` / redeemable `MasonrySquareUsdcVault`
+  stay fixed-range so Genesis redeem/burn and `V4PositionWrapper` exact-tick
+  wrapping stay compatible. MasonryChamber continues to stake user
+  X Share/WETH LP — not the protocol-owned SQUARE/USDG range.
+
+| Knob | Default | Bounds |
+| --- | --- | --- |
+| `policy.rangeHalfWidthBps` | 1500 | 500–3000 |
+| `policy.rangeRecenterBps` | 1000 | 100–(half width − 1) |
+| `policy.rangeCooldownSeconds` | 1800 | 60–86400 |
+| `policy.rangeMaxTwapDeviationBps` | 300 | 1–1000 |
+
 ### Exit Now (handoff 2026-11-07)
 
 `MasonryChamber.exitNow` (`MasonryChamber.sol`): bypasses the 6-hour
@@ -86,14 +121,15 @@ under a “Not launched yet” banner.
 
 ## Validation (8 November 2026, America/New_York)
 
-- Foundry: **448 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
+- Foundry: **457 passed, 0 failed, 7 skipped**. Includes the Robinhood fork dry-run and:
   - `MasonryTreasury.t.sol` (7)
   - `MasonryFarm.t.sol` (4)
   - `MasonryBond.t.sol` (7)
   - `MasonryChamber.t.sol` (4, including Exit Now / no LEVEL paid to the user)
   - `MasonryProductionInvariants.t.sol` fuzz (4 × 256)
-- Config: `node --test config/*.test.mjs` — **60 passed**, including out-of-bounds tokenomics rejects.
-- Frontend: `pnpm typecheck` and `pnpm build` passed (existing Vite chunk-size warning). Playwright: **77 passed**. Screenshots refreshed in `/workspace/v4-assess/shots/`.
+  - `MasonryRangeLib.t.sol` (5) and `MasonryRangeManager.t.sol` (4, both official pool shapes)
+- Config: `node --test config/*.test.mjs` — **60 passed**, including range-manager bound checks.
+- Frontend: `pnpm typecheck` passed. Playwright: **79 passed** (desktop + mobile, including protocol range status).
 
 No private keys, no broadcast, no push, no live launch.
 

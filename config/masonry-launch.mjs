@@ -122,6 +122,18 @@ export function validateMasonryLaunch(doc) {
   const premium = nonnegative(policy.bondRedeemPremiumBps, 'policy.bondRedeemPremiumBps');
   if (premium > 10000) throw new Error('policy.bondRedeemPremiumBps: cannot exceed 10000');
 
+
+  const halfWidth = nonnegative(policy.rangeHalfWidthBps, 'policy.rangeHalfWidthBps');
+  if (halfWidth < 500 || halfWidth > 3000) throw new Error('policy.rangeHalfWidthBps: must be 500–3000 (±5% to ±30%)');
+  const recenter = nonnegative(policy.rangeRecenterBps, 'policy.rangeRecenterBps');
+  if (recenter < 100 || recenter >= halfWidth) {
+    throw new Error('policy.rangeRecenterBps: must be 100–halfWidth (inner band)');
+  }
+  const rangeCooldown = nonnegative(policy.rangeCooldownSeconds, 'policy.rangeCooldownSeconds');
+  if (rangeCooldown < 60 || rangeCooldown > 86400) throw new Error('policy.rangeCooldownSeconds: must be 60–86400');
+  const twapDev = nonnegative(policy.rangeMaxTwapDeviationBps, 'policy.rangeMaxTwapDeviationBps');
+  if (twapDev < 1 || twapDev > 1000) throw new Error('policy.rangeMaxTwapDeviationBps: must be 1–1000');
+
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };
 }

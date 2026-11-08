@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { AnySwap, type SwapPair } from "@/components/AnySwap";
 import { FireTaxChart } from "@/components/FireTaxChart";
 import { LiquidityPanel } from "@/components/LiquidityPanel";
+import { ProtocolRangeStatus } from "@/components/ProtocolRangeStatus";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { Segmented } from "@/components/docs/kit";
 import { SimBadge } from "@/components/Status";
@@ -98,6 +99,7 @@ export function Swap() {
           ))}
         </div>
         <p className="mt-3 text-[12px] text-ash">The highest of the four applies, capped at {pct(FIRE.capBps)}. If the oracle has no valid TWAP the hook rejects the sell; buys still go through.</p>
+        <div className="mt-8"><ProtocolRangeStatus /></div>
       </div>
     </div>
   );

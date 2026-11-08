@@ -18,6 +18,8 @@ import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {MasonryLevelOracle} from "../masonry/MasonryLevelOracle.sol";
 import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
 import {MasonryRules} from "../masonry/MasonryRules.sol";
+import {IMasonryRangeNudge} from "../masonry/IMasonryPolSink.sol";
+import {MasonryRangeManager} from "../masonry/MasonryRangeManager.sol";
 
 /// @notice Shared sell-only tax, recovery and price observation for official USDC pools.
 abstract contract MasonryTaxHook is BaseV4Hook {
@@ -36,6 +38,7 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     MasonryLevelOracle public immutable oracle;
     address private immutable _initializer;
     uint160 private recordedSqrtPrice;
+    address public rangeManager;
     address public immutable asset;
     PoolId public immutable officialPool;
     bool public immutable assetIsCurrency0;
@@ -148,7 +151,25 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     ) external override onlyPoolManager returns (bytes4, int128) {
         _recordPool(true);
         if (params.zeroForOne == assetIsCurrency0) _afterSell(key);
+        _nudgeRange();
         return (IHooks.afterSwap.selector, 0);
+    }
+
+    /// @notice One-shot bind of the protocol-owned range manager for this official pool.
+    function bindRangeManager(
+        MasonryRangeManager rm
+    ) external {
+        if (
+            rangeManager != address(0) || address(rm).code.length == 0 || rm.hook() != address(this)
+                || PoolId.unwrap(rm.poolId()) != PoolId.unwrap(officialPool) || rm.manager() != poolManager
+        ) revert InvalidConfiguration();
+        rangeManager = address(rm);
+    }
+
+    function _nudgeRange() internal {
+        address rm = rangeManager;
+        if (rm == address(0) || gasleft() < 200_000) return;
+        try IMasonryRangeNudge(rm).nudge{gas: 180_000}() {} catch {}
     }
 
     /// @notice Saves a history checkpoint without refreshing the last-price-change time.
@@ -278,7 +299,9 @@ abstract contract MasonryTaxHook is BaseV4Hook {
     function _target(
         uint256 price
     ) private view returns (uint16) {
-        return MasonryRules.targetSellTaxBps(price, _referencePrice(), BASE_TAX, MAX_TAX_BPS, MasonryRules.DEFAULT_FULL_TAX_DROP_BPS);
+        return MasonryRules.targetSellTaxBps(
+            price, _referencePrice(), BASE_TAX, MAX_TAX_BPS, MasonryRules.DEFAULT_FULL_TAX_DROP_BPS
+        );
     }
     function _collectTax(
         uint256 amount,

@@ -142,3 +142,11 @@ export const PASSES: Record<PassTier, PassDef> = {
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
+
+/** Protocol-owned concentrated range defaults (both official pools). */
+export const RANGE_POLICY = {
+  halfWidthBps: POLICY.rangeHalfWidthBps,
+  recenterBps: POLICY.rangeRecenterBps,
+  cooldownSeconds: POLICY.rangeCooldownSeconds,
+  maxTwapDeviationBps: POLICY.rangeMaxTwapDeviationBps,
+};

@@ -67,6 +67,10 @@
     "bondMaxDebtRatioBps": 3500,
     "bondMaxSupply": 1000000,
     "bondRedeemPremiumBps": 0,
+    "rangeHalfWidthBps": 1500,
+    "rangeRecenterBps": 1000,
+    "rangeCooldownSeconds": 1800,
+    "rangeMaxTwapDeviationBps": 300,
     "governanceTimelocksEnabled": false,
     "ownerTradingPauseEnabled": false
   },

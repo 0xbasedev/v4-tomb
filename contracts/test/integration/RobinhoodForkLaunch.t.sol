@@ -41,6 +41,9 @@ import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 import {MasonryLaunchConfig, MasonryLaunchParams} from "../../script/MasonryLaunchConfig.sol";
+import {MasonryRangeManager, IMasonryRangeTwap} from "../../src/masonry/MasonryRangeManager.sol";
+import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 contract LaunchLevel is ERC20Burnable {
     constructor() ERC20("X Tomb", "xTOMB") {}
@@ -236,6 +239,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         assertFalse(MasonryRules.eligibleForExpansion(1e18, 1e18, true));
         assertTrue(MasonryRules.eligibleForExpansion(1.02e18, 1e18, true));
         _wireModernRuntime(pool.level, twap, user);
+        _exerciseRangeManagers(pool);
     }
 
     function _launchOfficialPool(
@@ -570,5 +574,95 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         assertEq(level.balanceOf(user), userLevel, "Exit Now is not a tax-free LEVEL exit");
         assertEq(level.balanceOf(address(0xA2B)), pending);
         assertEq(runtime.chamber.stakeToken().balanceOf(address(0xA11CE)), staked - staked / 2);
+    }
+
+    function _exerciseRangeManagers(
+        LivePool memory pool
+    ) internal {
+        MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
+        assertEq(cfg.rangeHalfWidthBps, 1500);
+        assertEq(cfg.rangeRecenterBps, 1000);
+        assertEq(cfg.rangeCooldownSeconds, 1800);
+        assertEq(cfg.rangeMaxTwapDeviationBps, 300);
+        _exerciseLevelRange(pool);
+        _exerciseShareRange();
+    }
+
+    function _exerciseLevelRange(
+        LivePool memory pool
+    ) internal {
+        IPoolManager pm = IPoolManager(POOL_MANAGER);
+        MockTwapOracle rangeTwap = new MockTwapOracle();
+        (uint160 sqrtPrice,,,) = StateLibrary.getSlot0(pm, pool.key.toId());
+        rangeTwap.setPrice(MasonryLevelPrice.fromSqrtPrice(sqrtPrice, pool.level0));
+        MasonryRangeManager levelRm = new MasonryRangeManager(
+            pm, pool.key, IMasonryRangeTwap(address(rangeTwap)), address(this), pool.level0, 1500, 1000, 1800, 300, 1e12
+        );
+        pool.level.mint(address(this), 50_000e18);
+        deal(USDG, address(this), IERC20(USDG).balanceOf(address(this)) + 50_000e6);
+        IERC20(address(pool.level)).approve(address(levelRm), type(uint256).max);
+        IERC20(USDG).approve(address(levelRm), type(uint256).max);
+        levelRm.donate(10_000e18, 10_000e6);
+        assertTrue(levelRm.seeded());
+        vm.expectRevert(MasonryRangeManager.NoRecenterNeeded.selector);
+        levelRm.rebalance();
+    }
+
+    function _exerciseShareRange() internal {
+        IPoolManager pm = IPoolManager(POOL_MANAGER);
+        LaunchShare share = new LaunchShare();
+        bool share0 = address(share) < USDG;
+        PoolKey memory shareKey = PoolKey({
+            currency0: Currency.wrap(share0 ? address(share) : USDG),
+            currency1: Currency.wrap(share0 ? USDG : address(share)),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
+        uint160 peg = uint160(share0 ? (uint256(1) << 96) / 1e6 : (uint256(1) << 96) * 1e6);
+        pm.initialize(shareKey, peg);
+        PoolModifyLiquidityTest liquidity = new PoolModifyLiquidityTest(pm);
+        share.mint(address(this), 2_000_000e18);
+        share.approve(address(liquidity), type(uint256).max);
+        IERC20(USDG).approve(address(liquidity), type(uint256).max);
+        int24 center = TickMath.getTickAtSqrtPrice(peg) / 60 * 60;
+        liquidity.modifyLiquidity(shareKey, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
+        MockTwapOracle rangeTwap = new MockTwapOracle();
+        rangeTwap.setPrice(1e18);
+        MasonryRangeManager shareRm = new MasonryRangeManager(
+            pm, shareKey, IMasonryRangeTwap(address(rangeTwap)), address(this), share0, 1500, 1000, 1800, 300, 1e12
+        );
+        share.approve(address(shareRm), type(uint256).max);
+        IERC20(USDG).approve(address(shareRm), type(uint256).max);
+        shareRm.donate(10_000e18, 10_000e6);
+        assertTrue(shareRm.seeded());
+        assertGt(shareRm.liquidity(), 0);
+        vm.expectRevert(MasonryRangeManager.NoRecenterNeeded.selector);
+        shareRm.rebalance();
+
+        PoolSwapTest swaps = new PoolSwapTest(pm);
+        share.mint(address(this), 1_000_000e18);
+        share.approve(address(swaps), type(uint256).max);
+        IERC20(USDG).approve(address(swaps), type(uint256).max);
+        (, int24 tick,,) = StateLibrary.getSlot0(pm, shareKey.toId());
+        int24 target = share0 ? tick - 1300 : tick + 1300;
+        swaps.swap(
+            shareKey,
+            SwapParams({
+                zeroForOne: share0,
+                amountSpecified: -int256(1_000_000e18),
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(target)
+            }),
+            PoolSwapTest.TestSettings(false, false),
+            ""
+        );
+        vm.expectRevert(MasonryRangeManager.UnsafeRebalance.selector);
+        shareRm.rebalance();
+        (uint160 sqrtAfter,,,) = StateLibrary.getSlot0(pm, shareKey.toId());
+        rangeTwap.setPrice(MasonryLevelPrice.fromSqrtPrice(sqrtAfter, share0));
+        int24 oldLower = shareRm.tickLower();
+        shareRm.rebalance();
+        assertTrue(shareRm.tickLower() != oldLower);
+        assertFalse(shareRm.shouldRebalance());
     }
 }

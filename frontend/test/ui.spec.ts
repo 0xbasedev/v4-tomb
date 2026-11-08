@@ -47,6 +47,14 @@ test.describe("Genesis boundaries", () => {
 });
 
 test.describe("Swap and the Fire Tax", () => {
+  test("shows protocol-owned range status for xTOMB and xSHARE", async ({ page }) => {
+    await page.goto("/swap?preview=1");
+    await expect(page.getByRole("heading", { name: "Protocol-owned ranges" })).toBeVisible();
+    await expect(page.getByText("xTOMB / USDG")).toBeVisible();
+    await expect(page.getByText("xSHARE / USDG")).toBeVisible();
+    await expect(page.getByText("±15%").first()).toBeVisible();
+  });
+
   test("buys pay 0%, sells pay one Fire Tax (baseline after Genesis)", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=ended&preview=1");
     await preset(page, "Buy xTOMB");
