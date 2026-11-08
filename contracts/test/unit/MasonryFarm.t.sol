@@ -301,4 +301,33 @@ contract MasonryFarmTest is BaseTest {
         vm.expectRevert(MasonryFarm.InvalidAmount.selector);
         farm.zapIntoMasonry(0, 0, 0);
     }
+
+    function test_LastCompoundAtIsPerUserPerPool() public {
+        MockShareWethLp lp1 = new MockShareWethLp();
+        farm.addPool(IERC20(address(lp1)), 1000);
+        lp1.mint(alice, 100 ether);
+        vm.prank(alice);
+        lp1.approve(address(farm), type(uint256).max);
+
+        vm.warp(startTime + 1);
+        vm.prank(alice);
+        farm.deposit(0, 100 ether);
+        vm.prank(alice);
+        farm.deposit(1, 100 ether);
+        vm.warp(startTime + 7 days);
+
+        assertEq(farm.lastCompoundAt(0, alice), 0);
+        assertEq(farm.lastCompoundAt(1, alice), 0);
+        vm.prank(alice);
+        farm.compound(0, 0, 0);
+        uint256 first = block.timestamp;
+        assertEq(farm.lastCompoundAt(0, alice), first);
+        assertEq(farm.lastCompoundAt(1, alice), 0, "compounding one pool must not reset another");
+
+        vm.warp(block.timestamp + 60);
+        vm.prank(alice);
+        farm.compound(1, 0, 0);
+        assertEq(farm.lastCompoundAt(0, alice), first);
+        assertEq(farm.lastCompoundAt(1, alice), block.timestamp);
+    }
 }

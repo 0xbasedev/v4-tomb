@@ -238,6 +238,25 @@ contract MasonryPooledRangeVaultTest is Test {
         (uint256 left,,) = vault.redeemRequests(alice);
         assertEq(left, 0);
         assertGe(vault.liquidity(), liqBefore);
+        assertEq(vault.lastCompoundAt(alice), block.timestamp);
+        assertEq(vault.lastCompoundAt(bob), 0);
+    }
+
+    function testCompoundTimestampIsPerPosition() public {
+        Env memory e = _boot();
+        MasonryPooledRangeVault vault = _vault(e, MasonryPooledRangeVault.Strategy.FixedPeg, 1500);
+        _deposit(e, vault, alice, 10_000e18, 10_000e6);
+        _deposit(e, vault, bob, 10_000e18, 10_000e6);
+        vm.prank(alice);
+        vault.compound();
+        uint256 aliceAt = vault.lastCompoundAt(alice);
+        assertEq(aliceAt, block.timestamp);
+        assertEq(vault.lastCompoundAt(bob), 0, "one position must not reset another");
+        vm.warp(block.timestamp + 60);
+        vm.prank(bob);
+        vault.compound();
+        assertEq(vault.lastCompoundAt(alice), aliceAt);
+        assertEq(vault.lastCompoundAt(bob), block.timestamp);
     }
 
     function testFirstDepositInflationIsBounded() public {

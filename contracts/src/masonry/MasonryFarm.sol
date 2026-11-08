@@ -57,6 +57,7 @@ contract MasonryFarm is ReentrancyGuard {
     mapping(uint256 => mapping(address => uint256)) public userRewardDebt;
     mapping(uint256 => mapping(address => uint256)) public storedReward;
     mapping(uint256 => mapping(address => WithdrawRequest)) public withdrawRequests;
+    mapping(uint256 => mapping(address => uint256)) public lastCompoundAt;
 
     event Funded(address indexed from, uint256 amount);
     event PoolAdded(uint256 indexed pid, address stakeToken, uint256 allocPoints);
@@ -253,6 +254,7 @@ contract MasonryFarm is ReentrancyGuard {
             emit WithdrawCancelled(msg.sender, pid, amount);
         }
         _zap(pid, msg.sender, minWethOut, minLpOut);
+        lastCompoundAt[pid][msg.sender] = block.timestamp;
     }
 
     function harvest(uint256 pid) external nonReentrant {

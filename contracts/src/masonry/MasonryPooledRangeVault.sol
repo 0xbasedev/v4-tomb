@@ -76,6 +76,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     }
 
     mapping(address => RedeemRequest) public redeemRequests;
+    mapping(address => uint256) public lastCompoundAt;
     mapping(uint256 => address) public receiptOwner;
     uint256 private _nextReceiptId = 1;
 
@@ -232,6 +233,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
             _unlockPending(msg.sender);
         }
         if (seeded) _run(Op.Deposit);
+        lastCompoundAt[msg.sender] = block.timestamp;
         emit Compounded(msg.sender, unlocked);
     }
 

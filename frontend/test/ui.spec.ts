@@ -319,3 +319,39 @@ test.describe("Farm zap and withdraw cooldown", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 });
+
+test.describe("Farm compound restyle", () => {
+  test("is green when the window is clear and muted while counting", async ({ page, broadcasts }) => {
+    await page.goto("/farm?preview=1");
+    const readyCard = page.getByTestId("farm-pool-xTOMB-USDC");
+    await expect(readyCard.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
+    await expect(readyCard.getByTestId("next-compound")).toHaveText("Next Compound: 0");
+    await readyCard.screenshot({ path: "/workspace/v4-assess/shots/farm-compound-ready.png" });
+    await page.getByRole("button", { name: "Withdraw" }).first().click();
+    const readyDialog = page.getByRole("dialog");
+    await expect(readyDialog.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
+    await expect(readyDialog.getByTestId("next-compound")).toHaveText("Next Compound: 0");
+    await readyDialog.screenshot({ path: "/workspace/v4-assess/shots/withdraw-compound-ready.png" });
+    await readyDialog.getByRole("button", { name: "Close" }).click().catch(async () => {
+      await page.keyboard.press("Escape");
+    });
+
+    await page.goto("/farm?preview=1&compounded=xTOMB-USDC");
+    const cooling = page.getByTestId("farm-pool-xTOMB-USDC");
+    const other = page.getByTestId("farm-pool-xSHARE-USDC");
+    await expect(cooling.getByTestId("compound-button")).toHaveAttribute("data-ready", "false");
+    await expect(cooling.getByTestId("compound-button")).toBeEnabled();
+    await expect(cooling.getByTestId("next-compound")).toContainText("Next Compound:");
+    await expect(cooling.getByTestId("next-compound")).not.toHaveText("Next Compound: 0");
+    await expect(cooling.getByTestId("compound-button")).toHaveAttribute("title", /Green returns/i);
+    await expect(other.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
+    await expect(other.getByTestId("next-compound")).toHaveText("Next Compound: 0");
+    await cooling.screenshot({ path: "/workspace/v4-assess/shots/farm-compound-cooling.png" });
+    await cooling.getByRole("button", { name: "Withdraw" }).click();
+    const coolDialog = page.getByRole("dialog");
+    await expect(coolDialog.getByTestId("compound-button")).toHaveAttribute("data-ready", "false");
+    await expect(coolDialog.getByTestId("next-compound")).not.toHaveText("Next Compound: 0");
+    await coolDialog.screenshot({ path: "/workspace/v4-assess/shots/withdraw-compound-cooling.png" });
+    await expectNoTransactionRequests(page, broadcasts);
+  });
+});
