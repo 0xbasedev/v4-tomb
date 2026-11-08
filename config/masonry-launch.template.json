@@ -84,6 +84,7 @@
       "maxTwapDeviationBps": 300
     },
     "liquidityWithdrawFeeBps": 200,
+    "shareSellTaxBps": 300,
     "farmClaimToWallet": false,
     "farmWithdrawCooldownSeconds": 1800,
     "farmZapLabel": "Zap into Masonry",
@@ -95,7 +96,7 @@
     "farmCompoundLabel": "Compound",
     "farmCancelLabel": "Cancel",
     "farmCompleteWithdrawLabel": "Complete withdrawal",
-    "farmFireTaxNote": "This zap sells about half of your pending X Share for WETH on the X Share/WETH pool (the Masonry LP pair). Fire Tax applies to official X Share/USDG sells, not this pool, so the zap does not pay Fire Tax.",
+    "farmFireTaxNote": "Completing a liquidity withdrawal charges the live Fire Tax rate on the withdrawn LP (3% at the X Tomb TWAP peg, rising along the square-root curve to 12% at 10% below peg, then decaying back to 3% over 7 hours). The fee is paid to the DAO wallet. X Tomb swaps themselves are not taxed. Official X Share sells pay a flat 3% that later buys and burns X Tomb; this zap uses the X Share/WETH pool, so it does not pay that share sell tax.",
     "governanceTimelocksEnabled": false,
     "ownerTradingPauseEnabled": false
   },

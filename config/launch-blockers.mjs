@@ -52,9 +52,9 @@ export function masonryPlanBlockers(plan, opts = {}) {
   }
   const p = opts.policy;
   if (p) {
-    if (!(p.liquidityWithdrawFeeBps >= 0 && p.liquidityWithdrawFeeBps <= 1000)) out.push('liquidityWithdrawFeeBps above 10% cap');
     if (!(p.fireTaxHardCapBps <= 1200)) out.push('fireTaxHardCapBps above 12% cap');
     if (p.fireTaxBaselineBps > p.fireTaxHardCapBps) out.push('fireTaxBaselineBps above hard cap');
+    if (!(p.shareSellTaxBps >= 1 && p.shareSellTaxBps <= 1200)) out.push('shareSellTaxBps above 12% cap');
   }
   return out;
 }

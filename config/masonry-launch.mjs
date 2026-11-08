@@ -179,8 +179,10 @@ export function validateMasonryLaunch(doc) {
   ]) {
     requiredText(policy[key], `policy.${key}`);
   }
-  const withdrawFee = nonnegative(policy.liquidityWithdrawFeeBps, 'policy.liquidityWithdrawFeeBps');
-  if (withdrawFee > 1000) throw new Error('policy.liquidityWithdrawFeeBps: cannot exceed 1000');
+  const shareSellTax = nonnegative(policy.shareSellTaxBps, 'policy.shareSellTaxBps');
+  if (shareSellTax < 1 || shareSellTax > 1200) {
+    throw new Error('policy.shareSellTaxBps: must be 1–1200 (12% cap)');
+  }
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

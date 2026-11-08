@@ -180,11 +180,14 @@ test('daoWallet rejects the zero address and missing farm copy', () => {
   assert.throws(() => validateMasonryLaunch(cd), /60–86400/);
 });
 
-test('liquidity withdraw fee is capped at 1000 bps', () => {
+test('share sell tax is required and capped at 1200 bps', () => {
   const cfg = complete();
-  cfg.policy.liquidityWithdrawFeeBps = 1001;
-  assert.throws(() => validateMasonryLaunch(cfg), /1000/);
+  cfg.policy.shareSellTaxBps = 1300;
+  assert.throws(() => validateMasonryLaunch(cfg), /12% cap/);
+  const zero = complete();
+  zero.policy.shareSellTaxBps = 0;
+  assert.throws(() => validateMasonryLaunch(zero), /12% cap|1–1200/);
   const ok = complete();
-  ok.policy.liquidityWithdrawFeeBps = 1000;
+  ok.policy.shareSellTaxBps = 300;
   assert.equal(validateMasonryLaunch(ok).squareCap, 33333);
 });
