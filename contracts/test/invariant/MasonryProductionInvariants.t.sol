@@ -37,10 +37,15 @@ contract MasonryProductionInvariantsTest is BaseTest {
         lp = new MockLp();
         oracle = new MockTwap();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        chamber = new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted);
-        treasury =
-            new MasonryTreasury(IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, address(this));
-        bond = new MasonryBond(IERC20(address(level)), treasury, oracle, 10_000, DEBT_RATIO, 1_000_000 ether);
+        chamber = new MasonryChamber(
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+        );
+        treasury = new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+        );
+        bond = new MasonryBond(
+            IERC20(address(level)), treasury, oracle, 10_000, DEBT_RATIO, 1_000_000 ether, 0, 30 minutes
+        );
         treasury.setBond(address(bond));
         share = new MockShare();
         shareLp = new MockShareWethLp();

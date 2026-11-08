@@ -40,6 +40,7 @@ import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
+import {MasonryLaunchConfig, MasonryLaunchParams} from "../../script/MasonryLaunchConfig.sol";
 
 contract LaunchLevel is ERC20Burnable {
     constructor() ERC20("X Tomb", "xTOMB") {}
@@ -435,32 +436,57 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         _exerciseExpansion(runtime, level, twap);
         _exerciseFarm(runtime, user);
         _exerciseBond(runtime, level, twap, user);
+        _exerciseExitNow(runtime, level, user);
     }
 
     function _deployModernRuntime(
         LaunchLevel level,
         MockTwapOracle twap
     ) internal returns (ModernRuntime memory runtime) {
+        MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
+        uint8 dec = level.decimals();
+        uint256 farmBudget = MasonryLaunchConfig.scaleWhole(cfg.farmWholeTokens, dec);
+        uint256 bondSupply = MasonryLaunchConfig.scaleWhole(cfg.bondMaxSupplyWholeTokens, dec);
         runtime.start = block.timestamp + 1 hours;
         LaunchShareWethLp slp = new LaunchShareWethLp();
         LaunchShare share = new LaunchShare();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        runtime.chamber = new MasonryChamber(IERC20(address(slp)), IERC20(address(level)), predicted);
-        // PLACEHOLDER requestedRateBps = policy.maximumExpansionPerEpochBps (200).
+        runtime.chamber = new MasonryChamber(
+            IERC20(address(slp)), IERC20(address(level)), predicted, address(0xA11CE), address(0xA2B)
+        );
         runtime.treasury = new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), runtime.chamber, twap, runtime.start, 200, address(this)
+            IMasonryMintableLevel(address(level)),
+            runtime.chamber,
+            twap,
+            runtime.start,
+            uint16(cfg.expansionRateBps),
+            cfg.oracleMaxAgeSeconds,
+            address(this)
         );
         assertEq(address(runtime.treasury), predicted);
-        // PLACEHOLDER farm budget/duration from masonry-launch.template.json.
         runtime.farm = new MasonryFarm(
-            IERC20(address(share)), runtime.start, 365 days, 25_641 ether, address(this), IERC20(address(slp)), 1000
+            IERC20(address(share)),
+            runtime.start,
+            cfg.farmEmissionDays * 1 days,
+            farmBudget,
+            address(this),
+            IERC20(address(slp)),
+            cfg.farmShareWethLpAllocPoints
         );
-        // PLACEHOLDER bond caps: 100% extra discount bound, 35% debt ratio, 1_000_000 supply.
-        runtime.bond = new MasonryBond(IERC20(address(level)), runtime.treasury, twap, 10_000, 3500, 1_000_000 ether);
+        runtime.bond = new MasonryBond(
+            IERC20(address(level)),
+            runtime.treasury,
+            twap,
+            uint16(cfg.bondMaxDiscountBps),
+            uint16(cfg.bondMaxDebtRatioBps),
+            bondSupply,
+            uint16(cfg.bondRedeemPremiumBps),
+            cfg.oracleMaxAgeSeconds
+        );
         runtime.treasury.setBond(address(runtime.bond));
-        share.mint(address(this), 25_641 ether);
-        share.approve(address(runtime.farm), 25_641 ether);
-        runtime.farm.fund(25_641 ether);
+        share.mint(address(this), farmBudget);
+        share.approve(address(runtime.farm), farmBudget);
+        runtime.farm.fund(farmBudget);
     }
 
     function _stakeRuntime(
@@ -523,10 +549,26 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         uint256 bonds = runtime.bond.balanceOf(user);
         vm.stopPrank();
         assertGt(bonds, 100 ether);
-        assertLe(runtime.bond.totalSupply() * 10_000, level.totalSupply() * 3500);
+        assertLe(runtime.bond.totalSupply() * 10_000, level.totalSupply() * runtime.bond.maxDebtRatioBps());
         twap.setPrice(1.05e18);
         vm.prank(user);
         runtime.bond.redeem(bonds);
         assertEq(runtime.bond.balanceOf(user), 0);
+    }
+
+    function _exerciseExitNow(
+        ModernRuntime memory runtime,
+        LaunchLevel level,
+        address user
+    ) internal {
+        uint256 pending = runtime.chamber.pending(user);
+        uint256 staked = runtime.chamber.balanceOf(user);
+        uint256 userLevel = level.balanceOf(user);
+        vm.prank(user);
+        runtime.chamber.exitNow();
+        assertEq(runtime.chamber.balanceOf(user), 0);
+        assertEq(level.balanceOf(user), userLevel, "Exit Now is not a tax-free LEVEL exit");
+        assertEq(level.balanceOf(address(0xA2B)), pending);
+        assertEq(runtime.chamber.stakeToken().balanceOf(address(0xA11CE)), staked - staked / 2);
     }
 }

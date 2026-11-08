@@ -19,8 +19,8 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
     uint256 public constant PEG_PRICE = 1e18;
     /// @notice Six-hour epochs (`policy.epochSeconds` = 21600).
     uint256 public constant PERIOD = 6 hours;
-    /// @notice Oracle freshness window (`policy.criticalOracleMaxAgeSeconds` = 1800).
-    uint256 public constant ORACLE_MAX_AGE = 30 minutes;
+    /// @notice Hard cap on the oracle freshness window (default and maximum: 30 minutes).
+    uint256 public constant HARD_MAX_ORACLE_AGE = 30 minutes;
 
     IMasonryMintableLevel public immutable level;
     IMasonrySeigniorageSink public immutable masonry;
@@ -29,6 +29,7 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
     /// @notice PLACEHOLDER expansion rate. Must be > 0 and ≤ `HARD_MAX_EXPANSION_BPS` (200).
     /// Not approved tokenomics — pass the value Jesse signs off on at launch.
     uint16 public immutable requestedRateBps;
+    uint256 public immutable oracleMaxAge;
     address public immutable admin;
 
     uint256 public epoch;
@@ -53,6 +54,7 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         IMasonryValidatedLevelTwap oracle_,
         uint256 startTime_,
         uint16 requestedRateBps_,
+        uint256 oracleMaxAge_,
         address admin_
     ) {
         if (
@@ -63,11 +65,13 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         if (requestedRateBps_ == 0 || requestedRateBps_ > MasonryRules.HARD_MAX_EXPANSION_BPS) {
             revert InvalidConfiguration();
         }
+        if (oracleMaxAge_ == 0 || oracleMaxAge_ > HARD_MAX_ORACLE_AGE) revert InvalidConfiguration();
         level = level_;
         masonry = masonry_;
         oracle = oracle_;
         startTime = startTime_;
         requestedRateBps = requestedRateBps_;
+        oracleMaxAge = oracleMaxAge_;
         admin = admin_;
     }
 
@@ -89,7 +93,7 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         (uint256 observedPrice, uint256 observedAt, bool valid) = oracle.latestValidatedTwap();
         price = observedPrice;
         fresh =
-            valid && observedAt != 0 && observedAt <= block.timestamp && block.timestamp - observedAt <= ORACLE_MAX_AGE;
+            valid && observedAt != 0 && observedAt <= block.timestamp && block.timestamp - observedAt <= oracleMaxAge;
     }
 
     function allocateExpansion() external nonReentrant {
@@ -121,9 +125,9 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         emit Expansion(epoch, minted, price);
     }
 
-    /// @notice Pays X Bond redemptions 1:1 in newly minted X Tomb only when
-    /// the peg-token TWAP is fresh and strictly above peg. 1:1 is a PLACEHOLDER
-    /// redemption price — no premium is applied until Jesse sets one.
+    /// @notice Pays X Bond redemptions in newly minted X Tomb when the peg-token
+    /// TWAP is fresh and strictly above peg. The amount includes any configured
+    /// redeem premium applied by MasonryBond (default 0).
     function settleBondRedemption(
         address to,
         uint256 tombAmount

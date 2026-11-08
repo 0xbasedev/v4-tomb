@@ -35,8 +35,6 @@ test('over-allocation and missing LEVEL funding are rejected', () => {
 
 test('immutable economic boundaries cannot be raised or shortened', () => {
   for (const [key, value] of Object.entries({
-    fireTaxHardCapBps: 2000,
-    maximumExpansionPerEpochBps: 300,
     fireTaxRecoverySeconds: 3600,
     farmsCompoundCooldownSeconds: 0,
     operationalVestingDays: 30,
@@ -64,7 +62,6 @@ test('Genesis LP fee, SQUARE treasury splits and critical defense are fixed rele
     criticalDefenseExitBps: 10000,
     criticalRecoveryEpochs: 1,
     epochSeconds: 3600,
-    criticalOracleMaxAgeSeconds: 86400,
     governanceTimelocksEnabled: true,
     ownerTradingPauseEnabled: true,
   })) {
@@ -105,4 +102,46 @@ test('confirmed Genesis rules are fixed launch invariants', () => {
     cfg.policy[key] = value;
     assert.throws(() => validateMasonryLaunch(cfg), new RegExp(key));
   }
+});
+
+test('out-of-bounds configurable tokenomics are rejected', () => {
+  const cases = [
+    ['fireTaxBaselineBps', 200, /3% floor/],
+    ['fireTaxHardCapBps', 2000, /cannot exceed 12%/],
+    ['maximumExpansionPerEpochBps', 300, /1–200|2% hard cap/],
+    ['maximumExpansionPerEpochBps', 0, /1–200|2% hard cap/],
+    ['farmEmissionDays', 0, /1–3650/],
+    ['farmEmissionDays', 3651, /1–3650/],
+    ['criticalOracleMaxAgeSeconds', 86400, /1–1800/],
+    ['criticalOracleMaxAgeSeconds', 0, /1–1800/],
+    ['farmShareWethLpAllocPoints', 0, /farmShareWethLpAllocPoints/],
+    ['bondMaxDiscountBps', 10001, /bondMaxDiscountBps/],
+    ['bondMaxDebtRatioBps', 0, /bondMaxDebtRatioBps/],
+    ['bondMaxDebtRatioBps', 10001, /bondMaxDebtRatioBps/],
+    ['bondMaxSupply', 0, /bondMaxSupply/],
+    ['bondRedeemPremiumBps', 10001, /bondRedeemPremiumBps/],
+  ];
+  for (const [key, value, pattern] of cases) {
+    const cfg = complete();
+    cfg.policy[key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), pattern, key);
+  }
+  const inverted = complete();
+  inverted.policy.fireTaxBaselineBps = 1200;
+  inverted.policy.fireTaxHardCapBps = 600;
+  assert.throws(() => validateMasonryLaunch(inverted), /cannot exceed fireTaxHardCapBps/);
+});
+
+test('stricter in-bound tokenomics defaults are accepted', () => {
+  const cfg = complete();
+  cfg.policy.fireTaxHardCapBps = 900;
+  cfg.policy.maximumExpansionPerEpochBps = 100;
+  cfg.policy.farmEmissionDays = 180;
+  cfg.policy.criticalOracleMaxAgeSeconds = 600;
+  cfg.policy.farmShareWethLpAllocPoints = 500;
+  cfg.policy.bondMaxDiscountBps = 5000;
+  cfg.policy.bondMaxDebtRatioBps = 2000;
+  cfg.policy.bondMaxSupply = 500000;
+  cfg.policy.bondRedeemPremiumBps = 0;
+  assert.equal(validateMasonryLaunch(cfg).squareCap, 33333);
 });

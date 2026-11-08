@@ -9,45 +9,71 @@ import {IMasonrySeigniorageSink} from "./IMasonryRuntime.sol";
 
 /// @notice Masonry stake room: holders of the configured stake token
 /// (product: X Share/WETH LP) earn expansion X Tomb.
+///
+/// Locks (from the 2026-11-07 handoff): a 6-hour global manual-deposit
+/// resettable stake cooldown and an independent 6-hour claim cooldown.
+/// Auto-compound, if added later, MUST NOT reset the manual stake lock.
+///
+/// Exit Now bypasses both locks: 50% of the user's staked LP returns to
+/// them, 50% is sent to the protocol treasury, and 100% of pending X Tomb
+/// is forfeited to Arbitrage. Ordinary eligible withdrawals (after the
+/// stake cooldown) still return 100% of remaining LP; this path does not
+/// redeem LP or sell X Tomb, so it cannot be used as a tax-free Fire Tax exit.
 contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    uint256 public constant STAKE_COOLDOWN = 6 hours;
+    uint256 public constant CLAIM_COOLDOWN = 6 hours;
 
     IERC20 public immutable stakeToken;
     IERC20 public immutable rewardToken;
     address public immutable treasury;
+    address public immutable protocolTreasury;
+    address public immutable arbitrage;
 
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
     uint256 public accRewardPerShare;
     mapping(address => uint256) public rewardDebt;
+    mapping(address => uint256) public storedReward;
+    mapping(address => uint256) public stakeUnlockAt;
+    mapping(address => uint256) public claimUnlockAt;
 
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 amount);
     event SeigniorageAllocated(uint256 amount);
+    event ExitNow(address indexed user, uint256 lpToUser, uint256 lpToTreasury, uint256 rewardsToArbitrage);
 
     error ZeroAddress();
     error InvalidAmount();
     error Unauthorized();
     error EmptyMasonry();
+    error StakeLocked();
+    error ClaimLocked();
 
     constructor(
         IERC20 stakeToken_,
         IERC20 rewardToken_,
-        address treasury_
+        address treasury_,
+        address protocolTreasury_,
+        address arbitrage_
     ) {
-        if (address(stakeToken_) == address(0) || address(rewardToken_) == address(0) || treasury_ == address(0)) {
-            revert ZeroAddress();
-        }
+        if (
+            address(stakeToken_) == address(0) || address(rewardToken_) == address(0) || treasury_ == address(0)
+                || protocolTreasury_ == address(0) || arbitrage_ == address(0)
+        ) revert ZeroAddress();
         stakeToken = stakeToken_;
         rewardToken = rewardToken_;
         treasury = treasury_;
+        protocolTreasury = protocolTreasury_;
+        arbitrage = arbitrage_;
     }
 
     function pending(
         address user
     ) public view returns (uint256) {
-        return balanceOf[user] * accRewardPerShare / 1e18 - rewardDebt[user];
+        return storedReward[user] + _unpaid(user);
     }
 
     function allocateSeigniorage(
@@ -65,11 +91,12 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         uint256 amount
     ) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
-        _harvest(msg.sender);
+        _accrue(msg.sender);
         stakeToken.safeTransferFrom(msg.sender, address(this), amount);
         totalSupply += amount;
         balanceOf[msg.sender] += amount;
         rewardDebt[msg.sender] = balanceOf[msg.sender] * accRewardPerShare / 1e18;
+        stakeUnlockAt[msg.sender] = block.timestamp + STAKE_COOLDOWN;
         emit Staked(msg.sender, amount);
     }
 
@@ -77,7 +104,8 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         uint256 amount
     ) external nonReentrant {
         if (amount == 0 || amount > balanceOf[msg.sender]) revert InvalidAmount();
-        _harvest(msg.sender);
+        if (block.timestamp < stakeUnlockAt[msg.sender]) revert StakeLocked();
+        _accrue(msg.sender);
         totalSupply -= amount;
         balanceOf[msg.sender] -= amount;
         rewardDebt[msg.sender] = balanceOf[msg.sender] * accRewardPerShare / 1e18;
@@ -86,17 +114,45 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     }
 
     function claim() external nonReentrant {
-        _harvest(msg.sender);
-        rewardDebt[msg.sender] = balanceOf[msg.sender] * accRewardPerShare / 1e18;
+        if (block.timestamp < claimUnlockAt[msg.sender]) revert ClaimLocked();
+        _accrue(msg.sender);
+        uint256 amount = storedReward[msg.sender];
+        if (amount == 0) return;
+        storedReward[msg.sender] = 0;
+        claimUnlockAt[msg.sender] = block.timestamp + CLAIM_COOLDOWN;
+        rewardToken.safeTransfer(msg.sender, amount);
+        emit RewardPaid(msg.sender, amount);
     }
 
-    function _harvest(
+    /// @notice Instant lock bypass. Does not redeem LP or sell X Tomb.
+    function exitNow() external nonReentrant {
+        _accrue(msg.sender);
+        uint256 staked = balanceOf[msg.sender];
+        if (staked == 0) revert InvalidAmount();
+        uint256 rewards = storedReward[msg.sender];
+        storedReward[msg.sender] = 0;
+        balanceOf[msg.sender] = 0;
+        totalSupply -= staked;
+        rewardDebt[msg.sender] = 0;
+
+        uint256 toUser = staked / 2;
+        uint256 toTreasury = staked - toUser;
+        if (toUser > 0) stakeToken.safeTransfer(msg.sender, toUser);
+        if (toTreasury > 0) stakeToken.safeTransfer(protocolTreasury, toTreasury);
+        if (rewards > 0) rewardToken.safeTransfer(arbitrage, rewards);
+        emit ExitNow(msg.sender, toUser, toTreasury, rewards);
+    }
+
+    function _unpaid(
+        address user
+    ) internal view returns (uint256) {
+        return balanceOf[user] * accRewardPerShare / 1e18 - rewardDebt[user];
+    }
+
+    function _accrue(
         address user
     ) internal {
-        uint256 amount = pending(user);
-        if (amount == 0) return;
+        storedReward[user] += _unpaid(user);
         rewardDebt[user] = balanceOf[user] * accRewardPerShare / 1e18;
-        rewardToken.safeTransfer(user, amount);
-        emit RewardPaid(user, amount);
     }
 }

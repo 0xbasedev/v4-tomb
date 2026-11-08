@@ -58,7 +58,6 @@ export function validateMasonryLaunch(doc) {
   }
 
   for (const [key, value] of Object.entries({
-    fireTaxHardCapBps: 1200,
     genesisDurationSeconds: 604800,
     genesisLpOpenDelaySeconds: 86400,
     genesisLevelSellMinimumBps: 300,
@@ -68,13 +67,10 @@ export function validateMasonryLaunch(doc) {
     genesisProNftPriceUsdc: 100,
     genesisUltraNftPriceUsdc: 500,
     genesisUltraMultiplier: 1,
-    fireTaxBaselineBps: 300,
     fireTaxRecoverySeconds: 25200,
-    maximumExpansionPerEpochBps: 200,
     requiresFreshTwapStrictlyAbovePegBps: 10100,
     farmsCompoundCooldownSeconds: 10800,
     genesisCompoundCooldownSeconds: 10800,
-    farmEmissionDays: 365,
     operationalVestingDays: 180,
     genesisLevelUsdcLpBurnFeeBps: 50,
     genesisLiquidRewardBps: 5000,
@@ -90,13 +86,41 @@ export function validateMasonryLaunch(doc) {
     criticalDefenseExitBps: 10100,
     criticalRecoveryEpochs: 2,
     epochSeconds: 21600,
-    criticalOracleMaxAgeSeconds: 1800,
     governanceTimelocksEnabled: false,
     ownerTradingPauseEnabled: false,
   })) {
     if (policy[key] !== value) throw new Error(`policy.${key}: Masonry release invariant must equal ${value}`);
   }
   if (policy.fullTaxAtOrBelowPegBps !== 9000) throw new Error('full Fire Tax threshold must be 0.90 of peg');
+
+  const baseline = nonnegative(policy.fireTaxBaselineBps, 'policy.fireTaxBaselineBps');
+  const hardCap = nonnegative(policy.fireTaxHardCapBps, 'policy.fireTaxHardCapBps');
+  if (baseline < 300) throw new Error('policy.fireTaxBaselineBps: 3% floor (300) is required');
+  if (hardCap > 1200) throw new Error('policy.fireTaxHardCapBps: cannot exceed 12% (1200)');
+  if (baseline > hardCap) throw new Error('policy.fireTaxBaselineBps: cannot exceed fireTaxHardCapBps');
+
+  const expansion = nonnegative(policy.maximumExpansionPerEpochBps, 'policy.maximumExpansionPerEpochBps');
+  if (expansion < 1 || expansion > 200) {
+    throw new Error('policy.maximumExpansionPerEpochBps: must be 1–200 (2% hard cap)');
+  }
+
+  const farmDays = nonnegative(policy.farmEmissionDays, 'policy.farmEmissionDays');
+  if (farmDays < 1 || farmDays > 3650) throw new Error('policy.farmEmissionDays: must be 1–3650');
+
+  const oracleAge = nonnegative(policy.criticalOracleMaxAgeSeconds, 'policy.criticalOracleMaxAgeSeconds');
+  if (oracleAge < 1 || oracleAge > 1800) {
+    throw new Error('policy.criticalOracleMaxAgeSeconds: must be 1–1800');
+  }
+
+  positive(policy.farmShareWethLpAllocPoints, 'policy.farmShareWethLpAllocPoints');
+
+  const discount = nonnegative(policy.bondMaxDiscountBps, 'policy.bondMaxDiscountBps');
+  if (discount > 10000) throw new Error('policy.bondMaxDiscountBps: cannot exceed 10000');
+  const debt = nonnegative(policy.bondMaxDebtRatioBps, 'policy.bondMaxDebtRatioBps');
+  if (debt < 1 || debt > 10000) throw new Error('policy.bondMaxDebtRatioBps: must be 1–10000');
+  positive(policy.bondMaxSupply, 'policy.bondMaxSupply');
+  const premium = nonnegative(policy.bondRedeemPremiumBps, 'policy.bondRedeemPremiumBps');
+  if (premium > 10000) throw new Error('policy.bondRedeemPremiumBps: cannot exceed 10000');
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };

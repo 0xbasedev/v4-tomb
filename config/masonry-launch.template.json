@@ -62,6 +62,11 @@
     "criticalRecoveryEpochs": 2,
     "epochSeconds": 21600,
     "criticalOracleMaxAgeSeconds": 1800,
+    "farmShareWethLpAllocPoints": 1000,
+    "bondMaxDiscountBps": 10000,
+    "bondMaxDebtRatioBps": 3500,
+    "bondMaxSupply": 1000000,
+    "bondRedeemPremiumBps": 0,
     "governanceTimelocksEnabled": false,
     "ownerTradingPauseEnabled": false
   },

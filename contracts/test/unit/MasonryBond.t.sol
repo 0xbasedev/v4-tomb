@@ -33,11 +33,21 @@ contract MasonryBondTest is BaseTest {
         lp = new MockLp();
         oracle = new MockTwap();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        chamber = new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted);
-        treasury =
-            new MasonryTreasury(IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, address(this));
+        chamber = new MasonryChamber(
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+        );
+        treasury = new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+        );
         bond = new MasonryBond(
-            IERC20(address(level)), treasury, oracle, MAX_DISCOUNT_BPS, MAX_DEBT_RATIO_BPS, MAX_BOND_SUPPLY
+            IERC20(address(level)),
+            treasury,
+            oracle,
+            MAX_DISCOUNT_BPS,
+            MAX_DEBT_RATIO_BPS,
+            MAX_BOND_SUPPLY,
+            0,
+            30 minutes
         );
         treasury.setBond(address(bond));
         level.mint(alice, 10_000 ether);
@@ -113,5 +123,12 @@ contract MasonryBondTest is BaseTest {
         vm.prank(alice);
         vm.expectRevert(MasonryBond.StaleOracle.selector);
         bond.buy(10 ether);
+    }
+
+    function test_RejectsOutOfBoundsPremiumAndOracleAge() public {
+        vm.expectRevert(MasonryBond.InvalidConfiguration.selector);
+        new MasonryBond(IERC20(address(level)), treasury, oracle, 10_000, 3500, 1_000_000 ether, 10_001, 30 minutes);
+        vm.expectRevert(MasonryBond.InvalidConfiguration.selector);
+        new MasonryBond(IERC20(address(level)), treasury, oracle, 10_000, 3500, 1_000_000 ether, 0, 30 minutes + 1);
     }
 }

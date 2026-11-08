@@ -14,18 +14,19 @@ import {IMasonryBondSettler} from "./IMasonryRuntime.sol";
 /// @notice X Bond: buy below peg by burning X Tomb; redeem above peg for X Tomb.
 /// Discounts are bounded and outstanding debt is capped.
 ///
-/// PLACEHOLDERS (not approved tokenomics — set at launch by Jesse):
+/// Configured tokenomics (defaults in masonry-launch.template.json; bounded here):
 /// - `maxDiscountBps`: extra bonds above 1:1, hard-capped at 10_000 (2×).
-/// - `maxDebtRatioBps`: outstanding bonds vs circulating X Tomb, hard-capped at 10_000.
-/// - `maxBondSupply`: absolute bond supply cap.
-/// - Redemption is 1:1 (no premium) until a premium is specified.
+/// - `maxDebtRatioBps`: outstanding bonds vs circulating X Tomb, 1–10_000.
+/// - `maxBondSupply`: absolute bond supply cap (base units).
+/// - `redeemPremiumBps`: extra X Tomb on redeem, default 0, hard-capped at 10_000.
 contract MasonryBond is ERC20, ERC20Burnable, ERC20Permit, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant PEG_PRICE = 1e18;
-    uint256 public constant ORACLE_MAX_AGE = 30 minutes;
+    uint256 public constant HARD_MAX_ORACLE_AGE = 30 minutes;
     uint16 public constant HARD_MAX_DISCOUNT_BPS = 10_000;
     uint16 public constant HARD_MAX_DEBT_RATIO_BPS = 10_000;
+    uint16 public constant HARD_MAX_PREMIUM_BPS = 10_000;
 
     IERC20 public immutable level;
     IMasonryBondSettler public immutable treasury;
@@ -33,6 +34,8 @@ contract MasonryBond is ERC20, ERC20Burnable, ERC20Permit, ReentrancyGuard {
     uint16 public immutable maxDiscountBps;
     uint16 public immutable maxDebtRatioBps;
     uint256 public immutable maxBondSupply;
+    uint16 public immutable redeemPremiumBps;
+    uint256 public immutable oracleMaxAge;
 
     event Bought(address indexed buyer, uint256 tombIn, uint256 bondsOut, uint256 twapPrice);
     event Redeemed(address indexed redeemer, uint256 bondsIn, uint256 tombOut, uint256 twapPrice);
@@ -52,31 +55,36 @@ contract MasonryBond is ERC20, ERC20Burnable, ERC20Permit, ReentrancyGuard {
         IMasonryValidatedLevelTwap oracle_,
         uint16 maxDiscountBps_,
         uint16 maxDebtRatioBps_,
-        uint256 maxBondSupply_
+        uint256 maxBondSupply_,
+        uint16 redeemPremiumBps_,
+        uint256 oracleMaxAge_
     ) ERC20("X Bond", "xBOND") ERC20Permit("X Bond") {
         if (address(level_) == address(0) || address(treasury_) == address(0) || address(oracle_) == address(0)) {
             revert ZeroAddress();
         }
         if (
             maxDiscountBps_ > HARD_MAX_DISCOUNT_BPS || maxDebtRatioBps_ == 0
-                || maxDebtRatioBps_ > HARD_MAX_DEBT_RATIO_BPS
+                || maxDebtRatioBps_ > HARD_MAX_DEBT_RATIO_BPS || redeemPremiumBps_ > HARD_MAX_PREMIUM_BPS
         ) {
             revert InvalidConfiguration();
         }
         if (maxBondSupply_ == 0) revert InvalidConfiguration();
+        if (oracleMaxAge_ == 0 || oracleMaxAge_ > HARD_MAX_ORACLE_AGE) revert InvalidConfiguration();
         level = level_;
         treasury = treasury_;
         oracle = oracle_;
         maxDiscountBps = maxDiscountBps_;
         maxDebtRatioBps = maxDebtRatioBps_;
         maxBondSupply = maxBondSupply_;
+        redeemPremiumBps = redeemPremiumBps_;
+        oracleMaxAge = oracleMaxAge_;
     }
 
     function previewTwap() public view returns (uint256 price, bool fresh) {
         (uint256 observedPrice, uint256 observedAt, bool valid) = oracle.latestValidatedTwap();
         price = observedPrice;
         fresh =
-            valid && observedAt != 0 && observedAt <= block.timestamp && block.timestamp - observedAt <= ORACLE_MAX_AGE;
+            valid && observedAt != 0 && observedAt <= block.timestamp && block.timestamp - observedAt <= oracleMaxAge;
     }
 
     function previewBuy(
@@ -118,8 +126,9 @@ contract MasonryBond is ERC20, ERC20Burnable, ERC20Permit, ReentrancyGuard {
         (uint256 price, bool fresh) = previewTwap();
         if (!fresh) revert StaleOracle();
         if (price <= PEG_PRICE) revert NotAbovePeg();
+        uint256 tombOut = bondAmount * (uint256(10_000) + redeemPremiumBps) / 10_000;
         _burn(msg.sender, bondAmount);
-        treasury.settleBondRedemption(msg.sender, bondAmount);
-        emit Redeemed(msg.sender, bondAmount, bondAmount, price);
+        treasury.settleBondRedemption(msg.sender, tombOut);
+        emit Redeemed(msg.sender, bondAmount, tombOut, price);
     }
 }

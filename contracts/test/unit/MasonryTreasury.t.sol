@@ -70,9 +70,12 @@ contract MasonryTreasuryTest is BaseTest {
         lp = new MockLp();
         oracle = new MockTwap();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        chamber = new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted);
-        treasury =
-            new MasonryTreasury(IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, address(this));
+        chamber = new MasonryChamber(
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+        );
+        treasury = new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+        );
         assertEq(address(treasury), predicted);
         level.mint(address(this), 1_000_000 ether);
         lp.mint(alice, 1000 ether);
@@ -152,8 +155,23 @@ contract MasonryTreasuryTest is BaseTest {
 
     function test_RequestedRateCap() public {
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        MasonryChamber next = new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted);
+        MasonryChamber next = new MasonryChamber(
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+        );
         vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
-        new MasonryTreasury(IMasonryMintableLevel(address(level)), next, oracle, startTime, 201, address(this));
+        new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), next, oracle, startTime, 201, 30 minutes, address(this)
+        );
+    }
+
+    function test_OracleAgeCap() public {
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        MasonryChamber next = new MasonryChamber(
+            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage")
+        );
+        vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
+        new MasonryTreasury(
+            IMasonryMintableLevel(address(level)), next, oracle, startTime, 200, 30 minutes + 1, address(this)
+        );
     }
 }
