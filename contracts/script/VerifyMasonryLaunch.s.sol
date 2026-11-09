@@ -25,7 +25,10 @@ contract VerifyMasonryLaunch is Create3Config {
             address a = vm.parseJsonAddress(config, string.concat(".addresses.", roles[i]));
             if (a.code.length == 0) revert NoCode(roles[i], a);
             bytes32 h = keccak256(bytes(roles[i]));
-            if ((h == keccak256("masonryTaxHook") || h == keccak256("masonryShareTaxHook")) && uint160(a) & 0x3fff != 0x35c8) {
+            if (
+                (h == keccak256("masonryTaxHook") || h == keccak256("masonryShareTaxHook"))
+                    && uint160(a) & 0x3fff != 0x35c8
+            ) {
                 revert BadHookBits(roles[i], a);
             }
         }
@@ -33,7 +36,11 @@ contract VerifyMasonryLaunch is Create3Config {
         _checkBind(config, "masonrySquareRangeManager", "masonryShareTaxHook");
     }
 
-    function _checkBind(string memory config, string memory rmRole, string memory hookRole) internal view {
+    function _checkBind(
+        string memory config,
+        string memory rmRole,
+        string memory hookRole
+    ) internal view {
         string memory rmKey = string.concat(".addresses.", rmRole);
         string memory hookKey = string.concat(".addresses.", hookRole);
         if (!vm.keyExistsJson(config, rmKey) && !vm.keyExistsJson(config, hookKey)) return;

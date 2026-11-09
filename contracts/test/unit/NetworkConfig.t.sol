@@ -191,6 +191,7 @@ contract NetworkConfigTest is Test {
         bytes memory initCode = abi.encodePacked(type(MasonryGenesisSchedule).creationCode, abi.encode(0, vm.addr(1)));
         address expected = 0xC1e16e56c5f5075D3b0E35508f518CBFec035683;
         string memory path = "./deployment-output/masonry-vanity-test.json";
+        vm.createDir("./deployment-output", true);
         vm.writeFile(
             path,
             string.concat(

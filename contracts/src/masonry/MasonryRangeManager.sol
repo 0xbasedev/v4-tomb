@@ -31,7 +31,6 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
 
-
     enum Op {
         Fund,
         Rebalance
@@ -112,13 +111,10 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
             ) {
                 revert MasonryRangeLib.InvalidRangeConfig();
             }
-            uint16 tighter = cfg.lowerHalfWidthBps < cfg.upperHalfWidthBps
-                ? cfg.lowerHalfWidthBps
-                : cfg.upperHalfWidthBps;
+            uint16 tighter =
+                cfg.lowerHalfWidthBps < cfg.upperHalfWidthBps ? cfg.lowerHalfWidthBps : cfg.upperHalfWidthBps;
             MasonryRangeLib.validate(tighter, cfg.recenterBps, cfg.cooldown, cfg.maxTwapDeviationBps);
-            halfWidthBps = cfg.lowerHalfWidthBps > cfg.upperHalfWidthBps
-                ? cfg.lowerHalfWidthBps
-                : cfg.upperHalfWidthBps;
+            halfWidthBps = cfg.lowerHalfWidthBps > cfg.upperHalfWidthBps ? cfg.lowerHalfWidthBps : cfg.upperHalfWidthBps;
             lowerHalfWidthBps = cfg.lowerHalfWidthBps;
             upperHalfWidthBps = cfg.upperHalfWidthBps;
             sqrtPeg = cfg.sqrtPeg;
@@ -283,7 +279,9 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
             lastRebalanceAt = block.timestamp;
             lastRebalanceBlock = block.number;
             (, int24 tick,,) = manager.getSlot0(poolId);
-            emit RangeRebalanced(tickLower, tickUpper, liquidity, tick, principal0, principal1, fees0, fees1, swap0, swap1);
+            emit RangeRebalanced(
+                tickLower, tickUpper, liquidity, tick, principal0, principal1, fees0, fees1, swap0, swap1
+            );
             return;
         }
         if (!seeded) _setBandFromSpot();
@@ -302,9 +300,14 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         seeded = true;
     }
 
-    function _bandTicks(uint160 sqrtPrice) private view returns (int24 lower, int24 upper) {
+    function _bandTicks(
+        uint160 sqrtPrice
+    ) private view returns (int24 lower, int24 upper) {
         if (pegAnchor) {
-            return MasonryRangeLib.pegAnchorTicks(sqrtPrice, sqrtPeg, lowerHalfWidthBps, upperHalfWidthBps, key.tickSpacing);
+            return
+                MasonryRangeLib.pegAnchorTicks(
+                    sqrtPrice, sqrtPeg, lowerHalfWidthBps, upperHalfWidthBps, key.tickSpacing
+                );
         }
         return MasonryRangeLib.bandTicks(sqrtPrice, halfWidthBps, key.tickSpacing);
     }
@@ -317,7 +320,6 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         uint256 spot = MasonryLevelPrice.fromSqrtPrice(sqrtPrice, assetIsCurrency0);
         if (MasonryRangeLib.deviationBps(spot, twap) > maxTwapDeviationBps) revert UnsafeRebalance();
     }
-
 
     function _rebalanceInventory() private returns (int256 swap0, int256 swap1) {
         IERC20 token0 = IERC20(Currency.unwrap(key.currency0));
@@ -344,12 +346,14 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         }
     }
 
-    function _swap(bool zeroForOne, uint256 amountIn, uint160 limit) private returns (int256 amount0, int256 amount1) {
+    function _swap(
+        bool zeroForOne,
+        uint256 amountIn,
+        uint160 limit
+    ) private returns (int256 amount0, int256 amount1) {
         if (amountIn == 0) return (0, 0);
         BalanceDelta delta = manager.swap(
-            key,
-            SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountIn), sqrtPriceLimitX96: limit}),
-            ""
+            key, SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amountIn), sqrtPriceLimitX96: limit}), ""
         );
         // _settleNegative also takes a positive credit so each currency is settled once.
         _settleNegative(key.currency0, delta.amount0());
@@ -375,10 +379,7 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         }
     }
 
-    function _removePosition()
-        private
-        returns (uint256 principal0, uint256 principal1, uint256 fees0, uint256 fees1)
-    {
+    function _removePosition() private returns (uint256 principal0, uint256 principal1, uint256 fees0, uint256 fees1) {
         if (liquidity == 0) return (0, 0, 0, 0);
         (BalanceDelta delta, BalanceDelta feesAccrued) = manager.modifyLiquidity(
             key, ModifyLiquidityParams(tickLower, tickUpper, -int256(uint256(liquidity)), bytes32(0)), ""
@@ -394,7 +395,9 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
         principal1 = total1 > fees1 ? total1 - fees1 : 0;
     }
 
-    function _positive(int128 amount) private pure returns (uint256) {
+    function _positive(
+        int128 amount
+    ) private pure returns (uint256) {
         return amount > 0 ? uint256(uint128(amount)) : 0;
     }
 

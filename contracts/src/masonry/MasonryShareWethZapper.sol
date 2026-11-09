@@ -8,10 +8,15 @@ import {MasonryRangeLib} from "./MasonryRangeLib.sol";
 
 interface IShareWethAmm {
     function spotPrice() external view returns (uint256);
-    function swapShareForWeth(uint256 shareIn, uint256 minWethOut) external returns (uint256 wethOut);
-    function addLiquidity(uint256 shareIn, uint256 wethIn, uint256 minLp)
-        external
-        returns (uint256 lpOut, uint256 shareUsed, uint256 wethUsed);
+    function swapShareForWeth(
+        uint256 shareIn,
+        uint256 minWethOut
+    ) external returns (uint256 wethOut);
+    function addLiquidity(
+        uint256 shareIn,
+        uint256 wethIn,
+        uint256 minLp
+    ) external returns (uint256 lpOut, uint256 shareUsed, uint256 wethUsed);
     function lpToken() external view returns (address);
 }
 
@@ -67,7 +72,9 @@ contract MasonryShareWethZapper is ReentrancyGuard {
 
     /// @dev Launch passes the planned CREATE3 farm address to the constructor; this late bind
     ///      is DAO-wallet-only so a stranger can't claim the zapper first.
-    function bindFarm(address farm_) external {
+    function bindFarm(
+        address farm_
+    ) external {
         if (msg.sender != daoWallet || farm != address(0) || farm_ == address(0)) revert Unauthorized();
         farm = farm_;
     }
@@ -76,11 +83,12 @@ contract MasonryShareWethZapper is ReentrancyGuard {
         return amm.lpToken();
     }
 
-    function zap(address, uint256 shareAmount, uint256 minWethOut, uint256 minLpOut)
-        external
-        nonReentrant
-        returns (uint256 lpOut, uint256 shareDust, uint256 wethDust)
-    {
+    function zap(
+        address,
+        uint256 shareAmount,
+        uint256 minWethOut,
+        uint256 minLpOut
+    ) external nonReentrant returns (uint256 lpOut, uint256 shareDust, uint256 wethDust) {
         if (msg.sender != farm) revert Unauthorized();
         if (shareAmount < 2) revert InvalidAmount();
         _guardTwap();

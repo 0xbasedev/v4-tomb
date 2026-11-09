@@ -22,9 +22,14 @@ import {MockFireTax} from "../utils/MockFireTax.sol";
 import {IMasonryFireTax} from "../../src/masonry/IMasonryFireTax.sol";
 
 contract MockAsset is ERC20 {
-    constructor(string memory name_) ERC20(name_, name_) {}
+    constructor(
+        string memory name_
+    ) ERC20(name_, name_) {}
 
-    function mint(address to, uint256 amount) external {
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         _mint(to, amount);
     }
 }
@@ -36,7 +41,10 @@ contract MockQuote is ERC20 {
         return 6;
     }
 
-    function mint(address to, uint256 amount) external {
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         _mint(to, amount);
     }
 }
@@ -66,7 +74,15 @@ contract MasonryPooledRangeVaultTest is Test {
     function testRangeGuardsComeFromConstructorAndAreValidated() public {
         Env memory e = _boot();
         MasonryPooledRangeVault v = new MasonryPooledRangeVault(
-            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, fireTax,
+            manager,
+            e.key,
+            MasonryPooledRangeVault.Strategy.FixedPeg,
+            1500,
+            e.peg,
+            1800,
+            address(this),
+            vaultDao,
+            fireTax,
             MasonryPooledRangeVault.RangeGuards(400, 900, 150)
         );
         assertEq(v.recenterBps(), 400);
@@ -74,7 +90,15 @@ contract MasonryPooledRangeVaultTest is Test {
         assertEq(v.maxTwapDeviationBps(), 150);
         vm.expectRevert(); // recenter >= half-width
         new MasonryPooledRangeVault(
-            manager, e.key, MasonryPooledRangeVault.Strategy.FixedPeg, 1500, e.peg, 1800, address(this), vaultDao, fireTax,
+            manager,
+            e.key,
+            MasonryPooledRangeVault.Strategy.FixedPeg,
+            1500,
+            e.peg,
+            1800,
+            address(this),
+            vaultDao,
+            fireTax,
             MasonryPooledRangeVault.RangeGuards(1500, 900, 150)
         );
     }
@@ -121,9 +145,7 @@ contract MasonryPooledRangeVaultTest is Test {
         assertGt(usdgLeft, 0, "pooled vault must keep USDG after a partial depeg redemption");
         assertGt(vault.balanceOf(alice), 0);
 
-        uint256 bobValue = MasonryRangeLib.valueInCurrency1(
-            e.asset0 ? bob0 : bob1, e.asset0 ? bob1 : bob0, sqrtAfter
-        );
+        uint256 bobValue = MasonryRangeLib.valueInCurrency1(e.asset0 ? bob0 : bob1, e.asset0 ? bob1 : bob0, sqrtAfter);
         // 20k USDG was deposited (6 decimals live in currency1 or currency0).
         // Mark the payout; it should be below the deposit once Fire-Tax-free but IL/impact apply.
         assertGt(bobValue, 0);
@@ -138,8 +160,7 @@ contract MasonryPooledRangeVaultTest is Test {
         (int24 lower, int24 upper) = vault.previewBand();
         int24 pegTick = TickMath.getTickAtSqrtPrice(e.peg);
         assertFalse(
-            MasonryRangeLib.containsTick(pegTick, lower, upper),
-            "follow recentered onto the depeg no longer reaches $1"
+            MasonryRangeLib.containsTick(pegTick, lower, upper), "follow recentered onto the depeg no longer reaches $1"
         );
     }
 
@@ -192,16 +213,15 @@ contract MasonryPooledRangeVaultTest is Test {
         vault.requestRedeem(aliceShares);
         (uint256 before0, uint256 before1) = vault.inventory();
         (uint160 sqrtBefore,,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
-        uint256 preview = MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore) * aliceShares / vault.totalSupply();
+        uint256 preview =
+            MasonryRangeLib.valueInCurrency1(before0, before1, sqrtBefore) * aliceShares / vault.totalSupply();
         _sellToward(e, 2000);
         vault.rebalance();
         vm.warp(block.timestamp + 1800);
         vm.prank(alice);
         (uint256 out0, uint256 out1) = vault.completeRedeem();
         (uint160 sqrtAfter,,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
-        uint256 paid = MasonryRangeLib.valueInCurrency1(
-            e.asset0 ? out0 : out1, e.asset0 ? out1 : out0, sqrtAfter
-        );
+        uint256 paid = MasonryRangeLib.valueInCurrency1(e.asset0 ? out0 : out1, e.asset0 ? out1 : out0, sqrtAfter);
         // Priced at completion, after the rebalance — not a snapshot from request time.
         assertTrue(paid != preview || out0 + out1 > 0);
         assertGt(paid, 0);
@@ -432,8 +452,18 @@ contract MasonryPooledRangeVaultTest is Test {
         MasonryPooledRangeVault.Strategy strategy,
         uint16 width
     ) private returns (MasonryPooledRangeVault vault) {
-        vault = new MasonryPooledRangeVault(manager, e.key, strategy, width, e.peg, 1800, address(this), vaultDao, fireTax,
-            MasonryPooledRangeVault.RangeGuards(uint16(width / 2 == 0 ? 100 : width / 2), 1800, 300));
+        vault = new MasonryPooledRangeVault(
+            manager,
+            e.key,
+            strategy,
+            width,
+            e.peg,
+            1800,
+            address(this),
+            vaultDao,
+            fireTax,
+            MasonryPooledRangeVault.RangeGuards(uint16(width / 2 == 0 ? 100 : width / 2), 1800, 300)
+        );
     }
 
     function _deposit(
@@ -453,25 +483,28 @@ contract MasonryPooledRangeVaultTest is Test {
         vm.stopPrank();
     }
 
-    function _sellToward(Env memory e, int24 tickDelta) private {
+    function _sellToward(
+        Env memory e,
+        int24 tickDelta
+    ) private {
         (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(e.key.toId());
         int24 target = e.asset0 ? tick - tickDelta : tick + tickDelta;
-        // asset0: cheaper asset raises token1/token0, so zeroForOne=false? 
+        // asset0: cheaper asset raises token1/token0, so zeroForOne=false?
         // Selling asset: if asset is token0, zeroForOne=true (sell token0).
         // tick for token0/token1: selling token0 decreases sqrt price.
         // MasonryRangeManager tests: target = asset0 ? tick - delta : tick + delta with zeroForOne: asset0
         // Wait, they used tick - delta when asset0. Selling token0 decreases tick.
-        // But cheaper LEVEL when LEVEL is token0 means USDG/LEVEL increases... 
+        // But cheaper LEVEL when LEVEL is token0 means USDG/LEVEL increases...
         // token1/token0 = USDG/LEVEL increases when LEVEL cheaper, tick INCREASES, so they should add to tick?
         // Their test: `target = e.asset0 ? tick - tickDelta` and zeroForOne: asset0 (sell asset).
         // Selling token0 decreases pool price token1/token0. If asset is token0, selling asset decreases USDG/LEVEL,
         // which means LEVEL became MORE expensive. That's a PUMP not a depeg!
         //
         // MasonryLevelPrice asset0: price = sqrt^2 * 1e30 / Q96^2 related to token1/token0.
-        // If they sell asset (token0), token1/token0 drops, fromSqrtPrice drops... 
+        // If they sell asset (token0), token1/token0 drops, fromSqrtPrice drops...
         // fromSqrtPrice asset0: sqrt^2 * 1e30 / 2^192 = token1/token0 * 1e30.
         // token1/token0 = USDG/LEVEL small when LEVEL expensive.
-        // Selling LEVEL (token0) -> more LEVEL in pool -> LEVEL cheaper -> USDG/LEVEL increases? 
+        // Selling LEVEL (token0) -> more LEVEL in pool -> LEVEL cheaper -> USDG/LEVEL increases?
         // Constant product: sell token0 -> get token1 -> reserve0 up, reserve1 down -> price token1/token0 down.
         // token1/token0 down = USDG per LEVEL down = LEVEL more expensive. PUMP!
         //
@@ -486,7 +519,7 @@ contract MasonryPooledRangeVaultTest is Test {
         // actually represents LEVEL price...
         // Earlier I calculated asset0 (token0=LEVEL, token1=USDG): token1/token0 = 1/(P*1e12), *1e30 = 1e18/P
         // That would be INVERSE - selling token0 lowers token1/token0, increases 1e18/P so P decreases. Yes! P = LEVEL price.
-        // Selling LEVEL (token0) increases 1/P displayed as fromSqrtPrice decreasing? 
+        // Selling LEVEL (token0) increases 1/P displayed as fromSqrtPrice decreasing?
         // token1/token0 decreases -> formula asset0: sqrt^2*1e30/Q96^2 decreases -> they call that price. assert <= 0.9.
         // So selling token0 (LEVEL) makes their price metric go DOWN = depeg. OK they have it right empirically.
         // Use the same direction as MasonryRangeManager.t.sol.

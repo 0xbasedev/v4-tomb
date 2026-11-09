@@ -9,15 +9,17 @@ contract MockMasonryValidatedTwap is IMasonryValidatedLevelTwap {
     uint256 public observedAt;
     bool public valid;
 
-    function set(uint256 p, uint256 t, bool v) external {
+    function set(
+        uint256 p,
+        uint256 t,
+        bool v
+    ) external {
         price = p;
         observedAt = t;
         valid = v;
     }
 
-    function latestValidatedTwap()
-        external view returns (uint256, uint256, bool)
-    {
+    function latestValidatedTwap() external view returns (uint256, uint256, bool) {
         return (price, observedAt, valid);
     }
 }
@@ -34,12 +36,16 @@ contract MasonryCriticalDefenseTest is Test {
         defense = new MasonryCriticalDefense(twap);
     }
 
-    function _observed(uint256 price) internal {
+    function _observed(
+        uint256 price
+    ) internal {
         twap.set(price, block.timestamp, true);
         defense.sync();
     }
 
-    function _nextEpoch(uint256 offset) internal {
+    function _nextEpoch(
+        uint256 offset
+    ) internal {
         vm.warp((firstEpoch + offset) * 6 hours + 60);
     }
 

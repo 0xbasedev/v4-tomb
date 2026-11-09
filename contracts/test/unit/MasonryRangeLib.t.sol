@@ -124,7 +124,7 @@ contract MasonryRangeLibTest is Test {
         // asset-as-token0 peg sqrt used by the official xTOMB/USDG tests
         uint160 peg = uint160((uint256(1) << 96) / 1e6);
         // ~18% below peg in asset price (pool sqrt rises by ~1/sqrt(0.82))
-        uint160 spot = uint160(uint256(peg) * 110432 / 100000);
+        uint160 spot = uint160(uint256(peg) * 110_432 / 100_000);
         int24 pegTick = TickMath.getTickAtSqrtPrice(peg);
         int24 spotTick = TickMath.getTickAtSqrtPrice(spot);
         assertTrue(spotTick != pegTick);
@@ -137,7 +137,9 @@ contract MasonryRangeLibTest is Test {
         assertFalse(MasonryRangeLib.containsTick(pegTick, followL, followU), "follow around a depeg abandons $1");
 
         assertTrue(MasonryRangeLib.containsTick(pegTick, fixedL, fixedU), "fixed book stays on $1");
-        assertFalse(MasonryRangeLib.containsTick(spotTick, fixedL, fixedU), "tight fixed book is idle below its lower edge");
+        assertFalse(
+            MasonryRangeLib.containsTick(spotTick, fixedL, fixedU), "tight fixed book is idle below its lower edge"
+        );
 
         assertTrue(MasonryRangeLib.containsTick(spotTick, anchorL, anchorU));
         assertTrue(MasonryRangeLib.containsTick(pegTick, anchorL, anchorU), "peg-anchor keeps the recovery path");
@@ -155,7 +157,10 @@ contract MasonryRangeLibTest is Test {
         _assertPegAnchorHighEdge(80e16, false);
     }
 
-    function _assertPegAnchorHighEdge(uint256 spotPriceWad, bool levelIsCurrency0) private pure {
+    function _assertPegAnchorHighEdge(
+        uint256 spotPriceWad,
+        bool levelIsCurrency0
+    ) private pure {
         uint160 peg = levelIsCurrency0 ? uint160((uint256(1) << 96) / 1e6) : uint160((uint256(1) << 96) * 1e6);
         assertApproxEqAbs(MasonryLevelPrice.fromSqrtPrice(peg, levelIsCurrency0), 1e18, 10);
 

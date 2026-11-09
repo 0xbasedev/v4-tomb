@@ -144,7 +144,11 @@ contract MasonryRangeManagerTest is Test {
         e.rm.depositFromHook(1, 1, address(this));
 
         MasonryRangeManager thin = new MasonryRangeManager(
-            manager, e.key, e.twap, address(this), e.asset0,
+            manager,
+            e.key,
+            e.twap,
+            address(this),
+            e.asset0,
             MasonryRangeManager.RangeConfig({
                 halfWidthBps: 1500,
                 recenterBps: 1000,
@@ -204,7 +208,13 @@ contract MasonryRangeManagerTest is Test {
         int24 center = TickMath.getTickAtSqrtPrice(peg) / 60 * 60;
         liqRouter.modifyLiquidity(e.key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
         e.twap = new MockRangeTwap();
-        e.rm = new MasonryRangeManager(manager, e.key, e.twap, address(this), e.asset0, MasonryRangeManager.RangeConfig({
+        e.rm = new MasonryRangeManager(
+            manager,
+            e.key,
+            e.twap,
+            address(this),
+            e.asset0,
+            MasonryRangeManager.RangeConfig({
                 halfWidthBps: 1500,
                 recenterBps: 1000,
                 cooldown: 1800,
@@ -214,7 +224,8 @@ contract MasonryRangeManagerTest is Test {
                 upperHalfWidthBps: 0,
                 sqrtPeg: 0,
                 pegAnchor: false
-            }));
+            })
+        );
         e.asset.approve(address(e.rm), type(uint256).max);
         usdg.approve(address(e.rm), type(uint256).max);
         e.rm.donate(20_000e18, 20_000e6);
@@ -302,22 +313,19 @@ contract MasonryRangeManagerTest is Test {
         e.rm.nudge();
     }
 
-
     function _assertRebalanceAccounting(
         Env memory e
     ) private {
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256(
-            "RangeRebalanced(int24,int24,uint128,int24,uint256,uint256,uint256,uint256,int256,int256)"
-        );
+        bytes32 topic =
+            keccak256("RangeRebalanced(int24,int24,uint128,int24,uint256,uint256,uint256,uint256,int256,int256)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(e.rm) || logs[i].topics[0] != topic) continue;
             (
                 int24 reportedLower,
                 int24 reportedUpper,
-                uint128 reportedLiq,
-                ,
+                uint128 reportedLiq,,
                 uint256 principal0,
                 uint256 principal1,
                 uint256 fees0,

@@ -181,10 +181,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
 
     function _nudgeRange() internal {
         address rm = rangeManager;
-        if (
-            rm == address(0)
-                || gasleft() < MasonryRangeLib.NUDGE_STIPEND + MasonryRangeLib.NUDGE_HOOK_BUFFER
-        ) return;
+        if (rm == address(0) || gasleft() < MasonryRangeLib.NUDGE_STIPEND + MasonryRangeLib.NUDGE_HOOK_BUFFER) return;
         try IMasonryRangeNudge(rm).nudge{gas: MasonryRangeLib.NUDGE_STIPEND}() {} catch {}
     }
 

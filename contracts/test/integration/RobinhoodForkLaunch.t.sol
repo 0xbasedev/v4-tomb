@@ -643,7 +643,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         _tinyBuy(pool);
 
         PoolSwapTest swaps = new PoolSwapTest(pm);
-        pool.level.mint(address(this), 5_000e18);
+        pool.level.mint(address(this), 5000e18);
         IERC20(address(pool.level)).approve(address(swaps), type(uint256).max);
         IERC20(USDG).approve(address(swaps), type(uint256).max);
         uint256 levelBefore = pool.level.balanceOf(address(this));
@@ -657,7 +657,9 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             PoolSwapTest.TestSettings(false, false),
             ""
         );
-        assertLt(pool.level.balanceOf(address(this)), levelBefore, "hooked sell still succeeds with range manager bound");
+        assertLt(
+            pool.level.balanceOf(address(this)), levelBefore, "hooked sell still succeeds with range manager bound"
+        );
         (uint160 sqrtAfter,,,) = StateLibrary.getSlot0(pm, pool.key.toId());
         uint256 spotAfter = MasonryLevelPrice.fromSqrtPrice(sqrtAfter, pool.level0);
         (uint256 twapNow,,) = rangeTwap.latestValidatedTwap();
@@ -771,7 +773,10 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         );
     }
 
-    function _farmPolicy(address daoWallet, address masonry) private returns (MasonryFarm.Policy memory policy) {
+    function _farmPolicy(
+        address daoWallet,
+        address masonry
+    ) private returns (MasonryFarm.Policy memory policy) {
         policy.claimToWallet = false;
         policy.withdrawCooldown = 1800;
         policy.daoWallet = daoWallet;

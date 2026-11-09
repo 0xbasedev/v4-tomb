@@ -34,7 +34,10 @@ contract MockShareWethLp is ERC20 {
 contract MintableZapperLp is ERC20 {
     constructor() ERC20("X Share/WETH LP", "SLP") {}
 
-    function mint(address to, uint256 amount) external {
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         _mint(to, amount);
     }
 }
@@ -43,7 +46,10 @@ contract MockFarmZapper {
     IERC20 public share;
     MintableZapperLp public lp;
 
-    constructor(IERC20 share_, MintableZapperLp lp_) {
+    constructor(
+        IERC20 share_,
+        MintableZapperLp lp_
+    ) {
         share = share_;
         lp = lp_;
     }
@@ -52,10 +58,12 @@ contract MockFarmZapper {
         return address(lp);
     }
 
-    function zap(address, uint256 shareAmount, uint256, uint256 minLpOut)
-        external
-        returns (uint256 lpOut, uint256 shareDust, uint256 wethDust)
-    {
+    function zap(
+        address,
+        uint256 shareAmount,
+        uint256,
+        uint256 minLpOut
+    ) external returns (uint256 lpOut, uint256 shareDust, uint256 wethDust) {
         uint256 bal = share.balanceOf(address(this));
         if (bal < shareAmount) shareAmount = bal;
         shareDust = shareAmount > 10 ? 1 : 0;
@@ -405,7 +413,11 @@ contract MasonryFarmTest is BaseTest {
         chamber.claim();
     }
 
-    function testFuzz_NoFarmPathPaysShareToWallet(uint8 action, uint256 elapsedRaw, uint256 amountRaw) public {
+    function testFuzz_NoFarmPathPaysShareToWallet(
+        uint8 action,
+        uint256 elapsedRaw,
+        uint256 amountRaw
+    ) public {
         vm.warp(startTime + 1);
         vm.prank(alice);
         farm.deposit(0, 100 ether);

@@ -12,11 +12,15 @@ contract BindOnlyHook {
     address public immutable initializer;
     address public rangeManager;
 
-    constructor(address initializer_) {
+    constructor(
+        address initializer_
+    ) {
         initializer = initializer_;
     }
 
-    function bindRangeManager(address rm) external {
+    function bindRangeManager(
+        address rm
+    ) external {
         require(msg.sender == initializer && rangeManager == address(0) && rm.code.length != 0, "unauthorized");
         rangeManager = rm;
     }
@@ -33,7 +37,11 @@ contract DryRunVerify is VerifyMasonryLaunch {
         return keccak256(type(ConfigTestFactory).runtimeCode);
     }
 
-    function create3Address(bytes32 releaseId, address deployer, string memory role) external pure returns (address) {
+    function create3Address(
+        bytes32 releaseId,
+        address deployer,
+        string memory role
+    ) external pure returns (address) {
         return _create3Address(Create3Plan(CREATEX, deployer, releaseId), role, 0);
     }
 }
@@ -61,17 +69,43 @@ contract MasonryLaunchDryRunTest is Test {
         verify = new DryRunVerify();
     }
 
-    function _write(bool withSquare) internal returns (address level, address square) {
+    function _write(
+        bool withSquare
+    ) internal returns (address level, address square) {
         level = verify.create3Address(RELEASE, deployer, "masonryLevelRangeManager");
         square = verify.create3Address(RELEASE, deployer, "masonrySquareRangeManager");
         string memory h = vm.toString(keccak256(initCode));
-        vm.writeFile(path, string.concat(
-            '{"chainId":4663,"factory":"', vm.toString(FACTORY), '","deployer":"', vm.toString(deployer),
-            '","releaseId":"', vm.toString(RELEASE), '","addresses":{"masonryTaxHook":"', vm.toString(HOOK),
-            '","masonryLevelRangeManager":"', vm.toString(level), '"',
-            withSquare ? string.concat(',"masonryShareTaxHook":"', vm.toString(SQUARE_HOOK), '","masonrySquareRangeManager":"', vm.toString(square), '"') : "",
-            '},"initCodeHashes":{"masonryLevelRangeManager":"', h, '","masonrySquareRangeManager":"', h, '"}}'
-        ));
+        vm.createDir("./deployment-output", true);
+        vm.writeFile(
+            path,
+            string.concat(
+                '{"chainId":4663,"factory":"',
+                vm.toString(FACTORY),
+                '","deployer":"',
+                vm.toString(deployer),
+                '","releaseId":"',
+                vm.toString(RELEASE),
+                '","addresses":{"masonryTaxHook":"',
+                vm.toString(HOOK),
+                '","masonryLevelRangeManager":"',
+                vm.toString(level),
+                '"',
+                withSquare
+                    ? string.concat(
+                        ',"masonryShareTaxHook":"',
+                        vm.toString(SQUARE_HOOK),
+                        '","masonrySquareRangeManager":"',
+                        vm.toString(square),
+                        '"'
+                    )
+                    : "",
+                '},"initCodeHashes":{"masonryLevelRangeManager":"',
+                h,
+                '","masonrySquareRangeManager":"',
+                h,
+                '"}}'
+            )
+        );
         vm.setEnv("MASONRY_CREATE3_CONFIG", path);
     }
 
@@ -91,7 +125,9 @@ contract MasonryLaunchDryRunTest is Test {
         // 3. code present but never bound
         _write(false);
         vm.etch(level, hex"00");
-        vm.expectRevert(abi.encodeWithSelector(VerifyMasonryLaunch.Unbound.selector, "masonryTaxHook", address(0), level));
+        vm.expectRevert(
+            abi.encodeWithSelector(VerifyMasonryLaunch.Unbound.selector, "masonryTaxHook", address(0), level)
+        );
         verify.run();
         vm.revertToState(snap);
         // 4. real launch run: CREATE3 deploy binds each hook in the same run, verify passes

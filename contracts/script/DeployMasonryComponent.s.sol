@@ -4,7 +4,9 @@ pragma solidity 0.8.26;
 import {Create3Config} from "./Create3Config.s.sol";
 
 interface IRangeBindable {
-    function bindRangeManager(address rm) external;
+    function bindRangeManager(
+        address rm
+    ) external;
     function rangeManager() external view returns (address);
 }
 
@@ -14,7 +16,9 @@ contract DeployMasonryComponent is Create3Config {
     error UnapprovedInitCode();
     error UnboundHook(string hookRole);
 
-    function _hookFor(bytes32 roleHash) internal pure returns (string memory) {
+    function _hookFor(
+        bytes32 roleHash
+    ) internal pure returns (string memory) {
         if (roleHash == keccak256("masonryLevelRangeManager")) return "masonryTaxHook";
         if (roleHash == keccak256("masonrySquareRangeManager")) return "masonryShareTaxHook";
         return "";

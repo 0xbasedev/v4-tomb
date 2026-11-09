@@ -40,16 +40,20 @@ contract MasonryRulesTest is Test {
         assertEq(MasonryRules.targetSellTaxBps(1e18 - 1, 1e18, 100, 1200, d), 100); // dust below peg
     }
 
-    function testFuzz_SqrtCurveMonotonic(uint128 a, uint128 b) public pure {
+    function testFuzz_SqrtCurveMonotonic(
+        uint128 a,
+        uint128 b
+    ) public pure {
         (uint256 lo, uint256 hi) = a < b ? (uint256(a), uint256(b)) : (uint256(b), uint256(a));
         uint16 d = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
         assertGe(
-            MasonryRules.targetSellTaxBps(lo, 1e18, 100, 1200, d),
-            MasonryRules.targetSellTaxBps(hi, 1e18, 100, 1200, d)
+            MasonryRules.targetSellTaxBps(lo, 1e18, 100, 1200, d), MasonryRules.targetSellTaxBps(hi, 1e18, 100, 1200, d)
         );
     }
 
-    function testFuzz_SqrtCurveAtLeastQuadratic(uint64 price) public pure {
+    function testFuzz_SqrtCurveAtLeastQuadratic(
+        uint64 price
+    ) public pure {
         uint256 p = bound(uint256(price), 9e17, 1e18);
         uint256 progress = (1e18 - p) * 10_000 / 1e17;
         uint256 oldTax = 100 + 1100 * (progress * progress / 10_000) / 10_000;
@@ -90,7 +94,9 @@ contract MasonryRulesTest is Test {
         assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 30 days), 300);
     }
 
-    function testFuzz_ThreePercentFloorBounds(uint128 price) public pure {
+    function testFuzz_ThreePercentFloorBounds(
+        uint128 price
+    ) public pure {
         uint16 tax = MasonryRules.targetSellTaxBps(price, 1e18, 300, 1200, 1000);
         assertGe(tax, 300);
         assertLe(tax, 1200);
@@ -117,8 +123,12 @@ contract MasonryRulesTest is Test {
         assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0 + 7 hours), 300);
     }
 
-    function testFuzz_WithdrawFeeNeverExceedsTwelvePercent(uint128 price, uint32 elapsed) public pure {
-        uint16 fee = MasonryRules.withdrawFeeBps(price == 0 ? 1 : uint256(price), 1e18, 300, 1200, 1000, 1200, 0, elapsed);
+    function testFuzz_WithdrawFeeNeverExceedsTwelvePercent(
+        uint128 price,
+        uint32 elapsed
+    ) public pure {
+        uint16 fee =
+            MasonryRules.withdrawFeeBps(price == 0 ? 1 : uint256(price), 1e18, 300, 1200, 1000, 1200, 0, elapsed);
         assertGe(fee, 300);
         assertLe(fee, 1200);
     }

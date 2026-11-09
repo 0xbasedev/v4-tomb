@@ -94,8 +94,8 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
                     != usdc || config.treasury == address(0) || config.polBinder == address(0)
                 || config.squareReferencePrice == 0 || config.squareReferencePrice > 1e36
                 || config.maxSquarePerRoute == 0 || config.maxSquarePerRoute > uint256(uint128(type(int128).max))
-                || config.maxDeviationBps == 0 || config.maxDeviationBps > 500
-                || config.shareSellTaxBps == 0 || config.shareSellTaxBps > MAX_TAX_BPS
+                || config.maxDeviationBps == 0 || config.maxDeviationBps > 500 || config.shareSellTaxBps == 0
+                || config.shareSellTaxBps > MAX_TAX_BPS
         ) revert InvalidConfiguration();
         polBinder = config.polBinder;
         levelPool = config.levelPool;
@@ -153,7 +153,9 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         poolManager.unlock("");
     }
 
-    function unlockCallback(bytes calldata) external returns (bytes memory) {
+    function unlockCallback(
+        bytes calldata
+    ) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert OnlySelf();
         _executeBuyback();
         return "";

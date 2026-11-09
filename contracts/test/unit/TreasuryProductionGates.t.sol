@@ -42,7 +42,13 @@ contract TreasuryProductionGatesTest is BaseTest {
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
         address[] memory excluded = new address[](0);
         treasury.initialize(
-            address(money), address(trustnote), address(estate), address(oracle), address(boardroom), startTime, excluded
+            address(money),
+            address(trustnote),
+            address(estate),
+            address(oracle),
+            address(boardroom),
+            startTime,
+            excluded
         );
         money.distributeReward(address(this), address(this), address(this));
         estate.distributeReward(address(this));
@@ -52,14 +58,14 @@ contract TreasuryProductionGatesTest is BaseTest {
         boardroom.setOperator(address(treasury));
         vm.stopPrank();
 
-        estate.transfer(alice, 1_000 ether);
+        estate.transfer(alice, 1000 ether);
         vm.warp(startTime + 1);
     }
 
     function _stakeAlice() internal {
         vm.startPrank(alice);
-        estate.approve(address(boardroom), 1_000 ether);
-        boardroom.stake(1_000 ether);
+        estate.approve(address(boardroom), 1000 ether);
+        boardroom.stake(1000 ether);
         vm.stopPrank();
         vm.roll(block.number + 1);
     }

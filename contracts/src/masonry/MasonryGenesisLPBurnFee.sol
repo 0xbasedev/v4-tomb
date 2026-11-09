@@ -16,13 +16,16 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 interface IMasonryRedeemableLPVault is IERC20 {
     function poolKey() external view returns (PoolKey memory);
 
-    function redeem(uint256 shares, address recipient)
-        external
-        returns (uint256 levelReceived, uint256 usdcReceived);
+    function redeem(
+        uint256 shares,
+        address recipient
+    ) external returns (uint256 levelReceived, uint256 usdcReceived);
 }
 
 interface IMasonryBurnableLevel is IERC20 {
-    function burn(uint256 amount) external;
+    function burn(
+        uint256 amount
+    ) external;
 }
 
 interface IMasonryExactInputV4Router {
@@ -42,7 +45,9 @@ interface IMasonryExactInputV4Router {
 interface IMasonryBuybackExecutionGuard {
     function officialPool() external view returns (PoolId);
 
-    function minimumLevelOut(uint256 usdcAmount) external returns (uint256);
+    function minimumLevelOut(
+        uint256 usdcAmount
+    ) external returns (uint256);
 }
 
 /// @notice Genesis LEVEL/USDC LP deposit/auto-compound fee: collect exactly
@@ -123,23 +128,23 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         address owner_
     ) Ownable(owner_) {
         if (
-            address(lpVault_).code.length == 0 || address(level_).code.length == 0
-                || address(usdc_).code.length == 0 || address(router_).code.length == 0
-                || address(guard_).code.length == 0 || genesis_ == address(0)
+            address(lpVault_).code.length == 0 || address(level_).code.length == 0 || address(usdc_).code.length == 0
+                || address(router_).code.length == 0 || address(guard_).code.length == 0 || genesis_ == address(0)
                 || maxFeeSharesPerCall_ == 0 || maxUsdcPerCall_ == 0
         ) revert InvalidConfiguration();
 
         address c0 = Currency.unwrap(buybackPoolKey_.currency0);
         address c1 = Currency.unwrap(buybackPoolKey_.currency1);
-        if (
-            !(c0 == address(usdc_) && c1 == address(level_))
-                && !(c0 == address(level_) && c1 == address(usdc_))
-        ) revert InvalidPool();
+        if (!(c0 == address(usdc_) && c1 == address(level_)) && !(c0 == address(level_) && c1 == address(usdc_))) {
+            revert InvalidPool();
+        }
         if (c0 >= c1) revert InvalidPool();
 
         PoolId pool = buybackPoolKey_.toId();
-        if (PoolId.unwrap(lpVault_.poolKey().toId()) != PoolId.unwrap(pool)
-            || PoolId.unwrap(guard_.officialPool()) != PoolId.unwrap(pool)) revert InvalidPool();
+        if (
+            PoolId.unwrap(lpVault_.poolKey().toId()) != PoolId.unwrap(pool)
+                || PoolId.unwrap(guard_.officialPool()) != PoolId.unwrap(pool)
+        ) revert InvalidPool();
 
         lpVault = lpVault_;
         level = level_;
@@ -159,13 +164,18 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
 
     /// @notice Immediate owner-controlled integration changes. Never authorizes
     /// withdrawals from the burn reserve and never pauses public v4 swaps.
-    function setGenesis(address newGenesis) external onlyOwner {
+    function setGenesis(
+        address newGenesis
+    ) external onlyOwner {
         if (newGenesis == address(0) || newGenesis.code.length == 0) revert InvalidConfiguration();
         emit GenesisUpdated(genesis, newGenesis);
         genesis = newGenesis;
     }
 
-    function setExecutionLimits(uint256 feeShareLimit, uint256 usdcLimit) external onlyOwner {
+    function setExecutionLimits(
+        uint256 feeShareLimit,
+        uint256 usdcLimit
+    ) external onlyOwner {
         if (feeShareLimit == 0 || usdcLimit == 0) revert InvalidConfiguration();
         maxFeeSharesPerCall = feeShareLimit;
         maxUsdcPerCall = usdcLimit;
@@ -176,12 +186,9 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
     /// shares and BEFORE it credits net shares to a depositor/auto-compounder.
     /// Genesis MUST approve this module to transfer the fee from its balance.
     /// A zap ending at Genesis must not separately charge the 0.5% route fee.
-    function collectAndProcess(uint256 grossShares)
-        external
-        onlyGenesis
-        nonReentrant
-        returns (uint256 feeShares)
-    {
+    function collectAndProcess(
+        uint256 grossShares
+    ) external onlyGenesis nonReentrant returns (uint256 feeShares) {
         if (grossShares == 0) revert InvalidConfiguration();
         feeShares = grossShares * DEPOSIT_BURN_FEE_BPS / BPS;
         if (feeShares > 0) {
@@ -196,12 +203,14 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         // Each try/catch is a separate revert boundary. A failed USDC buyback
         // leaves already-burned LEVEL burned and USDC still earmarked for burn.
         if (pendingFeeShares > 0) {
-            try this.redeemPendingShares() {} catch (bytes memory reason) {
+            try this.redeemPendingShares() {}
+            catch (bytes memory reason) {
                 emit RedemptionDeferred(keccak256(reason));
             }
         }
         if (pendingBurnUSDC > 0) {
-            try this.buyAndBurnPendingUSDC() {} catch (bytes memory reason) {
+            try this.buyAndBurnPendingUSDC() {}
+            catch (bytes memory reason) {
                 emit BuybackDeferred(keccak256(reason));
             }
         }
@@ -212,12 +221,14 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
     /// same irrevocable conversion path used during Genesis deposits.
     function retryDeferredBurn() external nonReentrant {
         if (pendingFeeShares > 0) {
-            try this.redeemPendingShares() {} catch (bytes memory reason) {
+            try this.redeemPendingShares() {}
+            catch (bytes memory reason) {
                 emit RedemptionDeferred(keccak256(reason));
             }
         }
         if (pendingBurnUSDC > 0) {
-            try this.buyAndBurnPendingUSDC() {} catch (bytes memory reason) {
+            try this.buyAndBurnPendingUSDC() {}
+            catch (bytes memory reason) {
                 emit BuybackDeferred(keccak256(reason));
             }
         }
@@ -261,16 +272,13 @@ contract MasonryGenesisLPBurnFee is Ownable, ReentrancyGuard {
         uint256 beforeLevel = level.balanceOf(address(this));
         uint256 beforeUsdc = usdc.balanceOf(address(this));
         usdc.forceApprove(address(router), amountIn);
-        uint256 returned = router.swapExactIn(
-            buybackPoolKey, usdcIsCurrency0, amountIn, minLevel, address(this)
-        );
+        uint256 returned = router.swapExactIn(buybackPoolKey, usdcIsCurrency0, amountIn, minLevel, address(this));
         usdc.forceApprove(address(router), 0);
 
         uint256 received = level.balanceOf(address(this)) - beforeLevel;
-        if (
-            received != returned || received < minLevel
-                || beforeUsdc - usdc.balanceOf(address(this)) != amountIn
-        ) revert UnexpectedBuyback();
+        if (received != returned || received < minLevel || beforeUsdc - usdc.balanceOf(address(this)) != amountIn) {
+            revert UnexpectedBuyback();
+        }
 
         pendingBurnUSDC -= amountIn;
         totalLevelBurnedFromLPFees += received;

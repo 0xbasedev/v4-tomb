@@ -41,7 +41,12 @@ contract MasonryProductionInvariantsTest is BaseTest {
         MockFireTax taxOracle = new MockFireTax();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         chamber = new MasonryChamber(
-            IERC20(address(lp)), IERC20(address(level)), predicted, makeAddr("protocolTreasury"), makeAddr("arbitrage"), taxOracle
+            IERC20(address(lp)),
+            IERC20(address(level)),
+            predicted,
+            makeAddr("protocolTreasury"),
+            makeAddr("arbitrage"),
+            taxOracle
         );
         treasury = new MasonryTreasury(
             IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)

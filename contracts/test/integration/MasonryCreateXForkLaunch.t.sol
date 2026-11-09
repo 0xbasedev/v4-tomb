@@ -8,7 +8,11 @@ import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.s
 import {BindOnlyHook} from "../unit/MasonryLaunchDryRun.t.sol";
 
 contract RealVerify is VerifyMasonryLaunch {
-    function predict(bytes32 releaseId, address deployer, string memory role) external pure returns (address) {
+    function predict(
+        bytes32 releaseId,
+        address deployer,
+        string memory role
+    ) external pure returns (address) {
         return _create3Address(Create3Plan(CREATEX, deployer, releaseId), role, 0);
     }
 }
@@ -21,7 +25,11 @@ contract MasonryCreateXForkLaunchTest is Test {
     bytes32 internal constant RELEASE = bytes32(uint256(0xC0FFEE));
 
     function test_RealCreateXRangeManagerLaunchOnFork() public {
-        try vm.createSelectFork("https://rpc.mainnet.chain.robinhood.com") {} catch { vm.skip(true); return; }
+        try vm.createSelectFork("https://rpc.mainnet.chain.robinhood.com") {}
+        catch {
+            vm.skip(true);
+            return;
+        }
         address deployer = vm.addr(7);
         vm.deal(deployer, 1 ether);
         vm.etch(HOOK, address(new BindOnlyHook(deployer)).code);
@@ -32,13 +40,29 @@ contract MasonryCreateXForkLaunchTest is Test {
         address square = verify.predict(RELEASE, deployer, "masonrySquareRangeManager");
         string memory path = "./deployment-output/masonry-createx-fork.json";
         string memory h = vm.toString(keccak256(initCode));
-        vm.writeFile(path, string.concat(
-            '{"chainId":4663,"factory":"0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed","deployer":"', vm.toString(deployer),
-            '","releaseId":"', vm.toString(RELEASE), '","addresses":{"masonryTaxHook":"', vm.toString(HOOK),
-            '","masonryLevelRangeManager":"', vm.toString(level), '","masonryShareTaxHook":"', vm.toString(SQUARE_HOOK),
-            '","masonrySquareRangeManager":"', vm.toString(square), '"},"initCodeHashes":{"masonryLevelRangeManager":"', h,
-            '","masonrySquareRangeManager":"', h, '"}}'
-        ));
+        vm.createDir("./deployment-output", true);
+        vm.writeFile(
+            path,
+            string.concat(
+                '{"chainId":4663,"factory":"0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed","deployer":"',
+                vm.toString(deployer),
+                '","releaseId":"',
+                vm.toString(RELEASE),
+                '","addresses":{"masonryTaxHook":"',
+                vm.toString(HOOK),
+                '","masonryLevelRangeManager":"',
+                vm.toString(level),
+                '","masonryShareTaxHook":"',
+                vm.toString(SQUARE_HOOK),
+                '","masonrySquareRangeManager":"',
+                vm.toString(square),
+                '"},"initCodeHashes":{"masonryLevelRangeManager":"',
+                h,
+                '","masonrySquareRangeManager":"',
+                h,
+                '"}}'
+            )
+        );
         vm.setEnv("MASONRY_CREATE3_CONFIG", path);
         DeployMasonryComponent deploy = new DeployMasonryComponent();
         address dl = deploy.run("masonryLevelRangeManager", initCode);

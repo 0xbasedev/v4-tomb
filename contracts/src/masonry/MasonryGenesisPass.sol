@@ -49,7 +49,9 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     }
 
     /// @notice The immutable Genesis scheduler controls the membership sale independently of staking.
-    function setSaleOpen(bool open) external {
+    function setSaleOpen(
+        bool open
+    ) external {
         if (msg.sender != schedule.scheduler()) revert Unauthorized();
         saleOpen = open;
         emit SaleOpenChanged(open);

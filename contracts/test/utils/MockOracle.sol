@@ -22,11 +22,15 @@ contract MockOracle is IOracle {
         price = newPrice;
     }
 
-    function setFresh(bool value) external {
+    function setFresh(
+        bool value
+    ) external {
         fresh = value;
     }
 
-    function isFresh(uint256) external view returns (bool) {
+    function isFresh(
+        uint256
+    ) external view returns (bool) {
         return fresh;
     }
 

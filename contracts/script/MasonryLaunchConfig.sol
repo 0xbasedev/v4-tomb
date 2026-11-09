@@ -44,7 +44,11 @@ library MasonryLaunchConfig {
     function load(
         Vm vm
     ) internal view returns (MasonryLaunchParams memory p) {
-        string memory raw = vm.readFile(vm.envOr("MASONRY_LAUNCH_CONFIG", string.concat(vm.projectRoot(), "/../config/masonry-launch.template.json")));
+        string memory raw = vm.readFile(
+            vm.envOr(
+                "MASONRY_LAUNCH_CONFIG", string.concat(vm.projectRoot(), "/../config/masonry-launch.template.json")
+            )
+        );
         p.expansionRateBps = raw.readUint(".policy.maximumExpansionPerEpochBps");
         p.farmEmissionDays = raw.readUint(".policy.farmEmissionDays");
         p.farmWholeTokens = raw.readUint(".square.farming");
@@ -115,8 +119,10 @@ library MasonryLaunchConfig {
                 p.rangeLevelLowerHalfWidthBps < p.rangeLevelUpperHalfWidthBps
                     ? p.rangeLevelLowerHalfWidthBps
                     : p.rangeLevelUpperHalfWidthBps,
-                p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
-                p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
+                p.rangeLevelRecenterBps,
+                p.rangeLevelCooldownSeconds,
+                p.rangeLevelMaxTwapDeviationBps,
+                "rangeLevel"
             );
             if (p.rangeLevelLowerHalfWidthBps < 500 || p.rangeLevelLowerHalfWidthBps > 3000) {
                 revert InvalidLaunchConfig("rangeLevel");
@@ -126,13 +132,19 @@ library MasonryLaunchConfig {
             }
         } else {
             _validateRange(
-                p.rangeLevelHalfWidthBps, p.rangeLevelRecenterBps, p.rangeLevelCooldownSeconds,
-                p.rangeLevelMaxTwapDeviationBps, "rangeLevel"
+                p.rangeLevelHalfWidthBps,
+                p.rangeLevelRecenterBps,
+                p.rangeLevelCooldownSeconds,
+                p.rangeLevelMaxTwapDeviationBps,
+                "rangeLevel"
             );
         }
         _validateRange(
-            p.rangeSquareHalfWidthBps, p.rangeSquareRecenterBps, p.rangeSquareCooldownSeconds,
-            p.rangeSquareMaxTwapDeviationBps, "rangeSquare"
+            p.rangeSquareHalfWidthBps,
+            p.rangeSquareRecenterBps,
+            p.rangeSquareCooldownSeconds,
+            p.rangeSquareMaxTwapDeviationBps,
+            "rangeSquare"
         );
     }
 

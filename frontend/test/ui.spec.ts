@@ -295,7 +295,6 @@ test.describe("Deferred Genesis scheduling", () => {
 test.describe("Farm zap and withdraw cooldown", () => {
   test("replaces Claim with Send to Masonry and shows the forfeit countdown", async ({ page, broadcasts }) => {
     await page.goto("/farm?preview=1");
-    await page.getByTestId("farm-pool-xTOMB-USDC").screenshot({ path: "/workspace/v4-assess/shots/farm-zap-card.png" });
     await expect(page.getByRole("button", { name: "Send to Masonry" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Claim" })).toHaveCount(0);
     await expect(page.getByText("For protocol stability, all farm-earned X Share must age in the Masonry.").first()).toBeVisible();
@@ -307,7 +306,6 @@ test.describe("Farm zap and withdraw cooldown", () => {
     await expect(page.getByText("You can cancel this timer by hitting Send to Masonry or Cancel.")).toBeVisible();
     const dialog = page.getByRole("dialog");
     await expect(page.getByTestId("withdraw-fee")).toContainText("3%");
-    await dialog.screenshot({ path: "/workspace/v4-assess/shots/withdraw-cooldown-modal.png" });
     await expect(dialog.getByRole("button", { name: "Send to Masonry" }).first()).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Complete withdrawal" })).toBeDisabled();
@@ -321,12 +319,10 @@ test.describe("Farm compound restyle", () => {
     const readyCard = page.getByTestId("farm-pool-xTOMB-USDC");
     await expect(readyCard.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
     await expect(readyCard.getByTestId("next-compound")).toHaveText("Next Compound: 0");
-    await readyCard.screenshot({ path: "/workspace/v4-assess/shots/farm-compound-ready.png" });
     await page.getByRole("button", { name: "Withdraw" }).first().click();
     const readyDialog = page.getByRole("dialog");
     await expect(readyDialog.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
     await expect(readyDialog.getByTestId("next-compound")).toHaveText("Next Compound: 0");
-    await readyDialog.screenshot({ path: "/workspace/v4-assess/shots/withdraw-compound-ready.png" });
     await readyDialog.getByRole("button", { name: "Close" }).click().catch(async () => {
       await page.keyboard.press("Escape");
     });
@@ -341,12 +337,10 @@ test.describe("Farm compound restyle", () => {
     await expect(cooling.getByTestId("compound-button")).toHaveAttribute("title", /Green returns/i);
     await expect(other.getByTestId("compound-button")).toHaveAttribute("data-ready", "true");
     await expect(other.getByTestId("next-compound")).toHaveText("Next Compound: 0");
-    await cooling.screenshot({ path: "/workspace/v4-assess/shots/farm-compound-cooling.png" });
     await cooling.getByRole("button", { name: "Withdraw" }).click();
     const coolDialog = page.getByRole("dialog");
     await expect(coolDialog.getByTestId("compound-button")).toHaveAttribute("data-ready", "false");
     await expect(coolDialog.getByTestId("next-compound")).not.toHaveText("Next Compound: 0");
-    await coolDialog.screenshot({ path: "/workspace/v4-assess/shots/withdraw-compound-cooling.png" });
     await expectNoTransactionRequests(page, broadcasts);
   });
 });

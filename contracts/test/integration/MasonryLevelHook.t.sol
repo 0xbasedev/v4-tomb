@@ -72,7 +72,11 @@ contract FakeRangeManager {
     bytes32 private pid;
     address public manager;
 
-    constructor(address hook_, bytes32 pid_, address manager_) {
+    constructor(
+        address hook_,
+        bytes32 pid_,
+        address manager_
+    ) {
         hook = hook_;
         pid = pid_;
         manager = manager_;
@@ -872,9 +876,18 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         }
     }
 
-    struct M { uint256 spot; uint256 liq; uint256 fg; uint256 tax; uint256 out; uint256 lpFee; }
+    struct M {
+        uint256 spot;
+        uint256 liq;
+        uint256 fg;
+        uint256 tax;
+        uint256 out;
+        uint256 lpFee;
+    }
 
-    function _measure(uint256 target) private {
+    function _measure(
+        uint256 target
+    ) private {
         IPoolManager manager = hook.poolManager();
         if (target < 1e18) {
             for (uint256 n; n < 2000; ++n) {
@@ -912,21 +925,28 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         emit log_named_uint("  total deduction bps (vs pre-trade spot)", totalBps);
     }
 
-    function _fg(IPoolManager manager) private view returns (uint256) {
+    function _fg(
+        IPoolManager manager
+    ) private view returns (uint256) {
         (uint256 a, uint256 b) = manager.getFeeGrowthGlobals(key.toId());
         return level0 ? a : b;
     }
 
-    function _sqrt(uint256 x) private pure returns (uint256 y) {
+    function _sqrt(
+        uint256 x
+    ) private pure returns (uint256 y) {
         if (x == 0) return 0;
-        uint256 z = (x + 1) / 2; y = x;
-        while (z < y) { y = z; z = (x / z + z) / 2; }
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
     }
 
     function testFakeRangeManagerCannotBindFromNonInitializer() public {
-        FakeRangeManager fake = new FakeRangeManager(
-            address(hook), PoolId.unwrap(hook.officialPool()), address(hook.poolManager())
-        );
+        FakeRangeManager fake =
+            new FakeRangeManager(address(hook), PoolId.unwrap(hook.officialPool()), address(hook.poolManager()));
         vm.prank(address(0xBEEF));
         vm.expectRevert(MasonryTaxHook.UnauthorizedInitializer.selector);
         hook.bindRangeManager(MasonryRangeManager(address(fake)));

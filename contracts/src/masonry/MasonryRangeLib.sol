@@ -105,7 +105,11 @@ library MasonryRangeLib {
         if (lower >= upper) revert InvalidRangeConfig();
     }
 
-    function containsTick(int24 tick, int24 lower, int24 upper) internal pure returns (bool) {
+    function containsTick(
+        int24 tick,
+        int24 lower,
+        int24 upper
+    ) internal pure returns (bool) {
         return tick > lower && tick < upper;
     }
 
@@ -173,7 +177,11 @@ library MasonryRangeLib {
     }
 
     /// @notice sqrtPrice limit that stays within `deviationBps` of the current price.
-    function sqrtPriceLimit(uint160 sqrtPrice, uint16 maxDeviationBps, bool zeroForOne) internal pure returns (uint160) {
+    function sqrtPriceLimit(
+        uint160 sqrtPrice,
+        uint16 maxDeviationBps,
+        bool zeroForOne
+    ) internal pure returns (uint160) {
         if (maxDeviationBps == 0 || maxDeviationBps >= BPS) revert InvalidRangeConfig();
         uint256 scale = Math.sqrt(BPS * 1e12);
         if (zeroForOne) {
@@ -187,13 +195,21 @@ library MasonryRangeLib {
     }
 
     /// @notice Inventory valued in currency1 units at `sqrtPrice` (pool decimals).
-    function valueInCurrency1(uint256 amount0, uint256 amount1, uint160 sqrtPrice) internal pure returns (uint256) {
+    function valueInCurrency1(
+        uint256 amount0,
+        uint256 amount1,
+        uint160 sqrtPrice
+    ) internal pure returns (uint256) {
         uint256 amount0As1 =
             FullMath.mulDiv(FullMath.mulDiv(amount0, sqrtPrice, uint256(1) << 96), sqrtPrice, uint256(1) << 96);
         return amount0As1 + amount1;
     }
 
-    function exceedsLoss(uint256 beforeValue, uint256 afterValue, uint16 maxLossBps) internal pure returns (bool) {
+    function exceedsLoss(
+        uint256 beforeValue,
+        uint256 afterValue,
+        uint16 maxLossBps
+    ) internal pure returns (bool) {
         if (afterValue >= beforeValue || beforeValue == 0) return false;
         return FullMath.mulDiv(beforeValue - afterValue, BPS, beforeValue) > maxLossBps;
     }

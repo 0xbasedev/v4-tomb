@@ -6,7 +6,9 @@ import {IMasonryFireTax} from "../../src/masonry/IMasonryFireTax.sol";
 contract MockFireTax is IMasonryFireTax {
     uint16 public rate = 300;
 
-    function set(uint16 r) external {
+    function set(
+        uint16 r
+    ) external {
         rate = r;
     }
 

@@ -31,13 +31,21 @@ library MasonryLaunchInitCode {
         address squareHook;
     }
 
-    function farm(MasonryLaunchParams memory p, Addrs memory a, uint256 startTime, uint256 budget)
-        internal pure returns (bytes memory)
-    {
+    function farm(
+        MasonryLaunchParams memory p,
+        Addrs memory a,
+        uint256 startTime,
+        uint256 budget
+    ) internal pure returns (bytes memory) {
         return bytes.concat(
             type(MasonryFarm).creationCode,
             abi.encode(
-                IERC20(a.share), startTime, p.farmEmissionDays * 1 days, budget, a.admin, IERC20(a.shareWethLp),
+                IERC20(a.share),
+                startTime,
+                p.farmEmissionDays * 1 days,
+                budget,
+                a.admin,
+                IERC20(a.shareWethLp),
                 p.farmShareWethLpAllocPoints,
                 MasonryFarm.Policy({
                     claimToWallet: p.farmClaimToWallet,
@@ -51,35 +59,61 @@ library MasonryLaunchInitCode {
         );
     }
 
-    function zapper(MasonryLaunchParams memory p, Addrs memory a) internal pure returns (bytes memory) {
+    function zapper(
+        MasonryLaunchParams memory p,
+        Addrs memory a
+    ) internal pure returns (bytes memory) {
         return bytes.concat(
             type(MasonryShareWethZapper).creationCode,
             abi.encode(
-                IERC20(a.share), IERC20(a.weth), a.farm, p.daoWallet, IShareWethAmm(a.shareWethAmm),
-                IZapTwap(a.shareWethTwap), uint16(p.rangeSquareMaxTwapDeviationBps)
+                IERC20(a.share),
+                IERC20(a.weth),
+                a.farm,
+                p.daoWallet,
+                IShareWethAmm(a.shareWethAmm),
+                IZapTwap(a.shareWethTwap),
+                uint16(p.rangeSquareMaxTwapDeviationBps)
             )
         );
     }
 
-    function pooledVault(MasonryLaunchParams memory p, Addrs memory a, PoolKey memory levelKey, uint160 sqrtPeg)
-        internal pure returns (bytes memory)
-    {
+    function pooledVault(
+        MasonryLaunchParams memory p,
+        Addrs memory a,
+        PoolKey memory levelKey,
+        uint160 sqrtPeg
+    ) internal pure returns (bytes memory) {
         return bytes.concat(
             type(MasonryPooledRangeVault).creationCode,
             abi.encode(
-                a.poolManager, levelKey,
-                p.rangeLevelPegAnchor ? MasonryPooledRangeVault.Strategy.PegAnchor : MasonryPooledRangeVault.Strategy.FixedPeg, uint16(p.rangeLevelHalfWidthBps),
-                sqrtPeg, p.farmWithdrawCooldownSeconds, a.admin, p.daoWallet, IMasonryFireTax(a.levelHook),
+                a.poolManager,
+                levelKey,
+                p.rangeLevelPegAnchor
+                    ? MasonryPooledRangeVault.Strategy.PegAnchor
+                    : MasonryPooledRangeVault.Strategy.FixedPeg,
+                uint16(p.rangeLevelHalfWidthBps),
+                sqrtPeg,
+                p.farmWithdrawCooldownSeconds,
+                a.admin,
+                p.daoWallet,
+                IMasonryFireTax(a.levelHook),
                 MasonryPooledRangeVault.RangeGuards(
-                    uint16(p.rangeLevelRecenterBps), p.rangeLevelCooldownSeconds, uint16(p.rangeLevelMaxTwapDeviationBps)
+                    uint16(p.rangeLevelRecenterBps),
+                    p.rangeLevelCooldownSeconds,
+                    uint16(p.rangeLevelMaxTwapDeviationBps)
                 )
             )
         );
     }
 
-    function levelRangeManager(MasonryLaunchParams memory p, Addrs memory a, PoolKey memory key, bool level0, uint160 sqrtPeg, uint128 minLiq)
-        internal pure returns (bytes memory)
-    {
+    function levelRangeManager(
+        MasonryLaunchParams memory p,
+        Addrs memory a,
+        PoolKey memory key,
+        bool level0,
+        uint160 sqrtPeg,
+        uint128 minLiq
+    ) internal pure returns (bytes memory) {
         MasonryRangeManager.RangeConfig memory c = MasonryRangeManager.RangeConfig({
             halfWidthBps: uint16(p.rangeLevelHalfWidthBps),
             recenterBps: uint16(p.rangeLevelRecenterBps),
@@ -97,9 +131,13 @@ library MasonryLaunchInitCode {
         );
     }
 
-    function squareRangeManager(MasonryLaunchParams memory p, Addrs memory a, PoolKey memory key, bool square0, uint128 minLiq)
-        internal pure returns (bytes memory)
-    {
+    function squareRangeManager(
+        MasonryLaunchParams memory p,
+        Addrs memory a,
+        PoolKey memory key,
+        bool square0,
+        uint128 minLiq
+    ) internal pure returns (bytes memory) {
         MasonryRangeManager.RangeConfig memory c = MasonryRangeManager.RangeConfig({
             halfWidthBps: uint16(p.rangeSquareHalfWidthBps),
             recenterBps: uint16(p.rangeSquareRecenterBps),

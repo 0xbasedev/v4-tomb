@@ -32,7 +32,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     address public immutable treasury;
     address public immutable daoWallet;
     address public immutable arbitrage;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_200;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1200;
     IMasonryFireTax public immutable fireTax;
 
     uint256 public totalSupply;
@@ -110,7 +110,9 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         emit SeigniorageAllocated(amount);
     }
 
-    function bindFarm(address farm_) external {
+    function bindFarm(
+        address farm_
+    ) external {
         if (msg.sender != treasury) revert Unauthorized();
         if (farm_ == address(0)) revert ZeroAddress();
         if (farm != address(0)) revert FarmAlreadyBound();
@@ -127,13 +129,20 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     /// @notice Credits LP to `user` and restarts Masonry aging (stake and claim
     /// cooldowns) for `user` only. Only the bound farm / Send-to-Masonry path
     /// may deposit on someone else's behalf.
-    function stakeFor(address user, uint256 amount) external nonReentrant {
+    function stakeFor(
+        address user,
+        uint256 amount
+    ) external nonReentrant {
         if (msg.sender != farm) revert Unauthorized();
         if (user == address(0)) revert ZeroAddress();
         _stakeFor(user, amount, false);
     }
 
-    function _stakeFor(address user, uint256 amount, bool pullFromUser) private {
+    function _stakeFor(
+        address user,
+        uint256 amount,
+        bool pullFromUser
+    ) private {
         if (amount == 0) revert InvalidAmount();
         _accrue(user);
         stakeToken.safeTransferFrom(pullFromUser ? user : msg.sender, address(this), amount);

@@ -39,7 +39,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         Rebalance
     }
 
-    uint256 public constant DEAD_SHARES = 1_000;
+    uint256 public constant DEAD_SHARES = 1000;
     address public constant DEAD = address(0xdead);
 
     IPoolManager public immutable manager;
@@ -59,7 +59,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     }
     address public immutable owner;
     address public immutable daoWallet;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1_200;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1200;
     IMasonryFireTax public immutable fireTax;
 
     PoolKey private key;
@@ -171,7 +171,10 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         }
     }
 
-    function deposit(uint256 max0, uint256 max1) external nonReentrant returns (uint256 shares) {
+    function deposit(
+        uint256 max0,
+        uint256 max1
+    ) external nonReentrant returns (uint256 shares) {
         if (max0 == 0 && max1 == 0) revert ZeroShares();
         uint256 supply = totalSupply();
         (uint256 before0, uint256 before1) = inventory();
@@ -197,7 +200,9 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         emit Deposited(msg.sender, shares, used0, used1);
     }
 
-    function requestRedeem(uint256 shares) external nonReentrant returns (uint256 receiptId) {
+    function requestRedeem(
+        uint256 shares
+    ) external nonReentrant returns (uint256 receiptId) {
         if (shares == 0 || shares > balanceOf(msg.sender)) revert ZeroShares();
         if (redeemRequests[msg.sender].shares != 0) revert RedeemPending();
         _transfer(msg.sender, address(this), shares);
@@ -258,17 +263,24 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         emit Compounded(msg.sender, unlocked);
     }
 
-    function transferRedeemReceipt(address, uint256) external pure {
+    function transferRedeemReceipt(
+        address,
+        uint256
+    ) external pure {
         revert ReceiptNotTransferable();
     }
 
-    function cooldownRemaining(address user) external view returns (uint256) {
+    function cooldownRemaining(
+        address user
+    ) external view returns (uint256) {
         RedeemRequest memory req = redeemRequests[user];
         if (req.shares == 0 || block.timestamp >= req.availableAt) return 0;
         return req.availableAt - block.timestamp;
     }
 
-    function _unlockPending(address user) private {
+    function _unlockPending(
+        address user
+    ) private {
         RedeemRequest memory req = redeemRequests[user];
         if (req.shares == 0) revert RedeemNotPending();
         delete redeemRequests[user];
@@ -286,18 +298,24 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     uint256 private _redeemShares;
     uint256 private _redeemSupply;
 
-    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+    function unlockCallback(
+        bytes calldata data
+    ) external returns (bytes memory) {
         if (msg.sender != address(manager)) revert NotPoolManager();
         _execute(abi.decode(data, (Op)));
         return "";
     }
 
-    function _run(Op op) private {
+    function _run(
+        Op op
+    ) private {
         if (manager.isUnlocked()) _execute(op);
         else manager.unlock(abi.encode(op));
     }
 
-    function _execute(Op op) private {
+    function _execute(
+        Op op
+    ) private {
         if (op == Op.Rebalance) {
             _removeAll();
             _setBand();
@@ -315,7 +333,9 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         _addFromBalance();
     }
 
-    function _band(uint160 sqrtPrice) private view returns (int24 lower, int24 upper) {
+    function _band(
+        uint160 sqrtPrice
+    ) private view returns (int24 lower, int24 upper) {
         if (strategy == Strategy.FixedPeg) {
             return MasonryRangeLib.fixedPegTicks(sqrtPeg, halfWidthBps, key.tickSpacing);
         }
@@ -335,7 +355,9 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         if (liquidity != 0) _removeLiquidity(liquidity);
     }
 
-    function _removeLiquidity(uint128 liq) private {
+    function _removeLiquidity(
+        uint128 liq
+    ) private {
         (BalanceDelta delta,) = manager.modifyLiquidity(
             key, ModifyLiquidityParams(tickLower, tickUpper, -int256(uint256(liq)), bytes32(0)), ""
         );
@@ -363,11 +385,17 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         liquidity += add;
     }
 
-    function _takePositive(Currency currency, int128 amount) private {
+    function _takePositive(
+        Currency currency,
+        int128 amount
+    ) private {
         if (amount > 0) manager.take(currency, address(this), uint256(uint128(amount)));
     }
 
-    function _settleNegative(Currency currency, int128 amount) private {
+    function _settleNegative(
+        Currency currency,
+        int128 amount
+    ) private {
         if (amount > 0) {
             manager.take(currency, address(this), uint256(uint128(amount)));
             return;
@@ -379,7 +407,10 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         manager.settle();
     }
 
-    function _pull(uint256 amount0, uint256 amount1) private {
+    function _pull(
+        uint256 amount0,
+        uint256 amount1
+    ) private {
         if (amount0 != 0) IERC20(Currency.unwrap(key.currency0)).safeTransferFrom(msg.sender, address(this), amount0);
         if (amount1 != 0) IERC20(Currency.unwrap(key.currency1)).safeTransferFrom(msg.sender, address(this), amount1);
     }

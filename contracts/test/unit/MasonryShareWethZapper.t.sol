@@ -15,7 +15,10 @@ import {MockFireTax} from "../utils/MockFireTax.sol";
 contract MockWeth is ERC20 {
     constructor() ERC20("WETH", "WETH") {}
 
-    function mint(address to, uint256 amount) external {
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         _mint(to, amount);
     }
 }
@@ -24,7 +27,10 @@ contract MockZapTwap {
     uint256 public price = 1e18;
     bool public valid = true;
 
-    function set(uint256 price_, bool valid_) external {
+    function set(
+        uint256 price_,
+        bool valid_
+    ) external {
         price = price_;
         valid = valid_;
     }
@@ -45,13 +51,20 @@ contract SimpleShareWethAmm {
     address public reenterTarget;
     bytes public reenterData;
 
-    constructor(IERC20 share_, IERC20 weth_, MockShareWethLp lp_) {
+    constructor(
+        IERC20 share_,
+        IERC20 weth_,
+        MockShareWethLp lp_
+    ) {
         share = share_;
         weth = weth_;
         lp = lp_;
     }
 
-    function seed(uint256 s, uint256 w) external {
+    function seed(
+        uint256 s,
+        uint256 w
+    ) external {
         share.safeTransferFrom(msg.sender, address(this), s);
         weth.safeTransferFrom(msg.sender, address(this), w);
         reserveShare += s;
@@ -59,7 +72,10 @@ contract SimpleShareWethAmm {
         lp.mint(address(this), 1_000_000 ether);
     }
 
-    function setReenter(address target, bytes calldata data) external {
+    function setReenter(
+        address target,
+        bytes calldata data
+    ) external {
         reenterTarget = target;
         reenterData = data;
     }
@@ -68,7 +84,10 @@ contract SimpleShareWethAmm {
         return reserveShare == 0 ? 0 : reserveWeth * 1e18 / reserveShare;
     }
 
-    function swapShareForWeth(uint256 shareIn, uint256 minWethOut) external returns (uint256 wethOut) {
+    function swapShareForWeth(
+        uint256 shareIn,
+        uint256 minWethOut
+    ) external returns (uint256 wethOut) {
         if (reenterTarget != address(0)) {
             (bool ok,) = reenterTarget.call(reenterData);
             require(ok, "reenter");
@@ -81,21 +100,26 @@ contract SimpleShareWethAmm {
         weth.safeTransfer(msg.sender, wethOut);
     }
 
-    function addLiquidity(uint256 shareIn, uint256 wethIn, uint256 minLp)
-        external
-        returns (uint256 lpOut, uint256 shareUsed, uint256 wethUsed)
-    {
+    function addLiquidity(
+        uint256 shareIn,
+        uint256 wethIn,
+        uint256 minLp
+    ) external returns (uint256 lpOut, uint256 shareUsed, uint256 wethUsed) {
         share.safeTransferFrom(msg.sender, address(this), shareIn);
         weth.safeTransferFrom(msg.sender, address(this), wethIn);
         shareUsed = shareIn;
         wethUsed = wethIn;
         // Leave 1 wei of each as leftover dust for the zapper to handle.
         if (shareUsed > 1) {
-            unchecked { shareUsed -= 1; }
+            unchecked {
+                shareUsed -= 1;
+            }
             share.safeTransfer(msg.sender, 1);
         }
         if (wethUsed > 1) {
-            unchecked { wethUsed -= 1; }
+            unchecked {
+                wethUsed -= 1;
+            }
             weth.safeTransfer(msg.sender, 1);
         }
         lpOut = shareUsed < wethUsed ? shareUsed : wethUsed;
@@ -137,10 +161,21 @@ contract MasonryShareWethZapperTest is BaseTest {
         daoWallet = makeAddr("daoWallet");
         amm = new SimpleShareWethAmm(IERC20(address(share)), IERC20(address(weth)), masonryLp);
         zapper = new MasonryShareWethZapper(
-            IERC20(address(share)), IERC20(address(weth)), address(0), daoWallet, IShareWethAmm(address(amm)), IZapTwap(address(twap)), 300
+            IERC20(address(share)),
+            IERC20(address(weth)),
+            address(0),
+            daoWallet,
+            IShareWethAmm(address(amm)),
+            IZapTwap(address(twap)),
+            300
         );
         chamber = new MasonryChamber(
-            IERC20(address(masonryLp)), IERC20(address(share)), address(this), daoWallet, makeAddr("arbitrage"), new MockFireTax()
+            IERC20(address(masonryLp)),
+            IERC20(address(share)),
+            address(this),
+            daoWallet,
+            makeAddr("arbitrage"),
+            new MockFireTax()
         );
         farm = new MasonryFarm(
             IERC20(address(share)),
