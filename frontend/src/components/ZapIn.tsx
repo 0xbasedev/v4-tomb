@@ -126,10 +126,6 @@ function ZapInModal({ onClose }: { onClose: () => void }) {
               />
             </>
           )}
-          <p className="px-1 pt-2 text-[12px] leading-relaxed text-ash">
-            A zap is a few transactions under the hood — swap, pair, stake. Each step is shown
-            before you sign it.
-          </p>
         </div>
       )}
     </Modal>
