@@ -66,13 +66,16 @@ test.describe("Genesis clock", () => {
 test.describe("Fire Tax", () => {
   const base = { raisedBps: 0, raisedAt: 0, now: 0 };
 
-  test("baseline 1% at or above the reference, 12% cap at or below 0.85", () => {
+  test("baseline 3% at or above the reference, 12% cap at or below 0.90", () => {
+    expect(FIRE.baselineBps).toBe(300);
+    expect(FIRE.fullTaxAt).toBeCloseTo(0.9, 10);
     expect(targetBps(1)).toBe(FIRE.baselineBps);
-    expect(targetBps(1.2)).toBe(100);
+    expect(targetBps(1.2)).toBe(300);
+    expect(targetBps(0.9)).toBe(1200);
     expect(targetBps(0.85)).toBe(1200);
     expect(targetBps(0.5)).toBe(1200);
-    expect(targetBps(0.9)).toBeGreaterThan(100);
-    expect(targetBps(0.9)).toBeLessThan(1200);
+    expect(targetBps(0.98)).toBe(702);
+    expect(targetBps(0.95)).toBe(936);
   });
 
   test("one rate: the highest of TWAP, projected, recovery and Genesis floor, capped at 12%", () => {
@@ -89,13 +92,13 @@ test.describe("Fire Tax", () => {
     expect([l.rateBps, l.driver, l.burned]).toEqual([300, "genesis", true]);
     expect([s.rateBps, s.driver, s.burned]).toEqual([600, "genesis", false]);
     const after = sellTax({ asset: "xTOMB", twap: 1, projected: 1, genesisActive: false, ...base });
-    expect([after.rateBps, after.driver, after.burned]).toEqual([100, "baseline", false]);
+    expect([after.rateBps, after.driver, after.burned]).toEqual([300, "baseline", false]);
   });
 
   test("recovery floor decays linearly to baseline over 7h", () => {
-    expect(recoveryFloorBps(900, 0, 0)).toBe(900);
-    expect(recoveryFloorBps(900, 0, FIRE.recoverySeconds / 2)).toBe(500);
-    expect(recoveryFloorBps(900, 0, FIRE.recoverySeconds)).toBe(100);
+    expect(recoveryFloorBps(1200, 0, 0)).toBe(1200);
+    expect(recoveryFloorBps(1200, 0, FIRE.recoverySeconds / 2)).toBe(750);
+    expect(recoveryFloorBps(1200, 0, FIRE.recoverySeconds)).toBe(300);
   });
 
   test("stale oracle: the hook rejects the sell", () => {
@@ -110,7 +113,7 @@ test.describe("Routes", () => {
   const ctx = (rate: number | null) => ({
     prices,
     poolFeeBps: { xTOMB: 30, xSHARE: 30 },
-    taxFor: (): TaxQuote => ({ rateBps: rate, driver: rate === null ? null : "baseline", parts: { baseline: 100, twap: 0, projected: 0, recovery: 0, genesis: 0 }, burned: false, blocked: rate === null ? "no TWAP" : undefined }),
+    taxFor: (): TaxQuote => ({ rateBps: rate, driver: rate === null ? null : "baseline", parts: { baseline: 300, twap: 0, projected: 0, recovery: 0, genesis: 0 }, burned: false, blocked: rate === null ? "no TWAP" : undefined }),
   });
 
   test("buy vs sell: buys carry no Fire Tax, sells carry one", () => {

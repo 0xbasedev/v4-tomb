@@ -11,7 +11,7 @@
     "build:demo": "VITE_ROUTER=memory VITE_PREVIEW=1 vite build --base ./ --outDir dist-demo",
     "test:browser": "playwright test",
     "test:model": "playwright test --project=model",
-    "gen:abis": "node scripts/gen-abis.mjs"
+    "gen:abis": "node scripts/gen-abis.mjs abi-handoff"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.2.6",

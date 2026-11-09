@@ -37,7 +37,11 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /**
  * @title Deploy
- * @notice One-shot Foundry deploy script for the inherited WETH-based protocol.
+ * @notice LEGACY WETH/bond-era launch script. It is NOT Masonry launch logic and
+ *         must not be used to launch X Tomb on Robinhood Chain. Use
+ *         LaunchMasonryDryRun.s.sol (simulation only, no broadcast) instead.
+ *
+ * @dev One-shot Foundry deploy script for the inherited WETH-based protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
  *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
@@ -231,10 +235,13 @@ contract Deploy is NetworkConfig, Create3Config {
         address deployer
     ) internal {
         IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
+        // LEGACY WETH-era path only. PegDefenseHook is not part of Masonry / X Tomb launch
+        // (LaunchMasonryDryRun / CREATE3 masonry roles). This deploy remains so inherited
+        // NetworkConfig tests can exercise the old factory path; do not run it to launch.
         bytes memory creationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
         hook = PegDefenseHook(_deploy("hook", creationCode));
-        console2.log("PegDefenseHook:", address(hook));
+        console2.log("PegDefenseHook (legacy, not Masonry launch):", address(hook));
 
         (Currency c0, Currency c1) = address(money) < wethAddress
             ? (Currency.wrap(address(money)), Currency.wrap(wethAddress))

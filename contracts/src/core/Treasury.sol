@@ -10,6 +10,7 @@ import {ContractGuard} from "../libs/ContractGuard.sol";
 import {IBasisAsset} from "../interfaces/IBasisAsset.sol";
 import {IBoardroom} from "../interfaces/IBoardroom.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
+import {MasonryRules} from "../masonry/MasonryRules.sol";
 
 /**
  * @title Treasury
@@ -39,6 +40,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     /* =================== CONSTANTS =================== */
 
     uint256 public constant PERIOD = 6 hours;
+    /// @notice Expansion requires a TWAP no older than this (Masonry 30-minute freshness).
+    uint256 public constant ORACLE_MAX_AGE = 30 minutes;
+    uint256 public constant MAX_BOND_DISCOUNT_PERCENT = 10_000;
+    uint256 public constant MAX_BOND_RATE_MULTIPLE = 2;
 
     /* =================== STATE =================== */
 
@@ -128,8 +133,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     error FundShareOutOfRange();
     error ZeroAddress();
     error DiscountPercentTooHigh();
+    error DiscountRateOutOfRange();
     error PremiumThresholdOutOfRange();
     error PremiumPercentTooHigh();
+    error PremiumRateOutOfRange();
     error MintingFactorOutOfRange();
     error ProtectedToken();
 
@@ -148,7 +155,9 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     modifier checkEpoch() {
         if (block.timestamp < nextEpochPoint()) revert NotEpochYet();
         _;
-        epoch += 1;
+        // Fast-forward to the current wall-clock period so missed epochs cannot
+        // be minted one-by-one at a single stale price (no catch-up minting).
+        epoch = (block.timestamp - startTime) / PERIOD + 1;
         epochSupplyContractionLeft = (getMoneyPrice() > moneyPriceCeiling)
             ? 0
             : getMoneyCirculatingSupply() * maxSupplyContractionPercent / 10_000;
@@ -295,6 +304,8 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
         moneyPriceOne = 1e18; // 1 MONEY = 1 WETH (Base peg target)
         moneyPriceCeiling = moneyPriceOne * 101 / 100;
+        maxDiscountRate = moneyPriceOne * MAX_BOND_RATE_MULTIPLE;
+        maxPremiumRate = moneyPriceOne * MAX_BOND_RATE_MULTIPLE;
 
         supplyTiers = [
             uint256(0),
@@ -454,19 +465,25 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     function setMaxDiscountRate(
         uint256 _maxDiscountRate
     ) external onlyOperator {
+        if (_maxDiscountRate < moneyPriceOne || _maxDiscountRate > moneyPriceOne * MAX_BOND_RATE_MULTIPLE) {
+            revert DiscountRateOutOfRange();
+        }
         maxDiscountRate = _maxDiscountRate;
     }
 
     function setMaxPremiumRate(
         uint256 _maxPremiumRate
     ) external onlyOperator {
+        if (_maxPremiumRate < moneyPriceOne || _maxPremiumRate > moneyPriceOne * MAX_BOND_RATE_MULTIPLE) {
+            revert PremiumRateOutOfRange();
+        }
         maxPremiumRate = _maxPremiumRate;
     }
 
     function setDiscountPercent(
         uint256 _discountPercent
     ) external onlyOperator {
-        if (_discountPercent > 20_000) revert DiscountPercentTooHigh();
+        if (_discountPercent > MAX_BOND_DISCOUNT_PERCENT) revert DiscountPercentTooHigh();
         discountPercent = _discountPercent;
     }
 
@@ -481,7 +498,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     function setPremiumPercent(
         uint256 _premiumPercent
     ) external onlyOperator {
-        if (_premiumPercent > 20_000) revert PremiumPercentTooHigh();
+        if (_premiumPercent > MAX_BOND_DISCOUNT_PERCENT) revert PremiumPercentTooHigh();
         premiumPercent = _premiumPercent;
     }
 
@@ -602,39 +619,55 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         previousEpochMoneyPrice = getMoneyPrice();
         uint256 supply = getMoneyCirculatingSupply() - seigniorageSaved;
 
-        if (epoch < bootstrapEpochs) {
-            _sendToBoardroom(supply * bootstrapSupplyExpansionPercent / 10_000);
-        } else if (previousEpochMoneyPrice > moneyPriceCeiling) {
-            // Expansion.
-            uint256 bondSupply = IERC20(trustnote).totalSupply();
-            uint256 percentage = previousEpochMoneyPrice - moneyPriceOne;
-            uint256 savedForBond = 0;
-            uint256 savedForBoardroom = 0;
-            uint256 mse = _calculateMaxSupplyExpansionPercent(supply) * moneyPriceOne / 10_000;
+        // Strict Masonry gate: only a fresh validated TWAP strictly above 1.01
+        // authorizes a mint. Bootstrap no longer bypasses the peg check, and a
+        // stale oracle never mints. The epoch still advances (see checkEpoch).
+        bool fresh = _oracleIsFresh();
+        if (!MasonryRules.eligibleForExpansion(previousEpochMoneyPrice, moneyPriceOne, fresh)) {
+            return;
+        }
 
-            if (percentage > mse) percentage = mse;
+        // Expansion.
+        uint256 bondSupply = IERC20(trustnote).totalSupply();
+        uint256 percentage = previousEpochMoneyPrice - moneyPriceOne;
+        uint256 savedForBond = 0;
+        uint256 savedForBoardroom = 0;
+        uint256 mse = _calculateMaxSupplyExpansionPercent(supply) * moneyPriceOne / 10_000;
 
-            if (seigniorageSaved >= bondSupply * bondDepletionFloorPercent / 10_000) {
-                savedForBoardroom = supply * percentage / moneyPriceOne;
-            } else {
-                // Compute boardroom share with mul-before-div to avoid the
-                // divide-before-multiply pattern (Slither). Algebraically equivalent to
-                // Tomb's two-step (supply*pct/priceOne then *floorPct/10000) at sub-wei
-                // precision, which is meaningless at our 1e23+ wei scale.
-                savedForBoardroom = supply * percentage * seigniorageExpansionFloorPercent / moneyPriceOne / 10_000;
-                uint256 totalSeigniorage = supply * percentage / moneyPriceOne;
-                savedForBond = totalSeigniorage - savedForBoardroom;
-                if (mintingFactorForPayingDebt > 0) {
-                    savedForBond = savedForBond * mintingFactorForPayingDebt / 10_000;
-                }
+        if (percentage > mse) percentage = mse;
+
+        if (seigniorageSaved >= bondSupply * bondDepletionFloorPercent / 10_000) {
+            savedForBoardroom = supply * percentage / moneyPriceOne;
+        } else {
+            // Compute boardroom share with mul-before-div to avoid the
+            // divide-before-multiply pattern (Slither). Algebraically equivalent to
+            // Tomb's two-step (supply*pct/priceOne then *floorPct/10000) at sub-wei
+            // precision, which is meaningless at our 1e23+ wei scale.
+            savedForBoardroom = supply * percentage * seigniorageExpansionFloorPercent / moneyPriceOne / 10_000;
+            uint256 totalSeigniorage = supply * percentage / moneyPriceOne;
+            savedForBond = totalSeigniorage - savedForBoardroom;
+            if (mintingFactorForPayingDebt > 0) {
+                savedForBond = savedForBond * mintingFactorForPayingDebt / 10_000;
             }
-            if (savedForBoardroom > 0) _sendToBoardroom(savedForBoardroom);
-            if (savedForBond > 0) {
-                // Effects-before-interactions: bump seigniorageSaved first, then mint.
-                seigniorageSaved += savedForBond;
-                require(IBasisAsset(money).mint(address(this), savedForBond), "Treasury: money mint failed");
-                emit TreasuryFunded(block.timestamp, savedForBond);
-            }
+        }
+        // An empty Masonry/Boardroom must not brick the epoch: skip the transfer
+        // rather than revert, so checkEpoch can still fast-forward.
+        if (savedForBoardroom > 0 && IBoardroom(boardroom).totalSupply() != 0) {
+            _sendToBoardroom(savedForBoardroom);
+        }
+        if (savedForBond > 0) {
+            // Effects-before-interactions: bump seigniorageSaved first, then mint.
+            seigniorageSaved += savedForBond;
+            require(IBasisAsset(money).mint(address(this), savedForBond), "Treasury: money mint failed");
+            emit TreasuryFunded(block.timestamp, savedForBond);
+        }
+    }
+
+    function _oracleIsFresh() internal view returns (bool) {
+        try IOracle(oracle).isFresh(ORACLE_MAX_AGE) returns (bool fresh) {
+            return fresh;
+        } catch {
+            return false;
         }
     }
 

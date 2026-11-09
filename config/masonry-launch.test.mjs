@@ -35,8 +35,6 @@ test('over-allocation and missing LEVEL funding are rejected', () => {
 
 test('immutable economic boundaries cannot be raised or shortened', () => {
   for (const [key, value] of Object.entries({
-    fireTaxHardCapBps: 2000,
-    maximumExpansionPerEpochBps: 300,
     fireTaxRecoverySeconds: 3600,
     farmsCompoundCooldownSeconds: 0,
     operationalVestingDays: 30,
@@ -64,7 +62,6 @@ test('Genesis LP fee, SQUARE treasury splits and critical defense are fixed rele
     criticalDefenseExitBps: 10000,
     criticalRecoveryEpochs: 1,
     epochSeconds: 3600,
-    criticalOracleMaxAgeSeconds: 86400,
     governanceTimelocksEnabled: true,
     ownerTradingPauseEnabled: true,
   })) {
@@ -105,4 +102,95 @@ test('confirmed Genesis rules are fixed launch invariants', () => {
     cfg.policy[key] = value;
     assert.throws(() => validateMasonryLaunch(cfg), new RegExp(key));
   }
+});
+
+test('out-of-bounds configurable tokenomics are rejected', () => {
+  const cases = [
+    ['fireTaxBaselineBps', 200, /3% floor/],
+    ['fireTaxHardCapBps', 2000, /cannot exceed 12%/],
+    ['maximumExpansionPerEpochBps', 300, /1–200|2% hard cap/],
+    ['maximumExpansionPerEpochBps', 0, /1–200|2% hard cap/],
+    ['farmEmissionDays', 0, /1–3650/],
+    ['farmEmissionDays', 3651, /1–3650/],
+    ['criticalOracleMaxAgeSeconds', 86400, /1–1800/],
+    ['criticalOracleMaxAgeSeconds', 0, /1–1800/],
+    ['farmShareWethLpAllocPoints', 0, /farmShareWethLpAllocPoints/],
+    ['bondMaxDiscountBps', 10001, /bondMaxDiscountBps/],
+    ['bondMaxDebtRatioBps', 0, /bondMaxDebtRatioBps/],
+    ['bondMaxDebtRatioBps', 10001, /bondMaxDebtRatioBps/],
+    ['bondMaxSupply', 0, /bondMaxSupply/],
+    ['bondRedeemPremiumBps', 10001, /bondRedeemPremiumBps/],
+  ];
+  for (const [key, value, pattern] of cases) {
+    const cfg = complete();
+    cfg.policy[key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), pattern, key);
+  }
+  const inverted = complete();
+  inverted.policy.fireTaxBaselineBps = 1200;
+  inverted.policy.fireTaxHardCapBps = 600;
+  assert.throws(() => validateMasonryLaunch(inverted), /cannot exceed fireTaxHardCapBps/);
+});
+
+test('stricter in-bound tokenomics defaults are accepted', () => {
+  const cfg = complete();
+  cfg.policy.fireTaxHardCapBps = 900;
+  cfg.policy.maximumExpansionPerEpochBps = 100;
+  cfg.policy.farmEmissionDays = 180;
+  cfg.policy.criticalOracleMaxAgeSeconds = 600;
+  cfg.policy.farmShareWethLpAllocPoints = 500;
+  cfg.policy.bondMaxDiscountBps = 5000;
+  cfg.policy.bondMaxDebtRatioBps = 2000;
+  cfg.policy.bondMaxSupply = 500000;
+  cfg.policy.bondRedeemPremiumBps = 0;
+  assert.equal(validateMasonryLaunch(cfg).squareCap, 33333);
+});
+
+test('per-pool range knobs are required and bounded independently', () => {
+  const cases = [
+    ['rangeLevel', 'lowerHalfWidthBps', 400, /500–3000/],
+    ['rangeLevel', 'upperHalfWidthBps', 3500, /500–3000/],
+    ['rangeSquare', 'halfWidthBps', 400, /500–3000/],
+    ['rangeLevel', 'recenterBps', 50, /inner band/],
+    ['rangeSquare', 'recenterBps', 800, /inner band/],
+    ['rangeLevel', 'cooldownSeconds', 10, /60–86400/],
+    ['rangeSquare', 'cooldownSeconds', 90000, /60–86400/],
+    ['rangeLevel', 'maxTwapDeviationBps', 0, /1–1000/],
+    ['rangeSquare', 'maxTwapDeviationBps', 1500, /1–1000/],
+  ];
+  for (const [pool, key, value, pattern] of cases) {
+    const cfg = complete();
+    cfg.policy[pool][key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), pattern, `${pool}.${key}=${value}`);
+  }
+});
+
+test('daoWallet rejects the zero address and missing farm copy', () => {
+  const zero = complete();
+  zero.daoWallet = '0x0000000000000000000000000000000000000000';
+  assert.throws(() => validateMasonryLaunch(zero), /zero address/);
+  const missing = complete();
+  missing.daoWallet = 'not-an-address';
+  assert.throws(() => validateMasonryLaunch(missing), /20-byte hex address/);
+  const noCopy = complete();
+  noCopy.policy.farmZapNotice = '';
+  assert.throws(() => validateMasonryLaunch(noCopy), /farmZapNotice/);
+  const cd = complete();
+  cd.policy.farmWithdrawCooldownSeconds = 10;
+  assert.throws(() => validateMasonryLaunch(cd), /60–86400/);
+  const claim = complete();
+  claim.policy.farmClaimToWallet = true;
+  assert.throws(() => validateMasonryLaunch(claim), /farmClaimToWallet/);
+});
+
+test('share sell tax is required and capped at 1200 bps', () => {
+  const cfg = complete();
+  cfg.policy.shareSellTaxBps = 1300;
+  assert.throws(() => validateMasonryLaunch(cfg), /12% cap/);
+  const zero = complete();
+  zero.policy.shareSellTaxBps = 0;
+  assert.throws(() => validateMasonryLaunch(zero), /12% cap|1–1200/);
+  const ok = complete();
+  ok.policy.shareSellTaxBps = 300;
+  assert.equal(validateMasonryLaunch(ok).squareCap, 33333);
 });

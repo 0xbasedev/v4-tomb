@@ -3,14 +3,14 @@ import type { Address } from "viem";
 
 import { sellTax, type TaxedAsset } from "@/lib/fireTax";
 import { compoundSplit, cumulativeEmitted, genesisClock, walletClaim, type Tranche } from "@/lib/genesis";
-import { DEPLOYMENTS, GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
+import { GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
 import { stepDefense } from "@/lib/market";
 import type { TokenId } from "@/lib/tokens";
 
 /**
- * Preview — a simulated chain for review and demos, on whenever no verified
- * deployment exists (config/masonry-deployments.json is empty today), or with
- * `?preview=1`. Every value it produces is SAMPLE data and every screen says
+ * Preview — an explicit simulated chain for review and demos, enabled only
+ * with `?preview=1` or the dedicated VITE_PREVIEW demo build. Missing launch
+ * addresses never enable it implicitly. Every value it produces is SAMPLE data and every screen says
  * so. It never asks a wallet to sign or send anything: actions mutate this
  * in-memory state and post a "Simulated" toast.
  *
@@ -59,7 +59,7 @@ function initialEnabled(): boolean {
   if (p === "0") return false;
   if (p === "1") return true;
   if (import.meta.env.VITE_PREVIEW === "1") return true;
-  return DEPLOYMENTS.length === 0;
+  return false;
 }
 
 /** Sample market depth for the projected post-sale price (constant product). */
@@ -91,6 +91,8 @@ export interface PreviewState {
   start: number;
   /** False while the schedule contract's start is 0 (deployed unscheduled). */
   scheduled: boolean;
+  saleOpen: boolean;
+  setSaleOpen: (open: boolean) => void;
   offset: number;
   setOffset: (s: number) => void;
   /** Back to "deployed, start = 0". */
@@ -123,6 +125,7 @@ export interface PreviewState {
     /** MasonryGenesisSchedule.schedule(start) — once, by the scheduler. */
     schedule: (startUnix: number) => void;
     purchase: (t: PassTier) => void;
+    upgrade: (t: PassTier) => void;
     deposit: (pool: 0 | 1, amount: number) => void;
     withdraw: (pool: 0 | 1, amount: number) => void;
     claim: (pool: 0 | 1) => void;
@@ -145,6 +148,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   const [offset, setOffsetState] = useState(initialOffset);
   // Genesis start is anchored so that `now - start === offset` at the moment it's set.
   const [start, setStart] = useState(() => mountedAt.current - initialOffset());
+  const [saleOpen, setSaleOpen] = useState(() => q().get("sale") !== "closed");
   const [scheduled, setScheduled] = useState(() => q().get("genesis") !== "unscheduled");
   const [twap, setTwap] = useState(() => {
     const p = Number(q().get("price"));
@@ -259,9 +263,17 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
       push(`Schedule Genesis for ${new Date(startUnix * 1000).toUTCString()}`);
     },
     purchase: (t) => {
+      if (!saleOpen || pass || (scheduled && now >= start + GENESIS_POLICY.durationSeconds)) throw new Error("Sale not open yet");
       setPass(t);
       setBalances((b) => ({ ...b, USDC: b.USDC - PASSES[t].priceUsdc }));
       push(`Buy ${PASSES[t].name} pass · ${PASSES[t].priceUsdc} USDC`);
+    },
+    upgrade: (t) => {
+      if (!saleOpen || !pass || PASSES[t].rank <= PASSES[pass].rank || (scheduled && now >= start + GENESIS_POLICY.durationSeconds)) throw new Error("Upgrade unavailable");
+      const cost = PASSES[t].priceUsdc - PASSES[pass].priceUsdc;
+      setBalances((b) => ({ ...b, USDC: b.USDC - cost }));
+      setPass(t);
+      push(`Upgrade to ${PASSES[t].name}`);
     },
     deposit: (pool, amount) => {
       const net = pool === 1 ? amount * (1 - GENESIS_POLICY.lpBurnFeeBps / 10_000) : amount;
@@ -294,7 +306,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     compound: (pool, automated) => {
       const reward = settle(pool);
       const tax = sellTax({ asset: "xTOMB", twap: oracleFresh ? twap : null, projected: twap, raisedBps: raised.xTOMB.bps, raisedAt: raised.xTOMB.at, now, genesisActive: clock.active });
-      const s = compoundSplit(reward, { automated, taxBps: tax.rateBps ?? 0 });
+      const s = compoundSplit(reward, { automated, taxBps: 0 }); // X Tomb sells are no longer taxed
       const lpPrice = 2 * twap;
       const shares = (s.net * twap) / lpPrice;
       setPositions((p) => {
@@ -346,6 +358,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     now,
     start,
     scheduled,
+    saleOpen, setSaleOpen,
     offset: now - start,
     setOffset: (o: number) => {
       setScheduled(true);

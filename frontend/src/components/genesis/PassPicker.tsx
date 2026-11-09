@@ -1,9 +1,12 @@
 import { useRef, useState } from "react";
 
+import { PRIMARY } from "@/lib/networks";
+const pReferenceSymbol = PRIMARY.referenceToken?.symbol ?? "USDC";
+
 import { Sigil } from "@/components/brand/Sigil";
 import { Reason, SimBadge } from "@/components/Status";
 import { useActions, useNetworkStatus, useProtocol } from "@/lib/hooks";
-import { PASSES, PASS_ORDER, type PassDef } from "@/lib/launch";
+import { PASSES, PASS_ORDER, type PassTier, type PassDef } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 
@@ -42,8 +45,8 @@ export function PassPicker() {
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-bone">{p.pass ? `You hold the ${PASSES[p.pass].name} pass.` : "Choose a Genesis pass"}</h2>
           <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-bone-dim">
             {p.pass
-              ? `${PASSES[p.pass].perks.slice(1).join(" · ") || PASSES[p.pass].perks.join(" · ")}. Passes are soulbound and can't be upgraded — your next step is staking below.`
-              : "Soulbound, one per wallet, paid in USDC. Every pass earns at the same rate — passes don't change rewards, only automation and Ultra's early start."}
+              ? `${PASSES[p.pass].perks.slice(1).join(" · ") || PASSES[p.pass].perks.join(" · ")}. Passes are soulbound; higher tiers can be unlocked by paying the difference while the sale is open.`
+              : "Soulbound, one per wallet, paid in the chain reference token. Every pass earns at the same rate — passes don't change rewards, only automation and Ultra's early start."}
           </p>
         </div>
         {p.pass && (
@@ -60,7 +63,7 @@ export function PassPicker() {
               pass={PASSES[id]}
               held={p.pass}
               closed={closed}
-              reason={p.genesisScheduled === false ? "Pass sales open once Genesis is scheduled — the pass contract rejects purchases while the start is unset." : !net.preview ? net.reason : null}
+              reason={p.saleOpen !== true ? "Sale not open yet" : !net.preview ? net.reason : null}
             />
           ))}
         </div>
@@ -69,13 +72,14 @@ export function PassPicker() {
   );
 }
 
-function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string | null; closed: boolean; reason: string | null }) {
+function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: PassTier | null; closed: boolean; reason: string | null }) {
   const actions = useActions();
   const cta = useRef<HTMLButtonElement>(null);
   useMagnetic(cta, 0.16);
   const ultra = pass.id === "ultra";
   const owned = held === pass.id;
-  const blocked = owned ? "Held" : held ? "One pass per wallet — passes can't be upgraded" : closed ? "Passes are sold until Genesis ends" : reason;
+  const upgrade = !!held && pass.rank > PASSES[held].rank;
+  const blocked = owned ? "Held" : held && !upgrade ? "Downgrades are not available" : closed ? "Passes are sold until Genesis ends" : reason;
   return (
     <article className={`pass-card relative flex flex-col rounded-2xl border bg-basalt-2/70 p-5 ${owned ? "border-ok/50" : ultra ? "border-spectre/30" : "border-white/[0.08]"}`}>
       {ultra && <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(120%_70%_at_50%_0%,rgba(62,231,255,0.10),transparent_60%)]" />}
@@ -88,8 +92,8 @@ function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string 
         <div className="min-w-0 pt-1">
           <h3 className="font-display text-[17px] font-semibold tracking-[-0.02em] text-bone">{pass.name}</h3>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span className={`font-display text-3xl font-semibold tracking-[-0.04em] ${ultra ? "spectre-text" : "text-bone"}`}>{pass.priceUsdc}</span>
-            <span className="font-mono text-[11px] text-ash">USDC</span>
+            <span className={`font-display text-3xl font-semibold tracking-[-0.04em] ${ultra ? "spectre-text" : "text-bone"}`}>{held && upgrade ? pass.priceUsdc - PASSES[held].priceUsdc : pass.priceUsdc}</span>
+            <span className="font-mono text-[11px] text-ash">{pReferenceSymbol}</span>
           </div>
           <span className="chip mt-2 h-5 px-2 text-[10px]">Soulbound ERC-721</span>
         </div>
@@ -107,11 +111,11 @@ function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string 
       <button
         ref={cta}
         type="button"
-        onClick={() => actions.purchasePass(pass.id)}
+        onClick={() => held ? actions.upgradePass(pass.id, held) : actions.purchasePass(pass.id)}
         disabled={!!blocked || actions.busy}
         className={`relative mt-4 h-11 w-full text-[13px] ${ultra ? "btn btn-spectre" : pass.id === "pro" ? "btn btn-primary" : "btn"}`}
       >
-        {owned ? "Held" : `Mint ${pass.name}`}
+        {owned ? "Held" : `${upgrade ? "Upgrade to" : "Mint"} ${pass.name}`}
       </button>
       {blocked && !owned && <Reason>{blocked}</Reason>}
     </article>

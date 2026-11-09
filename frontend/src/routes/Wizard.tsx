@@ -53,6 +53,10 @@ const POLICY_LABEL: Record<string, string> = {
   genesisLevelUsdcLpBurnFeeBps: "Genesis LP burn fee",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
   farmsCompoundCooldownSeconds: "Farm compound cooldown",
+  farmClaimToWallet: "Farm claim to wallet",
+  farmWithdrawCooldownSeconds: "Farm withdraw cooldown",
+  liquidityWithdrawFeeBps: "Legacy static withdraw fee (unused; withdrawals use the live Fire Tax rate)",
+  shareSellTaxBps: "X Share sell tax (flat; proceeds buy and burn X Tomb)",
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",
@@ -191,8 +195,8 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
     try {
       const [code, decimals, symbol] = await Promise.all([
         client.getCode({ address: chain.poolManager as Address }),
-        client.readContract({ address: chain.usdc as Address, abi: erc20Abi, functionName: "decimals" }),
-        client.readContract({ address: chain.usdc as Address, abi: erc20Abi, functionName: "symbol" }),
+        client.readContract({ address: chain.pegToken as Address, abi: erc20Abi, functionName: "decimals" }),
+        client.readContract({ address: chain.pegToken as Address, abi: erc20Abi, functionName: "symbol" }),
       ]);
       setChecks({ pm: !!code && code !== "0x", decimals, symbol, error: null });
     } catch (e) {
@@ -241,10 +245,10 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
         </div>
         <div className="rounded-xl bg-black/25 p-3">
           <dt className="label mb-1">Official USDC</dt>
-          <dd className="break-all font-mono text-bone">{chain.usdc}</dd>
+          <dd className="break-all font-mono text-bone">{chain.pegToken}</dd>
           {checks && (
-            <dd className={`mt-1 ${checks.decimals === 6 && checks.symbol === "USDC" ? "text-ok" : "text-bad"}`}>
-              {checks.decimals === null ? "—" : `${checks.decimals === 6 && checks.symbol === "USDC" ? "✓" : "✕"} ${checks.symbol} · ${checks.decimals} decimals`}
+            <dd className={`mt-1 ${checks.decimals === chain.pegTokenDecimals && checks.symbol === chain.pegTokenSymbol ? "text-ok" : "text-bad"}`}>
+              {checks.decimals === null ? "—" : `${checks.decimals === chain.pegTokenDecimals && checks.symbol === chain.pegTokenSymbol ? "✓" : "✕"} ${checks.symbol} · ${checks.decimals} decimals`}
             </dd>
           )}
         </div>

@@ -79,6 +79,7 @@ contract MasonryGenesisStakingTest is Test {
     ) private {
         schedule = new MasonryGenesisSchedule(start, address(this));
         pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        pass.setSaleOpen(true);
         address c0 = address(level) < address(usdc) ? address(level) : address(usdc);
         address c1 = address(level) < address(usdc) ? address(usdc) : address(level);
         PoolKey memory key = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
@@ -110,6 +111,7 @@ contract MasonryGenesisStakingTest is Test {
         assertFalse(schedule.active());
         assertFalse(schedule.lpOpen());
         assertEq(schedule.end(), 0);
+        pass.setSaleOpen(false);
         vm.prank(BASIC);
         vm.expectRevert(MasonryGenesisPass.InvalidPurchase.selector);
         pass.purchase(MasonryGenesisPass.Tier.Genesis);
@@ -124,6 +126,7 @@ contract MasonryGenesisStakingTest is Test {
         vm.expectRevert(MasonryGenesisSchedule.AlreadyScheduled.selector);
         schedule.schedule(start + 1 days);
 
+        pass.setSaleOpen(true);
         _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 50e6);
         vm.warp(start - 1);
         assertFalse(schedule.active());
@@ -245,6 +248,18 @@ contract MasonryGenesisStakingTest is Test {
         vm.prank(user);
         vm.expectRevert(MasonryGenesisStaking.PoolClosed.selector);
         staking.deposit(pool, 1);
+    }
+
+    function testKeeperWorksRightAfterGenesisToProUpgrade() public {
+        vm.prank(BASIC);
+        vm.expectRevert(MasonryGenesisStaking.NotEligible.selector);
+        staking.setKeeper(KEEPER, 1);
+        vm.startPrank(BASIC);
+        usdc.approve(address(pass), 50e6);
+        pass.upgrade(MasonryGenesisPass.Tier.Pro);
+        staking.setKeeper(KEEPER, 1);
+        vm.stopPrank();
+        assertEq(staking.keeper(BASIC), KEEPER);
     }
 
     function _buy(

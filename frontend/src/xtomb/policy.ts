@@ -20,6 +20,6 @@ export function sampleTargetBps(priceInTenThousandths: number) {
   if (priceInTenThousandths >= peg) return baseline;
   if (priceInTenThousandths <= bottom) return cap;
   const progress = Math.floor((peg - priceInTenThousandths) * peg / (peg - bottom));
-  const quadratic = Math.floor(progress * progress / peg);
-  return baseline + Math.floor((cap - baseline) * quadratic / peg);
+  const nonlinear = Math.floor(Math.sqrt(progress * peg));
+  return baseline + Math.floor((cap - baseline) * nonlinear / peg);
 }

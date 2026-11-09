@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "primaryChainId": 4663,
+  "networks": [
+    {
+      "id": 4663,
+      "name": "Robinhood Chain",
+      "enabled": true,
+      "icon": "RH",
+      "iconNote": "TODO: replace placeholder with official chain logo",
+      "nativeCurrency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+      "explorerUrl": "https://robinhoodchain.blockscout.com",
+      "testnet": false,
+      "referenceToken": {
+        "symbol": "USDG",
+        "decimals": 6,
+        "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
+      },
+      "infrastructure": {
+        "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+        "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+        "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+        "usdc": null
+      },
+      "sources": [
+        "https://docs.robinhood.com/chain/connecting/",
+        "https://docs.robinhood.com/chain/contracts/",
+        "https://developers.uniswap.org/deployments"
+      ],
+      "decimalsVerification": "Read-only eth_call decimals() returned 6 on chain 4663, 2026-11-07"
+    },
+    {
+      "id": 8453,
+      "name": "Base",
+      "enabled": false,
+      "icon": "BA",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 42161,
+      "name": "Arbitrum One",
+      "enabled": false,
+      "icon": "AR",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 10,
+      "name": "OP Mainnet",
+      "enabled": false,
+      "icon": "OP",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 130,
+      "name": "Unichain",
+      "enabled": false,
+      "icon": "UN",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 137,
+      "name": "Polygon PoS",
+      "enabled": false,
+      "icon": "PO",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 43114,
+      "name": "Avalanche C-Chain",
+      "enabled": false,
+      "icon": "AV",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 480,
+      "name": "World Chain",
+      "enabled": false,
+      "icon": "WO",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 57073,
+      "name": "Ink",
+      "enabled": false,
+      "icon": "IN",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 196,
+      "name": "X Layer",
+      "enabled": false,
+      "icon": "X ",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 42220,
+      "name": "Celo",
+      "enabled": false,
+      "icon": "CE",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 143,
+      "name": "Monad",
+      "enabled": false,
+      "icon": "MO",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 999,
+      "name": "HyperEVM",
+      "enabled": false,
+      "icon": "HY",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 1,
+      "name": "Ethereum",
+      "enabled": false,
+      "icon": "ET",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 84532,
+      "name": "Base Sepolia",
+      "enabled": false,
+      "icon": "BA",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 421614,
+      "name": "Arbitrum Sepolia",
+      "enabled": false,
+      "icon": "AR",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 1301,
+      "name": "Unichain Sepolia",
+      "enabled": false,
+      "icon": "UN",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 11155111,
+      "name": "Sepolia",
+      "enabled": false,
+      "icon": "SE",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 56,
+      "name": "BNB Smart Chain",
+      "enabled": false,
+      "icon": "BNB",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 369,
+      "name": "PulseChain",
+      "enabled": false,
+      "icon": "PLS",
+      "iconNote": "Placeholder chain monogram"
+    },
+    {
+      "id": 146,
+      "name": "Sonic",
+      "enabled": false,
+      "icon": "S",
+      "iconNote": "Placeholder chain monogram"
+    }
+  ]
+}

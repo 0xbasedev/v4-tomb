@@ -10,12 +10,13 @@ import { SimBadge } from "@/components/Status";
 import { fmtDuration, GENESIS_DAYS, LP_DAY, walletClaim, type GenesisClock } from "@/lib/genesis";
 import { useProtocol } from "@/lib/hooks";
 import { FIRE, GENESIS_POLICY, pct } from "@/lib/launch";
+import { pegPair } from "@/lib/peg";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
  * Genesis — seven days, pass-gated, two pools (MasonryGenesisSchedule /
  * Pass / Staking / Settlement). Day 1 sends every emission to the standard
- * pool; from Day 2 the xTOMB/USDC LP pool takes 75%. After Genesis the same
+ * pool; from Day 2 the official LP pool takes 75%. After Genesis the same
  * page keeps withdrawals, claims and vesting releases open.
  */
 export function Genesis() {
@@ -41,7 +42,7 @@ export function Genesis() {
         }
         token="xTOMB"
         title={<span className="ember-text">Genesis</span>}
-        lede={`Seven days, pass-gated. Stake in the standard pool from Day 1; the xTOMB/USDC LP pool opens on Day ${LP_DAY} and takes 75% of emissions from then on. Every reward is half liquid, half vested.`}
+        lede={`Seven days, pass-gated. Stake in the standard pool from Day 1; the ${pegPair("xTOMB")} LP pool opens on Day ${LP_DAY} and takes 75% of emissions from then on. Every reward is half liquid, half vested.`}
         aside={
           c ? (
             <Timeline clock={c} simulated={p.sim} />

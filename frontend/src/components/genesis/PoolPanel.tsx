@@ -248,7 +248,7 @@ function SettleSheet({
               <>
                 <Row k="Liquid half to compound" v={`${fmt(k.budget)} xTOMB`} />
                 <Row k="Sold for USDC (sell leg)" v={`≈ ${fmt(k.sold)} xTOMB`} sub="the rest pairs with the USDC in the vault range" />
-                <Row k={`Fire Tax on the sell leg (${pct(taxBps)})`} v={`−${fmt(k.fireTax)} xTOMB`} sub={taxDriver} tone={taxBps > 100 ? "text-warn" : undefined} />
+                <Row k={taxBps ? `Share sell tax on the sell leg (${pct(taxBps)})` : "X Tomb sell tax"} v={taxBps ? `−${fmt(k.fireTax)} xTOMB` : "None — swaps are untaxed"} sub={taxBps ? taxDriver : "Liquidity withdrawals use the live Fire Tax rate instead"} tone={taxBps > 100 ? "text-warn" : undefined} />
                 <Row k="LP burn fee (once, from gross shares)" v={`−${fmt(k.lpBurn)} xTOMB-equivalent`} />
                 <Row k="Credited to pool 1" v={`≈ ${fmt(k.net)} xTOMB of LP`} strong />
                 <p className="pt-1 text-[11.5px] text-ash">No claim fee and no keeper fee on a manual compound. Unused xTOMB (at most 3%) returns to your wallet.</p>

@@ -1,6 +1,7 @@
 import { trancheView } from "@/lib/genesis";
 import { useProtocol } from "@/lib/hooks";
 import { DEFENSE, EXPANSION, FIRE, pct } from "@/lib/launch";
+import { PEG, pegPair } from "@/lib/peg";
 
 /**
  * The interface's opinion: one primary move, one alternative, one thing to
@@ -39,7 +40,7 @@ export function usePlan(): Plan {
             ? { title: `Selling xTOMB at ${pct(rate)}`, why: `the recovery floor decays to ${pct(FIRE.baselineBps)} over seven hours — waiting is cheaper.` }
             : rate !== null && rate > FIRE.baselineBps
               ? { title: `Selling xTOMB at ${pct(rate)}`, why: "the tax is above baseline because the TWAP is below the reference; it falls as price recovers." }
-              : { title: "Selling on an unofficial pool", why: "only the official xTOMB/USDC and xSHARE/USDC pools enforce the Fire Tax and feed the TWAP." };
+              : { title: "Selling on an unofficial pool", why: `only the official ${pegPair("xTOMB")} and ${pegPair("xSHARE")} pools enforce the Fire Tax and feed the TWAP.` };
 
   const ready = p.tranches.some((t) => trancheView(t, p.now).ready);
 
@@ -57,7 +58,7 @@ export function usePlan(): Plan {
     if (!p.pass) {
       return {
         headline: c.phase === "pre" ? "Genesis hasn't started. Every staking entry point needs a Genesis pass." : `Genesis day ${c.day} of ${c.totalDays}. Staking needs a Genesis pass.`,
-        primary: { title: "Buy a Genesis pass", why: "Genesis 50, Pro 100 or Ultra 500 USDC — soulbound, one per wallet, same reward weighting.", cta: "Choose a pass", to: "/genesis", tone: "ember" },
+        primary: { title: "Buy a Genesis pass", why: `Genesis 50, Pro 100 or Ultra 500 ${PEG.symbol} — soulbound, one per wallet, same reward weighting.`, cta: "Choose a pass", to: "/genesis", tone: "ember" },
         secondary: { title: "Read how Genesis works", why: "", cta: "Docs", to: "/docs#genesis", tone: "neutral" },
         avoid: { title: "Buying xTOMB to farm Genesis", why: "rewards are paid only to pass holders staking in the two Genesis pools." },
       };
@@ -74,13 +75,13 @@ export function usePlan(): Plan {
       return {
         headline: "Day 1: the standard pool receives every Genesis emission until the LP pool opens.",
         primary: { title: "Stake in the standard pool", why: "100% of emissions today; from Day 2 the LP pool takes 75%.", cta: "Stake", to: "/genesis", tone: "ember" },
-        secondary: { title: "Prepare xTOMB/USDC liquidity", why: "", cta: "Add liquidity", to: "/swap?mode=liquidity", tone: "neutral" },
+        secondary: { title: `Prepare ${pegPair("xTOMB")} liquidity`, why: "", cta: "Add liquidity", to: "/swap?mode=liquidity", tone: "neutral" },
         avoid: avoidSell,
       };
     }
     return {
-      headline: "The xTOMB/USDC LP pool is open and carries 75% of Genesis emissions.",
-      primary: { title: "Stake xTOMB/USDC LP", why: "Add liquidity to the official vault, then stake the shares. A 0.5% LP burn fee is taken once per deposit.", cta: "Open Genesis", to: "/genesis", tone: "ember" },
+      headline: `The ${pegPair("xTOMB")} LP pool is open and carries 75% of Genesis emissions.`,
+      primary: { title: `Stake ${pegPair("xTOMB")} LP`, why: "Add liquidity to the official vault, then stake the shares. A 0.5% LP burn fee is taken once per deposit.", cta: "Open Genesis", to: "/genesis", tone: "ember" },
       secondary: { title: "Compound rewards into the LP pool", why: "", cta: "Compound", to: "/genesis", tone: "neutral" },
       avoid: avoidSell,
     };
@@ -109,7 +110,7 @@ export function usePlan(): Plan {
       p.market.phase === "expansion"
         ? `The validated TWAP is above $${EXPANSION.gate.toFixed(2)} — the planned expansion rule would let this epoch mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB.`
         : "Genesis is over. Farm and Masonry staking are pending their backend bindings.",
-    primary: { title: "Provide official liquidity", why: "xTOMB/USDC and xSHARE/USDC vault shares are redeemable for both tokens at any time.", cta: "Add liquidity", to: "/swap?mode=liquidity", tone: "spectre" },
+    primary: { title: "Provide official liquidity", why: `${pegPair("xTOMB")} and ${pegPair("xSHARE")} vault shares are redeemable for both tokens at any time.`, cta: "Add liquidity", to: "/swap?mode=liquidity", tone: "spectre" },
     secondary: { title: "See what's pending", why: "", cta: "Farm", to: "/farm", tone: "neutral" },
     avoid: avoidSell,
   };

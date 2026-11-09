@@ -1,6 +1,7 @@
 import { bridgeNetwork } from "@/lib/create3";
 import { http, createConfig, type Transport } from "wagmi";
 import {
+  bsc, pulsechain, sonic,
   arbitrum,
   arbitrumSepolia,
   avalanche,
@@ -22,16 +23,20 @@ import {
 } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 
+import networkConfig from "@config/frontend-networks.json";
+import { defineChain } from "viem";
 import { DEPLOYMENTS, REGISTRY } from "@/lib/launch";
 
 /**
- * Wallet chains = every chain in config/official-infrastructure.json (a
- * Uniswap v4 PoolManager plus native USDC), so a wallet can connect and
- * switch anywhere xTOMB could launch. Reads only ever go to chains with a
+ * Wallet chains follow config/frontend-networks.json, including inactive expansion
+ * destinations. Infrastructure availability is not protocol launch availability. Reads only ever go to chains with a
  * verified deployment; RPCs default to public endpoints and can be overridden
  * per chain with VITE_RPC_<chainId>.
  */
+const primary = networkConfig.networks.find((n) => n.id === networkConfig.primaryChainId)!;
+export const robinhood = defineChain({ id: primary.id, name: primary.name, nativeCurrency: primary.nativeCurrency!, rpcUrls: { default: { http: [primary.rpcUrl!] } }, blockExplorers: { default: { name: "Blockscout", url: primary.explorerUrl! } } });
 const KNOWN: Chain[] = [
+  robinhood, bsc, pulsechain, sonic,
   base,
   arbitrum,
   optimism,
@@ -51,7 +56,7 @@ const KNOWN: Chain[] = [
   sepolia,
 ];
 
-const listed = new Set(REGISTRY.chains.map((c) => c.id));
+const listed = new Set(networkConfig.networks.map((c) => c.id));
 const chains = KNOWN.filter((c) => listed.has(c.id)) as [Chain, ...Chain[]];
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -66,4 +71,4 @@ export const wagmiConfig = createConfig({
 export const SUPPORTED_CHAIN_IDS = chains.map((c) => c.id);
 export const DEPLOYED_CHAIN_IDS = DEPLOYMENTS.map((d) => d.chainId);
 export const chainName = (id: number | undefined) =>
-  id === undefined ? "—" : (REGISTRY.chains.find((c) => c.id === id)?.name ?? bridgeNetwork(id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);
+  id === undefined ? "—" : (networkConfig.networks.find((c) => c.id === id)?.name ?? REGISTRY.chains.find((c) => c.id === id)?.name ?? bridgeNetwork(id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);

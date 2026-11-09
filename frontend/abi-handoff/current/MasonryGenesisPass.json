@@ -223,6 +223,19 @@
   },
   {
     "type": "function",
+    "name": "saleOpen",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "schedule",
     "inputs": [],
     "outputs": [
@@ -245,6 +258,19 @@
       },
       {
         "name": "approved",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSaleOpen",
+    "inputs": [
+      {
+        "name": "open",
         "type": "bool",
         "internalType": "bool"
       }
@@ -305,6 +331,25 @@
   },
   {
     "type": "function",
+    "name": "tokenOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "tokenURI",
     "inputs": [
       {
@@ -357,6 +402,25 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "upgrade",
+    "inputs": [
+      {
+        "name": "newTier",
+        "type": "uint8",
+        "internalType": "enum MasonryGenesisPass.Tier"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "paid",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -423,6 +487,19 @@
   },
   {
     "type": "event",
+    "name": "SaleOpenChanged",
+    "inputs": [
+      {
+        "name": "open",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Transfer",
     "inputs": [
       {
@@ -441,6 +518,43 @@
         "name": "tokenId",
         "type": "uint256",
         "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Upgraded",
+    "inputs": [
+      {
+        "name": "holder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "oldTier",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum MasonryGenesisPass.Tier"
+      },
+      {
+        "name": "newTier",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum MasonryGenesisPass.Tier"
+      },
+      {
+        "name": "paid",
+        "type": "uint256",
+        "indexed": false,
         "internalType": "uint256"
       }
     ],
@@ -578,6 +692,11 @@
   {
     "type": "error",
     "name": "Soulbound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Unauthorized",
     "inputs": []
   }
 ]

@@ -139,3 +139,10 @@ test('receipt verification requires the planned factory, caller, proxy and contr
   await assert.rejects(verifyCreate3Receipts(plan, plan.addresses, wrongSalt), /creation receipt/);
   await assert.rejects(verifyCreate3Receipts(plan, plan.addresses, receipts.map((receipt) => ({ ...receipt, from: account }))), /creation receipt/);
 });
+
+test('masonry plan includes the liquidity-layer roles', async () => {
+  const { masonryRoles } = await import('./create3-plan.mjs');
+  for (const role of ['masonryLevelRangeManager', 'masonrySquareRangeManager', 'masonryPooledRangeVault', 'masonryShareWethZapper', 'masonryFarm']) {
+    assert.ok(masonryRoles.includes(role), role);
+  }
+});

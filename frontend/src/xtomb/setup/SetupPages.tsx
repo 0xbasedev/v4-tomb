@@ -180,10 +180,14 @@ function PlanDetails({ plan }: { plan: LaunchPlan }) {
         {plan.bridge && <li><strong>Bridge plan</strong> records addresses and limits for the optional xSHARE bridge.</li>}
       </ul>
     </details>
+    {!!plan.blockers?.length && <div className="ops-detail" role="alert" data-testid="launch-blockers">
+      <strong>Launch blocked. Fix these before exporting the address plan or launch settings:</strong>
+      <ul className="ops-explainer">{plan.blockers.map((b) => <li key={b}>{b}</li>)}</ul>
+    </div>}
     <div className="actions ops-actions">
-      <button className="button primary" type="button" onClick={() => download("masonry.release.json", plan.masonry)}>Download address plan</button>
+      <button className="button primary" type="button" disabled={!!plan.blockers?.length} onClick={() => download("masonry.release.json", plan.masonry)}>Download address plan</button>
       <button className="button" type="button" onClick={() => download("release.json", plan.release)}>Download release inputs</button>
-      <button className="button" type="button" onClick={() => download("masonry-launch.json", { ...plan.launch, network: plan.network })}>Download launch settings</button>
+      <button className="button" type="button" disabled={!!plan.blockers?.length} onClick={() => download("masonry-launch.json", { ...plan.launch, network: plan.network })}>Download launch settings</button>
       {plan.bridge && <button className="button" type="button" onClick={() => download("xshare-bridge.release.json", plan.bridge)}>Download bridge plan</button>}
     </div>
   </>;
@@ -401,7 +405,9 @@ export function AdminPage() {
         onClick={() => planner.plan && void verify(planner.plan)}>{checking ? "Checking RPC…" : "Check on-chain code"}</button></div>}
       {(error || planner.error) && <p role="alert" className="callout">{error || planner.error}</p>}
       {verification && <section className="ops-verification" aria-label="On-chain check results">
-        <h2>On-chain check</h2><p role="status">Chain {verification.chainId} · Block {verification.block}. Code presence and factory bytecode checked.</p>
+        <h2>On-chain check</h2><p role="status">Chain {verification.chainId} · Block {verification.block}. Code presence, factory bytecode, range-manager binds and peg decimals checked.</p>
+        {verification.blockers.length > 0 && <div role="alert" data-testid="onchain-blockers"><strong>Launch blocked:</strong>
+          <ul className="ops-explainer">{verification.blockers.map((b) => <li key={b}>{b}</li>)}</ul></div>}
         <dl className="address-list">{verification.checks.map(({ label, status }) =>
           <div key={label}><dt>{roleName(label)}</dt><dd className={"check-status " + status}>{status === "present" ? "Code present" : status === "factory" ? "CreateX bytecode verified" : status === "missing" ? "No code" : "Unexpected CreateX bytecode"}</dd></div>)}</dl>
         <p className="ops-meta">Review constructor inputs, contract ownership, and wiring before publishing a deployment.</p>

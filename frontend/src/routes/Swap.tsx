@@ -4,24 +4,26 @@ import { useSearchParams } from "react-router-dom";
 import { AnySwap, type SwapPair } from "@/components/AnySwap";
 import { FireTaxChart } from "@/components/FireTaxChart";
 import { LiquidityPanel } from "@/components/LiquidityPanel";
+import { ProtocolRangeStatus } from "@/components/ProtocolRangeStatus";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { Segmented } from "@/components/docs/kit";
 import { SimBadge } from "@/components/Status";
 import { DRIVER_LABEL, recoveryFloorBps, sellTax, targetBps, type TaxedAsset } from "@/lib/fireTax";
 import { useProtocol } from "@/lib/hooks";
 import { FIRE, pct } from "@/lib/launch";
+import { PEG } from "@/lib/peg";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /** One-tap starting points — each is just a pair in the same card. */
 const PRESETS: { title: string; detail: string; pair: SwapPair }[] = [
-  { title: "Buy xTOMB", detail: "USDC → xTOMB · never taxed", pair: { input: "USDC", output: "xTOMB" } },
-  { title: "Sell xTOMB", detail: "xTOMB → USDC · one Fire Tax", pair: { input: "xTOMB", output: "USDC" } },
-  { title: "Exit LP to USDC", detail: "redeem, then sell the xTOMB half", pair: { input: "xTOMB-USDC", output: "USDC" } },
-  { title: "Exit LP to xTOMB", detail: "redeem, then buy with the USDC half", pair: { input: "xTOMB-USDC", output: "xTOMB" } },
+  { title: "Buy xTOMB", detail: `${PEG.symbol} → xTOMB · never taxed`, pair: { input: "USDC", output: "xTOMB" } },
+  { title: "Sell xTOMB", detail: `xTOMB → ${PEG.symbol} · no sell tax`, pair: { input: "xTOMB", output: "USDC" } },
+  { title: "Exit LP to " + PEG.symbol, detail: "redeem, then sell the xTOMB half", pair: { input: "xTOMB-USDC", output: "USDC" } },
+  { title: "Exit LP to xTOMB", detail: `redeem, then buy with the ${PEG.symbol} half`, pair: { input: "xTOMB-USDC", output: "xTOMB" } },
 ];
 
 /**
- * Swap — the official pools (xTOMB/USDC and xSHARE/USDC through
+ * Swap — the official pools (xTOMB and xSHARE against the chain peg token through
  * MiniSwapRouter and their Fire Tax hooks) plus the two LP vaults. The Fire
  * Tax panel shows the one rate a sell would pay and why.
  */
@@ -42,7 +44,7 @@ export function Swap() {
       <PageHeader
         eyebrow={p.sim ? "Swap · simulated" : "Swap"}
         title="Official pools only"
-        lede="xTOMB/USDC and xSHARE/USDC on Uniswap v4. Buys and wallet transfers pay no Fire Tax; every sell pays one rate, shown before you sign, with pool fees itemized separately."
+        lede={`The official ${PEG.symbol} pairs on Uniswap v4. X Tomb swaps are not taxed. Official X Share sells pay a flat 3% that later buys and burns X Tomb. Liquidity withdrawals use the live Fire Tax rate. Pool fees are itemized separately.`}
       />
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
@@ -97,6 +99,7 @@ export function Swap() {
           ))}
         </div>
         <p className="mt-3 text-[12px] text-ash">The highest of the four applies, capped at {pct(FIRE.capBps)}. If the oracle has no valid TWAP the hook rejects the sell; buys still go through.</p>
+        <div className="mt-8"><ProtocolRangeStatus /></div>
       </div>
     </div>
   );

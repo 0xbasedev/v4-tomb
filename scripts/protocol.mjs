@@ -95,6 +95,10 @@ async function main() {
   const [command = 'validate', file = process.env.PROTOCOL_CONFIG || fileURLToPath(new URL('../config/networks.json', import.meta.url)), ...args] = process.argv.slice(2);
   const { document, networks } = readManifest(file);
   if (command === 'validate') {
+    const { manifestBlockers } = await import('../config/launch-blockers.mjs');
+    const sibling = (name) => JSON.parse(readFileSync(fileURLToPath(new URL(`../config/${name}`, import.meta.url)), 'utf8'));
+    const blockers = manifestBlockers(document, sibling('frontend-networks.json'), sibling('official-infrastructure.json'));
+    if (blockers.length) throw new Error(`Manifest blockers:\n  ${blockers.join('\n  ')}`);
     console.log(`Valid configuration: ${networks.length} network(s)`);
     return;
   }

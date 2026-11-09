@@ -12,15 +12,27 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 import {
-    MasonryGenesisLPBurnFee, IMasonryRedeemableLPVault, IMasonryBurnableLevel,
-    IMasonryExactInputV4Router, IMasonryBuybackExecutionGuard
+    MasonryGenesisLPBurnFee,
+    IMasonryRedeemableLPVault,
+    IMasonryBurnableLevel,
+    IMasonryExactInputV4Router,
+    IMasonryBuybackExecutionGuard
 } from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
 
 contract MockMasonryLevel is ERC20Burnable {
     uint256 public totalBurned;
     constructor() ERC20("LEVEL", "LEVEL") {}
-    function mint(address to, uint256 amount) external { _mint(to, amount); }
-    function burn(uint256 amount) public override {
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
+
+    function burn(
+        uint256 amount
+    ) public override {
         totalBurned += amount;
         super.burn(amount);
     }
@@ -28,8 +40,17 @@ contract MockMasonryLevel is ERC20Burnable {
 
 contract MockMasonryUSDC is ERC20 {
     constructor() ERC20("USDC", "USDC") {}
-    function decimals() public pure override returns (uint8) { return 6; }
-    function mint(address to, uint256 amount) external { _mint(to, amount); }
+
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
 }
 
 contract MockMasonryRedeemableVault is ERC20 {
@@ -38,24 +59,43 @@ contract MockMasonryRedeemableVault is ERC20 {
     bool public failRedemption;
     PoolKey private key;
 
-    constructor(MockMasonryLevel level_, MockMasonryUSDC usdc_)
-        ERC20("LEVEL/USDC LP Vault", "mlp")
-    {
+    constructor(
+        MockMasonryLevel level_,
+        MockMasonryUSDC usdc_
+    ) ERC20("LEVEL/USDC LP Vault", "mlp") {
         level = level_;
         usdc = usdc_;
     }
 
-    function setPoolKey(PoolKey memory key_) external { key = key_; }
-    function poolKey() external view returns (PoolKey memory) { return key; }
+    function setPoolKey(
+        PoolKey memory key_
+    ) external {
+        key = key_;
+    }
 
-    function mintShares(address to, uint256 shares) external { _mint(to, shares); }
-    function setFailRedemption(bool fail) external { failRedemption = fail; }
+    function poolKey() external view returns (PoolKey memory) {
+        return key;
+    }
+
+    function mintShares(
+        address to,
+        uint256 shares
+    ) external {
+        _mint(to, shares);
+    }
+
+    function setFailRedemption(
+        bool fail
+    ) external {
+        failRedemption = fail;
+    }
 
     // Deterministic test-only vault: five LP shares (18 decimal) redeem
     // proportionally for two LEVEL plus three USDC. Not a real v4 vault.
-    function redeem(uint256 shares, address to)
-        external returns (uint256 levelReceived, uint256 usdcReceived)
-    {
+    function redeem(
+        uint256 shares,
+        address to
+    ) external returns (uint256 levelReceived, uint256 usdcReceived) {
         require(!failRedemption, "mock: vault paused");
         _burn(msg.sender, shares);
         levelReceived = shares * 2 / 5;
@@ -69,10 +109,21 @@ contract MockMasonryBurnGuard is IMasonryBuybackExecutionGuard {
     bool public safeToTrade = true;
     PoolId public officialPool;
 
-    function setPoolKey(PoolKey memory key_) external { officialPool = PoolIdLibrary.toId(key_); }
+    function setPoolKey(
+        PoolKey memory key_
+    ) external {
+        officialPool = PoolIdLibrary.toId(key_);
+    }
 
-    function setSafe(bool value) external { safeToTrade = value; }
-    function minimumLevelOut(uint256 usdcAmount) external view returns (uint256) {
+    function setSafe(
+        bool value
+    ) external {
+        safeToTrade = value;
+    }
+
+    function minimumLevelOut(
+        uint256 usdcAmount
+    ) external view returns (uint256) {
         require(safeToTrade, "mock: quote unsafe");
         return usdcAmount * 1e12 * 99 / 100;
     }
@@ -83,12 +134,19 @@ contract MockMasonryV4Router is IMasonryExactInputV4Router {
     MockMasonryUSDC public immutable usdc;
     bool public failSwap;
 
-    constructor(MockMasonryLevel level_, MockMasonryUSDC usdc_) {
+    constructor(
+        MockMasonryLevel level_,
+        MockMasonryUSDC usdc_
+    ) {
         level = level_;
         usdc = usdc_;
     }
 
-    function setFailSwap(bool value) external { failSwap = value; }
+    function setFailSwap(
+        bool value
+    ) external {
+        failSwap = value;
+    }
 
     function swapExactIn(
         PoolKey calldata,
@@ -144,7 +202,8 @@ contract MasonryGenesisLPBurnFeeTest is Test {
             key,
             address(this),
             100e18,
-            100e6, address(this)
+            100e6,
+            address(this)
         );
 
         vault.mintShares(address(this), 10_000e18);
@@ -236,9 +295,38 @@ contract MasonryGenesisLPBurnFeeTest is Test {
         collector.setExecutionLimits(0, 1e6);
     }
 
-    function testFuzz_FeeNeverExceedsFiftyBasisPoints(uint128 gross) public pure {
+    function testFuzz_FeeNeverExceedsFiftyBasisPoints(
+        uint128 gross
+    ) public pure {
         uint256 fee = uint256(gross) * 50 / 10_000;
         assertLe(fee, uint256(gross));
         assertLe(fee * 10_000, uint256(gross) * 50);
+    }
+
+    function test_RetryDeferredBurnClearsStrandedUSDCWithoutGenesisDeposit() public {
+        router.setFailSwap(true);
+        collector.collectAndProcess(GROSS);
+        assertEq(collector.pendingBurnUSDC(), 3e6);
+        assertEq(level.totalBurned(), 2e18);
+
+        router.setFailSwap(false);
+        vm.prank(address(0xBEEF));
+        collector.retryDeferredBurn();
+        assertEq(collector.pendingBurnUSDC(), 0);
+        assertEq(level.totalBurned(), 5e18);
+        assertEq(usdc.balanceOf(address(collector)), 0);
+    }
+
+    function test_RetryDeferredBurnClearsStrandedSharesWithoutGenesisDeposit() public {
+        vault.setFailRedemption(true);
+        collector.collectAndProcess(GROSS);
+        assertEq(collector.pendingFeeShares(), FEE);
+
+        vault.setFailRedemption(false);
+        vm.prank(address(0xBEEF));
+        collector.retryDeferredBurn();
+        assertEq(collector.pendingFeeShares(), 0);
+        assertEq(collector.pendingBurnUSDC(), 0);
+        assertEq(level.totalBurned(), 5e18);
     }
 }

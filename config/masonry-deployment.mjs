@@ -10,9 +10,10 @@ const fail = (message) => { throw new Error(`Masonry deployment: ${message}`); }
 /** Contracts every xTOMB deployment must record, in the order Admin lists them. */
 export const masonryContractKeys = [
   'level', 'square', 'usdc', 'poolManager', 'treasury',
+  'chamber', 'farm', 'xBond',
   'schedule', 'pass', 'staking', 'settlement', 'lpBurnFee',
   'levelHook', 'levelOracle', 'buybackGuard', 'levelVault',
-  'squareHook', 'squareVault', 'criticalDefense', 'miniSwapRouter',
+  'squareHook', 'squareVault', 'levelRangeManager', 'squareRangeManager', 'criticalDefense', 'miniSwapRouter',
 ];
 
 /** Human labels for the same keys (UI uses these; contract names in parentheses). */
@@ -21,7 +22,10 @@ export const masonryContractLabels = {
   square: 'xSHARE token (SQUARE)',
   usdc: 'USDC (official, 6 decimals)',
   poolManager: 'Uniswap v4 PoolManager',
-  treasury: 'Treasury',
+  treasury: 'Masonry Treasury (MasonryTreasury)',
+  chamber: 'Masonry (MasonryChamber, X Share/WETH LP)',
+  farm: 'X Share farm (MasonryFarm)',
+  xBond: 'X Bond (MasonryBond)',
   schedule: 'Genesis schedule (MasonryGenesisSchedule)',
   pass: 'Genesis pass (MasonryGenesisPass)',
   staking: 'Genesis staking (MasonryGenesisStaking)',
@@ -33,6 +37,8 @@ export const masonryContractLabels = {
   levelVault: 'xTOMB/USDC LP vault (MasonryLevelUsdcVault)',
   squareHook: 'xSHARE/USDC hook (MasonrySquareHook)',
   squareVault: 'xSHARE/USDC LP vault (MasonrySquareUsdcVault)',
+  levelRangeManager: 'xTOMB/USDG protocol range (MasonryRangeManager)',
+  squareRangeManager: 'xSHARE/USDG protocol range (MasonryRangeManager)',
   criticalDefense: 'Critical Defense (MasonryCriticalDefense)',
   miniSwapRouter: 'Swap router (MiniSwapRouter)',
 };
@@ -91,5 +97,13 @@ export function parseMasonryDeployment(record, registry) {
 /** The registry entry for a chain, or undefined when xTOMB can't launch there. */
 export function officialChain(registry, chainId) {
   if (!object(registry) || !Array.isArray(registry.chains)) fail('registry must list chains');
-  return registry.chains.find((chain) => chain.id === chainId);
+  const chain = registry.chains.find((entry) => entry.id === chainId);
+  if (!chain) return undefined;
+  // Fail closed: the peg token must be named explicitly and the legacy usdc alias must agree.
+  if (!isAddress(chain.pegToken) || typeof chain.pegTokenSymbol !== 'string' || !chain.pegTokenSymbol
+    || !Number.isInteger(chain.pegTokenDecimals) || chain.pegTokenDecimals < 0 || chain.pegTokenDecimals > 36
+    || (chain.usdc && chain.usdc.toLowerCase() !== chain.pegToken.toLowerCase())) {
+    fail(`chain ${chainId}: pegToken, pegTokenSymbol and pegTokenDecimals must be set and match usdc`);
+  }
+  return chain;
 }

@@ -14,6 +14,8 @@ import {
 } from "@/lib/abis/masonry";
 import type { TaxedAsset } from "@/lib/fireTax";
 import { PASSES, PASS_TIER_ID, type PassTier } from "@/lib/launch";
+import { PRIMARY } from "@/lib/networks";
+import { PEG, pegPair } from "@/lib/peg";
 import { PREVIEW_KEEPER, simulateTx, usePreview } from "@/lib/preview";
 import type { TokenId } from "@/lib/tokens";
 import { useNetworkStatus } from "./useNetworkStatus";
@@ -130,7 +132,7 @@ export function useActions() {
     sim: preview.enabled,
 
     purchasePass(tier: PassTier, onDone?: () => void) {
-      const label = `Buy ${PASSES[tier].name} pass · ${PASSES[tier].priceUsdc} USDC`;
+      const label = `Buy ${PASSES[tier].name} pass · ${PASSES[tier].priceUsdc} ${PRIMARY.referenceToken?.symbol ?? "USDC"}`;
       if (preview.enabled) return sim(label, () => preview.act.purchase(tier), onDone);
       if (!c) return run(label, []);
       return run(
@@ -149,8 +151,16 @@ export function useActions() {
       );
     },
 
+    upgradePass(tier: PassTier, held: PassTier, onDone?: () => void) {
+      const cost = PASSES[tier].priceUsdc - PASSES[held].priceUsdc;
+      const label = `Upgrade to ${PASSES[tier].name} · ${cost} ${PRIMARY.referenceToken?.symbol ?? "USDC"}`;
+      if (preview.enabled) return sim(label, () => preview.act.upgrade(tier), onDone);
+      if (!c || cost <= 0) return run(label, []);
+      return run(label, [{ label: "pass upgrade", approvals: [{ token: c.usdc, spender: c.pass, amount: e6(cost) }], address: c.pass, abi: masonryGenesisPassAbi as Abi, functionName: "upgrade", args: [PASS_TIER_ID[tier]] }], onDone);
+    },
+
     deposit(pool: 0 | 1, amount: number, standardAsset: Address | null, onDone?: () => void) {
-      const label = pool === 0 ? `Stake ${amount} in the standard pool` : `Stake ${amount} LP in the xTOMB/USDC pool`;
+      const label = pool === 0 ? `Stake ${amount} in the standard pool` : `Stake ${amount} LP in the ${pegPair("xTOMB")} pool`;
       if (preview.enabled) return sim(label, () => preview.act.deposit(pool, amount), onDone);
       if (!c) return run(label, []);
       const token = pool === 0 ? standardAsset : c.levelVault;
@@ -214,7 +224,7 @@ export function useActions() {
 
     /** One official-pool swap through MiniSwapRouter. `minOut` comes from a prior simulation. */
     swapLeg(asset: TaxedAsset, side: "sell" | "buy", amountIn: number, minOut: bigint, onDone?: () => void) {
-      const label = side === "sell" ? `Sell ${asset} for USDC` : `Buy ${asset} with USDC`;
+      const label = side === "sell" ? `Sell ${asset} for ${PEG.symbol}` : `Buy ${asset} with ${PEG.symbol}`;
       if (!c || !net.deployment || !net.walletAddress) return run(label, []);
       const key = asset === "xTOMB" ? net.deployment.pools.level : net.deployment.pools.square;
       const assetAddr = asset === "xTOMB" ? c.level : c.square;

@@ -21,7 +21,10 @@ contract MasonryFeeAllocationTest is Test {
         assertEq(a.buyAndBurnSquare, 100e18);
     }
 
-    function testFuzz_AllocationNeverLosesOrMintsWei(uint128 amount, bool critical) public pure {
+    function testFuzz_AllocationNeverLosesOrMintsWei(
+        uint128 amount,
+        bool critical
+    ) public pure {
         MasonryFeeAllocation.SquareTax memory a = MasonryFeeAllocation.allocateSquare(uint256(amount), critical);
         assertEq(a.polSquare + a.usdcReserveSquare + a.retainedSquare + a.buyAndBurnSquare, uint256(amount));
         if (critical) assertEq(a.buyAndBurnSquare, uint256(amount));
