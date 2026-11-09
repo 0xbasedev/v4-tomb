@@ -6,20 +6,15 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
-import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {MasonryTaxHook} from "./MasonryTaxHook.sol";
 import {MasonryLevelHook} from "./MasonryLevelHook.sol";
 import {MasonryGenesisSchedule} from "../masonry/MasonryGenesisSchedule.sol";
 import {MasonryCriticalDefense} from "../masonry/MasonryCriticalDefense.sol";
-import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
 import {IMasonryPolSink} from "../masonry/IMasonryPolSink.sol";
-import {MasonryLevelOracle} from "../masonry/MasonryLevelOracle.sol";
 import {IMasonryBurnableLevel} from "../masonry/MasonryGenesisLPBurnFee.sol";
+import {MasonrySquareSwapLib} from "../masonry/MasonrySquareSwapLib.sol";
 import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
 
 /// @notice Flat X Share sell tax. Proceeds accumulate and are spent on an X Tomb
@@ -32,7 +27,6 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
 
     uint16 public constant BOOTSTRAP_TAX_BPS = 600;
     uint256 private constant ROUTE_GAS = 650_000;
-    uint256 private constant BPS = 10_000;
     uint16 public immutable shareSellTaxBps;
     uint256 public pendingBuybackSquare;
 
@@ -148,7 +142,7 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
 
     /// @notice Permissionless X Share → USDG → X Tomb buy-and-burn.
     /// Not invoked from `afterSwap`, so it cannot sandwich or reenter the user's swap.
-    /// Slippage is bounded by TWAP (`maxDeviationBps`) inside `_swapGuarded`.
+    /// Slippage is bounded by TWAP (`maxDeviationBps`) inside MasonrySquareSwapLib.swapGuarded.
     function buyAndBurn() external {
         poolManager.unlock("");
     }
@@ -173,9 +167,19 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         if (amount == 0) revert UnsafeRoute();
         pendingBuybackSquare -= amount;
         PoolKey memory squarePool = officialPoolKey();
-        uint256 usdcAmount = _swapGuarded(squarePool, oracle, assetIsCurrency0, amount, true);
+        uint256 usdcAmount = MasonrySquareSwapLib.swapGuarded(
+            poolManager, squarePool, oracle, assetIsCurrency0, amount, true, maxDeviationBps
+        );
         _recordPool(true);
-        uint256 received = _swapGuarded(levelPool, levelHook.oracle(), !levelHook.levelIsCurrency0(), usdcAmount, false);
+        uint256 received = MasonrySquareSwapLib.swapGuarded(
+            poolManager,
+            levelPool,
+            levelHook.oracle(),
+            !levelHook.levelIsCurrency0(),
+            usdcAmount,
+            false,
+            maxDeviationBps
+        );
         IMasonryBurnableLevel(levelHook.level()).burn(received);
         levelBurned += received;
         emit RouteSettled(true, amount, received);
@@ -232,9 +236,13 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         uint256 sellAmount = onlySquare ? 0 : onlyUsdc ? squareBudget : squareBudget / 2;
 
         uint256 twap = oracle.validatedPrice(officialPool);
-        _checkDeviation(_price(officialPool, assetIsCurrency0), twap);
+        MasonrySquareSwapLib.checkDeviation(
+            MasonrySquareSwapLib.price(poolManager, officialPool, assetIsCurrency0), twap, maxDeviationBps
+        );
         if (sellAmount != 0) {
-            polUsdc += _swapGuarded(squarePool, oracle, assetIsCurrency0, sellAmount, true);
+            polUsdc += MasonrySquareSwapLib.swapGuarded(
+                poolManager, squarePool, oracle, assetIsCurrency0, sellAmount, true, maxDeviationBps
+            );
             polSquare -= sellAmount;
             squareBudget -= sellAmount;
             _recordPool(true);
@@ -265,11 +273,21 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         if (critical) criticalSquare -= amount;
         else usdcReserveSquare -= amount;
 
-        uint256 usdcAmount = _swapGuarded(squarePool, oracle, assetIsCurrency0, amount, true);
+        uint256 usdcAmount = MasonrySquareSwapLib.swapGuarded(
+            poolManager, squarePool, oracle, assetIsCurrency0, amount, true, maxDeviationBps
+        );
         _recordPool(true); // The PoolManager skips hooks for the hook's own SQUARE swap.
         uint256 received = usdcAmount;
         if (critical) {
-            received = _swapGuarded(levelPool, levelHook.oracle(), !levelHook.levelIsCurrency0(), usdcAmount, false);
+            received = MasonrySquareSwapLib.swapGuarded(
+                poolManager,
+                levelPool,
+                levelHook.oracle(),
+                !levelHook.levelIsCurrency0(),
+                usdcAmount,
+                false,
+                maxDeviationBps
+            );
             IMasonryBurnableLevel(levelHook.level()).burn(received);
             levelBurned += received;
         } else {
@@ -278,62 +296,6 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
             usdcRouted += received;
         }
         emit RouteSettled(critical, amount, received);
-    }
-
-    function _swapGuarded(
-        PoolKey memory key,
-        MasonryLevelOracle feed,
-        bool zeroForOne,
-        uint256 amount,
-        bool sell
-    ) private returns (uint256 output) {
-        if (amount == 0 || amount > uint256(uint128(type(int128).max))) revert UnsafeRoute();
-        PoolId id = key.toId();
-        uint256 twap = feed.validatedPrice(id);
-        bool token0 = sell == zeroForOne;
-        uint256 spot = _price(id, token0);
-        _checkDeviation(spot, twap);
-        if (poolManager.getLiquidity(id) < feed.minLiquidity()) revert UnsafeRoute();
-
-        BalanceDelta delta = poolManager.swap(
-            key,
-            SwapParams(
-                zeroForOne, -int256(amount), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
-            ),
-            ""
-        );
-        int128 paid = zeroForOne ? delta.amount0() : delta.amount1();
-        int128 received = zeroForOne ? delta.amount1() : delta.amount0();
-        if (paid != -int256(amount) || received <= 0 || poolManager.getLiquidity(id) < feed.minLiquidity()) {
-            revert UnsafeRoute();
-        }
-        output = uint256(uint128(received));
-        _checkDeviation(_price(id, token0), spot);
-        uint256 expected = sell ? FullMath.mulDiv(amount, twap, 1e30) : FullMath.mulDiv(amount, 1e30, twap);
-        if (output < FullMath.mulDivRoundingUp(expected, BPS - maxDeviationBps, BPS)) revert UnsafeRoute();
-
-        Currency input = zeroForOne ? key.currency0 : key.currency1;
-        Currency out = zeroForOne ? key.currency1 : key.currency0;
-        poolManager.sync(input);
-        IERC20(Currency.unwrap(input)).safeTransfer(address(poolManager), amount);
-        if (poolManager.settle() != amount) revert UnsafeRoute();
-        poolManager.take(out, address(this), output);
-    }
-
-    function _price(
-        PoolId pool,
-        bool token0
-    ) private view returns (uint256) {
-        (uint160 sqrtPrice,,,) = poolManager.getSlot0(pool);
-        return MasonryLevelPrice.fromSqrtPrice(sqrtPrice, token0);
-    }
-
-    function _checkDeviation(
-        uint256 price,
-        uint256 referencePrice
-    ) private view {
-        uint256 deviation = price > referencePrice ? price - referencePrice : referencePrice - price;
-        if (deviation > FullMath.mulDiv(referencePrice, maxDeviationBps, BPS)) revert UnsafeRoute();
     }
 
     function _bootstrapFloor() internal view override returns (uint16) {
