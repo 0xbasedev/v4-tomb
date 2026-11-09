@@ -187,8 +187,8 @@ function MobileTabBar() {
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [location.pathname]);
   // Thumb bar: the four most-used screens; the rest live under "More".
-  const navItems = [all[0], all[1], all[3], all[5]];
-  const extra = [all[2], all[4], { label: "Docs", to: "/docs", glyph: "§" }, ...(admin.isAdmin ? [{ label: "Admin", to: "/admin", glyph: "⚙" }, { label: "Wizard", to: "/wizard", glyph: "✦" }] : [])];
+  const navItems = [all[0], all[1], all[2], all[3]];
+  const extra = [all[4], all[5], { label: "Docs", to: "/docs", glyph: "§" }, ...(admin.isAdmin ? [{ label: "Admin", to: "/admin", glyph: "⚙" }, { label: "Wizard", to: "/wizard", glyph: "✦" }] : [])];
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.07] bg-void/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl xl:hidden"
