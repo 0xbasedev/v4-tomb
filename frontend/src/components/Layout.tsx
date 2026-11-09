@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { ConnectButton } from "@/components/ConnectButton";
@@ -143,6 +143,14 @@ function TopNav() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 md:gap-3">
+          <NavLink
+            to="/docs"
+            className={({ isActive }) =>
+              `text-[13px] font-medium xl:hidden ${isActive ? "text-bone" : "text-ash"}`
+            }
+          >
+            Docs
+          </NavLink>
           <PriceTicker />
           <ConnectButton compact />
         </div>
@@ -182,33 +190,16 @@ function PriceTicker() {
 function MobileTabBar() {
   const recommended = useRecommendedPath();
   const all = useNavItems();
-  const admin = useIsAdmin();
-  const location = useLocation();
-  const [more, setMore] = useState(false);
-  useEffect(() => setMore(false), [location.pathname]);
-  // Thumb bar: the four most-used screens; the rest live under "More".
+  // Thumb bar: exactly the four core screens, fully displayed — no overflow
+  // menu, no "More" dots (Jess, 2026-11-08). Docs lives in the top bar on
+  // mobile; Bonds/Bridge stay on the desktop nav and in the footer.
   const navItems = [all[0], all[1], all[2], all[3]];
-  const extra = [all[4], all[5], { label: "Docs", to: "/docs", glyph: "§" }, ...(admin.isAdmin ? [{ label: "Admin", to: "/admin", glyph: "⚙" }, { label: "Wizard", to: "/wizard", glyph: "✦" }] : [])];
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.07] bg-void/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl xl:hidden"
       aria-label="Primary"
     >
-      {more && (
-        <div className="absolute inset-x-3 bottom-[calc(100%+8px)] grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-basalt-2/95 p-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.95)]">
-          {extra.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `flex h-14 flex-col items-center justify-center gap-1 rounded-xl border text-[12px] ${isActive ? "border-ember/50 text-bone" : "border-white/[0.06] text-ash"}`}
-            >
-              <span className="text-[16px] leading-none">{item.glyph}</span>
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
-      )}
-      <div className="mx-auto grid max-w-md grid-cols-5">
+      <div className="mx-auto grid max-w-md grid-cols-4">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -231,15 +222,6 @@ function MobileTabBar() {
             )}
           </NavLink>
         ))}
-        <button
-          type="button"
-          onClick={() => setMore((m) => !m)}
-          aria-expanded={more}
-          className={`relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium ${more ? "text-bone" : "text-ash"}`}
-        >
-          <span className="text-[17px] leading-none">⋯</span>
-          More
-        </button>
       </div>
     </nav>
   );
