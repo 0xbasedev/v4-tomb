@@ -84,17 +84,34 @@ contract MasonryLevelOracle is IMasonryValidatedLevelTwap {
     }
 
     function latestValidatedTwap() public view returns (uint256 price, uint256 observedAt, bool valid) {
+        return _twap(WINDOW);
+    }
+
+    /// @notice The same validated TWAP over a caller-chosen window: the
+    /// identical observation history, freshness gate and thin-interval
+    /// invalidation, with `window` substituted for the fixed WINDOW. A
+    /// window the recorded history cannot cover (or one longer than
+    /// MAX_LOOKBACK) reads invalid — consumers fail closed on it.
+    function latestValidatedTwap(
+        uint256 window
+    ) public view returns (uint256 price, uint256 observedAt, bool valid) {
+        return _twap(window);
+    }
+
+    function _twap(
+        uint256 window
+    ) private view returns (uint256 price, uint256 observedAt, bool valid) {
         observedAt = lastPriceChange;
         if (
             observedAt == 0 || block.timestamp - observedAt > MAX_SWAP_AGE || lastLiquidity < minLiquidity
-                || block.timestamp < WINDOW
+                || block.timestamp < window
         ) return (0, observedAt, false);
 
         Observation memory current = _advance();
         for (uint256 i; i < count; ++i) {
             Observation memory past = history[(uint256(cursor) + HISTORY - i) % HISTORY];
             uint256 elapsed = current.timestamp - past.timestamp;
-            if (elapsed < WINDOW) continue;
+            if (elapsed < window) continue;
             if (elapsed > MAX_LOOKBACK || current.thinSeconds != past.thinSeconds) break;
 
             int256 tickSeconds = int256(current.tickSeconds) - past.tickSeconds;

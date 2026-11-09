@@ -18,6 +18,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {MasonryCriticalDefense} from "../../src/masonry/MasonryCriticalDefense.sol";
 import {MasonryLevelOracle} from "../../src/masonry/MasonryLevelOracle.sol";
+import {MasonryLevelPrice} from "../../src/masonry/MasonryLevelPrice.sol";
 import {MasonryTaxHook} from "../../src/hooks/MasonryTaxHook.sol";
 import {MasonrySquareHook} from "../../src/hooks/MasonrySquareHook.sol";
 import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
@@ -136,7 +137,12 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         int24 tick = TickMath.getTickAtSqrtPrice(peg);
         int24 center = tick / 60 * 60;
         liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 6000, center + 6000, 1e16, 0), "");
-        liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 120, center + 120, 1e16, 0), "");
+        // Near-peg tranche at production-like depth: the zap's TWAP guard
+        // (2% provisional) is calibrated for a book where a $1,000 zap is
+        // a small trade. On the original 1e16 tranche a single zap leg
+        // moved spot ~15% — every repeat zap then read as "manipulated"
+        // against the TWAP, which is a fixture-depth artifact, not signal.
+        liquidity.modifyLiquidity(key, ModifyLiquidityParams(center - 120, center + 120, 1e18, 0), "");
 
         router = new MiniSwapRouter(manager);
         vault = new MasonryLevelUsdcVault(key, center - 6000, center + 6000);
@@ -151,6 +157,45 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         usdc.mint(noPass, USER_USDC);
         vm.prank(noPass);
         usdc.approve(address(zap), type(uint256).max);
+
+        // The zap's TWAP guard fails closed until each pool's oracle has
+        // a full window of history (Jess's launch ruling: the warm-up is
+        // waited out, never seeded away). These tests exercise zap
+        // mechanics on LIVE pools, so the fixture first lives through one
+        // window of ordinary activity: real router buys the hooks record
+        // themselves, plus hook checkpoints across warped time. Nothing
+        // is written to the oracle except by the hooks' own paths.
+        _liveWindow();
+    }
+
+    /// @dev One full TWAP window (33 minutes against the 30-minute
+    /// default) of ordinary pool activity at the peg: a dust buy now, a
+    /// hook checkpoint every 11 minutes, and a closing dust buy so the
+    /// latest price change is fresh. Spot ends where the TWAP sits — at
+    /// the peg — so a guarded zap proceeds exactly as on a live pool.
+    function _liveWindow() private {
+        usdc.approve(address(router), type(uint256).max);
+        _dustBuy(key);
+        _dustBuy(squareKey);
+        vm.warp(block.timestamp + 11 minutes);
+        hook.checkpoint();
+        squareHook.checkpoint();
+        vm.warp(block.timestamp + 11 minutes);
+        hook.checkpoint();
+        squareHook.checkpoint();
+        vm.warp(block.timestamp + 11 minutes);
+        _dustBuy(key);
+        _dustBuy(squareKey);
+    }
+
+    /// @dev A small stable-in buy through the real router: enough to
+    /// move the sqrt price (so the hook records a genuine price change)
+    /// and far too small to move the price itself.
+    function _dustBuy(
+        PoolKey memory poolKey_
+    ) private {
+        bool usdcIsCurrency0 = poolKey_.currency0 == Currency.wrap(address(usdc));
+        router.swapExactIn(poolKey_, usdcIsCurrency0, 100e6, 0, address(this));
     }
 
     /// @dev The full staking stack + the zap, wired the way the config
@@ -219,6 +264,12 @@ contract MasonryZapTest is Test, IMockLevelTwap {
 
     function _warpIntoGenesis() private {
         vm.warp(schedule.start() + 2 days);
+        // The two-day jump leaves every oracle observation older than
+        // its lookback and the last price change stale — a quiet stretch
+        // the guard (correctly) refuses. Genesis in production trades
+        // through those two days; live through one window again so the
+        // pools are in their ordinary Genesis-day state.
+        _liveWindow();
     }
 
     /* ------------------------------ routes end STAKED ------------------------------ */
@@ -694,6 +745,226 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         assertGt(masonryOut, 0);
     }
 
+    /* ------------------------------ TWAP guard ------------------------------ */
+
+    function testTwapGuardDefaultsAndAdmin() public {
+        // Provisional defaults: 2% threshold, the oracle's own 30-minute
+        // window; hard bounds live in code, not config.
+        assertEq(zap.maxSpotTwapDeviationBps(), 200);
+        assertEq(zap.twapWindowSeconds(), 30 minutes);
+        assertEq(zap.MAX_SPOT_TWAP_DEVIATION_BPS(), 500);
+        assertEq(zap.MIN_TWAP_WINDOW_SECONDS(), 5 minutes);
+        assertEq(zap.MAX_TWAP_WINDOW_SECONDS(), 1 hours);
+
+        zap.setTwapGuard(300, 10 minutes);
+        assertEq(zap.maxSpotTwapDeviationBps(), 300);
+        assertEq(zap.twapWindowSeconds(), 10 minutes);
+
+        // The hard cap rejects above it; bounds reject a zero threshold
+        // and windows the oracle cannot resolve.
+        vm.expectRevert(MasonryZap.InvalidTwapGuard.selector);
+        zap.setTwapGuard(501, 10 minutes);
+        vm.expectRevert(MasonryZap.InvalidTwapGuard.selector);
+        zap.setTwapGuard(0, 10 minutes);
+        vm.expectRevert(MasonryZap.InvalidTwapGuard.selector);
+        zap.setTwapGuard(300, 5 minutes - 1);
+        vm.expectRevert(MasonryZap.InvalidTwapGuard.selector);
+        zap.setTwapGuard(300, 1 hours + 1);
+
+        address stranger = makeAddr("stranger");
+        vm.prank(stranger);
+        vm.expectRevert();
+        zap.setTwapGuard(100, 30 minutes);
+        assertEq(zap.maxSpotTwapDeviationBps(), 300, "rejected writes must not move the config");
+    }
+
+    function testTwapGuardRefusesPushedSpotFundsUntouched() public {
+        // Push the LEVEL spot well past the threshold with real swaps;
+        // the TWAP (a 30-minute mean over peg history) barely moves.
+        _pushToDivergence(hook.oracle(), key, vault.assetIsCurrency0(), 400);
+        (uint256 spot, uint256 twap, uint256 bps) = _divergence(hook.oracle(), key, vault.assetIsCurrency0());
+        assertGt(bps, zap.maxSpotTwapDeviationBps(), "fixture must actually sit beyond the threshold");
+
+        uint256 usdcBefore = usdc.balanceOf(user);
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.swap(address(usdc), ZAP_IN, address(level), 0, block.timestamp + 1 hours);
+        assertEq(usdc.balanceOf(user), usdcBefore, "a refused zap leaves the user whole");
+        assertEq(usdc.balanceOf(FEE_RECIPIENT), 0, "a refused zap takes no fee");
+        assertZapEmpty();
+    }
+
+    function testTwapGuardRefusesPushedSquareOnEverySquareRoute() public {
+        _pushToDivergence(squareHook.oracle(), squareKey, squareVault.assetIsCurrency0(), 400);
+        (uint256 spot, uint256 twap, uint256 bps) = _divergence(squareHook.oracle(), squareKey, squareVault.assetIsCurrency0());
+        assertGt(bps, zap.maxSpotTwapDeviationBps(), "fixture must actually sit beyond the threshold");
+
+        uint256 usdcBefore = usdc.balanceOf(user);
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.zapToFarmShare(ZAP_IN, 0, block.timestamp + 1 hours);
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.zapToMasonry(ZAP_IN, 0, block.timestamp + 1 hours);
+        assertEq(usdc.balanceOf(user), usdcBefore);
+        assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
+        assertZapEmpty();
+    }
+
+    function testTwapGuardGenesisStandardConversionRefusesWhenPushed() public {
+        // The Genesis standard route whose stake asset is xSHARE converts
+        // on the Square pool first — that conversion is guarded too.
+        MasonryGenesisStaking staking2 = new MasonryGenesisStaking(
+            pass, burnFee, new MockZapSettlement(), IERC20(address(square)), 30_000e18
+        );
+        level.approve(address(staking2), 30_000e18);
+        staking2.fund();
+        MasonryZap zap2 = new MasonryZap(
+            address(router),
+            address(usdc),
+            address(vault),
+            address(squareVault),
+            address(staking2),
+            address(farm),
+            address(boardroom),
+            FEE_RECIPIENT,
+            50,
+            address(this)
+        );
+        staking2.setZapOperator(address(zap2));
+
+        _warpIntoGenesis();
+        _pushToDivergence(squareHook.oracle(), squareKey, squareVault.assetIsCurrency0(), 400);
+        (uint256 spot, uint256 twap, uint256 bps) =
+            _divergence(squareHook.oracle(), squareKey, squareVault.assetIsCurrency0());
+        assertGt(bps, zap2.maxSpotTwapDeviationBps(), "fixture must actually sit beyond the threshold");
+
+        uint256 usdcBefore = usdc.balanceOf(user);
+        vm.startPrank(user);
+        usdc.approve(address(zap2), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap2.zapToGenesisStandard(ZAP_IN, 0, block.timestamp + 1 hours);
+        vm.stopPrank();
+        assertEq(usdc.balanceOf(user), usdcBefore);
+        assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
+    }
+
+    function testTwapGuardWindowIsLive() public {
+        // Push spot, confirm refusal at the default 30-minute window.
+        _pushToDivergence(hook.oracle(), key, vault.assetIsCurrency0(), 400);
+        (uint256 spot, uint256 twap,) = _divergence(hook.oracle(), key, vault.assetIsCurrency0());
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+
+        // Six minutes of trading at the new price: the 30-minute TWAP
+        // still averages in the peg history, so the refusal stands —
+        // time passing alone does not clear the guard.
+        vm.warp(block.timestamp + 6 minutes);
+        hook.checkpoint();
+        _dustBuy(key);
+        (spot, twap,) = _divergence(hook.oracle(), key, vault.assetIsCurrency0());
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(MasonryZap.SpotTwapDivergence.selector, spot, twap));
+        zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+
+        // Shrink the window to 5 minutes and the same pool state reads a
+        // post-push TWAP: spot and TWAP agree, the zap executes. The
+        // window parameter is live, not decorative.
+        zap.setTwapGuard(200, 5 minutes);
+        vm.prank(user);
+        uint256 credited = zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+        assertGt(credited, 0);
+        (uint256 staked,) = farm.userInfo(0, user);
+        assertEq(staked, credited);
+    }
+
+    function testTwapGuardInsideThresholdExecutes() public {
+        // A real but modest divergence: spot a few percent over the TWAP.
+        _pushToDivergence(hook.oracle(), key, vault.assetIsCurrency0(), 100);
+        (, , uint256 bps) = _divergence(hook.oracle(), key, vault.assetIsCurrency0());
+        assertGt(bps, 0, "fixture must carry a genuine divergence");
+        assertLe(bps, zap.MAX_SPOT_TWAP_DEVIATION_BPS(), "fixture divergence must fit under the hard cap");
+
+        // Raise the (config) threshold to the cap — still code-bounded —
+        // and the same state executes.
+        zap.setTwapGuard(zap.MAX_SPOT_TWAP_DEVIATION_BPS(), 30 minutes);
+        vm.prank(user);
+        uint256 credited = zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+        assertGt(credited, 0);
+    }
+
+    function testTwapGuardNotReadyAfterQuietStretch() public {
+        // Two quiet days: history falls outside the oracle's lookback and
+        // the latest price change goes stale. Swapping routes refuse
+        // with the DISTINCT not-ready error — never a spot-only fallback —
+        // while non-swapping routes stay open (standard Genesis is open
+        // from minute one; the guard applies only to swapping routes).
+        vm.warp(block.timestamp + 2 days);
+        uint256 usdcBefore = usdc.balanceOf(user);
+        vm.prank(user);
+        vm.expectRevert(MasonryZap.TwapNotReady.selector);
+        zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp + 1 hours);
+        vm.prank(user);
+        vm.expectRevert(MasonryZap.TwapNotReady.selector);
+        zap.swap(address(usdc), ZAP_IN, address(level), 0, block.timestamp + 1 hours);
+        assertEq(usdc.balanceOf(user), usdcBefore);
+        assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
+
+        vm.prank(user);
+        uint256 credited = zap.zapToGenesisStandard(ZAP_IN, 0, block.timestamp + 1 hours);
+        assertEq(credited, ZAP_IN - 5e6, "the direct-stake route never consults the guard");
+    }
+
+    /// @dev Spot (live slot0) vs the oracle's 30-minute TWAP for a pool,
+    /// in the oracle's own price convention, plus the divergence in bps.
+    function _divergence(
+        MasonryLevelOracle oracle_,
+        PoolKey memory poolKey_,
+        bool assetIs0
+    ) private view returns (uint256 spot, uint256 twap, uint256 bps) {
+        bool valid;
+        (twap,, valid) = oracle_.latestValidatedTwap(30 minutes);
+        assertTrue(valid, "fixture TWAP must be valid for a divergence read");
+        spot = MasonryLevelPrice.fromSqrtPrice(_sqrtPrice(poolKey_), assetIs0);
+        uint256 dev = spot > twap ? spot - twap : twap - spot;
+        bps = dev * 10_000 / twap;
+    }
+
+    /// @dev A stable-in buy of any size through the real router (the
+    /// test contract's funds): how these tests push a pool's spot.
+    function _swapUsdcIn(
+        PoolKey memory poolKey_,
+        uint256 amountIn
+    ) private {
+        bool usdcIsCurrency0 = poolKey_.currency0 == Currency.wrap(address(usdc));
+        usdc.approve(address(router), type(uint256).max);
+        router.swapExactIn(poolKey_, usdcIsCurrency0, amountIn, 0, address(this));
+    }
+
+    /// @dev Push a pool's spot with repeated $500 buys until its
+    /// divergence from the TWAP reaches `targetBps`. Self-calibrating:
+    /// this book's depth makes any fixed amount unreliable (a few
+    /// thousand dollars runs the price tens of percent and out of the
+    /// seeded range entirely, which reads as an invalid TWAP instead).
+    function _pushToDivergence(
+        MasonryLevelOracle oracle_,
+        PoolKey memory poolKey_,
+        bool assetIs0,
+        uint256 targetBps
+    ) private {
+        for (uint256 i; i < 40; ++i) {
+            (, , uint256 bps) = _divergence(oracle_, poolKey_, assetIs0);
+            if (bps >= targetBps) return;
+            _swapUsdcIn(poolKey_, 500e6);
+        }
+        (, , uint256 finalBps) = _divergence(oracle_, poolKey_, assetIs0);
+        assertGe(finalBps, targetBps, "push loop must reach its target divergence");
+    }
+
     /* ------------------------------ helpers ------------------------------ */
 
     function _zapAs(
@@ -758,6 +1029,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         square.approve(address(liquidity), type(uint256).max);
         int24 midpoint = TickMath.getTickAtSqrtPrice(peg) / 60 * 60;
         liquidity.modifyLiquidity(squareKey, ModifyLiquidityParams(midpoint - 6000, midpoint + 6000, 1e16, 0), "");
+        liquidity.modifyLiquidity(squareKey, ModifyLiquidityParams(midpoint - 120, midpoint + 120, 1e18, 0), "");
         squareVault = new MasonrySquareUsdcVault(squareKey, midpoint - 6000, midpoint + 6000);
     }
 }

@@ -21,6 +21,9 @@ import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {LiquidityAmounts} from "v4-periphery/src/libraries/LiquidityAmounts.sol";
 
 import {IMasonryExactInputV4Router} from "./MasonryGenesisLPBurnFee.sol";
+import {MasonryTaxHook} from "../hooks/MasonryTaxHook.sol";
+import {MasonryLevelOracle} from "./MasonryLevelOracle.sol";
+import {MasonryLevelPrice} from "./MasonryLevelPrice.sol";
 
 /// @notice The slice of a MasonryUsdcVault this zap drives. The vault's
 /// deposit() is shares-denominated with per-token input caps and mints to an
@@ -125,6 +128,18 @@ interface IMasonryZapBoardroom {
  *      real pool (the hook takes whatever it takes) and the caller's
  *      minOut binds the measured receipt.
  *
+ *      TWAP GUARD. Every route that executes a swap first checks the
+ *      pool's spot against its TWAP (the pool hook's own oracle — the
+ *      tree's gate-2 observation oracle, since V4 pools keep no price
+ *      history): divergence beyond the configured threshold reverts
+ *      SpotTwapDivergence, and a TWAP that is not ready (history shorter
+ *      than the configured window, or the latest price change stale)
+ *      reverts TwapNotReady. The guard never falls back to spot-only
+ *      execution — right after a pool opens, swaps refuse until the
+ *      window fills or the launch seeds the oracle. The split solve and
+ *      every user floor stay exactly as they were; the guard only
+ *      refuses. Two-hop swaps are guarded per leg, on each leg's pool.
+ *
  *      FEES (spec §15 house toll): one 0.5% route fee per call, taken
  *      once, in the input asset, on the amount actually received.
  *      EXCEPTION, carried from MasonryGenesisLPBurnFee's own rule ("a zap
@@ -162,6 +177,20 @@ contract MasonryZap is Ownable, ReentrancyGuard {
     /// @notice Bisection budget for the exact deposit share solve. Pulls are
     /// monotone in shares, so this converges to the exact maximum.
     uint256 private constant SHARE_ITERATIONS = 64;
+    /// @notice Hard cap on the spot-vs-TWAP divergence threshold (5%): the
+    /// same tolerance ceiling MasonryBuybackGuard sets for its own guard.
+    /// The threshold itself is config below the cap — this bound is code.
+    uint256 public constant MAX_SPOT_TWAP_DEVIATION_BPS = 500;
+    /// @notice TWAP window bounds. The floor is one oracle bucket (the
+    /// history cannot resolve a shorter average); the ceiling is the
+    /// oracle's own MAX_LOOKBACK.
+    uint256 public constant MIN_TWAP_WINDOW_SECONDS = 5 minutes;
+    uint256 public constant MAX_TWAP_WINDOW_SECONDS = 1 hours;
+    /// @notice Provisional guard defaults (Bingo, 2026-11-09 — flagged for
+    /// Jess, NOT his numbers): a 2% divergence threshold, and the oracle's
+    /// own established 30-minute TWAP window.
+    uint256 public constant DEFAULT_SPOT_TWAP_DEVIATION_BPS = 200;
+    uint256 public constant DEFAULT_TWAP_WINDOW_SECONDS = 30 minutes;
 
     enum Destination {
         GenesisLP,
@@ -192,10 +221,23 @@ contract MasonryZap is Ownable, ReentrancyGuard {
 
     address public feeRecipient;
     uint256 public routeFeeBps;
+    /// @notice Spot-vs-TWAP manipulation guard (policy: one rule, both
+    /// chains — the split may be solved on-chain and every floor is a
+    /// user-signed input, but a price pushed earlier in the block must not
+    /// be priced in as real). Every route that executes a swap refuses
+    /// when the pool's spot has diverged from its TWAP by more than
+    /// `maxSpotTwapDeviationBps`, and refuses with TwapNotReady when the
+    /// TWAP itself is not ready (history shorter than `twapWindowSeconds`
+    /// or the latest price change stale) — never a spot-only fallback.
+    uint256 public maxSpotTwapDeviationBps;
+    uint256 public twapWindowSeconds;
 
     error InvalidConfiguration();
     error InvalidAmount();
     error InvalidFee();
+    error InvalidTwapGuard();
+    error SpotTwapDivergence(uint256 spot, uint256 twap);
+    error TwapNotReady();
     error Expired();
     error BelowMinShares(uint256 minShares, uint256 actualShares);
     error BelowMinOut(uint256 minOut, uint256 actualOut);
@@ -216,6 +258,9 @@ contract MasonryZap is Ownable, ReentrancyGuard {
     );
     event RouteFeeUpdated(uint256 previousBps, uint256 newBps);
     event FeeRecipientUpdated(address indexed previousRecipient, address indexed newRecipient);
+    event TwapGuardUpdated(
+        uint256 previousDeviationBps, uint256 newDeviationBps, uint256 previousWindowSeconds, uint256 newWindowSeconds
+    );
 
     constructor(
         address router_,
@@ -269,6 +314,8 @@ contract MasonryZap is Ownable, ReentrancyGuard {
             : standard == address(squareToken) ? squareVault : IMasonryZapVault(address(0));
         feeRecipient = feeRecipient_;
         routeFeeBps = routeFeeBps_;
+        maxSpotTwapDeviationBps = DEFAULT_SPOT_TWAP_DEVIATION_BPS;
+        twapWindowSeconds = DEFAULT_TWAP_WINDOW_SECONDS;
     }
 
     /* ------------------------------ admin ------------------------------ */
@@ -287,6 +334,48 @@ contract MasonryZap is Ownable, ReentrancyGuard {
         if (newRecipient == address(0)) revert InvalidConfiguration();
         emit FeeRecipientUpdated(feeRecipient, newRecipient);
         feeRecipient = newRecipient;
+    }
+
+    /// @notice Set the spot-vs-TWAP guard's divergence threshold and TWAP
+    /// window together. The threshold may not exceed the hard cap
+    /// (MAX_SPOT_TWAP_DEVIATION_BPS — a code bound, not config) and the
+    /// window must sit inside the oracle's resolvable range.
+    function setTwapGuard(
+        uint256 newDeviationBps,
+        uint256 newWindowSeconds
+    ) external onlyOwner {
+        if (
+            newDeviationBps == 0 || newDeviationBps > MAX_SPOT_TWAP_DEVIATION_BPS
+                || newWindowSeconds < MIN_TWAP_WINDOW_SECONDS || newWindowSeconds > MAX_TWAP_WINDOW_SECONDS
+        ) revert InvalidTwapGuard();
+        emit TwapGuardUpdated(maxSpotTwapDeviationBps, newDeviationBps, twapWindowSeconds, newWindowSeconds);
+        maxSpotTwapDeviationBps = newDeviationBps;
+        twapWindowSeconds = newWindowSeconds;
+    }
+
+    /* ------------------------------ TWAP guard ------------------------------ */
+
+    /// @dev The spot-vs-TWAP guard for one pool, read through the pool
+    /// hook's own oracle (the tree's gate-2 oracle: hook-recorded tick
+    /// observations — V4 pools keep no price history of their own). Spot
+    /// is the live slot0 price in the oracle's own price convention, so
+    /// the comparison is unit-exact. Fails closed in both directions: no
+    /// usable TWAP (TwapNotReady — history shorter than the configured
+    /// window, or the latest price change stale) and excessive divergence
+    /// (SpotTwapDivergence) both revert; there is no spot-only path.
+    function _guardTwap(
+        IMasonryZapVault vault
+    ) private view {
+        PoolKey memory key = vault.poolKey();
+        MasonryLevelOracle oracle = MasonryTaxHook(address(key.hooks)).oracle();
+        (uint256 twap,, bool valid) = oracle.latestValidatedTwap(twapWindowSeconds);
+        if (!valid || twap == 0) revert TwapNotReady();
+        (uint160 sqrtPrice,,,) = vault.manager().getSlot0(key.toId());
+        uint256 spot = MasonryLevelPrice.fromSqrtPrice(sqrtPrice, vault.assetIsCurrency0());
+        uint256 deviation = spot > twap ? spot - twap : twap - spot;
+        if (deviation > FullMath.mulDiv(twap, maxSpotTwapDeviationBps, BPS)) {
+            revert SpotTwapDivergence(spot, twap);
+        }
     }
 
     /* ------------------------------ generic entry ------------------------------ */
@@ -535,6 +624,7 @@ contract MasonryZap is Ownable, ReentrancyGuard {
         bool assetIs0,
         uint256 work
     ) private returns (uint256 sharesOut) {
+        _guardTwap(vault);
         IPoolManager manager = vault.manager();
         PoolKey memory key = vault.poolKey();
         (uint256 swapAmt, uint256 expectedOut,, bool complete) = _solveSwapAmount(vault, key, assetIs0, work);
@@ -734,6 +824,7 @@ contract MasonryZap is Ownable, ReentrancyGuard {
         uint256 minAssetOut,
         uint256 assetBase
     ) private returns (uint256 assetOut) {
+        _guardTwap(standardVault);
         PoolKey memory key = standardVault.poolKey();
         bool assetIs0 = standardVault.assetIsCurrency0();
         (uint256 expectedOut,, bool complete) = _simulateSwap(standardVault.manager(), key, !assetIs0, work);
@@ -789,6 +880,7 @@ contract MasonryZap is Ownable, ReentrancyGuard {
         uint256 minAssetOut,
         uint256 assetBase
     ) private returns (uint256 assetOut) {
+        _guardTwap(squareVault);
         PoolKey memory key = squareVault.poolKey();
         bool assetIs0 = squareVault.assetIsCurrency0();
         (uint256 expectedOut,, bool complete) = _simulateSwap(squareVault.manager(), key, !assetIs0, work);
@@ -860,6 +952,7 @@ contract MasonryZap is Ownable, ReentrancyGuard {
         uint256 minOutLeg,
         bool isFinal
     ) private returns (uint256 out) {
+        _guardTwap(vault);
         PoolKey memory key = vault.poolKey();
         bool zeroForOne = _zeroForOne(vault, input);
         uint256 min = minOutLeg;
