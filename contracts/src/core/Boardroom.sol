@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {ContractGuard} from "../libs/ContractGuard.sol";
+import {IMasonryLoyaltyTracker} from "../interfaces/IMasonryLoyaltyTracker.sol";
 import {ITreasury} from "../interfaces/ITreasury.sol";
 
 /**
@@ -103,12 +104,19 @@ contract Boardroom is ShareWrapper, ContractGuard {
     mapping(address => Memberseat) public members;
     BoardroomSnapshot[] public boardroomHistory;
 
+    /// @notice Weekly-loyalty-boost tracker (ShareRewardPool), notified on
+    ///         every stake change so boost eligibility can follow Masonry
+    ///         stake and Masonry withdrawals. Zero = not wired; staking works
+    ///         exactly as before, it is simply unobserved.
+    address public loyaltyTracker;
+
     uint256 public withdrawLockupEpochs;
     uint256 public rewardLockupEpochs;
 
     /* ========== EVENTS ========== */
 
     event Initialized(address indexed executor, uint256 at);
+    event LoyaltyTrackerSet(address indexed tracker);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
@@ -193,6 +201,28 @@ contract Boardroom is ShareWrapper, ContractGuard {
         operator = newOperator;
     }
 
+    /// @notice Wire (or unwire, with address(0)) the loyalty-boost tracker.
+    ///         Wire it before staking opens: changes made while unwired are
+    ///         unobservable and cannot be reconstructed later.
+    function setLoyaltyTracker(
+        address newTracker
+    ) external onlyOperator {
+        loyaltyTracker = newTracker;
+        emit LoyaltyTrackerSet(newTracker);
+    }
+
+    /// @dev Notify the loyalty tracker of a stake change that has already
+    ///      been applied to this contract's balances.
+    function _notifyLoyaltyTracker(
+        bool isWithdrawal,
+        uint256 amount
+    ) internal {
+        address tracker = loyaltyTracker;
+        if (tracker != address(0)) {
+            IMasonryLoyaltyTracker(tracker).onMasonryStakeChange(msg.sender, isWithdrawal, amount);
+        }
+    }
+
     /// @notice Update the lockup epoch counts. `withdrawLockupEpochs >= rewardLockupEpochs`
     ///         and `withdrawLockupEpochs <= 56` (== 2 weeks at 6h epochs) — Tomb bounds.
     function setLockUp(
@@ -270,6 +300,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         if (amount == 0) revert CannotStakeZero();
         super.stake(amount);
         members[msg.sender].epochTimerStart = treasury.epoch();
+        _notifyLoyaltyTracker(false, amount);
         emit Staked(msg.sender, amount);
     }
 
@@ -282,6 +313,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         }
         claimReward();
         super.withdraw(amount);
+        _notifyLoyaltyTracker(true, amount);
         emit Withdrawn(msg.sender, amount);
     }
 
