@@ -34,9 +34,20 @@ abstract contract ShareWrapper {
     function stake(
         uint256 amount
     ) public virtual {
+        _stakeFrom(msg.sender, msg.sender, amount);
+    }
+
+    /// @dev Pull `amount` of share from `payer` and credit it to
+    /// `beneficiary`. The single accounting path behind both stake() and
+    /// the Boardroom's zap-operator stakeFor().
+    function _stakeFrom(
+        address payer,
+        address beneficiary,
+        uint256 amount
+    ) internal {
         _totalSupply += amount;
-        _balances[msg.sender] += amount;
-        share.safeTransferFrom(msg.sender, address(this), amount);
+        _balances[beneficiary] += amount;
+        share.safeTransferFrom(payer, address(this), amount);
     }
 
     function withdraw(
@@ -103,6 +114,10 @@ contract Boardroom is ShareWrapper, ContractGuard {
     mapping(address => Memberseat) public members;
     BoardroomSnapshot[] public boardroomHistory;
 
+    /// @notice The one caller allowed to stake on a beneficiary's behalf
+    /// (the protocol zap). Set by the operator; address(0) disables it.
+    address public zapOperator;
+
     uint256 public withdrawLockupEpochs;
     uint256 public rewardLockupEpochs;
 
@@ -126,6 +141,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
     error CannotAllocateWhenTotalSupplyZero();
     error LockupOutOfRange();
     error ProtectedToken();
+    error NotZapOperator();
 
     /* ========== MODIFIERS ========== */
 
@@ -271,6 +287,27 @@ contract Boardroom is ShareWrapper, ContractGuard {
         super.stake(amount);
         members[msg.sender].epochTimerStart = treasury.epoch();
         emit Staked(msg.sender, amount);
+    }
+
+    /// @notice Stake on behalf of a beneficiary. Callable ONLY by the
+    /// allowlisted zap operator. Share is pulled from the caller; the
+    /// position, reward snapshot and epoch timer all belong to the
+    /// beneficiary, exactly as if they had staked themselves.
+    function stakeFor(
+        address beneficiary,
+        uint256 amount
+    ) external onlyOneBlock updateReward(beneficiary) {
+        if (msg.sender != zapOperator) revert NotZapOperator();
+        if (amount == 0) revert CannotStakeZero();
+        _stakeFrom(msg.sender, beneficiary, amount);
+        members[beneficiary].epochTimerStart = treasury.epoch();
+        emit Staked(beneficiary, amount);
+    }
+
+    function setZapOperator(
+        address newZapOperator
+    ) external onlyOperator {
+        zapOperator = newZapOperator;
     }
 
     function withdraw(
