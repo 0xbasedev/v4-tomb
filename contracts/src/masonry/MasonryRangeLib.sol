@@ -109,7 +109,9 @@ library MasonryRangeLib {
         return tick > lower && tick < upper;
     }
 
-    /// @notice Recenter when the tick is outside the position or outside the inner band.
+    /// @notice Legacy midpoint check (symmetric halfWidth). Prefer `needsRecenterToTarget`
+    /// for peg-anchor ranges: this fires against a wide [0.49, 1.10] band even when the
+    /// live ticks already equal the peg-anchor target.
     function needsRecenter(
         int24 tick,
         int24 lower,
@@ -125,6 +127,40 @@ library MasonryRangeLib {
         if (inner == 0) inner = 1;
         int24 dist = tick > mid ? tick - mid : mid - tick;
         return dist >= inner;
+    }
+
+    /// @notice Recenter when the target band differs from the live band and the move is
+    /// large enough. Hysteresis is per-wing: edge drift must reach
+    /// `wingSpanTicks * recenterBps / wingBps` (downBps on the lower wing, upBps on the
+    /// upper). Out-of-range always qualifies once the target differs. No-op when the
+    /// target ticks already match the live ticks.
+    function needsRecenterToTarget(
+        int24 tick,
+        int24 lower,
+        int24 upper,
+        int24 targetLower,
+        int24 targetUpper,
+        uint16 downBps,
+        uint16 upBps,
+        uint16 recenterBps
+    ) internal pure returns (bool) {
+        if (targetLower == lower && targetUpper == upper) return false;
+        if (lower >= upper || targetLower >= targetUpper) return true;
+        if (downBps == 0 || upBps == 0) return true;
+        if (tick <= lower || tick >= upper) return true;
+
+        int24 t = tick;
+        if (t <= targetLower) t = targetLower + 1;
+        if (t >= targetUpper) t = targetUpper - 1;
+        int24 lowerSpan = t - targetLower;
+        int24 upperSpan = targetUpper - t;
+        int24 threshL = int24(int256(uint256(uint24(lowerSpan)) * uint256(recenterBps) / uint256(downBps)));
+        int24 threshU = int24(int256(uint256(uint24(upperSpan)) * uint256(recenterBps) / uint256(upBps)));
+        if (threshL == 0) threshL = 1;
+        if (threshU == 0) threshU = 1;
+        int24 dL = targetLower > lower ? targetLower - lower : lower - targetLower;
+        int24 dU = targetUpper > upper ? targetUpper - upper : upper - targetUpper;
+        return dL >= threshL || dU >= threshU;
     }
 
     function deviationBps(

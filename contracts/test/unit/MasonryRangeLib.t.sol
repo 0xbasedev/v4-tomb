@@ -63,6 +63,46 @@ contract MasonryRangeLibTest is Test {
         assertTrue(MasonryRangeLib.needsRecenter(1600, lower, upper, 1500, 1000));
     }
 
+    /// @dev Target-equality short-circuit + per-wing hysteresis for peg-anchor.
+    function testNeedsRecenterToTargetSkipsWhenAlreadyOnTarget() public pure {
+        uint160 peg = uint160((uint256(1) << 96) / 1e6);
+        // $0.60 with level-as-currency0: sqrt scales by sqrt(0.60).
+        uint256 ratioSqrtWad = Math.sqrt(uint256(60e16) * 1e18);
+        uint160 spot = uint160(uint256(peg) * ratioSqrtWad / 1e18);
+        (int24 targetL, int24 targetU) = MasonryRangeLib.pegAnchorTicks(spot, peg, 1800, 1000, 60);
+        int24 spotTick = TickMath.getTickAtSqrtPrice(spot);
+        // Live band already equals target → never recenter, even though spot is far from mid.
+        assertFalse(
+            MasonryRangeLib.needsRecenterToTarget(spotTick, targetL, targetU, targetL, targetU, 1800, 1000, 666)
+        );
+        // Legacy midpoint check WOULD fire on this wide band (documents the bug).
+        assertTrue(MasonryRangeLib.needsRecenter(spotTick, targetL, targetU, 1800, 666));
+    }
+
+    function testNeedsRecenterToTargetHysteresisAndOutOfRange() public pure {
+        uint160 peg = uint160((uint256(1) << 96) / 1e6);
+        (int24 liveL, int24 liveU) = MasonryRangeLib.pegAnchorTicks(peg, peg, 1800, 1000, 60);
+
+        // ~+2% human price: sqrt *= sqrt(1.02). Tiny edge drift should stay under hysteresis.
+        uint256 slightRatio = Math.sqrt(uint256(102e16) * 1e18);
+        uint160 slightUp = uint160(uint256(peg) * slightRatio / 1e18);
+        (int24 tL, int24 tU) = MasonryRangeLib.pegAnchorTicks(slightUp, peg, 1800, 1000, 60);
+        int24 tick = TickMath.getTickAtSqrtPrice(slightUp);
+        if (tL != liveL || tU != liveU) {
+            assertFalse(MasonryRangeLib.needsRecenterToTarget(tick, liveL, liveU, tL, tU, 1800, 1000, 666));
+        }
+
+        // ~+20% human price: clear target move, should fire.
+        uint256 bigRatio = Math.sqrt(uint256(120e16) * 1e18);
+        uint160 bigUp = uint160(uint256(peg) * bigRatio / 1e18);
+        (tL, tU) = MasonryRangeLib.pegAnchorTicks(bigUp, peg, 1800, 1000, 60);
+        tick = TickMath.getTickAtSqrtPrice(bigUp);
+        assertTrue(tL != liveL || tU != liveU);
+        assertTrue(MasonryRangeLib.needsRecenterToTarget(tick, liveL, liveU, tL, tU, 1800, 1000, 666));
+        // Out of live range with a different target always qualifies.
+        assertTrue(MasonryRangeLib.needsRecenterToTarget(liveL, liveL, liveU, tL, tU, 1800, 1000, 666));
+    }
+
     function testDeviationBps() public pure {
         assertEq(MasonryRangeLib.deviationBps(1.03e18, 1e18), 300);
         assertEq(MasonryRangeLib.deviationBps(0.97e18, 1e18), 300);

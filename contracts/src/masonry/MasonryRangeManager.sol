@@ -200,7 +200,14 @@ contract MasonryRangeManager is ReentrancyGuard, IUnlockCallback, IMasonryPolSin
 
     function shouldRebalance() public view returns (bool) {
         if (!seeded) return false;
-        (, int24 tick,,) = manager.getSlot0(poolId);
+        (uint160 sqrtPrice, int24 tick,,) = manager.getSlot0(poolId);
+        (int24 targetLower, int24 targetUpper) = _bandTicks(sqrtPrice);
+        if (targetLower == tickLower && targetUpper == tickUpper) return false;
+        if (pegAnchor) {
+            return MasonryRangeLib.needsRecenterToTarget(
+                tick, tickLower, tickUpper, targetLower, targetUpper, lowerHalfWidthBps, upperHalfWidthBps, recenterBps
+            );
+        }
         return MasonryRangeLib.needsRecenter(tick, tickLower, tickUpper, halfWidthBps, recenterBps);
     }
 
