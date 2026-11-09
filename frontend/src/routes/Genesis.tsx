@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { KeeperPanel } from "@/components/genesis/KeeperPanel";
+import { ClaimAllToLp } from "@/components/genesis/ClaimAllToLp";
 import { PassPicker } from "@/components/genesis/PassPicker";
 import { PoolPanel } from "@/components/genesis/PoolPanel";
 import { VestingPanel } from "@/components/genesis/VestingPanel";
@@ -73,6 +74,7 @@ export function Genesis() {
             <PoolPanel pool={0} />
             <PoolPanel pool={1} />
           </div>
+          {c?.phase !== "ended" && <ClaimAllToLp />}
         </section>
 
         <section data-reveal className="grid grid-cols-1 gap-5 lg:grid-cols-2">
