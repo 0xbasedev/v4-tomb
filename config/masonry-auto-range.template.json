@@ -1,0 +1,51 @@
+{
+  "keepers": {
+    "_comment": "Addresses authorized to call rebalance() on the xSHARE vault. Keepers are paid nothing and cannot choose the range, the size, or a recipient \u2014 they only decide when. The permissionless poke above is the backstop, so this list may be empty.",
+    "addresses": []
+  },
+  "note": "Auto-range v2 parameters in human units only: whole numbers, percents, hours, dollars. No wei, no basis points \u2014 deploy code converts. Ticks are the one native unit kept as-is, because a Uniswap v4 range is defined in ticks; every tick field carries a worked example converting it to a percent.",
+  "priceGuard": {
+    "_comment": "The buyback guard cross-checks prices before any rebalance swap leg runs. Stale or conflicting feeds fail closed: no rebalance happens at all.",
+    "_guardExample": "If the spot price disagrees with the 30-minute TWAP by more than 1.5%, or a quote would move the price more than 1%, the rebalance reverts before touching the position.",
+    "maxSpotVsTwapDeviationPercent": 1.5,
+    "maxSwapExecutionLossPercent": 1.5,
+    "maxSwapPriceImpactPercent": 1
+  },
+  "protocol": "masonry",
+  "schemaVersion": 1,
+  "xshareVault": {
+    "_comment": "The xSHARE (share token) vault is the price-following vault: it recenters on the 30-minute TWAP (never the spot price) under the exact recenter trigger below.",
+    "rangeLowerWidthTicks": 1800,
+    "rangeUpperWidthTicks": 1000,
+    "_widthsExample": "The two widths are SEPARATE and asymmetric, never one symmetric width. Price multiplies by 1.0001 per tick, so 1800 ticks down is about 18% below the TWAP center and 1000 ticks up is about 10% above it. Edges are snapped to the pool's tick spacing of 60, so the upper edge lands on 1020 ticks in practice.",
+    "recenterDriftNumerator": 666,
+    "_triggerExample": "The exact recenter trigger (all in tick units): build the target band from the TWAP center with the widths above. If the target ticks equal the live ticks, NEVER recenter (this equality skip is what makes a quiet market produce zero recenters). If the spot tick is at or outside a live edge, recenter. Otherwise recenter only when an edge has drifted from its target by at least a per-side threshold: lower threshold = (spot's span to the target's lower edge) x 666 / 1800, upper threshold = (span to the upper edge) x 666 / 1000, minimum 1 tick. Worked example: TWAP sits mid-band, spans are the full widths, thresholds are 666 ticks on both sides \u2014 so the center must move about 666 ticks (roughly 6.9%) before a recenter can fire, comfortably before the spot can exit the band (1000 ticks up / 1800 down).",
+    "maxRangeWidthTicks": 4000,
+    "_maxWidthExample": "Neither side's width, after the volatility adjustment, may exceed 4000 ticks (about 49%: 1.0001^4000 is about 1.49).",
+    "_volatilityExample": "Signed ticks added to the half width by the keeper/admin when volatility changes: +900 widens the range by about 9% per side, -900 narrows it by about 9% per side. 0 is the calm default.",
+    "volatilityAdjustmentTicks": 0,
+    "_pokeExample": "Authorized keepers may rebalance at most every 6 hours. If no keeper has serviced an eligible position for 24 hours, anyone may poke the rebalance permissionlessly, so a dead keeper can never strand the position out of range.",
+    "minHoursBetweenRebalances": 6,
+    "permissionlessPokeDelayHours": 24,
+    "_lossExample": "A rebalance must not lose more than 1% of the position's TWAP value to swap slippage and Fire Tax, measured after the swap; if it would, the whole rebalance reverts and the old position is restored untouched. Note: recovering from a full exit while the price is far below peg pays an elevated Fire Tax, so this percent may need raising (vault hard cap: 5) for that specific recovery.",
+    "maxRebalanceLossPercent": 1,
+    "_minPositionExample": "Positions worth less than $1,000 at the TWAP never rebalance \u2014 the swap cost would eat the position.",
+    "minPositionValueUsd": 1000,
+    "_minSwapExample": "If the inventory swap leg of a rebalance is worth less than $1, it is skipped as dust and the balances are re-minted as they are.",
+    "minSwapValueUsd": 1,
+    "_feeGateComment": "Expected-fees gate (quality-bar point 3), enforced on-chain inside the rebalance: a recenter whose swap leg costs more than the position is expected to earn back does not fire. The vault snapshots the pool's fee growth over a trailing window and projects it over the horizon for a position of the current size; the leg's cost is priced from the same guard quotes the loss cap uses (swap fees, Fire Tax and price impact included). Refusal reverts the whole rebalance with the position untouched. Until the vault has one full trailing window of fee history the estimate is zero and any costly recenter is refused — fail closed.",
+    "_feeGateExample": "Defaults: over the last 24 hours the pool's fee growth works out to $40 of fees for a position of this vault's size, and the recenter's swap leg would cost $25. Expected $40 over the 24-hour horizon exceeds $25 x 100% margin, so the recenter fires. If the leg would cost $50 instead, $40 does not exceed $50 and the recenter is refused. Setting the margin to 50 halves the bar (expected fees must exceed half the cost); setting it to 0 turns the gate off entirely — an admin decision, recorded on-chain like every parameter change. Raising the trailing window to 168 (a week) makes the estimate slower-moving and harder to game with one busy hour.",
+    "feeGateHorizonHours": 24,
+    "feeGateTrailingWindowHours": 24,
+    "feeGateMarginPercent": 100
+  },
+  "xtombVault": {
+    "_bandExample": "Peg $1 with 18% below and 10% above gives the fixed band $0.82 to $1.10. Deploy code converts each edge to a tick with tick = ln(price) / ln(1.0001), snapped to the pool's tick spacing of 60.",
+    "_comment": "The xTOMB (peg token) vault has a FIXED band and NO recenter path (Jess, 2026-11-08). These values are deployment-time only: they become the vault's constructor ticks and cannot drift afterward. A rebalance call on this vault is never eligible at any price.",
+    "_depegExample": "While the 30-minute TWAP is below $0.90 the vault reports its depeg hold state and refuses any rebalance attempt: the below-peg position is deployed defense capital, not a malfunction.",
+    "bandAbovePegPercent": 10,
+    "bandBelowPegPercent": 18,
+    "depegHoldBelowUsd": 0.9,
+    "pegPriceUsd": 1
+  }
+}

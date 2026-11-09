@@ -276,8 +276,12 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         wrong.fee = 1000;
         int24 lower = center - 6000;
         int24 upper = center + 6000;
+        MasonryBuybackGuard vaultGuard = new MasonryBuybackGuard(key, 150, 100, 150);
+        MiniSwapRouter vaultRouter = new MiniSwapRouter(hook.poolManager());
         vm.expectRevert(MasonryUsdcVault.InvalidConfiguration.selector);
-        new MasonryLevelUsdcVault(wrong, lower, upper);
+        new MasonryLevelUsdcVault(
+            wrong, lower, upper, vaultGuard, vaultRouter, MasonryCriticalDefense(address(0)), address(this)
+        );
 
         MasonryLevelUsdcVault vault = _vault();
         MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
@@ -599,7 +603,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
         (, int24 tick,,) = hook.poolManager().getSlot0(squareHook.officialPool());
         int24 midpoint = tick / 60 * 60;
-        MasonrySquareUsdcVault pol = new MasonrySquareUsdcVault(squareKey, midpoint - 6000, midpoint + 6000);
+        MasonrySquareUsdcVault pol = new MasonrySquareUsdcVault(
+            squareKey,
+            midpoint - 6000,
+            midpoint + 6000,
+            new MasonryBuybackGuard(squareKey, 150, 100, 150),
+            new MiniSwapRouter(hook.poolManager()),
+            MasonryCriticalDefense(address(0)),
+            address(this)
+        );
         vm.prank(makeAddr("not deployer"));
         vm.expectRevert(MasonryTaxHook.InvalidConfiguration.selector);
         squareHook.bindPolVault(pol);
@@ -820,7 +832,15 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     }
 
     function _vault() private returns (MasonryLevelUsdcVault vault) {
-        vault = new MasonryLevelUsdcVault(key, center - 6000, center + 6000);
+        vault = new MasonryLevelUsdcVault(
+            key,
+            center - 6000,
+            center + 6000,
+            new MasonryBuybackGuard(key, 150, 100, 150),
+            new MiniSwapRouter(hook.poolManager()),
+            MasonryCriticalDefense(address(0)),
+            address(this)
+        );
         level.approve(address(vault), type(uint256).max);
         usdc.approve(address(vault), type(uint256).max);
     }
@@ -843,5 +863,279 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             PoolSwapTest.TestSettings(false, false),
             abi.encode("untrusted router data")
         );
+    }
+
+    // ================= design section 7.21: compound plans x v2 vaults ===
+    // Section 7.21 prescribes: a compound plan computed before a
+    // rebalance reverts on the settlement's 3% refund cap (does not
+    // execute wrongly); a plan computed after the rebalance succeeds;
+    // the 3-hour compound cooldowns are unaffected by rebalances;
+    // compoundToLP still works after a rebalance.
+    //
+    // Shipped-system note: the settlement compounds only into the
+    // LEVEL vault (its constructor takes that concrete type), and
+    // that vault's band is FIXED by policy (Jess 2026-11-08 22:05) —
+    // it has no recenter path, and its rebalance is additionally
+    // Genesis-locked while compounds run. The literal same-vault
+    // scenario (plan -> recenter of the Genesis vault -> execute)
+    // is therefore unreachable BY POLICY, not by missing code: the
+    // refund-cap safety net the design specifies exists and is what
+    // these tests exercise, against the state changes the shipped
+    // system actually exposes a plan to — price drift on the
+    // compound's own vault (tests 1 and 3), a plan that mismatches
+    // the live vault state (test 2, the refund cap itself firing),
+    // and a real recenter of the system's recenter-capable vault
+    // interleaved with a Genesis compound (test 4).
+
+    /// @dev Drive the LEVEL TWAP up to >= stopPrice in absorbable
+    /// chunks (swap, checkpoint, settle, dust), mirroring the
+    /// auto-range harness's TWAP drives.
+    function _driveLevelTwapUp(
+        uint256 stopPrice
+    ) private {
+        for (uint256 i = 0; i < 40; i++) {
+            (uint256 price,, bool valid) = hook.oracle().latestValidatedTwap();
+            if (valid && price >= stopPrice) return;
+            _swap(!level0, -300e6);
+            hook.checkpoint();
+            vm.warp(block.timestamp + 31 minutes);
+            _swap(!level0, -1e6);
+        }
+        fail();
+    }
+
+    function testCompoundPlanStaleAfterPriceMoveRevertsAndExecutesNothing() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement,) = _realGenesis();
+        MasonryLevelUsdcVault vault = settlement.vault();
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        // The plan a keeper computes against the peg state: sell
+        // 2.54 LEVEL of the 5 LEVEL liquid budget, deposit the
+        // budget-consistent gross shares (the same shape as the
+        // passing manual-compound test above).
+        uint256 gross = _estimateShares(vault, 5e18, 2.54e18);
+        IMasonryGenesisSettlement.CompoundPlan memory stalePlan =
+            IMasonryGenesisSettlement.CompoundPlan(2.54e18, gross);
+        // The market state the plan was computed against moves +30%.
+        _driveLevelTwapUp(1.28e18);
+        (uint256 price,, bool valid) = hook.oracle().latestValidatedTwap();
+        assertTrue(valid);
+        assertGt(price, 1.25e18);
+        // Section 7.21's prescribed outcome: the stale plan REVERTS
+        // and does not execute wrongly. On the shipped fixed-band
+        // vault, price drift breaks the vault deposit's input caps
+        // (the settlement's refund cap is the second net, exercised
+        // directly in the next test).
+        vm.expectRevert(MasonryUsdcVault.Slippage.selector);
+        staking.compoundToLP(0, address(this), 1, stalePlan);
+        // Nothing executed: no vested escrow, no tranche, no LP
+        // position, and the reverted attempt did not consume the
+        // compound cooldown.
+        assertEq(settlement.totalEscrowed(), 0);
+        assertEq(settlement.trancheCount(address(this)), 0);
+        (uint256 net,,) = staking.positions(1, address(this));
+        assertEq(net, 0);
+        assertEq(staking.nextCompoundAt(0, address(this)), 0);
+        // The full pending reward survived intact: the claim pays
+        // the whole liquid half (pending streams upward over time,
+        // so it is at least the 4.9 LEVEL the at-lpOpens claim test
+        // establishes) less exactly the 2% wallet fee, and the
+        // vested half escrows in full.
+        uint256 treasuryBefore = level.balanceOf(TREASURY);
+        uint256 levelBefore = level.balanceOf(address(this));
+        staking.claim(0);
+        uint256 received = level.balanceOf(address(this)) - levelBefore;
+        uint256 fee = level.balanceOf(TREASURY) - treasuryBefore;
+        assertGt(received, 4.9e18);
+        assertApproxEqAbs(received, fee * 49, 1e6);
+        assertApproxEqAbs(settlement.totalEscrowed(), received + fee, 2);
+    }
+
+    function testCompoundPlanUndersizedGrossRevertsOnRefundCap() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement,) = _realGenesis();
+        MasonryLevelUsdcVault vault = settlement.vault();
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        uint256 gross = _estimateShares(vault, 5e18, 2.54e18);
+        // A plan whose grossShares under-uses the budget by ~45% —
+        // the mismatch a pre/post state change produces when the
+        // vault's per-share amounts move. The deposit itself fits
+        // the caps, so what fires is exactly section 7.21's named
+        // mechanism: the settlement's 3% refund cap.
+        IMasonryGenesisSettlement.CompoundPlan memory plan =
+            IMasonryGenesisSettlement.CompoundPlan(2.54e18, gross * 55 / 100);
+        vm.expectRevert(MasonryGenesisSettlement.InvalidPlan.selector);
+        staking.compoundToLP(0, address(this), 1, plan);
+        assertEq(settlement.totalEscrowed(), 0);
+        assertEq(settlement.trancheCount(address(this)), 0);
+        (uint256 net,,) = staking.positions(1, address(this));
+        assertEq(net, 0);
+        assertEq(staking.nextCompoundAt(0, address(this)), 0);
+    }
+
+    function testCompoundPlanComputedAfterPriceMoveSucceeds() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement, MasonryGenesisLPBurnFee collector) =
+            _realGenesis();
+        MasonryLevelUsdcVault vault = settlement.vault();
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        _driveLevelTwapUp(1.28e18);
+        (uint256 price,, bool valid) = hook.oracle().latestValidatedTwap();
+        assertTrue(valid);
+        assertGt(price, 1.25e18);
+        // Section 7.21: a plan computed AFTER the state change (the
+        // keeper's retry) succeeds against the moved vault state.
+        // At ~$1.30 the deposit is stable-heavy, so the plan sells
+        // ~70% of the budget, not the ~51% an at-peg plan sells.
+        (IMasonryGenesisSettlement.CompoundPlan memory plan, uint256 gross, uint256 pending) =
+            _livePlan(vault, staking, 70);
+        staking.compoundToLP(0, address(this), 1, plan);
+        (uint256 net,,) = staking.positions(1, address(this));
+        assertEq(net, gross - gross * 50 / 10_000);
+        assertEq(collector.totalFeeSharesCollected(), gross * 50 / 10_000);
+        assertEq(settlement.totalEscrowed(), pending - pending / 2);
+    }
+
+    /// @dev Build a compound plan on the exact live budget. Pending
+    /// streams upward and accrues lazily, so a dust deposit first
+    /// forces the accrual checkpoint; the position's pending then
+    /// reads exact at this timestamp. `sellPercent` is the share of
+    /// the liquid budget the plan sells into the deposit.
+    function _livePlan(
+        MasonryLevelUsdcVault vault,
+        MasonryGenesisStaking staking,
+        uint256 sellPercent
+    )
+        private
+        returns (IMasonryGenesisSettlement.CompoundPlan memory plan, uint256 gross, uint256 pending)
+    {
+        usdc.approve(address(staking), 1);
+        staking.deposit(0, 1);
+        (,, pending) = staking.positions(0, address(this));
+        uint256 budget = pending / 2;
+        uint256 swapLevel = budget * sellPercent / 100;
+        gross = _estimateShares(vault, budget, swapLevel);
+        plan = IMasonryGenesisSettlement.CompoundPlan(swapLevel, gross);
+    }
+
+    /// @dev Drive a SQUARE vault's TWAP up until it reports itself
+    /// recenter-eligible (swap, checkpoint, settle, dust per step).
+    function _driveSquareVaultUp(
+        MasonrySquareHook sqHook,
+        PoolKey memory sqKey,
+        bool sq0,
+        MasonrySquareUsdcVault sqVault
+    ) private {
+        for (uint256 i = 0; i < 40; i++) {
+            (bool eligible,) = sqVault.rebalanceNeeded();
+            if (eligible) return;
+            _swapOn(sqKey, !sq0, -5_000e6);
+            sqHook.checkpoint();
+            vm.warp(block.timestamp + 31 minutes);
+            _swapOn(sqKey, !sq0, -1e6);
+        }
+        fail();
+    }
+
+    /// @dev The system's recenter-capable vault on this harness's
+    /// square pool: deepened seed so its recenter leg fits the guard
+    /// caps, deployed at the trigger's target band, keeper at 0xB0B1.
+    function _squareSide()
+        private
+        returns (MasonrySquareHook sqHook, PoolKey memory sqKey, MasonrySquareUsdcVault sqVault, bool sq0)
+    {
+        MockMasonryLevel sq;
+        (sqHook, sq, sqKey) = _squarePool();
+        (, int24 tick,,) = hook.poolManager().getSlot0(sqKey.toId());
+        int24 mid = tick / 60 * 60;
+        liquidity.modifyLiquidity(sqKey, ModifyLiquidityParams(mid - 6000, mid + 6000, 1e18, 0), "");
+        sq0 = sqHook.assetIsCurrency0();
+        sqVault = new MasonrySquareUsdcVault(
+            sqKey,
+            mid - 1800,
+            mid + 1020,
+            new MasonryBuybackGuard(sqKey, 500, 500, 500),
+            new MiniSwapRouter(hook.poolManager()),
+            MasonryCriticalDefense(address(0)),
+            address(this)
+        );
+        sq.approve(address(sqVault), type(uint256).max);
+        usdc.approve(address(sqVault), type(uint256).max);
+        sqVault.setKeeper(address(0xB0B1), true);
+        sqVault.setFeeGateParams(7 days, 1 minutes, 10_000);
+        sqVault.setRebalanceParams(1 hours, 1 hours, 100, 1_000e18, 1e18);
+        sqVault.deposit(4e16, type(uint256).max, type(uint256).max, address(this));
+    }
+
+    function testCompoundUnaffectedBySquareVaultRecenter() public {
+        (MasonryGenesisStaking staking, MasonryGenesisSettlement settlement,) = _realGenesis();
+        MasonryLevelUsdcVault vault = settlement.vault();
+        (MasonrySquareHook sqHook, PoolKey memory sqKey, MasonrySquareUsdcVault sqVault, bool sq0) = _squareSide();
+        address keeper = address(0xB0B1);
+        int24 initialLower = sqVault.tickLower();
+
+        vm.warp(schedule.lpOpens() - 30 minutes);
+        _warmOracle();
+        mockTwap = false;
+        sqHook.checkpoint();
+        vm.warp(block.timestamp + 30 minutes);
+        _swapOn(sqKey, !sq0, -1e6);
+
+        // Drive the price-following vault to recenter-eligible.
+        _driveSquareVaultUp(sqHook, sqKey, sq0, sqVault);
+        (bool eligible,) = sqVault.rebalanceNeeded();
+        assertTrue(eligible);
+
+        // The compound plan is computed now — BEFORE the recenter —
+        // on the exact live budget, as in the fresh-plan test above.
+        // The LEVEL oracle is re-warmed first: the square drive took
+        // hours of warps, and the hook refuses sells against a stale
+        // TWAP (the estimate's pricing swap is a sell).
+        _warmOracle();
+        (IMasonryGenesisSettlement.CompoundPlan memory plan, uint256 gross, uint256 pending) =
+            _livePlan(vault, staking, 51);
+
+        // The recenter lands between plan computation and execution.
+        vm.prank(keeper);
+        sqVault.rebalance();
+        assertTrue(sqVault.lastRebalanceAt() != 0);
+        assertTrue(sqVault.tickLower() != initialLower);
+
+        // Section 7.21: compoundToLP still works after a rebalance —
+        // with the plan computed before it — and the cooldown it sets
+        // is exactly its own 3 hours. (The escrowed half is asserted
+        // to 1%: pending streams, and dust may accrue between the
+        // plan's checkpoint and the compound.)
+        uint256 compoundAt = block.timestamp;
+        staking.compoundToLP(0, address(this), 1, plan);
+        {
+            (uint256 net,,) = staking.positions(1, address(this));
+            assertEq(net, gross - gross * 50 / 10_000);
+        }
+        assertApproxEqRel(settlement.totalEscrowed(), pending - pending / 2, 0.01e18);
+        assertEq(staking.nextCompoundAt(0, address(this)), compoundAt + 3 hours);
+
+        // A second recenter does not move the compound cooldown by a
+        // single second.
+        _driveSquareVaultUp(sqHook, sqKey, sq0, sqVault);
+        vm.prank(keeper);
+        sqVault.rebalance();
+        assertEq(staking.nextCompoundAt(0, address(this)), compoundAt + 3 hours);
+
+        // And the gate opens exactly on schedule despite both
+        // recenters: one second early is a Cooldown; at the timestamp
+        // the call passes the gate, takes the reward that streamed
+        // in over those 3 hours, and reaches the settlement — where
+        // the now-stale pre-recenter plan reverts on the refund cap,
+        // exactly as section 7.21 prescribes for stale plans.
+        vm.warp(compoundAt + 3 hours - 1);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, address(this), 1, plan);
+        vm.warp(compoundAt + 3 hours);
+        vm.expectRevert(MasonryGenesisSettlement.InvalidPlan.selector);
+        staking.compoundToLP(0, address(this), 1, plan);
     }
 }
