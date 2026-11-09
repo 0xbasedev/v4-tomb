@@ -35,17 +35,22 @@ function Destination({
   label,
   sub,
   onPick,
+  hot = false,
 }: {
   glyph: string;
   label: string;
   sub: string;
   onPick: () => void;
+  /** The destination currently taking the majority of emissions glows. */
+  hot?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onPick}
-      className="flex w-full items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-ember/40 hover:bg-ember/[0.06]"
+      className={`flex w-full items-center gap-3 rounded-xl border bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-ember/40 hover:bg-ember/[0.06] ${
+        hot ? "animate-pool-glow" : "border-white/[0.07]"
+      }`}
     >
       <span className="text-[18px] leading-none text-ember" aria-hidden>
         {glyph}
@@ -81,23 +86,21 @@ function ZapInModal({ onClose }: { onClose: () => void }) {
               <Destination
                 glyph="▲"
                 label="Genesis · Standard pool"
-                sub={
-                  lpOpen
-                    ? "Single-stake · 25% of Genesis emissions"
-                    : "Single-stake · 100% of Genesis emissions until the LP pool opens"
-                }
+                sub="Single-stake · open from Day 1"
+                hot={clock?.phase === "day1"}
                 onPick={pick(close, "/genesis")}
               />
               {lpOpen ? (
                 <Destination
                   glyph="◆"
                   label="Genesis · xTOMB/USDC LP pool"
-                  sub="Paired liquidity · 75% of Genesis emissions"
+                  sub="Paired liquidity · the LP pool"
+                  hot={lpOpen}
                   onPick={pick(close, "/genesis")}
                 />
               ) : (
                 <p className="px-1 pt-1 text-[12px] leading-relaxed text-ash">
-                  The xTOMB/USDC LP pool opens on Day 2 and takes 75% of emissions from then on.
+                  The xTOMB/USDC LP pool opens on Day 2.
                 </p>
               )}
             </>
@@ -106,13 +109,13 @@ function ZapInModal({ onClose }: { onClose: () => void }) {
               <Destination
                 glyph="▲"
                 label="xTOMB Farm"
-                sub="xTOMB LP · 75% of xSHARE emissions"
+                sub="xTOMB LP · earns xSHARE"
                 onPick={pick(close, "/farm")}
               />
               <Destination
                 glyph="◆"
                 label="xSHARE Farm"
-                sub="xSHARE LP · 20% of xSHARE emissions"
+                sub="xSHARE LP · earns xSHARE"
                 onPick={pick(close, "/farm")}
               />
               <Destination

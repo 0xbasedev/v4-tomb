@@ -41,7 +41,7 @@ export function Genesis() {
         }
         token="xTOMB"
         title={<span className="ember-text">Genesis</span>}
-        lede={`Seven days, pass-gated. Stake in the standard pool from Day 1; the xTOMB/USDC LP pool opens on Day ${LP_DAY} and takes 75% of emissions from then on. Every reward is half liquid, half vested.`}
+        lede={`Seven days, pass-gated. Stake in the standard pool from Day 1; the xTOMB/USDC LP pool opens on Day ${LP_DAY}. Every reward is half liquid, half vested.`}
         aside={
           c ? (
             <Timeline clock={c} simulated={p.sim} />
@@ -173,7 +173,7 @@ function Timeline({ clock, simulated }: { clock: GenesisClock; simulated: boolea
       </div>
       <div className="mt-3 flex items-center gap-2 text-[12px] text-ash">
         <span className="h-2 w-2 rounded-sm bg-ember-hot/70" />
-        {clock.lpOpen ? "LP pool open · 75% of emissions" : ended ? "LP pool closed with Genesis" : clock.phase === "pre" ? (clock.ultraEarly ? "Ultra early staking is open (standard pool)" : "Ultra may pre-stake 24h before the start") : `LP pool opens Day ${LP_DAY} · in ${fmtDuration(clock.secondsToLp)}`}
+        {clock.lpOpen ? "LP pool open" : ended ? "LP pool closed with Genesis" : clock.phase === "pre" ? (clock.ultraEarly ? "Ultra early staking is open (standard pool)" : "Ultra may pre-stake 24h before the start") : `LP pool opens Day ${LP_DAY} · in ${fmtDuration(clock.secondsToLp)}`}
       </div>
     </div>
   );

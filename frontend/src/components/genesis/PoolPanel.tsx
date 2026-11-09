@@ -89,8 +89,13 @@ export function PoolPanel({ pool }: { pool: 0 | 1 }) {
             : "Not started"
           : "Open";
 
+  // The pool currently taking the majority of emissions glows — the split is
+  // shown, never stated (Jess, 2026-11-09: people see the APR and the glow,
+  // not "75% of emissions goes here").
+  const hot = c ? emissionShare(pool, c) > 0.5 : false;
+
   return (
-    <article data-testid={`pool-${pool}`} className="panel overflow-hidden p-0">
+    <article data-testid={`pool-${pool}`} className={`panel overflow-hidden p-0 ${hot ? "animate-pool-glow" : ""}`}>
       <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-[1.4fr_1fr_1fr_1fr] md:items-center">
         <div className="flex items-center gap-3">
           <TokenIcon symbol={asset} size={38} />
