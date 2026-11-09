@@ -6,12 +6,12 @@ import { useProtocol } from "@/lib/hooks";
 
 /**
  * Zap In — the top-bar button (next to the price) and its destination modal
- * (Jess, 2026-11-09). One entry point for getting into the protocol from a
- * single asset: while Genesis runs it lists the Genesis pools; after Genesis
- * it lists the two Farms and the Masonry. Picking a destination navigates
- * there, where the zap itself runs — there is no zap contract, so the legs
- * (swap, pair, stake) are separate transactions and each is shown before
- * signing (lib/routes.ts).
+ * (Jess, 2026-11-09). Zap is everywhere: one engine (the ZapBase pattern)
+ * whose target decides the product — a token target is the Swap, an LP
+ * target is a zap-in, a staking destination is a zap-and-stake that ends
+ * STAKED on the user's behalf, any combo of input and destination. The
+ * modal lists every destination open in the current phase, Swap included.
+ * Picking one navigates there, where the zap itself runs.
  */
 export function ZapInButton() {
   const [open, setOpen] = useState(false);
@@ -78,9 +78,10 @@ function ZapInModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal kicker="⚡ Zap In" title={ended ? "Where do you want in?" : "Zap into Genesis"} onClose={onClose}>
+    <Modal kicker="⚡ Zap In" title="Where do you want in?" onClose={onClose}>
       {(close: () => void): ReactNode => (
         <div className="flex flex-col gap-2.5">
+          <Destination glyph="⇄" label="Swap" sub="Any token → any token" onPick={pick(close, "/swap")} />
           {!ended ? (
             <>
               <Destination
