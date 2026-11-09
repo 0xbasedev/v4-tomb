@@ -6,6 +6,7 @@ import { Wordmark } from "@/components/brand/Sigil";
 import { EmberField } from "@/components/fx/EmberField";
 import { HeatSync } from "@/components/fx/HeatSync";
 import { PreviewDock } from "@/components/PreviewDock";
+import { ZapInButton } from "@/components/ZapIn";
 import { NetworkNote } from "@/components/Status";
 import { useIsAdmin, useProtocol } from "@/lib/hooks";
 import { EPOCH_SECONDS } from "@/lib/launch";
@@ -151,6 +152,7 @@ function TopNav() {
           >
             Docs
           </NavLink>
+          <ZapInButton />
           <PriceTicker />
           <ConnectButton compact />
         </div>
