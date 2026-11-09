@@ -1,0 +1,53 @@
+[package]
+name = "xtomb"
+version = "0.1.0"
+description = "Solana xTOMB fork: Genesis passes, Fire Tax exits, xBOND, lazy-epoch Masonry"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "xtomb"
+
+[features]
+no-entrypoint = []
+no-idl = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+# init-if-needed feature is REQUIRED: stake/compound/redeem_bond use
+# #[account(init_if_needed)] for Position / BondPosition.
+anchor-attribute-access-control = "=0.30.1"
+anchor-attribute-account = "=0.30.1"
+anchor-attribute-constant = "=0.30.1"
+anchor-attribute-error = "=0.30.1"
+anchor-attribute-event = "=0.30.1"
+anchor-attribute-program = "=0.30.1"
+anchor-derive-accounts = "=0.30.1"
+anchor-derive-serde = "=0.30.1"
+anchor-derive-space = "=0.30.1"
+anchor-lang = { version = "=0.30.1", features = ["init-if-needed"] }
+anchor-spl = "=0.30.1"
+# Metaplex Core for pass NFTs only (0.8.1 is the last line whose
+# solana-program requirement unifies to 1.18.26; 0.9.x requires
+# solana-program 2.x and cannot coexist with anchor 0.30.1).
+mpl-core = "=0.8.1"
+proc-macro2 = "=1.0.107"
+# Pins carried over from lodge-solana-v2: host cargo 1.79 / SBF platform
+# rustc 1.75 cannot build edition2024 crates or crates requiring newer rustc.
+blake3 = "=1.6.1"
+borsh = "=1.5.7"
+digest = "=0.10.7"
+sha2 = "=0.10.8"
+block-buffer = "=0.10.4"
+indexmap = "=2.5.0"
+unicode-segmentation = "=1.12.0"
+zeroize_derive = "=1.4.2"
+proc-macro-crate = "=3.1.0"
+jobserver = "=0.1.32"
+rmp-serde = "=1.1.2"
+rmp = "=0.8.14"
+wasm-bindgen = "=0.2.92"
+rayon = "=1.10.0"
+rayon-core = "=1.12.1"

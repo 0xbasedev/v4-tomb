@@ -1,0 +1,148 @@
+{
+  "takenAt": "2026-11-08T23:53:31.665Z",
+  "slot": 520192605,
+  "program": "4En9hXzHXTSNvwizNya8oit7MTLfsJxsShnMLgkjttEY",
+  "configPda": "4YSDCLocaTcSRrXGKjJd8Hm9uELnmEb3irSHeWnGrc6a",
+  "configAccount": {
+    "lamports": 5892800,
+    "dataLen": 1032,
+    "dataHex": "9b0caae01efacc82df45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08edf45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08edf45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08edf45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08edf45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08edf45f68a726331b07696aee182771cf1ab2619e2a943c9a5bee50f1766ccc08e80ba680025f8ff1cf8d4b8a9a461d75da413c4dc695a604003a85003991ee4fd886d348a01245039396d9e380cce90d2aaafe0dde47f16397f902a19ce6f95a7c994a53a59234daefabb121edefc4c2294542e727e80968a3ee2229b6df9928412481db24f34c56c7eafb78fe39491481b66698e783b8b98db250725d89b5fd91ab1ee6a000000009aebf76a0000000000ac23fc060000000000000000000000c3c10000000000002d0300000000000040420f000000000055b1ee6a0000000000000000000000000000000000000000000000005aca8b09000000000000000000000000000000000000000010a5d4e800000064000000000000000000008813d007dc05dc05c800c800320046697265205461780000000000000000000000000000000000000000000000000000000000000000ff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "config": {
+    "admin": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "treasuryWallet": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "teamWallet": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "devWallet": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "botWallet": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "oracleAuthority": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "xtombMint": "9fW3YqmJGWqXMrVaRQRKpADtbG3W3Lo7uz6uZ4Yy9TZv",
+    "xshareMint": "ABZ2f4UCuYWJNYYXfyiX2A74incgbaiUxrRG35476Dz6",
+    "xbondMint": "EZtQnHjCr2cHLMUNBz3cxrWkwNHiu4LcZ1W87x2TT3Yf",
+    "usdcMint": "2EN7s2AMm9vjKxduHawr1Z9WySCCBbMdJKNaqvLimCbA",
+    "genesisStartTs": "1794027802",
+    "genesisEndTs": "1794632602",
+    "genesisRewardBudget": "30000000000",
+    "genesisRewardsDistributed": "0",
+    "genesisEmissionPerSec": "49603",
+    "farmEmissionPerSec": "813",
+    "oracleTwapE6": "1000000",
+    "oracleTs": "1794027861",
+    "currentEpoch": "0",
+    "epoch0Open": false,
+    "lastEpochTs": "0",
+    "criticalDefense": false,
+    "defenseAboveCheckpoints": 0,
+    "circulatingXtomb": "41000000000",
+    "expansionAllowance": "0",
+    "bondOutstanding": "0",
+    "bondMaxOutstanding": "1000000000000",
+    "recoveryFloorBps": 100,
+    "recoveryFloorTs": "0",
+    "maintenance": false,
+    "treasuryBps": 5000,
+    "teamBps": 2000,
+    "devBps": 1500,
+    "botBps": 1500,
+    "claimFeeBps": 200,
+    "keeperFeeBps": 200,
+    "lpFeeBps": 50,
+    "feeDisplayName": [
+      70,
+      105,
+      114,
+      101,
+      32,
+      84,
+      97,
+      120,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "xshareTaxPendingBurn": "0",
+    "bump": 255,
+    "fireTaxBaseXtombBps": 0,
+    "fireTaxBaseXshareBps": 0,
+    "fireTaxCapBps": 0,
+    "fireTaxRestBps": 0,
+    "fireTaxRecoverySecs": "0",
+    "fireTaxZeroed": false,
+    "bondPremiumBps": 0,
+    "bondLpMint": "11111111111111111111111111111111",
+    "bondBackingLp": "0",
+    "solPriceE6": "0",
+    "solPriceTs": "0",
+    "bondXtombPremiumBps": 0,
+    "passPriceGenesisUsdc": "0",
+    "passPriceProUsdc": "0",
+    "passPriceUltraUsdc": "0",
+    "passDepositFeeGenesisBps": 0,
+    "passDepositFeeProBps": 0,
+    "passDepositFeeUltraBps": 0
+  },
+  "vaults": {
+    "rewards": {
+      "address": "Aou6Hq854gJ4aoFQRzadQGc5BBsaUhJLHaMnjwaV64aj",
+      "amount": "30000000000"
+    },
+    "farm": {
+      "address": "DfTpsK7fznG5bT5D5afaF9oDqsCkQRvbZCVD7q94YvCP",
+      "amount": "25641000000"
+    },
+    "treasury-xtomb": {
+      "address": "DEzcrg3wQLoSEiQXSy38RxH4jX6DfTMUwERA2xQpbzi1",
+      "amount": "11000000000"
+    },
+    "treasury-xshare": {
+      "address": "BmiXUkCr56vBGt2x6hz5pTsAKnGnnbjqWWKbxW5v5M8t",
+      "amount": "751000000"
+    },
+    "vesting": {
+      "address": "DhiuqBF66eeDGtdJNfjz4uSEL9nfgEtrUkHeX1Wa5gA",
+      "amount": "6941000000"
+    },
+    "masonry": {
+      "address": "5V7gAjMXuAfTUVyaeZJqvy8c7mdJGeDvy31YHsHd8Zs2",
+      "amount": "0"
+    }
+  },
+  "mintSupplies": {
+    "xtomb": "41000000000",
+    "xshare": "33333000000",
+    "xbond": "0",
+    "usdc": "100000000000"
+  },
+  "programData": {
+    "address": "Df5GHtybNCQZasiU2Bq75SrVtRrsjSocTrjBZC7grXE3",
+    "lamports": 3935724920,
+    "dataLen": 774621,
+    "lastDeploySlot": 520192550,
+    "codeSha256": "82d70a2cc7286e7b5586b7e22fad994e67e498ed5c104d925e2eb9c31ad381a6",
+    "codeNonZeroLen": 765425
+  },
+  "wallet": {
+    "address": "G2ZnxDj62Au7dRtEd4Pu5Qt8QxjH9PbA8DNSwRcYoPBs",
+    "lamports": 27587797878
+  }
+}
