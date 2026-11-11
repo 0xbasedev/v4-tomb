@@ -8,6 +8,15 @@ import bridgeTemplate from "../../../../config/xshare-bridge.json";
 export const bridgeNetworks = bridgeTemplate.networks as BridgeNetwork[];
 export const bridgeInput = bridgeTemplate;
 
+type HomeNetwork = Pick<BridgeNetwork, "id" | "name" | "rpcUrl" | "nativeCurrency">;
+/** Robinhood Chain is a home-chain choice only. xSHARE does not bridge there, so it is not in the bridge manifest. */
+const robinhoodChain: HomeNetwork = {
+  id: 4663, name: "Robinhood Chain", rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+};
+/** Chains the Setup Wizard offers as a home network: the bridge networks plus the non-bridge home chains. */
+export const homeNetworks: HomeNetwork[] = [...bridgeNetworks.slice(0, 1), robinhoodChain, ...bridgeNetworks.slice(1)];
+
 export const supplyFields = [
   ["pegSupply", "xTOMB authorized launch supply"],
   ["pegTeam", "xTOMB owner, team and developer"],
@@ -151,7 +160,7 @@ function whole(fields: Fields, field: string, label: string) {
 }
 
 export function networkFrom(fields: Fields) {
-  if (fields.network !== "custom" && !bridgeNetworks.some(({ id }) => String(id) === fields.network)) {
+  if (fields.network !== "custom" && !homeNetworks.some(({ id }) => String(id) === fields.network)) {
     throw new Error("Select a home network.");
   }
   const id = whole(fields, "chainId", "Chain ID");
@@ -211,7 +220,7 @@ export function buildInputs(fields: Fields, requireFuture = true) {
   const network = networkFrom(fields);
   const { launch, releaseId, deployer } = launchFrom(fields, requireFuture);
   const withBridge = fields.bridge === "on";
-  if (withBridge && !bridgeNetworks.some(({ id }) => id === network.id)) throw new Error("Bridge planning requires one of the five supported home networks.");
+  if (withBridge && !bridgeNetworks.some(({ id }) => id === network.id)) throw new Error("Bridge planning requires one of the four bridge networks as the home network.");
   const addressPatterns = addressPatternsFrom(fields, withBridge ? [...masonryRoles, ...bridgeRoles] : masonryRoles);
   const release: ReleaseInput = {
     releaseId, deployer, canonicalDomain: network.id, canonicalTokenRole: "masonryShare",

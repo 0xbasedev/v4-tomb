@@ -234,10 +234,11 @@ test.describe("Bridge and release plan", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("five networks, all disabled; Sonic awaits relayer and verifier setup", async ({ page, broadcasts }) => {
+  test("four networks, all disabled; Robinhood Chain is not one; Sonic awaits relayer and verifier setup", async ({ page, broadcasts }) => {
     await page.goto("/bridge");
     const nets = page.getByTestId("bridge-networks");
-    for (const name of ["Base", "Robinhood Chain", "BNB Smart Chain", "PulseChain", "Sonic"]) await expect(nets).toContainText(name);
+    for (const name of ["Base", "BNB Smart Chain", "PulseChain", "Sonic"]) await expect(nets).toContainText(name);
+    await expect(nets).not.toContainText("Robinhood");
     await expect(nets.locator("[data-network=sonic]")).toContainText("Awaiting relayer and verifier setup");
     await expect(nets.locator("[data-network=base]")).toContainText("Bridge unavailable");
     await expect(page.getByRole("button", { name: "Bridge unavailable" })).toBeDisabled();

@@ -250,7 +250,7 @@ test.describe("CREATE3 release planning", () => {
       ...release,
       canonicalDomain: 8453,
       canonicalTokenRole: "masonryShare",
-      routeCaps: { 4663: "100", 56: "200", 369: "300", 146: "400" },
+      routeCaps: { 56: "200", 369: "300", 146: "400" },
       bridgeOperators: Object.fromEntries(BRIDGE.networks.map(({ id }) => [id, { owner, ism: owner }])),
     });
     const mine = browserBridge(release, 8453, "masonryShare")!;

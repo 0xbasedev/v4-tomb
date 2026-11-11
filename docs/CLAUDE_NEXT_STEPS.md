@@ -14,7 +14,7 @@ Use MasonryGenesisSchedule for scheduler(), start(), lpOpens(), end() and the on
 
 ## Bridge
 
-Keep Base, Robinhood Chain, BNB Smart Chain, PulseChain and Sonic visible and greyed out until verified. Use XTombShareBridge for route reads, quoteSend and send. Canonical xSHARE sends may need ERC-20 approval. Wrapped xSHARE sends burn through the bridge. A source receipt starts delivery tracking. Read delivered(messageId) from IHyperlaneMailbox on the destination before showing delivery complete. Keep route and peer configuration behind owner checks. See reference/XSHARE_BRIDGE.md for activation and verification details.
+Keep Base, BNB Smart Chain, PulseChain and Sonic visible and greyed out until verified. Robinhood Chain is not a bridge network. Use XTombShareBridge for route reads, quoteSend and send. Canonical xSHARE sends may need ERC-20 approval. Wrapped xSHARE sends burn through the bridge. A source receipt starts delivery tracking. Read delivered(messageId) from IHyperlaneMailbox on the destination before showing delivery complete. Keep route and peer configuration behind owner checks. See reference/XSHARE_BRIDGE.md for activation and verification details.
 
 Keep Claude's v5 layout, typography, existing routes and token names. Integrate the three screens on the editable branch and test disconnected wallets, wrong chains, missing deployments, rejected signatures and confirmed transactions.
 

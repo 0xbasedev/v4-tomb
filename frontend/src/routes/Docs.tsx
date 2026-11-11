@@ -313,7 +313,7 @@ export function Docs() {
             ]}
           >
             <PendingPanel title="xSHARE bridge" badge="planned">
-              Five networks, all disabled in the manifest. The Bridge page shows the routes, the send checks and predicted addresses from your release plan.{" "}
+              Four networks, all disabled in the manifest. The Bridge page shows the routes, the send checks and predicted addresses from your release plan.{" "}
               <Link to="/bridge" className="text-ember-hot underline-offset-2 hover:underline">Open Bridge →</Link>
             </PendingPanel>
           </DocSection>

@@ -18,7 +18,7 @@ const release = {
   ...base,
   canonicalDomain: 8453,
   canonicalTokenRole: 'estate',
-  routeCaps: { 4663: '100', 56: '200', 369: '300', 146: '400' },
+  routeCaps: { 56: '200', 369: '300', 146: '400' },
   bridgeOperators: Object.fromEntries(bridge.networks.map(({ id }) => [id, { owner: account, ism: account }])),
 };
 const corePlan = planCore(core, base, 0).networks[0].create3;

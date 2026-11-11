@@ -5,7 +5,7 @@ import { bridgeRoles, masonryRoles } from "../../../../config/create3-plan.mjs";
 import { durationDays, lpDay, percent, policy } from "../policy";
 import { TokenIcon } from "../TokenIcon";
 import {
-  addressPatternsFrom, bridgeNetworks, chainInfrastructure, download, importDraft, infrastructureFields, launchFrom, loadDraft,
+  addressPatternsFrom, bridgeNetworks, chainInfrastructure, homeNetworks, download, importDraft, infrastructureFields, launchFrom, loadDraft,
   makeDraft, networkFrom, saveDraft, supplyFields, identityFields, type Fields, type LaunchPlan,
 } from "./configuration";
 import { verifyLaunch, type Verification } from "./verifyLaunch";
@@ -202,13 +202,13 @@ export function WizardPage() {
   function replace(next: Fields) { setFields(next); planner.clear(); setError(""); }
   function update(key: string, value: string) { replace({ ...fields, [key]: value }); }
   function selectNetwork(value: string) {
-    const selected = bridgeNetworks.find(({ id }) => String(id) === value);
+    const selected = homeNetworks.find(({ id }) => String(id) === value);
     const defaults = selected && chainInfrastructure[selected.id];
     replace({
       ...fields, network: value, chainId: selected ? String(selected.id) : "", chainName: selected?.name ?? "",
       rpcUrl: selected?.rpcUrl ?? "", nativeSymbol: selected?.nativeCurrency.symbol ?? "",
       ...Object.fromEntries(infrastructureFields.map(([field]) => [field, defaults?.[field] ?? ""])),
-      ...(value === "custom" ? { bridge: "off" } : {}),
+      ...(bridgeNetworks.some(({ id }) => String(id) === value) ? {} : { bridge: "off" }),
     });
   }
   function advance() {
@@ -228,7 +228,8 @@ export function WizardPage() {
     }
   }
 
-  const selectedNetwork = bridgeNetworks.find(({ id }) => String(id) === fields.network);
+  const selectedNetwork = homeNetworks.find(({ id }) => String(id) === fields.network);
+  const bridgeHome = bridgeNetworks.some(({ id }) => String(id) === fields.network);
   const missingDefaults = Object.entries(selectedNetwork ? chainInfrastructure[selectedNetwork.id] ?? {} : {})
     .filter(([field]) => !fields[field].trim());
   return <>
@@ -247,7 +248,7 @@ export function WizardPage() {
             <p>Your home network is where the original xTOMB and xSHARE will live. If you use the optional bridge later, the other chains will hold wrapped copies of xSHARE.</p>
             <label className="ops-field">Home network
               <select aria-describedby="home-network-help" value={fields.network} onChange={(event) => selectNetwork(event.target.value)}>
-                <option value="">Select a network</option>{bridgeNetworks.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+                <option value="">Select a network</option>{homeNetworks.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
                 <option value="custom">Custom EVM network</option>
               </select>
             </label>
@@ -297,9 +298,9 @@ export function WizardPage() {
           </>}
           {step === 2 && <>
             <p>A bridge lets users move xSHARE between chains. Leave this off for a single-chain launch or if you do not have the bridge owner addresses, message verifiers and limits ready. Exporting a bridge plan leaves all transfers disabled.</p>
-            <label className="ops-check"><input type="checkbox" checked={fields.bridge === "on"} disabled={!selectedNetwork}
+            <label className="ops-check"><input type="checkbox" checked={fields.bridge === "on"} disabled={!bridgeHome}
               onChange={(event) => update("bridge", event.target.checked ? "on" : "off")} />Include xSHARE bridge in this release</label>
-            {!selectedNetwork && <p className="ops-meta">Bridge planning is available for the five supported home networks.</p>}
+            {!bridgeHome && <p className="ops-meta">Bridge planning is available when the home network is one of the four bridge networks. Robinhood Chain and custom networks launch without a bridge.</p>}
             {fields.bridge === "on" && <AddressPatternFields fields={fields} update={update} roles={bridgeRoles} />}
             {fields.bridge === "on" && bridgeNetworks.map(({ id, name, registryAvailability }) => <details className="ops-detail" key={id} open>
               <summary>{name}{String(id) === fields.network ? " · Home" : ""}</summary>

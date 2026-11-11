@@ -15,7 +15,7 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 
 - Public names xTOMB / xSHARE. Source names PegToken / ShareToken. Older docs say LEVEL / SQUARE: naming only.
 - Base first. BSC later as a bridge satellite (Bridged xSHARE, one 33,333 cap). Bridge stays off until peers, ISMs, limits and relayers are verified.
-- **Robinhood Chain is a Wizard chain choice only, not a bridge destination (owner decision 2026-11-11).** xSHARE does not bridge there, and deposits stay per-chain. This overrides the bridge material that still lists Robinhood Chain (domain 4663) as a route: `docs/XSHARE_BRIDGE.md`, `config/xshare-bridge.json`, `config/create3-plan.mjs`, `XTombShareBridge` and its deploy script and tests, the Bridge page's network list and the browser tests that expect five networks. Those are NOT YET CHANGED and need one rework.
+- **Robinhood Chain is a Wizard chain choice only, not a bridge destination (owner decision 2026-11-11).** xSHARE does not bridge there, and deposits stay per-chain. **BUILT 2026-11-11:** `XTombShareBridge` and its deploy script reject domain 4663 as a route and as a home; `config/xshare-bridge.json` and the CREATE3 planner list four bridge networks (Base, BSC, PulseChain, Sonic); the Setup Wizard still offers Robinhood Chain as a home network, with the bridge option off.
 - xBOND after launch. No bond mechanics in the Masonry runtime.
 - **Genesis pool 0 asset: USDC** (6 decimals). Read on-chain via `staking.standardAsset()`.
 - **Automation: as implemented.** Pro/Ultra only, opt-in keeper with a minimum-net-output floor, 2% performance fee on the liquid amount, no $50 fee. Manual compounding has no performance fee. Farm/Masonry automation pricing is decided with those modules.

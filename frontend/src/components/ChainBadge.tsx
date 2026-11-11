@@ -19,8 +19,9 @@ const SLUG: Record<number, string> = {
   143: "monad",
   999: "hyperliquid",
   1: "ethereum",
-  // xSHARE bridge networks (Hyperlane)
+  // Home-chain choice only, not a bridge network
   4663: "robinhood",
+  // xSHARE bridge networks (Hyperlane)
   56: "binance",
   369: "pulse",
   146: "sonic",

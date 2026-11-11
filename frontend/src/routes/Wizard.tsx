@@ -261,7 +261,7 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
       {checks?.error && <Reason tone="warn">Couldn't reach the chain: {checks.error}</Reason>}
       {chain.id === 1 && <Reason tone="warn">Ethereum mainnet: rehearse the full launch on a testnet first.</Reason>}
       <Reason>
-        This is the home chain for the release. The xSHARE bridge can only be planned when the home chain is one of its five networks (marked “bridge home”). Bridge support doesn't certify a chain for the Masonry launch.
+        This is the home chain for the release. The xSHARE bridge can only be planned when the home chain is one of its four networks (marked “bridge home”). Bridge support doesn't certify a chain for the Masonry launch.
       </Reason>
       <p className="mt-3 font-mono text-[10.5px] text-ash-dim">
         Sources: Uniswap v4 deployments and Circle USDC addresses, retrieved {REGISTRY.sources.retrieved}.
