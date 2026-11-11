@@ -15,6 +15,7 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 
 - Public names xTOMB / xSHARE. Source names PegToken / ShareToken. Older docs say LEVEL / SQUARE: naming only.
 - Base first. BSC later as a bridge satellite (Bridged xSHARE, one 33,333 cap). Bridge stays off until peers, ISMs, limits and relayers are verified.
+- **Robinhood Chain is a Wizard chain choice only, not a bridge destination (owner decision 2026-11-11).** xSHARE does not bridge there, and deposits stay per-chain. This overrides the bridge material that still lists Robinhood Chain (domain 4663) as a route: `docs/XSHARE_BRIDGE.md`, `config/xshare-bridge.json`, `config/create3-plan.mjs`, `XTombShareBridge` and its deploy script and tests, the Bridge page's network list and the browser tests that expect five networks. Those are NOT YET CHANGED and need one rework.
 - xBOND after launch. No bond mechanics in the Masonry runtime.
 - **Genesis pool 0 asset: USDC** (6 decimals). Read on-chain via `staking.standardAsset()`.
 - **Automation: as implemented.** Pro/Ultra only, opt-in keeper with a minimum-net-output floor, 2% performance fee on the liquid amount, no $50 fee. Manual compounding has no performance fee. Farm/Masonry automation pricing is decided with those modules.
@@ -74,7 +75,7 @@ Mint only on fresh TWAP strictly > 1.01, max 2% of circulating xTOMB per 6-hour 
 - **Payment:** the chain's stablecoin or ETH. The stablecoin is **USDC on Base and USDG on Robinhood Chain**.
 - **Destination:** the **DAO/Team wallet**. Fee destinations are wallets, never the Treasury contract (locked rule).
 - **ETH pricing:** the fee is denominated in USD, so an ETH payment converts at the protocol's own TWAP/oracle price with a staleness check; a stale price rejects the ETH route and leaves the stablecoin route open. Never a fixed ETH amount, which drifts from $5 as ETH moves. Build note: the Masonry oracle today prices xTOMB in the stablecoin only, so G2 has to add the ETH/stablecoin read.
-- **USDG on Robinhood Chain:** `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (Paxos-issued, 6 decimals), recorded under `pendingStablecoins` in `config/official-infrastructure.json`. Pin and verify on-chain before mainnet wiring. Robinhood Chain is not yet a launch chain in that registry.
+- **USDG on Robinhood Chain:** `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (Paxos-issued, 6 decimals), recorded under `pendingStablecoins` in `config/official-infrastructure.json`. Pin and verify on-chain before mainnet wiring. Robinhood Chain is not yet a launch chain in that registry, and it is not a bridge destination.
 - **Who advances:** the expected caller is a positioned user, anyone whose expansion print, claim window or vesting release keys off the new epoch; they pay because advancing pays them. The protocol keeper is the backstop, and its worst case is about $20 a day (four epochs). A missed epoch gets no catch-up, as above.
 
 ## Still open
