@@ -77,8 +77,6 @@ export const defaultFields = {
   shareTeam: String(launchTemplate.square.initial.ownerTeamDeveloper),
   shareTreasury: String(launchTemplate.square.initial.treasury), shareArbitrage: String(launchTemplate.square.initial.arbitrage),
   vestTeam: "", vestDeveloper: "", vestTreasury: "", vestArbitrage: "",
-  burnShares: launchTemplate.genesisBurnExecution.maxFeeSharesPerCallBaseUnits,
-  burnUsdc: launchTemplate.genesisBurnExecution.maxUsdcPerCallBaseUnits,
   bridge: "off",
   ...Object.fromEntries(bridgeNetworks.flatMap(({ id }) => [["owner" + id, ""], ["ism" + id, ""], ["cap" + id, ""]])),
   ...Object.fromEntries(masonryRoles.map((role) => ["hash-" + role, ""])),
@@ -198,7 +196,6 @@ export function launchFrom(fields: Fields, requireFuture = true) {
       authorizedLaunchSupply: amounts.pegSupply,
       initial: { ownerTeamDeveloper: amounts.pegTeam, treasury: amounts.pegTreasury, arbitrage: amounts.pegArbitrage },
     },
-    genesisBurnExecution: { maxFeeSharesPerCallBaseUnits: fields.burnShares.trim(), maxUsdcPerCallBaseUnits: fields.burnUsdc.trim() },
   };
   try { validateMasonryLaunch(launch); }
   catch (error) {

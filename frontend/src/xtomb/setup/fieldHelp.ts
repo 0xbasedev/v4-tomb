@@ -26,6 +26,4 @@ export const fieldHelp: Record<string, string> = {
   vestDeveloper: "xSHARE that unlocks gradually for the developer. Enter 0 if unused.",
   vestTreasury: "xSHARE that unlocks gradually for the Treasury. Enter 0 if unused.",
   vestArbitrage: "xSHARE that unlocks gradually for arbitrage operations. Enter 0 if unused.",
-  burnShares: "The most fee shares a single buyback call can redeem. With 18 decimals, 1 share is 1000000000000000000 base units.",
-  burnUsdc: "The most USDC a single buyback call can spend. With 6 decimals, 1 USDC is 1000000 base units.",
 };

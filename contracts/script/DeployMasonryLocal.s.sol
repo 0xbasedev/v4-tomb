@@ -28,11 +28,7 @@ import {MasonryCriticalDefense} from "../src/masonry/MasonryCriticalDefense.sol"
 import {MasonryGenesisPass} from "../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisSettlement} from "../src/masonry/MasonryGenesisSettlement.sol";
 import {MasonryGenesisStaking} from "../src/masonry/MasonryGenesisStaking.sol";
-import {
-    MasonryGenesisLPBurnFee,
-    IMasonryBurnableLevel,
-    IMasonryExactInputV4Router
-} from "../src/masonry/MasonryGenesisLPBurnFee.sol";
+import {MasonryGenesisLPBurnFee, IMasonryBurnableLevel} from "../src/masonry/MasonryGenesisLPBurnFee.sol";
 import {MiniSwapRouter} from "../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
 
@@ -212,16 +208,7 @@ contract DeployMasonryLocal is Script {
         d.guard = new MasonryBuybackGuard(d.levelKey, 150, 100, 150);
         d.router = new MiniSwapRouter(d.manager);
         d.lpBurnFee = new MasonryGenesisLPBurnFee(
-            d.levelVault,
-            IMasonryBurnableLevel(address(d.level)),
-            d.usdc,
-            IMasonryExactInputV4Router(address(d.router)),
-            d.guard,
-            d.levelKey,
-            d.deployer,
-            1e21,
-            1e9,
-            d.deployer
+            d.levelVault, IMasonryBurnableLevel(address(d.level)), d.usdc, d.treasury, d.deployer, d.deployer
         );
         d.pass = new MasonryGenesisPass(d.usdc, d.treasury, d.schedule);
         d.settlement = new MasonryGenesisSettlement(d.levelVault, d.guard, d.router, d.treasury, d.deployer);
@@ -341,6 +328,7 @@ contract DeployMasonryLocal is Script {
             _keyJson(d.squareKey),
             "}}"
         );
+        vm.createDir("./deployment-output", true);
         vm.writeFile("./deployment-output/masonry-local.json", json);
         console2.log("Masonry local deployment written to deployment-output/masonry-local.json");
     }

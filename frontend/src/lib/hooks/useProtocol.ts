@@ -27,7 +27,7 @@ import { useNetworkStatus, type NetworkState } from "./useNetworkStatus";
  *
  * Preview: the simulated chain (lib/preview.tsx), flagged `sim: true`.
  * Live:    multicall reads against the verified deployment (MasonryGenesis*,
- *          the two hooks, the oracle, Critical Defense, the LP burn fee and
+ *          the two hooks, the oracle, Critical Defense, the LP fee module and
  *          ERC-20 metadata). Values the contracts don't expose stay null and
  *          the screens say "—", never a made-up number.
  */
@@ -72,7 +72,8 @@ export interface ProtocolState {
     keeper: { executor: Address | null; minNetShares: number };
   };
   tranches: Tranche[];
-  lpBurn: { totalShares: number | null; levelBurned: number | null; pendingShares: number | null; pendingUsdc: number | null };
+  /** Genesis LP deposit fee: LP shares collected and forwarded to the Treasury as POL. */
+  lpFee: { totalShares: number | null; sentToTreasury: number | null };
   /** Static LP fee of each official pool (pool key), bps. */
   poolFeeBps: Record<TaxedAsset, number>;
   /** Share of an LP share's value held in its asset (sets the sell leg of an LP exit). */
@@ -144,7 +145,7 @@ export function useProtocol(): ProtocolState {
         keeper: preview.keeper,
       },
       tranches: connected ? preview.tranches : [],
-      lpBurn: { totalShares: 1_284.2, levelBurned: 642.1, pendingShares: 0, pendingUsdc: 0 },
+      lpFee: { totalShares: 1_284.2, sentToTreasury: 1_284.2 },
       poolFeeBps: { xTOMB: SIM_POOLS.xTOMB.feeBps, xSHARE: SIM_POOLS.xSHARE.feeBps },
       lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
       now: preview.now,
@@ -208,15 +209,13 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "minimumNetCompoundShares", args: [user] }, // 27
           { address: c.settlement, abi: masonryGenesisSettlementAbi, functionName: "trancheCount", args: [user] }, // 28
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalFeeSharesCollected" }, // 29
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalLevelBurnedFromLPFees" }, // 30
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingFeeShares" }, // 31
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingBurnUSDC" }, // 32
-          { address: c.level, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 33
-          { address: c.square, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
-          { address: c.usdc, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
-          { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 36
-          { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 37
-          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 38
+          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalSharesSentToTreasury" }, // 30
+          { address: c.level, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 31
+          { address: c.square, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 32
+          { address: c.usdc, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 33
+          { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
+          { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 36
         ]
       : [],
     query: { enabled, refetchInterval: 15_000 },
@@ -252,7 +251,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   });
 
   // xSHARE's own validated TWAP lives in the oracle its hook created.
-  const squareOracle = ok<Address>(r[38]);
+  const squareOracle = ok<Address>(r[36]);
   const squareTwapRead = useReadContracts({
     allowFailure: true,
     contracts: squareOracle ? [{ address: squareOracle, abi: masonryLevelOracleAbi, functionName: "latestValidatedTwap" }] : [],
@@ -291,7 +290,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     .map((t) => ok<readonly [bigint, bigint, number]>(t))
     .filter((t): t is readonly [bigint, bigint, number] => !!t)
     .map((t) => ({ amount: Number(formatUnits(t[0], 18)), nextRelease: Number(t[1]), releasedInstallments: Number(t[2]) }));
-  const usdcBal = ok<bigint>(r[35]);
+  const usdcBal = ok<bigint>(r[33]);
 
   return {
     sim: false,
@@ -326,11 +325,11 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     // and vault share prices need pool state, so those stay unknown rather than guessed.
     prices: { xTOMB: twap, USDC: 1, xSHARE: squareTwap, "xTOMB-USDC": null, "xSHARE-USDC": null },
     balances: {
-      xTOMB: n18(ok<bigint>(r[33])),
-      xSHARE: n18(ok<bigint>(r[34])),
+      xTOMB: n18(ok<bigint>(r[31])),
+      xSHARE: n18(ok<bigint>(r[32])),
       USDC: usdcBal !== undefined ? Number(formatUnits(usdcBal, 6)) : null,
-      "xTOMB-USDC": n18(ok<bigint>(r[36])),
-      "xSHARE-USDC": n18(ok<bigint>(r[37])),
+      "xTOMB-USDC": n18(ok<bigint>(r[34])),
+      "xSHARE-USDC": n18(ok<bigint>(r[35])),
     },
     staking: {
       funded: ok<boolean>(r[18]) ?? null,
@@ -341,7 +340,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
       keeper: { executor: keeper && keeper !== zeroAddress ? keeper : null, minNetShares: n18(ok<bigint>(r[27])) ?? 0 },
     },
     tranches,
-    lpBurn: { totalShares: n18(ok<bigint>(r[29])), levelBurned: n18(ok<bigint>(r[30])), pendingShares: n18(ok<bigint>(r[31])), pendingUsdc: ok<bigint>(r[32]) !== undefined ? Number(formatUnits(ok<bigint>(r[32])!, 6)) : null },
+    lpFee: { totalShares: n18(ok<bigint>(r[29])), sentToTreasury: n18(ok<bigint>(r[30])) },
     poolFeeBps: { xTOMB: (d?.pools.level.fee ?? 0) / 100, xSHARE: (d?.pools.square.fee ?? 0) / 100 },
     lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
     now: nowSec,

@@ -64,9 +64,5 @@
     "criticalOracleMaxAgeSeconds": 1800,
     "governanceTimelocksEnabled": false,
     "ownerTradingPauseEnabled": false
-  },
-  "genesisBurnExecution": {
-    "maxFeeSharesPerCallBaseUnits": "1000000000000000000000",
-    "maxUsdcPerCallBaseUnits": "1000000000"
   }
 }

@@ -25,17 +25,13 @@ import {MasonrySquareHook} from "../../src/hooks/MasonrySquareHook.sol";
 import {MasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisSettlement.sol";
 import {MasonryLevelHook} from "../../src/hooks/MasonryLevelHook.sol";
 import {MasonryGenesisSchedule} from "../../src/masonry/MasonryGenesisSchedule.sol";
-import {MockMasonryLevel, MockMasonryUSDC, MockMasonryBurnGuard} from "../unit/MasonryGenesisLPBurnFee.t.sol";
+import {MockMasonryLevel, MockMasonryUSDC} from "../unit/MasonryGenesisLPBurnFee.t.sol";
 import {MasonryBuybackGuard} from "../../src/masonry/MasonryBuybackGuard.sol";
 import {MasonrySquareUsdcVault} from "../../src/masonry/MasonrySquareUsdcVault.sol";
 import {MasonryLevelUsdcVault, MasonryUsdcVault} from "../../src/masonry/MasonryLevelUsdcVault.sol";
 import {MasonryGenesisPass} from "../../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisStaking, IMasonryGenesisSettlement} from "../../src/masonry/MasonryGenesisStaking.sol";
-import {
-    MasonryGenesisLPBurnFee,
-    IMasonryBurnableLevel,
-    IMasonryExactInputV4Router
-} from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
+import {MasonryGenesisLPBurnFee, IMasonryBurnableLevel} from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
@@ -271,69 +267,26 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertEq(vault.balanceOf(address(this)), 1e16);
     }
 
-    function testVaultAndCollectorRejectMismatchedPoolKeys() public {
+    function testVaultRejectsMismatchedPoolKey() public {
         PoolKey memory wrong = key;
         wrong.fee = 1000;
-        int24 lower = center - 6000;
-        int24 upper = center + 6000;
         vm.expectRevert(MasonryUsdcVault.InvalidConfiguration.selector);
-        new MasonryLevelUsdcVault(wrong, lower, upper);
-
-        MasonryLevelUsdcVault vault = _vault();
-        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
-        MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
-        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidPool.selector);
-        new MasonryGenesisLPBurnFee(
-            vault,
-            IMasonryBurnableLevel(address(level)),
-            usdc,
-            IMasonryExactInputV4Router(address(router)),
-            guard,
-            wrong,
-            address(this),
-            1e16,
-            10_000e6,
-            address(this)
-        );
+        new MasonryLevelUsdcVault(wrong, center - 6000, center + 6000);
     }
 
-    function testCollectorRejectsMismatchedGuardPool() public {
+    function testCollectorRejectsMissingTreasuryOrGenesis() public {
         MasonryLevelUsdcVault vault = _vault();
-        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
-        PoolKey memory wrong = key;
-        wrong.fee = 1000;
-        guard.setPoolKey(wrong);
-        MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
-
-        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidPool.selector);
-        new MasonryGenesisLPBurnFee(
-            vault,
-            IMasonryBurnableLevel(address(level)),
-            usdc,
-            IMasonryExactInputV4Router(address(router)),
-            guard,
-            key,
-            address(this),
-            1e16,
-            10_000e6,
-            address(this)
-        );
+        IMasonryBurnableLevel burnable = IMasonryBurnableLevel(address(level));
+        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidConfiguration.selector);
+        new MasonryGenesisLPBurnFee(vault, burnable, usdc, address(0), address(this), address(this));
+        vm.expectRevert(MasonryGenesisLPBurnFee.InvalidConfiguration.selector);
+        new MasonryGenesisLPBurnFee(vault, burnable, usdc, TREASURY, address(0), address(this));
     }
 
-    function testGenesisDepositRedeemsRealVaultFeeAndRetriesUsdcBuyback() public {
+    function testGenesisDepositSendsRealVaultFeeSharesToTreasuryAsPOL() public {
         MasonryLevelUsdcVault vault = _vault();
-        MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
         MasonryGenesisLPBurnFee collector = new MasonryGenesisLPBurnFee(
-            vault,
-            IMasonryBurnableLevel(address(level)),
-            usdc,
-            IMasonryExactInputV4Router(address(new MiniSwapRouter(hook.poolManager()))),
-            guard,
-            key,
-            address(this),
-            1e16,
-            10_000e6,
-            address(this)
+            vault, IMasonryBurnableLevel(address(level)), usdc, TREASURY, address(this), address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         MasonryGenesisStaking staking =
@@ -358,19 +311,23 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         vm.prank(member);
         staking.deposit(1, gross);
 
-        uint256 firstBurn = level.totalBurned();
-        assertGt(firstBurn, 0);
-        assertEq(firstBurn, collector.totalLevelBurnedFromLPFees());
-        assertGt(collector.pendingBurnUSDC(), 0);
-        assertEq(collector.pendingFeeShares(), 0);
+        uint256 fee = gross * 50 / 10_000;
+        assertEq(vault.balanceOf(TREASURY), fee);
+        assertEq(vault.balanceOf(address(collector)), 0);
+        assertEq(level.totalBurned(), 0);
 
         _swap(!level0, -1e6);
+        uint256 supply = vault.totalSupply();
         vm.prank(member);
         staking.deposit(1, gross);
-        assertEq(collector.pendingBurnUSDC(), 0);
-        assertEq(collector.totalFeeSharesCollected(), gross / 100);
-        assertGt(level.totalBurned(), firstBurn);
-        assertEq(level.totalBurned(), collector.totalLevelBurnedFromLPFees());
+        assertEq(collector.totalFeeSharesCollected(), fee * 2);
+        assertEq(collector.totalSharesSentToTreasury(), fee * 2);
+        assertEq(vault.balanceOf(TREASURY), fee * 2);
+        // POL: the fee stays in the pool as liquidity — nothing is redeemed or burned.
+        assertEq(vault.totalSupply(), supply);
+        assertEq(level.totalBurned(), 0);
+        assertEq(level.balanceOf(address(collector)), 0);
+        assertEq(usdc.balanceOf(address(collector)), 0);
         assertEq(hook.genesisLevelBurned(), 0);
         (uint256 shares,,) = staking.positions(1, member);
         assertEq(shares, gross * 2 - gross / 100);
@@ -541,7 +498,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertEq(settlement.totalEscrowed(), 5e18);
         assertGe(level.balanceOf(TREASURY), 0.1e18);
         assertGt(hook.genesisLevelBurned(), 0);
-        assertGt(collector.totalLevelBurnedFromLPFees(), 0);
+        assertEq(collector.totalSharesSentToTreasury(), gross - net);
+        assertEq(settlement.vault().balanceOf(TREASURY), gross - net);
         assertEq(level.balanceOf(keeper), 0);
 
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
@@ -713,16 +671,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         MasonryBuybackGuard guard = new MasonryBuybackGuard(key, 150, 100, 150);
         MiniSwapRouter router = new MiniSwapRouter(hook.poolManager());
         collector = new MasonryGenesisLPBurnFee(
-            vault,
-            IMasonryBurnableLevel(address(level)),
-            usdc,
-            IMasonryExactInputV4Router(address(router)),
-            guard,
-            key,
-            address(this),
-            1e16,
-            10_000e6,
-            address(this)
+            vault, IMasonryBurnableLevel(address(level)), usdc, TREASURY, address(this), address(this)
         );
         MasonryGenesisPass pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
         settlement = new MasonryGenesisSettlement(vault, guard, router, TREASURY, address(this));

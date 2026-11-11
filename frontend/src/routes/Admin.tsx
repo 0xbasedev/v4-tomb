@@ -19,7 +19,7 @@ import {
   masonrySquareHookAbi,
 } from "@/lib/abis/masonry";
 import { useActions, useIsAdmin, useProtocol, type AdminRole } from "@/lib/hooks";
-import { LAUNCH, POLICY } from "@/lib/launch";
+import { POLICY } from "@/lib/launch";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
@@ -78,9 +78,8 @@ const ITEMS: Item[] = [
   { label: "Keeper fee", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "AUTOMATION_FEE_BPS", expect: bps(POLICY.genesisAutomationFeeBps), fmt: bps },
   { label: "Max compound refund", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "MAX_REFUND_BPS", expect: "3%", fmt: bps },
   { label: "Bound staking", kind: "State", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "staking", fmt: addr },
-  { label: "LP burn fee", kind: "Fixed", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "DEPOSIT_BURN_FEE_BPS", expect: bps(POLICY.genesisLevelUsdcLpBurnFeeBps), fmt: bps },
-  { label: "Max fee shares / call", kind: "Settable", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "maxFeeSharesPerCall", expect: LAUNCH.genesisBurnExecution.maxFeeSharesPerCallBaseUnits, fmt: String },
-  { label: "Max USDC / call", kind: "Settable", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "maxUsdcPerCall", expect: LAUNCH.genesisBurnExecution.maxUsdcPerCallBaseUnits, fmt: String },
+  { label: "LP deposit fee (to Treasury as POL)", kind: "Fixed", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "DEPOSIT_BURN_FEE_BPS", expect: bps(POLICY.genesisLevelUsdcLpBurnFeeBps), fmt: bps },
+  { label: "LP fee destination", kind: "Deployment-bound", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "treasury", fmt: addr },
   { label: "Authorized Genesis caller", kind: "Settable", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "genesis", fmt: addr },
   { label: "Defense entry", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "ENTER_PRICE", expect: `$${(POLICY.criticalDefenseEntryBps / 10_000).toFixed(2)}`, fmt: price18 },
   { label: "Defense exit", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "EXIT_PRICE", expect: `$${(POLICY.criticalDefenseExitBps / 10_000).toFixed(2)}`, fmt: price18 },
@@ -239,7 +238,6 @@ function AdminActions({ roles, state }: { roles: AdminRole[]; state: (fn: string
   const p = useProtocol();
   const actions = useActions();
   const d = p.net.deployment;
-  const [limits, setLimits] = useState({ shares: LAUNCH.genesisBurnExecution.maxFeeSharesPerCallBaseUnits, usdc: LAUNCH.genesisBurnExecution.maxUsdcPerCallBaseUnits });
   const [genesisCaller, setGenesisCaller] = useState("");
   const [newOwner, setNewOwner] = useState("");
   const [bindStaking, setBindStaking] = useState("");
@@ -257,27 +255,15 @@ function AdminActions({ roles, state }: { roles: AdminRole[]; state: (fn: string
 
   const rows: { title: string; who: string; body: React.ReactNode; disabled: string | null; run: () => void }[] = [
     {
-      title: "Set LP burn execution limits",
-      who: "lpBurnFee owner",
-      body: (
-        <div className="grid grid-cols-2 gap-2">
-          <input aria-label="Max fee shares per call" value={limits.shares} onChange={(e) => setLimits({ ...limits, shares: e.target.value.replace(/\D/g, "") })} className="well px-2 py-1.5 font-mono text-[12px] text-bone" />
-          <input aria-label="Max USDC per call" value={limits.usdc} onChange={(e) => setLimits({ ...limits, usdc: e.target.value.replace(/\D/g, "") })} className="well px-2 py-1.5 font-mono text-[12px] text-bone" />
-        </div>
-      ),
-      disabled: !owner ? "Only the LP burn fee owner can change execution limits." : !/^[1-9]\d*$/.test(limits.shares) || !/^[1-9]\d*$/.test(limits.usdc) ? "Both limits must be positive base-unit integers." : null,
-      run: () => send("Set LP burn execution limits", "lpBurnFee", masonryGenesisLPBurnFeeAbi as Abi, "setExecutionLimits", [BigInt(limits.shares), BigInt(limits.usdc)]),
-    },
-    {
       title: "Set the authorized Genesis caller",
-      who: "lpBurnFee owner",
+      who: "LP fee owner",
       body: <input aria-label="Genesis staking address" placeholder="0x… staking contract" value={genesisCaller} onChange={(e) => setGenesisCaller(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
-      disabled: !owner ? "Only the LP burn fee owner can change the Genesis caller." : !isAddress(genesisCaller) ? "Enter the Genesis staking address." : null,
+      disabled: !owner ? "Only the LP fee owner can change the Genesis caller." : !isAddress(genesisCaller) ? "Enter the Genesis staking address." : null,
       run: () => send("Set Genesis caller", "lpBurnFee", masonryGenesisLPBurnFeeAbi as Abi, "setGenesis", [genesisCaller]),
     },
     {
-      title: "Transfer LP burn fee ownership",
-      who: "lpBurnFee owner",
+      title: "Transfer LP fee ownership",
+      who: "LP fee owner",
       body: <input aria-label="New owner" placeholder="0x… new owner" value={newOwner} onChange={(e) => setNewOwner(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
       disabled: !owner ? "Only the current owner can transfer ownership." : !isAddress(newOwner) ? "Enter the new owner's address." : null,
       run: () => send("Transfer ownership", "lpBurnFee", masonryGenesisLPBurnFeeAbi as Abi, "transferOwnership", [newOwner]),

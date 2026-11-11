@@ -26,7 +26,7 @@ export const masonryContractLabels = {
   pass: 'Genesis pass (MasonryGenesisPass)',
   staking: 'Genesis staking (MasonryGenesisStaking)',
   settlement: 'Genesis settlement (MasonryGenesisSettlement)',
-  lpBurnFee: 'Genesis LP burn fee (MasonryGenesisLPBurnFee)',
+  lpBurnFee: 'Genesis LP fee, POL to Treasury (MasonryGenesisLPBurnFee)',
   levelHook: 'xTOMB/USDC hook (MasonryLevelHook)',
   levelOracle: 'xTOMB TWAP oracle (MasonryLevelOracle)',
   buybackGuard: 'Buyback guard (MasonryBuybackGuard)',

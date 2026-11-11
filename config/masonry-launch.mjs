@@ -35,9 +35,6 @@ export function validateMasonryLaunch(doc) {
   const source = obj(d.level, 'level');
   const levelInitial = obj(source.initial, 'level.initial');
   const policy = obj(d.policy, 'policy');
-  const genesisBurn = obj(d.genesisBurnExecution, 'genesisBurnExecution');
-  positiveRawAmount(genesisBurn.maxFeeSharesPerCallBaseUnits, 'genesisBurnExecution.maxFeeSharesPerCallBaseUnits');
-  positiveRawAmount(genesisBurn.maxUsdcPerCallBaseUnits, 'genesisBurnExecution.maxUsdcPerCallBaseUnits');
 
   const squareCap = positive(s.maxSupply, 'square.maxSupply');
   const farms = nonnegative(s.farming, 'square.farming');

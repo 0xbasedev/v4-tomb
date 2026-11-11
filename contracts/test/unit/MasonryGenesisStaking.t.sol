@@ -14,13 +14,7 @@ import {
     IMasonryBurnableLevel,
     IMasonryRedeemableLPVault
 } from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
-import {
-    MockMasonryLevel,
-    MockMasonryUSDC,
-    MockMasonryRedeemableVault,
-    MockMasonryV4Router,
-    MockMasonryBurnGuard
-} from "./MasonryGenesisLPBurnFee.t.sol";
+import {MockMasonryLevel, MockMasonryUSDC, MockMasonryRedeemableVault} from "./MasonryGenesisLPBurnFee.t.sol";
 
 contract MockGenesisSettlement is IMasonryGenesisSettlement {
     MockMasonryLevel private immutable level;
@@ -83,18 +77,12 @@ contract MasonryGenesisStakingTest is Test {
         address c1 = address(level) < address(usdc) ? address(usdc) : address(level);
         PoolKey memory key = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
         vault.setPoolKey(key);
-        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
-        guard.setPoolKey(key);
         fee = new MasonryGenesisLPBurnFee(
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(level)),
             usdc,
-            new MockMasonryV4Router(level, usdc),
-            guard,
-            key,
+            TREASURY,
             address(this),
-            10_000e18,
-            10_000e6,
             address(this)
         );
         staking = new MasonryGenesisStaking(pass, fee, new MockGenesisSettlement(level, vault), usdc, 7000e18);

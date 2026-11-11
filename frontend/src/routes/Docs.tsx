@@ -61,7 +61,7 @@ const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Liquid / vested", tag: "genesis", body: `Every reward splits ${pct(GENESIS_POLICY.liquidShare * 10_000)} liquid, the rest vested. This is separate from the 75/25 pool split.` },
   { term: "Installment", tag: "genesis", body: `Vested rewards release in ${GENESIS_POLICY.installments} claim-gated installments. The first opens ${H(GENESIS_POLICY.installmentSeconds)} after Genesis ends; each next one ${H(GENESIS_POLICY.installmentSeconds)} after you claim the last.` },
   { term: "Wallet fee", tag: "genesis", body: `${pct(GENESIS_POLICY.walletFeeBps)} of liquid claims, releases and refunds, to Treasury. A claim of 400 pays 196 to the wallet, 4 to Treasury and vests 200.` },
-  { term: "LP burn fee", tag: "genesis", body: `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the LP shares a compound creates, burned.` },
+  { term: "LP fee", tag: "genesis", body: `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the LP shares a deposit or compound creates, sent to the Treasury as protocol-owned liquidity. The same for every pass tier.` },
   { term: "Keeper", tag: "automation", body: `An executor a Pro or Ultra holder opts into. It compounds for you, no more often than every ${H(GENESIS_POLICY.compoundCooldownSeconds)}, for ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half per run.` },
   { term: "Compound cooldown", tag: "automation", body: `${H(GENESIS_POLICY.compoundCooldownSeconds)}, shared by claims and compounds, by hand or by keeper. Withdrawals are never locked.` },
   { term: "xSHARE routing", tag: "treasury", body: `Normal mode: ${pct(SQUARE_ROUTING.polBps)} of collected xSHARE tax to protocol LP, ${pct(SQUARE_ROUTING.usdcReserveBps)} to the USDC reserve, ${pct(SQUARE_ROUTING.squareReserveBps)} to the xSHARE reserve.` },
@@ -238,7 +238,7 @@ export function Docs() {
             lede={`Claims and compounds share one ${H(GENESIS_POLICY.compoundCooldownSeconds)} cooldown. A compound sells part of the liquid half for USDC, adds xTOMB/USDC liquidity and stakes it.`}
             facts={[
               "The compound's sell leg can pay the Fire Tax.",
-              `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the new LP shares burn.`,
+              `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the new LP shares go to the Treasury as protocol-owned liquidity.`,
               `Keeper runs (Pro/Ultra, opt-in) add a ${pct(GENESIS_POLICY.automationFeeBps)} automation fee.`,
               "Withdrawals are never locked.",
             ]}

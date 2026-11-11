@@ -19,7 +19,7 @@ const roleNames: Record<string, string> = {
   masonryLevelOracle: "xTOMB price oracle", masonryShareOracle: "xSHARE price oracle",
   masonrySwapRouter: "xTOMB swap router", masonryGenesisSchedule: "Genesis clock",
   masonryGenesisStaking: "Genesis staking", masonryGenesisSettlement: "Genesis reward payouts and vesting",
-  masonryGenesisLPBurnFee: "Genesis liquidity fee and burn", masonryLevelUsdcVault: "xTOMB/USDC liquidity vault",
+  masonryGenesisLPBurnFee: "Genesis liquidity fee (to Treasury)", masonryLevelUsdcVault: "xTOMB/USDC liquidity vault",
   masonrySquareUsdcVault: "xSHARE/USDC liquidity vault", masonryBuybackGuard: "Buyback price safeguards",
   masonryCompoundGate: "Compounding permissions", masonryCriticalDefense: "Peg defense controls",
   masonryVestingTeam: "Team vesting", masonryVestingDeveloper: "Developer vesting",
@@ -287,12 +287,6 @@ export function WizardPage() {
             <details className="ops-detail" open><summary>Supply and vesting</summary>
               <p>Enter whole tokens, without commas or decimals. Vesting means tokens unlock over time. Enter 0 for each unused allocation. For xSHARE, the farm, sale, signer, initial and vesting amounts must add up to the maximum supply.</p>
               <FieldsGroup fields={fields} update={update} entries={supplyFields} numeric />
-            </details>
-            <details className="ops-detail"><summary>Advanced · Buyback limits</summary>
-              <p>These caps limit how much a single transaction can use to buy and burn xTOMB. Keep the filled-in values unless you have reviewed replacements.</p>
-              <FieldsGroup fields={fields} update={update} numeric entries={[
-                ["burnShares", "Maximum LP fee shares per call (base units)"], ["burnUsdc", "Maximum USDC per call (base units)"],
-              ]} />
             </details>
             <details className="ops-detail"><summary>Fixed Genesis rules</summary><p>Genesis runs for {durationDays} days and requires a pass. The official xTOMB/USDC liquidity pool opens on Day {lpDay}. Each xTOMB sell during Genesis pays one tax from {percent(policy.genesisLevelSellMinimumBps)} to {percent(policy.fireTaxHardCapBps)}, burned in the same transaction. Buys and wallet transfers pay zero Fire Tax.</p></details>
             <AddressPatternFields fields={fields} update={update} roles={masonryRoles} />

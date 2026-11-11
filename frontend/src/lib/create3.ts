@@ -39,7 +39,7 @@ export const ROLE_LABEL: Record<PlannedRole, string> = {
   masonryGenesisSchedule: "Genesis schedule",
   masonryGenesisStaking: "Genesis staking",
   masonryGenesisSettlement: "Genesis settlement",
-  masonryGenesisLPBurnFee: "Genesis LP burn fee",
+  masonryGenesisLPBurnFee: "Genesis LP fee (POL to Treasury)",
   masonryLevelUsdcVault: "xTOMB/USDC vault",
   masonrySquareUsdcVault: "xSHARE/USDC vault",
   masonryBuybackGuard: "Buyback guard",

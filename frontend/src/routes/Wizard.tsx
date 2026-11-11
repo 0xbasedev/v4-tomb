@@ -50,7 +50,7 @@ const POLICY_LABEL: Record<string, string> = {
   genesisVestingIntervalSeconds: "Installment interval",
   genesisWalletClaimFeeBps: "Wallet claim fee",
   genesisAutomationFeeBps: "Keeper fee",
-  genesisLevelUsdcLpBurnFeeBps: "Genesis LP burn fee",
+  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to Treasury as POL)",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
   farmsCompoundCooldownSeconds: "Farm compound cooldown",
   farmEmissionDays: "Farm emissions",
@@ -416,9 +416,6 @@ function PoolsStep({ pools, setPools, issues }: { pools: Pools; setPools: (p: Po
         {field("maxSquarePerRoute", "Max xSHARE per route", "caps each routed sale")}
         {field("maxDeviationBps", "Max route deviation (bps)")}
       </div>
-      <p className="mt-3 font-mono text-[11px] text-ash">
-        Genesis burn execution limits (from the template): {LAUNCH.genesisBurnExecution.maxFeeSharesPerCallBaseUnits} shares · {LAUNCH.genesisBurnExecution.maxUsdcPerCallBaseUnits} USDC base units per call.
-      </p>
       {issues.length > 0 && (
         <ul className="mt-3 space-y-1 text-[12px] text-warn" role="status">
           {issues.map((x) => (

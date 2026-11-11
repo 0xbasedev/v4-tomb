@@ -74,15 +74,6 @@ test('Genesis LP fee, SQUARE treasury splits and critical defense are fixed rele
   }
 });
 
-test('Genesis burn execution caps must be positive uint256 decimal strings', () => {
-  for (const value of [null, '0', '-100', '1.5', 100, '1e9', '0x10']) {
-    const cfg = complete();
-    cfg.genesisBurnExecution.maxUsdcPerCallBaseUnits = value;
-    assert.throws(() => validateMasonryLaunch(cfg), /positive uint256 decimal string/);
-  }
-  assert.equal(validateMasonryLaunch(complete()).squareCap, 33333);
-});
-
 test('confirmed Genesis rules are fixed launch invariants', () => {
   for (const [key, value] of Object.entries({
     genesisDurationSeconds: 86400,

@@ -1,5 +1,7 @@
 # Masonry v4 integration status
 
+> **Superseded 2026-11-11:** the Genesis LP fee no longer redeems, burns or buys back. `MasonryGenesisLPBurnFee` now forwards its 50 bps of LP shares directly to the Treasury as protocol-owned liquidity. Burn/buyback descriptions of that module below are historical; see `docs/HANDOFF_LOCAL_LAUNCH.md`.
+
 **Branch:** `merge`, based on `feat/chain-agnostic-config`  
 **Status:** Genesis settlement and compounding, both official v4 hooks, native TWAP, and fee routing are integrated and tested locally. Target-chain calibration and deployment wiring remain open.
 **Governance:** no new timelock or owner-activated trading pause.
