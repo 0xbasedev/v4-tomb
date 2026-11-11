@@ -25,7 +25,7 @@ export interface PlanInputs {
   levelIsCurrency0: boolean;
   /** Fire Tax + pool fee on the sell leg, bps. */
   sellCostBps: number;
-  /** LP fee (to Treasury) and slippage, bps. */
+  /** LP fee (to the DAO/Team wallet) and slippage, bps. */
   lpBurnBps: number;
   slippageBps: number;
 }

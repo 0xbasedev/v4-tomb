@@ -134,11 +134,11 @@ export function PoolPanel({ pool }: { pool: 0 | 1 }) {
           {!lp && (
             <p className="mt-2 text-[12px] text-ash">
               {pct(depositFeeBps(p.pass))} deposit fee for your {p.pass ? "pass" : "Genesis pass"}
-              {amt > 0 ? ` — you stake ${fmt(amt * (1 - depositFeeBps(p.pass) / 10_000), 2)} USDC, ${fmt((amt * depositFeeBps(p.pass)) / 10_000, 2)} goes to the Treasury` : ""}.
+              {amt > 0 ? ` — you stake ${fmt(amt * (1 - depositFeeBps(p.pass) / 10_000), 2)} USDC, ${fmt((amt * depositFeeBps(p.pass)) / 10_000, 2)} goes to the DAO/Team wallet` : ""}.
               {depositFeeBps(p.pass) > 0 ? " Ultra pays none." : ""}
             </p>
           )}
-          {lp && <p className="mt-2 text-[12px] text-ash">A {pct(GENESIS_POLICY.lpBurnFeeBps)} LP fee is taken once from the shares on each deposit or compound and sent to the Treasury as protocol-owned liquidity; only net shares are credited.</p>}
+          {lp && <p className="mt-2 text-[12px] text-ash">A {pct(GENESIS_POLICY.lpBurnFeeBps)} LP fee is taken once from the shares on each deposit or compound and sent to the DAO/Team wallet, held as protocol-owned liquidity; only net shares are credited.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="btn btn-primary h-10 px-4 text-[13px]" disabled={!!depositBlock || !!amountBlock || !(amt > 0) || actions.busy} onClick={() => actions.deposit(pool, amt, null, () => setAmount(""))}>
               Stake
@@ -248,7 +248,7 @@ function SettleSheet({
             {mode === "claim" ? (
               <>
                 <Row k="Liquid half" v={`${fmt(w.liquid)} xTOMB`} />
-                <Row k={`Wallet claim fee (${pct(GENESIS_POLICY.walletFeeBps)})`} v={`−${fmt(w.treasury)} to Treasury`} tone="text-warn" />
+                <Row k={`Wallet claim fee (${pct(GENESIS_POLICY.walletFeeBps)})`} v={`−${fmt(w.treasury)} to the DAO/Team wallet`} tone="text-warn" />
                 <Row k="To your wallet" v={`${fmt(w.toWallet)} xTOMB`} strong />
               </>
             ) : (
@@ -256,7 +256,7 @@ function SettleSheet({
                 <Row k="Liquid half to compound" v={`${fmt(k.budget)} xTOMB`} />
                 <Row k="Sold for USDC (sell leg)" v={`≈ ${fmt(k.sold)} xTOMB`} sub="the rest pairs with the USDC in the vault range" />
                 <Row k={`Fire Tax on the sell leg (${pct(taxBps)})`} v={`−${fmt(k.fireTax)} xTOMB`} sub={taxDriver} tone={taxBps > 100 ? "text-warn" : undefined} />
-                <Row k="LP fee to Treasury (once, from gross shares)" v={`−${fmt(k.lpBurn)} xTOMB-equivalent`} sub="stays in the pool as protocol-owned liquidity" />
+                <Row k="LP fee to the DAO/Team wallet (once, from gross shares)" v={`−${fmt(k.lpBurn)} xTOMB-equivalent`} sub="stays in the pool as protocol-owned liquidity" />
                 <Row k="Credited to pool 1" v={`≈ ${fmt(k.net)} xTOMB of LP`} strong />
                 <p className="pt-1 text-[11.5px] text-ash">No claim fee and no keeper fee on a manual compound. Unused xTOMB (at most 3%) returns to your wallet.</p>
               </>

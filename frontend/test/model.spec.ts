@@ -46,7 +46,7 @@ test.describe("Genesis clock", () => {
     expect(genesisClock(START, START).ultraEarly).toBe(false);
   });
 
-  test("a 400 wallet claim: 196 wallet, 4 Treasury, 200 vested in 16 installments", () => {
+  test("a 400 wallet claim: 196 to the claimer, 4 to the DAO/Team wallet, 200 vested in 16 installments", () => {
     const c = walletClaim(400);
     expect(c.toWallet).toBeCloseTo(196, 9);
     expect(c.treasury).toBeCloseTo(4, 9);

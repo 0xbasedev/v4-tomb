@@ -19,7 +19,7 @@ const roleNames: Record<string, string> = {
   masonryLevelOracle: "xTOMB price oracle", masonryShareOracle: "xSHARE price oracle",
   masonrySwapRouter: "xTOMB swap router", masonryGenesisSchedule: "Genesis clock",
   masonryGenesisStaking: "Genesis staking", masonryGenesisSettlement: "Genesis reward payouts and vesting",
-  masonryGenesisLPBurnFee: "Genesis liquidity fee (to Treasury)", masonryLevelUsdcVault: "xTOMB/USDC liquidity vault",
+  masonryGenesisLPBurnFee: "Genesis liquidity fee (to the DAO/Team wallet)", masonryLevelUsdcVault: "xTOMB/USDC liquidity vault",
   masonrySquareUsdcVault: "xSHARE/USDC liquidity vault", masonryBuybackGuard: "Buyback price safeguards",
   masonryCompoundGate: "Compounding permissions", masonryCriticalDefense: "Peg defense controls",
   masonryVestingTeam: "Team vesting", masonryVestingDeveloper: "Developer vesting",
