@@ -37,6 +37,9 @@ export const masonryContractLabels = {
   miniSwapRouter: 'Swap router (MiniSwapRouter)',
 };
 
+/** xSHARE vesting streams (MasonryLinearVesting), one per bucket. Optional in a record; all four or none. */
+export const masonryVestingKeys = ['team', 'developer', 'treasury', 'arbitrage'];
+
 const DYNAMIC_FEE_FLAG = 0x800000;
 
 function poolKey(key, path, { asset, usdc, hook }) {
@@ -85,6 +88,17 @@ export function parseMasonryDeployment(record, registry) {
   if (!object(p)) fail('pools missing');
   poolKey(p.level, 'pools.level', { asset: c.level, usdc: c.usdc, hook: c.levelHook });
   poolKey(p.square, 'pools.square', { asset: c.square, usdc: c.usdc, hook: c.squareHook });
+  if (record.vesting !== undefined) {
+    const v = record.vesting;
+    if (!object(v)) fail('vesting must map each bucket to its stream');
+    for (const key of masonryVestingKeys) {
+      if (!isAddress(v[key])) fail(`vesting.${key} must be a nonzero address`);
+      const a = v[key].toLowerCase();
+      // Buckets may share a beneficiary, never a stream contract.
+      if (seen.has(a)) fail(`vesting.${key} repeats ${seen.get(a)}`);
+      seen.set(a, `vesting.${key}`);
+    }
+  }
   return record;
 }
 

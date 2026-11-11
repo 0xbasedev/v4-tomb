@@ -28,6 +28,7 @@ import {MasonryCriticalDefense} from "../src/masonry/MasonryCriticalDefense.sol"
 import {MasonryGenesisPass} from "../src/masonry/MasonryGenesisPass.sol";
 import {MasonryGenesisSettlement} from "../src/masonry/MasonryGenesisSettlement.sol";
 import {MasonryGenesisStaking} from "../src/masonry/MasonryGenesisStaking.sol";
+import {MasonryLinearVesting} from "../src/masonry/MasonryLinearVesting.sol";
 import {MasonryGenesisLPBurnFee, IMasonryBurnableLevel} from "../src/masonry/MasonryGenesisLPBurnFee.sol";
 import {MiniSwapRouter} from "../src/swap/MiniSwapRouter.sol";
 import {HookMiner} from "../test/utils/HookMiner.sol";
@@ -82,6 +83,15 @@ contract DeployMasonryLocal is Script {
     uint256 internal constant SEED_LIQUIDITY = 1e16;
     uint256 internal constant SQUARE_REFERENCE_PRICE = 120e18;
 
+    /// xSHARE vesting remainder (owner decision 2026-11-05; config/masonry-launch.template.json):
+    /// four 180-day linear streams totalling 6,841, plus 100 minted outright to the deployer/DAO.
+    uint256 internal constant VEST_TEAM = 1000 ether;
+    uint256 internal constant VEST_DEVELOPER = 1000 ether;
+    uint256 internal constant VEST_TREASURY = 2940 ether;
+    uint256 internal constant VEST_ARBITRAGE = 1901 ether;
+    uint256 internal constant DEPLOYER_DAO_OUTRIGHT = 100 ether;
+    uint64 internal constant VESTING_DURATION = 180 days;
+
     struct Deployed {
         address deployer;
         address treasury;
@@ -104,6 +114,8 @@ contract DeployMasonryLocal is Script {
         MasonrySquareHook squareHook;
         PoolKey squareKey;
         MasonrySquareUsdcVault squareVault;
+        // Order: team, developer, treasury, arbitrage.
+        MasonryLinearVesting[4] vesting;
     }
 
     function run() external returns (Deployed memory d) {
@@ -117,8 +129,8 @@ contract DeployMasonryLocal is Script {
 
         // xTOMB: PegToken unchanged; its legacy distributeReward is never called.
         d.level = new PegToken(d.deployer);
-        // xSHARE: the Masonry profile. Vesting buckets are unset in the template, so the
-        // remainder sits with the deployer here; farming (25,641) mints to the Farm later.
+        // xSHARE: the Masonry profile. The vesting buckets mint to the deployer and move into
+        // their MasonryLinearVesting streams in `_vesting`; farming (25,641) mints to the Farm later.
         d.square =
             new ShareToken(ShareTokenProfiles.masonry(_shareAllocations(d), 25_641 ether, 33_333 ether), d.deployer);
 
@@ -128,6 +140,8 @@ contract DeployMasonryLocal is Script {
         _levelPool(d);
         _genesis(d);
         _squarePool(d);
+        // Last on purpose: keeps every earlier contract address unchanged.
+        _vesting(d);
         vm.stopBroadcast();
 
         _write(d);
@@ -137,10 +151,36 @@ contract DeployMasonryLocal is Script {
         Deployed memory d
     ) internal pure returns (ShareToken.Allocation[] memory a) {
         a = new ShareToken.Allocation[](4);
-        a[0] = ShareToken.Allocation(d.deployer, 100 ether + 1 ether + 6941 ether); // sale escrow + deployer + vesting (local)
+        // Sale escrow (held by the deployer locally) + deployer 1 + deployer/DAO outright 100
+        // + the four vesting buckets, which `_vesting` escrows right after the pools exist.
+        a[0] = ShareToken.Allocation(
+            d.deployer,
+            100 ether + 1 ether + DEPLOYER_DAO_OUTRIGHT + VEST_TEAM + VEST_DEVELOPER + VEST_TREASURY + VEST_ARBITRAGE
+        );
         a[1] = ShareToken.Allocation(d.deployer, 100 ether); // owner / team / developer
         a[2] = ShareToken.Allocation(d.treasury, 500 ether);
         a[3] = ShareToken.Allocation(d.deployer, 50 ether); // arbitrage
+    }
+
+    /// Escrow the vesting remainder in four separate 180-day linear streams. Beneficiaries
+    /// default to the deployer (team, developer, arbitrage) and the Treasury; override with
+    /// MASONRY_TEAM / MASONRY_DEVELOPER / MASONRY_ARBITRAGE. MASONRY_VESTING_START defaults to one hour after deployment.
+    function _vesting(
+        Deployed memory d
+    ) internal {
+        uint64 start = uint64(vm.envOr("MASONRY_VESTING_START", block.timestamp + 1 hours));
+        address[4] memory who = [
+            vm.envOr("MASONRY_TEAM", d.deployer),
+            vm.envOr("MASONRY_DEVELOPER", d.deployer),
+            d.treasury,
+            vm.envOr("MASONRY_ARBITRAGE", d.deployer)
+        ];
+        uint256[4] memory amounts = [VEST_TEAM, VEST_DEVELOPER, VEST_TREASURY, VEST_ARBITRAGE];
+        for (uint256 i; i < 4; ++i) {
+            d.vesting[i] = new MasonryLinearVesting(d.square, who[i], start, VESTING_DURATION, d.deployer);
+            d.square.approve(address(d.vesting[i]), amounts[i]);
+            d.vesting[i].fund(0, amounts[i]);
+        }
     }
 
     function _key(
@@ -326,6 +366,14 @@ contract DeployMasonryLocal is Script {
             _keyJson(d.levelKey),
             ',"square":',
             _keyJson(d.squareKey),
+            '},"vesting":{',
+            _kv("team", address(d.vesting[0])),
+            ",",
+            _kv("developer", address(d.vesting[1])),
+            ",",
+            _kv("treasury", address(d.vesting[2])),
+            ",",
+            _kv("arbitrage", address(d.vesting[3])),
             "}}"
         );
         vm.createDir("./deployment-output", true);

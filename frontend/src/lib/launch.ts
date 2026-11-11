@@ -105,6 +105,8 @@ export const GENESIS_POLICY = {
   automationFeeBps: POLICY.genesisAutomationFeeBps,
   lpBurnFeeBps: POLICY.genesisLevelUsdcLpBurnFeeBps,
   compoundCooldownSeconds: POLICY.genesisCompoundCooldownSeconds,
+  /** MasonryGenesisStaking.PRO_KEEPER_INTERVAL / ULTRA_KEEPER_INTERVAL — minimum spacing between keeper runs. */
+  keeperIntervalSeconds: { pro: POLICY.genesisProKeeperIntervalSeconds, ultra: POLICY.genesisUltraKeeperIntervalSeconds },
   /** MasonryGenesisStaking.ULTRA_EARLY_ACCESS — Ultra may pre-stake in the standard pool. */
   ultraEarlySeconds: 86_400,
   ultraMultiplier: POLICY.genesisUltraMultiplier,
@@ -148,7 +150,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisProNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: false,
-    perks: ["Everything in Genesis", "2% fee on standard-pool deposits instead of 3%", `Opt in to keeper compounding (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
+    perks: ["Everything in Genesis", "2% fee on standard-pool deposits instead of 3%", `Opt in to keeper compounding every ${POLICY.genesisProKeeperIntervalSeconds / 3600} hours (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
   },
   ultra: {
     id: "ultra",
@@ -157,7 +159,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisUltraNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: true,
-    perks: ["Everything in Pro", "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
+    perks: ["Everything in Pro", `Keeper compounding every ${POLICY.genesisUltraKeeperIntervalSeconds / 3600} hours instead of ${POLICY.genesisProKeeperIntervalSeconds / 3600}`, "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];

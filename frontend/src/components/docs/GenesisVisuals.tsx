@@ -118,6 +118,7 @@ export function TierMatrix() {
     ["Stake, claim, compound by hand", () => true],
     ["Same reward weighting", () => true],
     ["Keeper compounding (opt-in)", (t) => t.keeper],
+    [`Keeper every ${GENESIS_POLICY.keeperIntervalSeconds.ultra / 3600}h instead of ${GENESIS_POLICY.keeperIntervalSeconds.pro / 3600}h`, (t) => t.id === "ultra"],
     ["24h early standard staking", (t) => t.earlyStandardStaking],
   ];
   return (

@@ -62,8 +62,8 @@ const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Installment", tag: "genesis", body: `Vested rewards release in ${GENESIS_POLICY.installments} claim-gated installments. The first opens ${H(GENESIS_POLICY.installmentSeconds)} after Genesis ends; each next one ${H(GENESIS_POLICY.installmentSeconds)} after you claim the last.` },
   { term: "Wallet fee", tag: "genesis", body: `${pct(GENESIS_POLICY.walletFeeBps)} of liquid claims, releases and refunds, to Treasury. A claim of 400 pays 196 to the wallet, 4 to Treasury and vests 200.` },
   { term: "LP fee", tag: "genesis", body: `${pct(GENESIS_POLICY.lpBurnFeeBps)} of the LP shares a deposit or compound creates, sent to the Treasury as protocol-owned liquidity. The same for every pass tier.` },
-  { term: "Keeper", tag: "automation", body: `An executor a Pro or Ultra holder opts into. It compounds for you, no more often than every ${H(GENESIS_POLICY.compoundCooldownSeconds)}, for ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half per run.` },
-  { term: "Compound cooldown", tag: "automation", body: `${H(GENESIS_POLICY.compoundCooldownSeconds)}, shared by claims and compounds, by hand or by keeper. Withdrawals are never locked.` },
+  { term: "Keeper", tag: "automation", body: `An executor a Pro or Ultra holder opts into. It compounds for you, no more often than every ${H(GENESIS_POLICY.keeperIntervalSeconds.pro)} on Pro or every ${H(GENESIS_POLICY.keeperIntervalSeconds.ultra)} on Ultra, for ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half per run.` },
+  { term: "Compound cooldown", tag: "automation", body: `${H(GENESIS_POLICY.compoundCooldownSeconds)}, shared by claims and compounds made by hand, for every pass. A keeper also waits out its own interval (${H(GENESIS_POLICY.keeperIntervalSeconds.pro)} Pro, ${H(GENESIS_POLICY.keeperIntervalSeconds.ultra)} Ultra). Withdrawals are never locked.` },
   { term: "xSHARE routing", tag: "treasury", body: `Normal mode: ${pct(SQUARE_ROUTING.polBps)} of collected xSHARE tax to protocol LP, ${pct(SQUARE_ROUTING.usdcReserveBps)} to the USDC reserve, ${pct(SQUARE_ROUTING.squareReserveBps)} to the xSHARE reserve.` },
   { term: "Hook", tag: "swap", body: "A Uniswap v4 contract that runs on every swap of its pool. The xTOMB and xSHARE hooks observe price, charge the Fire Tax and reject sells without a valid TWAP." },
   { term: "CREATE3 release plan", tag: "app", body: "CreateX predicts every project address from the deployment signer, a release ID and each role — the same on every chain with the canonical factory. Hooks are mined for their Uniswap v4 permission bits. Predictions aren't deployments." },
@@ -199,7 +199,7 @@ export function Docs() {
               `Vested: ${GENESIS_POLICY.installments} claim-gated ${H(GENESIS_POLICY.installmentSeconds)} installments after Genesis ends.`,
               `${pct(GENESIS_POLICY.walletFeeBps)} wallet fee on liquid claims. 400 → 196 wallet, 4 Treasury, 200 vested.`,
               `Passes: ${PASSES.genesis.priceUsdc} / ${PASSES.pro.priceUsdc} / ${PASSES.ultra.priceUsdc} USDC, soulbound. Same reward weighting.`,
-              "Pro and Ultra can opt into keeper compounding. Ultra can stake the standard pool 24h early.",
+              `Pro and Ultra can opt into keeper compounding: every ${H(GENESIS_POLICY.keeperIntervalSeconds.pro)} on Pro, every ${H(GENESIS_POLICY.keeperIntervalSeconds.ultra)} on Ultra. Ultra can stake the standard pool 24h early.`,
             ]}
             wide
           >

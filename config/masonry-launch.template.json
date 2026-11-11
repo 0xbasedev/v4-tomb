@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "protocol": "masonry",
-  "note": "INCOMPLETE TEMPLATE: select all vesting amounts and authorized LEVEL launch supply before deployment. Never deploy from null fields.",
+  "note": "INCOMPLETE TEMPLATE: select the authorized LEVEL launch supply before deployment. Never deploy from null fields.",
   "square": {
     "maxSupply": 33333,
     "farming": 25641,
@@ -9,14 +9,15 @@
     "deployer": 1,
     "initial": {
       "ownerTeamDeveloper": 100,
+      "deployerDao": 100,
       "treasury": 500,
       "arbitrage": 50
     },
     "vesting": {
-      "team": null,
-      "developer": null,
-      "treasury": null,
-      "arbitrage": null
+      "team": 1000,
+      "developer": 1000,
+      "treasury": 2940,
+      "arbitrage": 1901
     }
   },
   "level": {
@@ -45,6 +46,8 @@
     "requiresFreshTwapStrictlyAbovePegBps": 10100,
     "farmsCompoundCooldownSeconds": 10800,
     "genesisCompoundCooldownSeconds": 10800,
+    "genesisProKeeperIntervalSeconds": 21600,
+    "genesisUltraKeeperIntervalSeconds": 10800,
     "farmEmissionDays": 365,
     "operationalVestingDays": 180,
     "genesisLevelUsdcLpBurnFeeBps": 50,

@@ -6,22 +6,46 @@ import { validateMasonryLaunch } from './masonry-launch.mjs';
 const template = JSON.parse(readFileSync(new URL('./masonry-launch.template.json', import.meta.url), 'utf8'));
 const complete = () => {
   const doc = structuredClone(template);
-  // Test fixture only, NOT approved allocation split.
-  doc.square.vesting = { team: 3000, developer: 2500, treasury: 941, arbitrage: 500 };
   doc.level.authorizedLaunchSupply = 11000;
   return doc;
 };
 
 test('incomplete wizard template cannot deploy', () => {
-  assert.throws(() => validateMasonryLaunch(template), /square\.vesting\.team/);
+  assert.throws(() => validateMasonryLaunch(template), /level\.authorizedLaunchSupply/);
 });
 
 test('a complete exact allocation reconciles to 33,333', () => {
   const out = validateMasonryLaunch(complete());
   assert.equal(out.squareCap, 33333);
   assert.equal(out.allocatedSquare, 33333);
-  assert.equal(out.vestedSquare, 6941);
+  assert.equal(out.vestedSquare, 6841);
+  assert.equal(out.liquidDeployerSquare, 101);
   assert.equal(out.initialLevelFunding, 11000);
+});
+
+test('the template carries the owner-decided xSHARE vesting split', () => {
+  assert.deepEqual(template.square.vesting, { team: 1000, developer: 1000, treasury: 2940, arbitrage: 1901 });
+  assert.equal(template.square.initial.deployerDao, 100);
+  assert.equal(template.square.deployer + template.square.initial.deployerDao, 101);
+  // Arbitrage holds 1,951 in total with its initial 50.
+  assert.equal(template.square.initial.arbitrage + template.square.vesting.arbitrage, 1951);
+});
+
+test('the deployer/DAO outright allocation is required and counted', () => {
+  const missing = complete();
+  delete missing.square.initial.deployerDao;
+  assert.throws(() => validateMasonryLaunch(missing), /square\.initial\.deployerDao/);
+  const moved = complete();
+  moved.square.initial.deployerDao = 0;
+  assert.throws(() => validateMasonryLaunch(moved), /SQUARE supply mismatch/);
+});
+
+test('keeper cadence is a fixed launch invariant: Pro 6h, Ultra 3h', () => {
+  for (const [key, value] of Object.entries({ genesisProKeeperIntervalSeconds: 10800, genesisUltraKeeperIntervalSeconds: 21600 })) {
+    const cfg = complete();
+    cfg.policy[key] = value;
+    assert.throws(() => validateMasonryLaunch(cfg), /release invariant/);
+  }
 });
 
 test('over-allocation and missing LEVEL funding are rejected', () => {

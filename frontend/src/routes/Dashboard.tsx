@@ -8,7 +8,7 @@ import { PendingBadge, PlannedBadge, SimBadge } from "@/components/Status";
 import { DRIVER_LABEL, targetBps } from "@/lib/fireTax";
 import { fmtDuration } from "@/lib/genesis";
 import { useProtocol } from "@/lib/hooks";
-import { DEFENSE, EXPANSION, FIRE, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
+import { DEFENSE, EXPANSION, FIRE, POLICY, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
 import { PHASE_META, expansionCap, marketPhase } from "@/lib/market";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useReveal } from "@/lib/motion/useReveal";
@@ -300,14 +300,15 @@ function SupplyBar() {
   const v = SQUARE_SUPPLY.vesting;
   const vested = Object.values(v).every((x) => x !== null) ? Object.values(v).reduce<number>((a, b) => a + (b ?? 0), 0) : null;
   const initial = SQUARE_SUPPLY.initial.ownerTeamDeveloper + SQUARE_SUPPLY.initial.treasury + SQUARE_SUPPLY.initial.arbitrage;
-  const assigned = SQUARE_SUPPLY.farming + SQUARE_SUPPLY.saleEscrow + SQUARE_SUPPLY.deployer + initial;
+  const deployerDao = SQUARE_SUPPLY.deployer + SQUARE_SUPPLY.initial.deployerDao;
+  const assigned = SQUARE_SUPPLY.farming + SQUARE_SUPPLY.saleEscrow + deployerDao + initial;
   const rest = SQUARE_SUPPLY.cap - assigned;
   const parts: { k: string; n: number; tone: string; note?: string }[] = [
     { k: "Farming emissions", n: SQUARE_SUPPLY.farming, tone: "bg-spectre" },
     { k: "Initial (owner/team/dev · Treasury · arbitrage)", n: initial, tone: "bg-[#5b9dff]" },
     { k: "Sale escrow", n: SQUARE_SUPPLY.saleEscrow, tone: "bg-ember" },
-    { k: "Deployer", n: SQUARE_SUPPLY.deployer, tone: "bg-bone" },
-    { k: vested === null ? "Vesting buckets — set in the Wizard" : "Vesting", n: rest, tone: "bg-amethyst", note: vested === null ? "unset" : undefined },
+    { k: "Deployer / DAO (liquid)", n: deployerDao, tone: "bg-bone" },
+    { k: vested === null ? "Vesting buckets — set in the Wizard" : `Vesting · ${POLICY.operationalVestingDays}-day linear (team ${(v.team ?? 0).toLocaleString()} · developer ${(v.developer ?? 0).toLocaleString()} · Treasury ${(v.treasury ?? 0).toLocaleString()} · arbitrage ${(v.arbitrage ?? 0).toLocaleString()})`, n: rest, tone: "bg-amethyst", note: vested === null ? "unset" : undefined },
   ];
   return (
     <div>

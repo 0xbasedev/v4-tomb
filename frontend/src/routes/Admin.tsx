@@ -69,6 +69,8 @@ const ITEMS: Item[] = [
   { label: "Max route deviation", kind: "Deployment-bound", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "maxDeviationBps", fmt: bps },
   { label: "xSHARE POL vault", kind: "State", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "polVault", fmt: addr },
   { label: "Compound cooldown", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "COMPOUND_COOLDOWN", expect: secs(POLICY.genesisCompoundCooldownSeconds), fmt: secs },
+  { label: "Pro keeper interval", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "PRO_KEEPER_INTERVAL", expect: secs(POLICY.genesisProKeeperIntervalSeconds), fmt: secs },
+  { label: "Ultra keeper interval", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "ULTRA_KEEPER_INTERVAL", expect: secs(POLICY.genesisUltraKeeperIntervalSeconds), fmt: secs },
   { label: "Ultra early access", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "ULTRA_EARLY_ACCESS", expect: "1 d", fmt: secs },
   { label: "Reward budget", kind: "Deployment-bound", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "rewardBudget", fmt: big18 },
   { label: "Funded", kind: "State", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "funded", fmt: (v) => (v ? "yes" : "no") },

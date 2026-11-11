@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { masonryContractKeys, officialChain, parseMasonryDeployment } from './masonry-deployment.mjs';
+import { masonryContractKeys, masonryVestingKeys, officialChain, parseMasonryDeployment } from './masonry-deployment.mjs';
 
 const registry = JSON.parse(readFileSync(new URL('./official-infrastructure.json', import.meta.url), 'utf8'));
 const base = officialChain(registry, 84532);
@@ -64,4 +64,22 @@ test('repeated contract addresses are rejected', () => {
   const dup = fixture();
   dup.contracts.squareVault = dup.contracts.levelVault;
   assert.throws(() => parseMasonryDeployment(dup, registry), /repeats/);
+});
+
+test('vesting streams are optional, but complete and distinct when recorded', () => {
+  const record = fixture();
+  record.vesting = Object.fromEntries(masonryVestingKeys.map((k, i) => [k, addr(0x2000 + i)]));
+  assert.deepEqual(Object.keys(parseMasonryDeployment(record, registry).vesting), ['team', 'developer', 'treasury', 'arbitrage']);
+
+  const partial = fixture();
+  partial.vesting = { team: addr(0x2000) };
+  assert.throws(() => parseMasonryDeployment(partial, registry), /vesting\.developer must be a nonzero address/);
+
+  const shared = fixture();
+  shared.vesting = { ...record.vesting, developer: record.vesting.team };
+  assert.throws(() => parseMasonryDeployment(shared, registry), /vesting\.developer repeats vesting\.team/);
+
+  const clash = fixture();
+  clash.vesting = { ...record.vesting, treasury: clash.contracts.treasury };
+  assert.throws(() => parseMasonryDeployment(clash, registry), /vesting\.treasury repeats treasury/);
 });

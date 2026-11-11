@@ -18,6 +18,7 @@ export const supplyFields = [
   ["shareSale", "xSHARE sale escrow"],
   ["shareDeployer", "xSHARE deployer"],
   ["shareTeam", "xSHARE owner, team and developer"],
+  ["shareDeployerDao", "xSHARE deployer/DAO outright"],
   ["shareTreasury", "xSHARE Treasury"],
   ["shareArbitrage", "xSHARE arbitrage"],
   ["vestTeam", "xSHARE team vesting"],
@@ -75,8 +76,10 @@ export const defaultFields = {
   shareSupply: String(launchTemplate.square.maxSupply), shareFarm: String(launchTemplate.square.farming),
   shareSale: String(launchTemplate.square.saleEscrow), shareDeployer: String(launchTemplate.square.deployer),
   shareTeam: String(launchTemplate.square.initial.ownerTeamDeveloper),
+  shareDeployerDao: String(launchTemplate.square.initial.deployerDao),
   shareTreasury: String(launchTemplate.square.initial.treasury), shareArbitrage: String(launchTemplate.square.initial.arbitrage),
-  vestTeam: "", vestDeveloper: "", vestTreasury: "", vestArbitrage: "",
+  vestTeam: String(launchTemplate.square.vesting.team), vestDeveloper: String(launchTemplate.square.vesting.developer),
+  vestTreasury: String(launchTemplate.square.vesting.treasury), vestArbitrage: String(launchTemplate.square.vesting.arbitrage),
   bridge: "off",
   ...Object.fromEntries(bridgeNetworks.flatMap(({ id }) => [["owner" + id, ""], ["ism" + id, ""], ["cap" + id, ""]])),
   ...Object.fromEntries(masonryRoles.map((role) => ["hash-" + role, ""])),
@@ -189,7 +192,7 @@ export function launchFrom(fields: Fields, requireFuture = true) {
     treasury: addresses.treasury,
     square: {
       maxSupply: amounts.shareSupply, farming: amounts.shareFarm, saleEscrow: amounts.shareSale, deployer: amounts.shareDeployer,
-      initial: { ownerTeamDeveloper: amounts.shareTeam, treasury: amounts.shareTreasury, arbitrage: amounts.shareArbitrage },
+      initial: { ownerTeamDeveloper: amounts.shareTeam, deployerDao: amounts.shareDeployerDao, treasury: amounts.shareTreasury, arbitrage: amounts.shareArbitrage },
       vesting: { team: amounts.vestTeam, developer: amounts.vestDeveloper, treasury: amounts.vestTreasury, arbitrage: amounts.vestArbitrage },
     },
     level: {

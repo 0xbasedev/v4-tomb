@@ -69,6 +69,8 @@ export interface ProtocolState {
     totals: Record<0 | 1, number | null>;
     positions: Record<0 | 1, { shares: number; pending: number } | null>;
     nextCompoundAt: Record<0 | 1, number>;
+    /** Earliest keeper run per source pool (shared cooldown and the tier's keeper interval); null without a keeper tier. */
+    nextKeeperCompoundAt: Record<0 | 1, number | null>;
     keeper: { executor: Address | null; minNetShares: number };
   };
   tranches: Tranche[];
@@ -142,6 +144,8 @@ export function useProtocol(): ProtocolState {
           ? { 0: { shares: preview.positions[0].shares, pending: preview.pending[0] }, 1: { shares: preview.positions[1].shares, pending: preview.pending[1] } }
           : { 0: null, 1: null },
         nextCompoundAt: preview.nextCompoundAt,
+        // Preview never runs a keeper, so only the shared cooldown can hold one back.
+        nextKeeperCompoundAt: preview.pass === "pro" || preview.pass === "ultra" ? preview.nextCompoundAt : { 0: null, 1: null },
         keeper: preview.keeper,
       },
       tranches: connected ? preview.tranches : [],
@@ -171,6 +175,9 @@ export function useProtocol(): ProtocolState {
 }
 
 /** Live multicall reads. Returns nulls (never samples) for anything unread. */
+/** The contract returns uint256 max when the account's pass has no keeper. */
+const keeperAt = (v: bigint | undefined): number | null => (v === undefined || v > 2n ** 48n ? null : Number(v));
+
 function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omit<ProtocolState, "net" | "account"> {
   const user = account ?? zeroAddress;
   const c = d?.contracts;
@@ -216,6 +223,8 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
           { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 36
+          { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [0n, user] }, // 37
+          { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [1n, user] }, // 38
         ]
       : [],
     query: { enabled, refetchInterval: 15_000 },
@@ -337,6 +346,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
       totals: { 0: pool(20, stdDecimals), 1: pool(21, 18) },
       positions: { 0: pos(22, stdDecimals), 1: pos(23, 18) },
       nextCompoundAt: { 0: Number(ok<bigint>(r[24]) ?? 0n), 1: Number(ok<bigint>(r[25]) ?? 0n) },
+      nextKeeperCompoundAt: { 0: keeperAt(ok<bigint>(r[37])), 1: keeperAt(ok<bigint>(r[38])) },
       keeper: { executor: keeper && keeper !== zeroAddress ? keeper : null, minNetShares: n18(ok<bigint>(r[27])) ?? 0 },
     },
     tranches,

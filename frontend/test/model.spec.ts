@@ -61,6 +61,22 @@ test.describe("Genesis clock", () => {
     expect([PASSES.genesis.earlyStandardStaking, PASSES.pro.earlyStandardStaking, PASSES.ultra.earlyStandardStaking]).toEqual([false, false, true]);
     expect(GENESIS_POLICY.ultraMultiplier).toBe(1);
   });
+
+  test("keeper cadence: Pro every 6h, Ultra every 3h; manual compounding stays 3h for every pass", () => {
+    expect(GENESIS_POLICY.keeperIntervalSeconds).toEqual({ pro: 6 * 3600, ultra: 3 * 3600 });
+    expect(GENESIS_POLICY.compoundCooldownSeconds).toBe(3 * 3600);
+    expect(PASSES.pro.perks.join(" ")).toMatch(/every 6 hours/);
+    expect(PASSES.ultra.perks.join(" ")).toMatch(/every 3 hours instead of 6/);
+  });
+
+  test("xSHARE vesting split: 1,000 / 1,000 / 2,940 / 1,901 vested, 101 liquid with the deployer/DAO, exact to the cap", () => {
+    expect(SQUARE_SUPPLY.vesting).toEqual({ team: 1000, developer: 1000, treasury: 2940, arbitrage: 1901 });
+    expect(SQUARE_SUPPLY.deployer + SQUARE_SUPPLY.initial.deployerDao).toBe(101);
+    const vested = Object.values(SQUARE_SUPPLY.vesting).reduce<number>((a, b) => a + (b ?? 0), 0);
+    const i = SQUARE_SUPPLY.initial;
+    expect(vested).toBe(6841);
+    expect(SQUARE_SUPPLY.farming + SQUARE_SUPPLY.saleEscrow + SQUARE_SUPPLY.deployer + i.ownerTeamDeveloper + i.deployerDao + i.treasury + i.arbitrage + vested).toBe(SQUARE_SUPPLY.cap);
+  });
 });
 
 test.describe("Fire Tax", () => {
