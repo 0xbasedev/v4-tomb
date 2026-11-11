@@ -26,23 +26,6 @@
       "registryUrl": "https://github.com/hyperlane-xyz/hyperlane-registry/tree/a03afaa4fc6b8bd86616ef9986d80dcc1863e66a/chains/base"
     },
     {
-      "id": 4663,
-      "domain": 4663,
-      "slug": "robinhood",
-      "name": "Robinhood Chain",
-      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
-      "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
-      "explorerUrl": "https://robin.etherscan.io",
-      "mailbox": "0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7",
-      "observedMailboxDefaultIsm": "0xf761809694c85b1C55A16ee184D2676892aABeB3",
-      "bridge": null,
-      "token": null,
-      "bridgeIsm": null,
-      "bridgeOwner": null,
-      "enabled": false,
-      "registryUrl": "https://github.com/hyperlane-xyz/hyperlane-registry/tree/a03afaa4fc6b8bd86616ef9986d80dcc1863e66a/chains/robinhood"
-    },
-    {
       "id": 56,
       "domain": 56,
       "slug": "bsc",

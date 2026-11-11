@@ -50,7 +50,7 @@ const POLICY_LABEL: Record<string, string> = {
   genesisVestingIntervalSeconds: "Installment interval",
   genesisWalletClaimFeeBps: "Wallet claim fee",
   genesisAutomationFeeBps: "Keeper fee",
-  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to Treasury as POL)",
+  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to the DAO wallet as POL)",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
   genesisProKeeperIntervalSeconds: "Pro keeper interval",
   genesisUltraKeeperIntervalSeconds: "Ultra keeper interval",
@@ -58,6 +58,7 @@ const POLICY_LABEL: Record<string, string> = {
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",
+  epochAdvanceFeeUsd: "Advance-epoch fee (USD; USDC, USDG or ETH)",
   requiresFreshTwapStrictlyAbovePegBps: "Expansion gate (× peg)",
   squareTaxPolBps: "xSHARE tax → POL",
   squareTaxUsdcReserveBps: "xSHARE tax → USDC reserve",
@@ -260,7 +261,7 @@ function ChainStep({ chainId, setChainId }: { chainId: number; setChainId: (n: n
       {checks?.error && <Reason tone="warn">Couldn't reach the chain: {checks.error}</Reason>}
       {chain.id === 1 && <Reason tone="warn">Ethereum mainnet: rehearse the full launch on a testnet first.</Reason>}
       <Reason>
-        This is the home chain for the release. The xSHARE bridge can only be planned when the home chain is one of its five networks (marked “bridge home”). Bridge support doesn't certify a chain for the Masonry launch.
+        This is the home chain for the release. The xSHARE bridge can only be planned when the home chain is one of its four networks (marked “bridge home”). Bridge support doesn't certify a chain for the Masonry launch.
       </Reason>
       <p className="mt-3 font-mono text-[10.5px] text-ash-dim">
         Sources: Uniswap v4 deployments and Circle USDC addresses, retrieved {REGISTRY.sources.retrieved}.

@@ -69,6 +69,7 @@ export function validateMasonryLaunch(doc) {
     fireTaxBaselineBps: 100,
     fireTaxRecoverySeconds: 25200,
     maximumExpansionPerEpochBps: 200,
+    epochAdvanceFeeUsd: 5,
     requiresFreshTwapStrictlyAbovePegBps: 10100,
     farmsCompoundCooldownSeconds: 10800,
     genesisCompoundCooldownSeconds: 10800,

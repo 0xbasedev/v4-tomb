@@ -83,7 +83,7 @@ export function Genesis() {
             <h3 className="font-display text-lg font-semibold text-bone">A 400 xTOMB wallet claim</h3>
             <div className="mt-4 flex h-3 overflow-hidden rounded-full">
               <div className="bg-ember" style={{ width: `${(ex.toWallet / 400) * 100}%` }} title="to wallet" />
-              <div className="bg-warn" style={{ width: `${(ex.treasury / 400) * 100}%` }} title="to Treasury" />
+              <div className="bg-warn" style={{ width: `${(ex.treasury / 400) * 100}%` }} title="to the DAO wallet" />
               <div className="bg-amethyst" style={{ width: `${(ex.vested / 400) * 100}%` }} title="vested" />
             </div>
             <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-[12.5px]">
@@ -92,7 +92,7 @@ export function Genesis() {
                 <dd className="num text-[17px] text-ember-hot">{ex.toWallet}</dd>
               </div>
               <div>
-                <dt className="text-ash">To Treasury</dt>
+                <dt className="text-ash">To the DAO wallet</dt>
                 <dd className="num text-[17px] text-warn">{ex.treasury}</dd>
               </div>
               <div>

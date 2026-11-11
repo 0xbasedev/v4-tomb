@@ -12,7 +12,7 @@ import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
- * Bridge — the five-chain xSHARE bridge (merge @ 484c279, Hyperlane), shown
+ * Bridge — the four-chain xSHARE bridge (merge @ 484c279, Hyperlane), shown
  * from config/xshare-bridge.json. Original xSHARE stays on the Wizard-selected
  * home chain; the other four networks receive Bridged xSHARE (same symbol,
  * its own address). Satellite → satellite is two transfers through home.
@@ -39,7 +39,7 @@ export function Bridge() {
     <div ref={root}>
       <PageHeader
         eyebrow="Bridge · xSHARE · Hyperlane"
-        title="xSHARE across five chains"
+        title="xSHARE across four chains"
         lede={`Original xSHARE stays on the home chain. ${NETS.map((n) => n.name).join(", ").replace(/, ([^,]*)$/, " and $1")} are connected; the networks that aren't home receive Bridged xSHARE. Every route stays off until a reviewed deployment is verified and published.`}
         aside={
           <div className="panel p-5">
@@ -49,7 +49,7 @@ export function Bridge() {
             </div>
             <ul className="space-y-1.5 text-[13px] leading-relaxed text-bone-dim">
               <li>xSHARE only. Genesis passes are soulbound and aren't part of this bridge.</li>
-              <li>All five networks are disabled in the manifest.</li>
+              <li>All four networks are disabled in the manifest.</li>
               <li>{home ? `Home chain in your release plan: ${home.name}.` : "The home chain is chosen in the Wizard's release plan."}</li>
             </ul>
           </div>
@@ -60,7 +60,7 @@ export function Bridge() {
         <BridgeForm homeId={plan?.canonicalDomain ?? null} />
 
         <section>
-          <SectionTitle kicker="Networks" title="Five Hyperlane routes" right={<span className="hidden font-mono text-[11px] text-ash sm:inline">config/xshare-bridge.json</span>} />
+          <SectionTitle kicker="Networks" title="Four Hyperlane routes" right={<span className="hidden font-mono text-[11px] text-ash sm:inline">config/xshare-bridge.json</span>} />
           <div data-reveal className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="bridge-networks">
             {NETS.map((n) => (
               <NetworkCard key={n.id} n={n} home={plan?.canonicalDomain === n.id} token={plan?.tokens[n.id] ?? null} bridge={plan?.bridge ?? null} />

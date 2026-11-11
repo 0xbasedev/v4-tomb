@@ -1,20 +1,21 @@
 # xSHARE Bridge
 
-The xSHARE bridge moves original xSHARE between the Wizard-selected home chain and Base, Robinhood Chain, BNB Smart Chain, PulseChain, or Sonic. The other four chains receive a separately identified 18-decimal token named Bridged xSHARE with symbol xSHARE. A satellite-to-satellite transfer takes two independent transfers through the home chain. The bridge supports xSHARE only.
+The xSHARE bridge moves original xSHARE between the Wizard-selected home chain and Base, BNB Smart Chain, PulseChain, or Sonic. The other three chains receive a separately identified 18-decimal token named Bridged xSHARE with symbol xSHARE. A satellite-to-satellite transfer takes two independent transfers through the home chain. The bridge supports xSHARE only.
 
 | Network | Chain ID and Hyperlane domain | Native fee currency |
 | --- | ---: | --- |
 | Base | 8453 | ETH |
-| Robinhood Chain | 4663 | ETH |
 | BNB Smart Chain | 56 | BNB |
 | PulseChain | 369 | PLS |
 | Sonic | 146 | S |
 
-The manifest starts with five disabled networks and blank project addresses. The Mailboxes in it are infrastructure addresses. Use the Wizard-selected home chain to generate predicted bridge and token addresses before deployment. Publish addresses for use by live actions after verification. Bridge support does not certify a chain for the separate Masonry protocol launch.
+Robinhood Chain (4663) is a Wizard home-chain choice only: it is not a bridge network, the contract rejects it as a route or a home, and xSHARE deposits there stay on that chain.
+
+The manifest starts with four disabled networks and blank project addresses. The Mailboxes in it are infrastructure addresses. Use the Wizard-selected home chain to generate predicted bridge and token addresses before deployment. Publish addresses for use by live actions after verification. Bridge support does not certify a chain for the separate Masonry protocol launch.
 
 ## UI integration for Claude
 
-1. Use `xshare-bridge.json` to render the five network options in the theme. In preview, grey out all five and show “Bridge unavailable”. For Sonic, the detail can say “Awaiting relayer and verifier setup”. Remove any old OFT or ONFT copy tied to this bridge.
+1. Use `xshare-bridge.json` to render the four network options in the theme. In preview, grey out all four and show “Bridge unavailable”. For Sonic, the detail can say “Awaiting relayer and verifier setup”. Remove any old OFT or ONFT copy tied to this bridge.
 2. When an approved deployment is published, resolve the source and destination by chain ID. Require both deployment records, the current wallet network, a supported home-to-satellite direction, and verified reciprocal peers and limits. Read `routes(domain)` on both ends. Require source `outboundEnabled` and destination `inboundPaused(sourceDomain) == false` before enabling Send. Invalidate quote, allowance, and simulation when wallet, chain, amount, recipient, or route changes.
 3. Read `asset()` and the ERC-20 balance on the source chain. Amounts use 18 decimals. For a home-chain send, approve the bridge for the amount if the allowance is insufficient. For a satellite send, the bridge burns the connected sender's tokens directly as part of the signed send.
 4. Call `quoteSend(destinationDomain, recipient, amount)` as the sending wallet. Display the quote in the source chain's native currency and estimate source transaction gas separately. Simulate and call `send(destinationDomain, recipient, amount)` with that exact quote as `value`. If the fee changes, refresh the quote and simulate again. Confirm the recipient and destination before signing. The recipient must be able to use the address on that chain.
@@ -54,6 +55,6 @@ forge test --match-contract XTombShareBridgeTest
 XSHARE_BRIDGE_FORKS=true forge test --match-contract XTombShareBridgeForkTest
 ```
 
-The unit suite uses mock Mailboxes to exercise all five possible home-chain selections. The opt-in fork test runs four two-way routes using the official CreateX factories and deployed Hyperlane Mailboxes across all five chains, using a test verifier to exercise both rejection and delivery. The fork test sends no live messages and provides no evidence about production validator or relayer liveness.
+The unit suite uses mock Mailboxes to exercise all four possible home-chain selections. The opt-in fork test runs three two-way routes using the official CreateX factories and deployed Hyperlane Mailboxes across all four chains, using a test verifier to exercise both rejection and delivery. The fork test sends no live messages and provides no evidence about production validator or relayer liveness.
 
 The bridge compiles with Solidity 0.8.26 and the Shanghai EVM target because PulseChain rejects Cancun opcodes used by the compiler. The other Masonry and Uniswap V4 contracts retain their Cancun target.

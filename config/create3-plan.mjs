@@ -16,7 +16,7 @@ const hookFlags = { hook: 0x1088, masonryTaxHook: 0x35c8, masonryShareTaxHook: 0
 const hookMask = 0x3fff;
 const searchLimit = 1_000_000;
 const roles = new Set([...coreRoles, ...masonryRoles, ...bridgeRoles]);
-const domains = [8453, 4663, 56, 369, 146];
+const domains = [8453, 56, 369, 146];
 const uint256Max = (1n << 256n) - 1n;
 
 export function validateAddressPatterns(input = {}) {
@@ -153,7 +153,7 @@ export function create3Planner({ concatHex, encodeAbiParameters, encodePacked, g
     }
     const networkIds = template.networks?.map(({ id, domain }) => id === domain ? id : 0) ?? [];
     if (networkIds.length !== domains.length || !domains.every((id) => networkIds.includes(id))) {
-      throw new Error('Bridge template must contain the five supported domains exactly once');
+      throw new Error('Bridge template must contain the four supported domains exactly once');
     }
 
     const document = structuredClone(template);
