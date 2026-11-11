@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useConfig } from "wagmi";
-import { getAccount, readContract, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getAccount, getPublicClient, readContract, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, erc20Abi, isAddressEqual, maxUint256, parseUnits, type Abi, type Address } from "viem";
 
 import { useToast } from "@/components/ToastProvider";
@@ -99,7 +99,11 @@ export function useActions() {
           const sim = await simulateContract(config, { chainId, account, address: step.address, abi: step.abi, functionName: step.functionName, args: step.args } as Parameters<typeof simulateContract>[1]);
           toast.update(id, { message: `Confirm ${step.label} in your wallet…` });
           still();
-          const hash = await writeContract(config, sim.request as Parameters<typeof writeContract>[1]);
+          // Reward checkpoints cost more gas once time has passed since the pool was last
+          // touched, so an estimate taken in the same block as someone else's action runs
+          // short by the time the transaction is mined. Send with explicit headroom.
+          const estimated = await getPublicClient(config, { chainId })!.estimateContractGas({ account, address: step.address, abi: step.abi, functionName: step.functionName, args: step.args });
+          const hash = await writeContract(config, { ...sim.request, gas: (estimated * 3n) / 2n + 80_000n } as Parameters<typeof writeContract>[1]);
           const receipt = await waitForTransactionReceipt(config, { chainId, hash });
           if (receipt.status !== "success") throw new Error(`${step.label} reverted`);
           toast.update(id, { txHash: hash });
