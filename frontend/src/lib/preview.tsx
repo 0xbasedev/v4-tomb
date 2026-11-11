@@ -280,7 +280,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
         return { ...p, [pool]: { shares: pos.shares + net, paidMark: marks[pool], stored } };
       });
       setBalances((b) => ({ ...b, [pool === 0 ? "USDC" : "xTOMB-USDC"]: b[pool === 0 ? "USDC" : "xTOMB-USDC"] - amount }));
-      push(pool === 0 ? `Stake ${amount.toLocaleString()} USDC · ${(amount - net).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC fee to the DAO/Team wallet` : `Stake ${amount.toFixed(4)} LP · ${(amount - net).toFixed(4)} LP fee to the DAO/Team wallet`);
+      push(pool === 0 ? `Stake ${amount.toLocaleString()} USDC · ${(amount - net).toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC fee to the DAO wallet` : `Stake ${amount.toFixed(4)} LP · ${(amount - net).toFixed(4)} LP fee to the DAO wallet`);
     },
     withdraw: (pool, amount) => {
       setPositions((p) => {

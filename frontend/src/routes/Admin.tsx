@@ -80,7 +80,7 @@ const ITEMS: Item[] = [
   { label: "Keeper fee", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "AUTOMATION_FEE_BPS", expect: bps(POLICY.genesisAutomationFeeBps), fmt: bps },
   { label: "Max compound refund", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "MAX_REFUND_BPS", expect: "3%", fmt: bps },
   { label: "Bound staking", kind: "State", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "staking", fmt: addr },
-  { label: "LP deposit fee (to the DAO/Team wallet as POL)", kind: "Fixed", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "DEPOSIT_BURN_FEE_BPS", expect: bps(POLICY.genesisLevelUsdcLpBurnFeeBps), fmt: bps },
+  { label: "LP deposit fee (to the DAO wallet as POL)", kind: "Fixed", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "DEPOSIT_BURN_FEE_BPS", expect: bps(POLICY.genesisLevelUsdcLpBurnFeeBps), fmt: bps },
   { label: "LP fee destination", kind: "Deployment-bound", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "treasury", fmt: addr },
   { label: "Authorized Genesis caller", kind: "Settable", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "genesis", fmt: addr },
   { label: "Defense entry", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "ENTER_PRICE", expect: `$${(POLICY.criticalDefenseEntryBps / 10_000).toFixed(2)}`, fmt: price18 },

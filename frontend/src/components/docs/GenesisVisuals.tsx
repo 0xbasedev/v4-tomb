@@ -61,7 +61,7 @@ export function EmissionsTimeline() {
   );
 }
 
-/** A reward splits: liquid half (2% fee to the DAO/Team wallet), vested half in 16 claim-gated installments. */
+/** A reward splits: liquid half (2% fee to the DAO wallet), vested half in 16 claim-gated installments. */
 export function HarvestSplitter() {
   const root = useRef<HTMLDivElement>(null);
   const [reward, setReward] = useState(400);
@@ -74,7 +74,7 @@ export function HarvestSplitter() {
     { scope: root, dependencies: [reward] },
   );
   return (
-    <Stage caption={`A wallet claim: half is liquid (minus ${pct(GENESIS_POLICY.walletFeeBps)} to the DAO/Team wallet), half vests. Each installment opens ${GENESIS_POLICY.installmentSeconds / 3600}h after you claim the previous one, starting ${GENESIS_POLICY.installmentSeconds / 3600}h after Genesis ends.`}>
+    <Stage caption={`A wallet claim: half is liquid (minus ${pct(GENESIS_POLICY.walletFeeBps)} to the DAO wallet), half vests. Each installment opens ${GENESIS_POLICY.installmentSeconds / 3600}h after you claim the previous one, starting ${GENESIS_POLICY.installmentSeconds / 3600}h after Genesis ends.`}>
       <div ref={root}>
         <Slider id="hs-reward" label="Reward claimed" value={reward} min={20} max={2000} step={20} onChange={setReward} display={`${reward} xTOMB`} />
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
@@ -83,7 +83,7 @@ export function HarvestSplitter() {
             <AnimatedNumber value={c.toWallet} format={(n) => n.toFixed(2)} className="num text-lg text-bone" />
           </div>
           <div className="rounded-xl bg-warn/[0.08] p-3">
-            <div className="label mb-1 text-warn">To the DAO/Team wallet</div>
+            <div className="label mb-1 text-warn">To the DAO wallet</div>
             <AnimatedNumber value={c.treasury} format={(n) => n.toFixed(2)} className="num text-lg text-bone" />
           </div>
           <div className="rounded-xl bg-amethyst/[0.08] p-3">
@@ -122,7 +122,7 @@ export function TierMatrix() {
     ["24h early standard staking", (t) => t.earlyStandardStaking],
   ];
   return (
-    <Stage caption="Soulbound, one per wallet, paid in USDC to the DAO/Team wallet. Upgrade any time before Genesis ends for just the price difference. Not transferable.">
+    <Stage caption="Soulbound, one per wallet, paid in USDC to the DAO wallet. Upgrade any time before Genesis ends for just the price difference. Not transferable.">
       <div ref={root} role="table" aria-label="Genesis passes compared" className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-x-2 gap-y-0">
         <div role="row" className="contents">
           <span role="columnheader" className="label self-end pb-2">Pass</span>

@@ -50,7 +50,7 @@ const POLICY_LABEL: Record<string, string> = {
   genesisVestingIntervalSeconds: "Installment interval",
   genesisWalletClaimFeeBps: "Wallet claim fee",
   genesisAutomationFeeBps: "Keeper fee",
-  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to the DAO/Team wallet as POL)",
+  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to the DAO wallet as POL)",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
   genesisProKeeperIntervalSeconds: "Pro keeper interval",
   genesisUltraKeeperIntervalSeconds: "Ultra keeper interval",

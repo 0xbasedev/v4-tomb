@@ -7,7 +7,7 @@ import { GENESIS_POLICY, pct } from "@/lib/launch";
  * Vested Genesis rewards — MasonryGenesisSettlement tranches. Each tranche
  * releases in 16 claim-gated installments: the first opens at Genesis end +
  * 6h, and each next one opens 6h after the previous is claimed (not on a
- * fixed calendar). Every release pays the 2% wallet fee to the DAO/Team wallet.
+ * fixed calendar). Every release pays the 2% wallet fee to the DAO wallet.
  */
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 

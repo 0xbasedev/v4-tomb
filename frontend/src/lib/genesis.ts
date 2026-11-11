@@ -12,12 +12,12 @@ import { GENESIS_POLICY as G } from "@/lib/launch";
  *               From Day 2: 75% to the LP pool, 25% to the standard pool.
  *   Settlement  every reward splits 50/50 into liquid xTOMB and a vested
  *               tranche (odd unit to the tranche). A wallet claim pays 2% of
- *               the liquid half to the DAO/Team wallet. Tranches release in 16 claim-gated
+ *               the liquid half to the DAO wallet. Tranches release in 16 claim-gated
  *               installments: the first opens at Genesis end + 6h, each next one
  *               6h after the previous is claimed; each release also pays 2%.
  *   Compound    the liquid half (minus a 2% keeper fee when automated) sells
  *               part of itself for USDC — paying the Fire Tax on that sell leg —
- *               and mints xTOMB/USDC vault shares; the 0.5% LP fee (to the DAO/Team wallet) is taken
+ *               and mints xTOMB/USDC vault shares; the 0.5% LP fee (to the DAO wallet) is taken
  *               once from the gross shares. Claims and compounds share one
  *               3-hour clock per source pool.
  */
@@ -91,7 +91,7 @@ export function cumulativeEmitted(pool: 0 | 1, budget: number, c: Pick<GenesisCl
 
 const fee = (amount: number, bps: number) => (amount * bps) / 10_000;
 
-/** A wallet claim of `reward`: 400 → 196 to the claimer, 4 to the DAO/Team wallet, 200 vested. */
+/** A wallet claim of `reward`: 400 → 196 to the claimer, 4 to the DAO wallet, 200 vested. */
 export function walletClaim(reward: number) {
   const liquid = reward * G.liquidShare;
   const vested = reward - liquid;

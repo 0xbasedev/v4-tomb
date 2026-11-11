@@ -164,6 +164,6 @@ export const PASSES: Record<PassTier, PassDef> = {
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
 
-/** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the DAO/Team wallet. */
+/** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the DAO wallet. */
 export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 0 };
 export const depositFeeBps = (tier: PassTier | null | undefined): number => (tier ? DEPOSIT_FEE_BPS[tier] : DEPOSIT_FEE_BPS.genesis);

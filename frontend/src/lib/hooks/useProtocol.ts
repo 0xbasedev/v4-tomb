@@ -74,7 +74,7 @@ export interface ProtocolState {
     keeper: { executor: Address | null; minNetShares: number };
   };
   tranches: Tranche[];
-  /** Genesis LP deposit fee: LP shares collected and forwarded to the DAO/Team wallet as POL. */
+  /** Genesis LP deposit fee: LP shares collected and forwarded to the DAO wallet as POL. */
   lpFee: { totalShares: number | null; sentToTreasury: number | null };
   /** Static LP fee of each official pool (pool key), bps. */
   poolFeeBps: Record<TaxedAsset, number>;

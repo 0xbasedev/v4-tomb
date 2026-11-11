@@ -115,7 +115,7 @@ function Cost({ k, v, bad, good }: { k: string; v: string; bad?: boolean; good?:
  * Claim vs compound over the Genesis LP window, drawn. Drag the APR; the gap
  * is what compounding the liquid half is worth after its real costs. Each run
  * reinvests the liquid half minus the sell leg's Fire Tax and pool fee (on
- * roughly half of it) and the LP fee (sent to the DAO/Team wallet); the vested half accrues either way.
+ * roughly half of it) and the LP fee (sent to the DAO wallet); the vested half accrues either way.
  */
 export function CompoundCurve() {
   const [apr, setApr] = useState(1500);
@@ -172,7 +172,7 @@ export function CompoundCurve() {
 
   return (
     <Stage
-      caption={`$1,000 from Day ${LP_DAY} to the end of Genesis, compounded every ${GENESIS_POLICY.compoundCooldownSeconds / 3600}h. Each run reinvests the liquid half after the sell leg (${pct(FIRE.genesisFloorBps.xTOMB)} Genesis Fire Tax + pool fee on about half of it) and the ${pct(GENESIS_POLICY.lpBurnFeeBps)} LP fee to the DAO/Team wallet; claims pay the ${pct(GENESIS_POLICY.walletFeeBps)} wallet fee instead. A keeper run also pays ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half.`}
+      caption={`$1,000 from Day ${LP_DAY} to the end of Genesis, compounded every ${GENESIS_POLICY.compoundCooldownSeconds / 3600}h. Each run reinvests the liquid half after the sell leg (${pct(FIRE.genesisFloorBps.xTOMB)} Genesis Fire Tax + pool fee on about half of it) and the ${pct(GENESIS_POLICY.lpBurnFeeBps)} LP fee to the DAO wallet; claims pay the ${pct(GENESIS_POLICY.walletFeeBps)} wallet fee instead. A keeper run also pays ${pct(GENESIS_POLICY.automationFeeBps)} of the liquid half.`}
     >
       <div ref={root}>
         <Slider id="cc-apr" label="Pool APR" value={apr} min={100} max={6000} step={100} onChange={setApr} display={`${apr.toLocaleString()}%`} accent="#34e3a0" />
