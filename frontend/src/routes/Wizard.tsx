@@ -58,6 +58,7 @@ const POLICY_LABEL: Record<string, string> = {
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",
+  epochAdvanceFeeUsd: "Advance-epoch fee (USD; USDC, USDG or ETH)",
   requiresFreshTwapStrictlyAbovePegBps: "Expansion gate (× peg)",
   squareTaxPolBps: "xSHARE tax → POL",
   squareTaxUsdcReserveBps: "xSHARE tax → USDC reserve",

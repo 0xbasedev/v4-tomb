@@ -48,6 +48,14 @@ test('keeper cadence is a fixed launch invariant: Pro 6h, Ultra 3h', () => {
   }
 });
 
+test('advancing the epoch costs a fixed $5 for every caller', () => {
+  for (const value of [0, 4, 6, undefined]) {
+    const cfg = complete();
+    cfg.policy.epochAdvanceFeeUsd = value;
+    assert.throws(() => validateMasonryLaunch(cfg), /policy\.epochAdvanceFeeUsd: Masonry release invariant must equal 5/);
+  }
+});
+
 test('over-allocation and missing LEVEL funding are rejected', () => {
   const excess = complete();
   excess.square.vesting.team += 1;

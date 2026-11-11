@@ -5,6 +5,14 @@ import { masonryContractKeys, masonryVestingKeys, officialChain, parseMasonryDep
 
 const registry = JSON.parse(readFileSync(new URL('./official-infrastructure.json', import.meta.url), 'utf8'));
 const base = officialChain(registry, 84532);
+
+test('USDG on Robinhood Chain is recorded but not yet a launch chain', () => {
+  const [usdg] = registry.pendingStablecoins;
+  assert.deepEqual([usdg.chainId, usdg.symbol, usdg.decimals], [4663, 'USDG', 6]);
+  assert.match(usdg.address, /^0x[0-9a-fA-F]{40}$/);
+  assert.match(usdg.status, /verify on-chain before mainnet/);
+  assert.equal(officialChain(registry, 4663), undefined);
+});
 const addr = (n) => `0x${n.toString(16).padStart(40, '0')}`;
 
 function fixture() {

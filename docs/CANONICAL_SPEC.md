@@ -70,6 +70,13 @@ The **dev address is Owner, Operator and Admin** and has the privileged Admin-pa
 
 Mint only on fresh TWAP strictly > 1.01, max 2% of circulating xTOMB per 6-hour epoch, no catch-up for missed epochs, no stale-oracle bypass. The inherited `core/Treasury.sol` is WETH/bond-era and must not ship as Masonry.
 
+**Advance-epoch fee (owner decisions 2026-11-11, NOT YET BUILT):** anyone may advance the epoch once it is due, and every caller pays **$5** to do it. There is no free path and no caller reward; the protocol's own keeper pays the same fee. Policy key `epochAdvanceFeeUsd` = 5 is a release invariant. It is spec and policy only until G2 is built: no contract charges it yet, so page copy must not advertise it before then.
+- **Payment:** the chain's stablecoin or ETH. The stablecoin is **USDC on Base and USDG on Robinhood Chain**.
+- **Destination:** the **DAO/Team wallet**. Fee destinations are wallets, never the Treasury contract (locked rule).
+- **ETH pricing:** the fee is denominated in USD, so an ETH payment converts at the protocol's own TWAP/oracle price with a staleness check; a stale price rejects the ETH route and leaves the stablecoin route open. Never a fixed ETH amount, which drifts from $5 as ETH moves. Build note: the Masonry oracle today prices xTOMB in the stablecoin only, so G2 has to add the ETH/stablecoin read.
+- **USDG on Robinhood Chain:** `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (Paxos-issued, 6 decimals), recorded under `pendingStablecoins` in `config/official-infrastructure.json`. Pin and verify on-chain before mainnet wiring. Robinhood Chain is not yet a launch chain in that registry.
+- **Who advances:** the expected caller is a positioned user, anyone whose expansion print, claim window or vesting release keys off the new epoch; they pay because advancing pays them. The protocol keeper is the backstop, and its worst case is about $20 a day (four epochs). A missed epoch gets no catch-up, as above.
+
 ## Still open
 
-6,941 split; `authorizedLaunchSupply`; reward budget; Genesis deposit-fee policy (the 50 bps LP fee is separate); multi-pool Genesis; tier perks beyond the base; Harvest All / Compound All / Robot Arms; Farm migration; target-chain calibration (liquidity floor, TWAP cadence, guard tolerances, tick range).
+Home chain (Base first vs Robinhood Chain); 6,941 split; `authorizedLaunchSupply`; reward budget; Genesis deposit-fee policy (the 50 bps LP fee is separate); multi-pool Genesis; tier perks beyond the base; Harvest All / Compound All / Robot Arms; Farm migration; target-chain calibration (liquidity floor, TWAP cadence, guard tolerances, tick range).
