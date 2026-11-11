@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -58,8 +58,8 @@ interface IWeth9 {
 contract BaseForkHookTaxTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
-    Estate internal estate;
+    PegToken internal money;
+    ShareToken internal estate;
     TrustNote internal trustnote;
     Treasury internal treasury;
     Boardroom internal boardroom;
@@ -104,9 +104,10 @@ contract BaseForkHookTaxTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        money = new PegToken(address(this));
+        estate =
+            new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, address(this)), address(this));
+        trustnote = new TrustNote(address(this));
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
         uint160 flags =
@@ -137,11 +138,11 @@ contract BaseForkHookTaxTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime, address(this));
 
         // Deploy Treasury + Boardroom, init, hand off operator.
-        treasury = new Treasury();
-        boardroom = new Boardroom();
+        treasury = new Treasury(address(this));
+        boardroom = new Boardroom(address(this));
         boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);

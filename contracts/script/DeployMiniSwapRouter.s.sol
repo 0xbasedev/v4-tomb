@@ -4,9 +4,8 @@ pragma solidity 0.8.26;
 import {console2} from "forge-std/Script.sol";
 
 import {NetworkConfig} from "./NetworkConfig.s.sol";
+import {Create3Config} from "./Create3Config.s.sol";
 import {MiniSwapRouter} from "../src/swap/MiniSwapRouter.sol";
-
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
 /**
  * @title DeployMiniSwapRouter
@@ -16,10 +15,14 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
  *
  *         Infrastructure resolves from the selected network manifest.
  */
-contract DeployMiniSwapRouter is NetworkConfig {
+contract DeployMiniSwapRouter is NetworkConfig, Create3Config {
     function run() external {
-        _network();
+        (string memory json, string memory path) = _network();
+        string memory planPath = string.concat(path, ".create3");
+        Create3Plan memory plan = _readCreate3(json, planPath);
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        if (vm.addr(pk) != plan.deployer) revert InvalidCreate3Plan();
+        address expected = vm.parseJsonAddress(json, string.concat(planPath, ".addresses.miniSwapRouter"));
         address pm = _infrastructure("poolManager");
 
         console2.log("=== DeployMiniSwapRouter ===");
@@ -27,7 +30,15 @@ contract DeployMiniSwapRouter is NetworkConfig {
         console2.log("poolManager: ", pm);
 
         vm.startBroadcast(pk);
-        MiniSwapRouter router = new MiniSwapRouter(IPoolManager(pm));
+        MiniSwapRouter router = MiniSwapRouter(
+            payable(_deployCreate3(
+                    plan,
+                    "miniSwapRouter",
+                    _addressNonce(json, planPath, "miniSwapRouter"),
+                    expected,
+                    abi.encodePacked(type(MiniSwapRouter).creationCode, abi.encode(pm))
+                ))
+        );
         vm.stopBroadcast();
 
         console2.log("MiniSwapRouter:", address(router));

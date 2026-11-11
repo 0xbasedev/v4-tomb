@@ -21,3 +21,8 @@ build/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+dist-demo/
+
+# playwright
+test-results/
+playwright-report/

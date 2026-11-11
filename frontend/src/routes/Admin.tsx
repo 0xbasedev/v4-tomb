@@ -1,592 +1,329 @@
-import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { isAddress } from "viem";
+import { useRef, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
+import { useReadContracts } from "wagmi";
+import { isAddress, zeroAddress, type Abi, type Address } from "viem";
 
-import { LaunchSequence } from "@/components/LaunchSequence";
-import { RotationStatusPanel } from "@/components/RotationStatusPanel";
-import { RuleTrio } from "@/components/RuleTrio";
-import { StatTile } from "@/components/StatTile";
-import { useToast } from "@/components/ToastProvider";
+import { masonryContractKeys, masonryContractLabels, type MasonryContractKey } from "@config/masonry-deployment.mjs";
+import { GenesisSchedulePanel } from "@/components/admin/GenesisSchedulePanel";
+import { PageHeader, SectionTitle } from "@/components/PageHeader";
+import { Reason, SimBadge } from "@/components/Status";
 import {
-  useDeployment,
-  useEpoch,
-  useIsAdmin,
-  useMoneyMarket,
-} from "@/lib/hooks";
-import {
-  genesisRewardPoolAbi,
-  hookAbi,
-  treasuryAbi,
-} from "@/lib/abis";
-import { maskDecimalInput } from "@/lib/util/decimal";
+  masonryBuybackGuardAbi,
+  masonryCriticalDefenseAbi,
+  masonryGenesisLPBurnFeeAbi,
+  masonryGenesisScheduleAbi,
+  masonryGenesisSettlementAbi,
+  masonryGenesisStakingAbi,
+  masonryLevelHookAbi,
+  masonryLevelOracleAbi,
+  masonrySquareHookAbi,
+} from "@/lib/abis/masonry";
+import { useActions, useIsAdmin, useProtocol, type AdminRole } from "@/lib/hooks";
+import { POLICY } from "@/lib/launch";
+import { useReveal } from "@/lib/motion/useReveal";
 
 /**
- * Admin — operator console for the protocol's privileged surfaces.
- *
- * Access:
- *   The route is reachable to anyone, but the action panels render only when
- *   the connected wallet matches Treasury.operator() OR PegDefenseHook.trustees()
- *   OR GenesisRewardPool.operator(). The contracts enforce the same checks
- *   server-side — this is a convenience gate, not a security boundary.
- *
- * Panels:
- *   I.   Status Board       — at-a-glance: epoch, oracle init, tax on/off, fund cuts
- *   II.  Open Genesis Pool  — register a stake token (operator-only)
- *   III. Post-Bootstrap     — set dao/dev fund cuts + enable hook tax
- *   IV.  Manual Tick        — call treasury.allocateSeigniorage() right now
- *
- * Each panel is independent and renders inline status / errors.
+ * Admin — for role holders only (lpBurnFee owner, settlement binder, xSHARE
+ * hook POL binder). It shows what's deployed and offers only the writes the
+ * connected contracts support for the connected wallet's role, each with the
+ * reason it's disabled. Values are labelled Fixed (contract constants),
+ * Deployment-bound (constructor immutables), Settable (owner setters) or Set
+ * once (Genesis start, by the schedule's immutable scheduler).
+ * There is no timelock, tax switch, forced epoch or Genesis registration:
+ * the xTOMB contracts don't have them.
  */
 
+type Kind = "Fixed" | "Deployment-bound" | "Settable" | "Set once" | "State";
+interface Item {
+  label: string;
+  kind: Kind;
+  contract: MasonryContractKey;
+  abi: Abi;
+  fn: string;
+  /** Expected value from the launch config, shown in Preview and compared live. */
+  expect?: string;
+  fmt?: (v: unknown) => string;
+}
+
+const bps = (v: unknown) => `${Number(v) / 100}%`;
+const secs = (v: unknown) => {
+  const n = Number(v);
+  return n >= 86_400 ? `${n / 86_400} d` : n >= 3_600 ? `${n / 3_600} h` : `${n / 60} min`;
+};
+const price18 = (v: unknown) => `$${(Number(v) / 1e18).toFixed(2)}`;
+const addr = (v: unknown) => (typeof v === "string" ? `${v.slice(0, 8)}…${v.slice(-6)}` : "—");
+const big18 = (v: unknown) => (typeof v === "bigint" ? (Number(v) / 1e18).toLocaleString() : String(v));
+
+const ITEMS: Item[] = [
+  { label: "Genesis length", kind: "Fixed", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "DURATION", expect: secs(POLICY.genesisDurationSeconds), fmt: secs },
+  { label: "LP pool opens after", kind: "Fixed", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "LP_DELAY", expect: secs(POLICY.genesisLpOpenDelaySeconds), fmt: secs },
+  { label: "Genesis scheduler", kind: "Deployment-bound", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "scheduler", fmt: addr },
+  { label: "Genesis start", kind: "Set once", contract: "schedule", abi: masonryGenesisScheduleAbi as Abi, fn: "start", fmt: (v) => (Number(v) === 0 ? "unscheduled (0)" : new Date(Number(v) * 1000).toUTCString()) },
+  { label: "xTOMB sell tax cap", kind: "Fixed", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "MAX_TAX_BPS", expect: bps(POLICY.fireTaxHardCapBps), fmt: bps },
+  { label: "xTOMB Genesis floor", kind: "Fixed", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "GENESIS_MIN_TAX_BPS", expect: bps(POLICY.genesisLevelSellMinimumBps), fmt: bps },
+  { label: "xTOMB tax recipient", kind: "Deployment-bound", contract: "levelHook", abi: masonryLevelHookAbi as Abi, fn: "taxRecipient", fmt: addr },
+  { label: "xSHARE sell tax cap", kind: "Fixed", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "MAX_TAX_BPS", expect: bps(POLICY.fireTaxHardCapBps), fmt: bps },
+  { label: "xSHARE Genesis floor", kind: "Fixed", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "BOOTSTRAP_TAX_BPS", expect: bps(POLICY.squareGenesisSellMinimumBps), fmt: bps },
+  { label: "xSHARE reference price", kind: "Deployment-bound", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "squareReferencePrice", fmt: price18 },
+  { label: "Max xSHARE per route", kind: "Deployment-bound", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "maxSquarePerRoute", fmt: big18 },
+  { label: "Max route deviation", kind: "Deployment-bound", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "maxDeviationBps", fmt: bps },
+  { label: "xSHARE POL vault", kind: "State", contract: "squareHook", abi: masonrySquareHookAbi as Abi, fn: "polVault", fmt: addr },
+  { label: "Compound cooldown", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "COMPOUND_COOLDOWN", expect: secs(POLICY.genesisCompoundCooldownSeconds), fmt: secs },
+  { label: "Pro keeper interval", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "PRO_KEEPER_INTERVAL", expect: secs(POLICY.genesisProKeeperIntervalSeconds), fmt: secs },
+  { label: "Ultra keeper interval", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "ULTRA_KEEPER_INTERVAL", expect: secs(POLICY.genesisUltraKeeperIntervalSeconds), fmt: secs },
+  { label: "Ultra early access", kind: "Fixed", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "ULTRA_EARLY_ACCESS", expect: "1 d", fmt: secs },
+  { label: "Reward budget", kind: "Deployment-bound", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "rewardBudget", fmt: big18 },
+  { label: "Funded", kind: "State", contract: "staking", abi: masonryGenesisStakingAbi as Abi, fn: "funded", fmt: (v) => (v ? "yes" : "no") },
+  { label: "Vesting installments", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "INSTALLMENTS", expect: String(POLICY.genesisVestingInstallments), fmt: String },
+  { label: "Installment interval", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "RELEASE_INTERVAL", expect: secs(POLICY.genesisVestingIntervalSeconds), fmt: secs },
+  { label: "Wallet claim fee", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "WALLET_FEE_BPS", expect: bps(POLICY.genesisWalletClaimFeeBps), fmt: bps },
+  { label: "Keeper fee", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "AUTOMATION_FEE_BPS", expect: bps(POLICY.genesisAutomationFeeBps), fmt: bps },
+  { label: "Max compound refund", kind: "Fixed", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "MAX_REFUND_BPS", expect: "3%", fmt: bps },
+  { label: "Bound staking", kind: "State", contract: "settlement", abi: masonryGenesisSettlementAbi as Abi, fn: "staking", fmt: addr },
+  { label: "LP deposit fee (to Treasury as POL)", kind: "Fixed", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "DEPOSIT_BURN_FEE_BPS", expect: bps(POLICY.genesisLevelUsdcLpBurnFeeBps), fmt: bps },
+  { label: "LP fee destination", kind: "Deployment-bound", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "treasury", fmt: addr },
+  { label: "Authorized Genesis caller", kind: "Settable", contract: "lpBurnFee", abi: masonryGenesisLPBurnFeeAbi as Abi, fn: "genesis", fmt: addr },
+  { label: "Defense entry", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "ENTER_PRICE", expect: `$${(POLICY.criticalDefenseEntryBps / 10_000).toFixed(2)}`, fmt: price18 },
+  { label: "Defense exit", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "EXIT_PRICE", expect: `$${(POLICY.criticalDefenseExitBps / 10_000).toFixed(2)}`, fmt: price18 },
+  { label: "Defense oracle max age", kind: "Fixed", contract: "criticalDefense", abi: masonryCriticalDefenseAbi as Abi, fn: "MAX_ORACLE_AGE", expect: secs(POLICY.criticalOracleMaxAgeSeconds), fmt: secs },
+  { label: "TWAP window", kind: "Fixed", contract: "levelOracle", abi: masonryLevelOracleAbi as Abi, fn: "WINDOW", fmt: secs },
+  { label: "Oracle min liquidity", kind: "Deployment-bound", contract: "levelOracle", abi: masonryLevelOracleAbi as Abi, fn: "minLiquidity", fmt: String },
+  { label: "Guard spot tolerance", kind: "Deployment-bound", contract: "buybackGuard", abi: masonryBuybackGuardAbi as Abi, fn: "maxSpotDeviationBps", fmt: bps },
+  { label: "Guard impact tolerance", kind: "Deployment-bound", contract: "buybackGuard", abi: masonryBuybackGuardAbi as Abi, fn: "maxPriceImpactBps", fmt: bps },
+  { label: "Guard loss tolerance", kind: "Deployment-bound", contract: "buybackGuard", abi: masonryBuybackGuardAbi as Abi, fn: "maxExecutionLossBps", fmt: bps },
+];
+
 export function Admin() {
-  const { chainId, address } = useAccount();
-  const deployment = useDeployment();
+  const root = useRef<HTMLDivElement>(null);
   const admin = useIsAdmin();
-  const epoch = useEpoch();
-  const market = useMoneyMarket();
-  const toast = useToast();
+  const p = useProtocol();
+  useReveal(root, []);
+  const d = p.net.deployment;
+  const reads = useReadContracts({
+    allowFailure: true,
+    contracts: d ? ITEMS.map((i) => ({ address: d.contracts[i.contract], abi: i.abi, functionName: i.fn })) : [],
+    query: { enabled: !!d },
+  });
+  if (!admin.isAdmin) return <Navigate to="/dashboard" replace />;
 
-  // One write hook reused across panels — only one action runs at a time on
-  // this page, so a shared pipeline is fine.
-  const write = useWriteContract();
-  const receipt = useWaitForTransactionReceipt({ hash: write.data, chainId: write.variables?.chainId });
-
-  function broadcast(label: string, call: Parameters<typeof write.writeContract>[0]) {
-    const tid = toast.push({ variant: "pending", title: label, message: "Awaiting your signature." });
-    write.writeContract({ ...call, chainId, account: address }, {
-      onSuccess: (hash) => {
-        toast.update(tid, {
-          variant: "pending",
-          title: `${label} · Confirming`,
-          message: "Broadcast — waiting for inclusion.",
-          txHash: hash,
-        });
-        // Defer success/error to the receipt watcher below
-        watchReceipt(tid, label, hash);
-      },
-      onError: (err) => {
-        toast.update(tid, {
-          variant: "error",
-          title: `${label} · Reverted`,
-          message: err.message.split("\n")[0].slice(0, 120),
-        });
-      },
-    });
-  }
-
-  function watchReceipt(tid: string, label: string, hash: `0x${string}`) {
-    // Poll the receipt status synchronously via the existing useWaitForTransactionReceipt.
-    // We can't subscribe per-tx here without restructuring, so we rely on the receipt
-    // hook (above) which tracks write.data. The hook below escalates the toast on
-    // success/error. Hash is included in pending toast so user has the BaseScan link.
-    void hash;
-    void tid;
-    void label;
-  }
-
-  // Promote pending toast to success/error as the receipt resolves.
-  if (receipt.isSuccess && write.data) {
-    // Idempotent — only fires once because write.data identity is stable post-broadcast.
-    // The Toast system de-dups by id; we re-push with a stable id derived from the txHash.
-    toast.push({
-      id: `r-${write.data}`,
-      variant: "success",
-      title: "Confirmed",
-      txHash: write.data,
-    });
-  }
-  if (receipt.isError && write.data) {
-    toast.push({
-      id: `e-${write.data}`,
-      variant: "error",
-      title: "Reverted",
-      message: (write.error as Error | null)?.message?.split("\n")[0]?.slice(0, 120) ?? "Reverted",
-      txHash: write.data,
-    });
-  }
+  const value = (i: number): string => {
+    if (!d) return ITEMS[i].expect ?? "set at deploy";
+    const r = reads.data?.[i];
+    return r?.status === "success" ? (ITEMS[i].fmt ?? String)(r.result) : "—";
+  };
+  const state = (fn: string) => {
+    const i = ITEMS.findIndex((x) => x.fn === fn);
+    return d ? reads.data?.[i]?.result : undefined;
+  };
 
   return (
-    <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            The Operator's Console · Restricted
+    <div ref={root}>
+      <PageHeader
+        eyebrow="Admin · role holders only"
+        title="Deployment"
+        lede="What's deployed, what's fixed, and the few changes these contracts allow — each one gated by the role that can make it."
+        aside={
+          <div className="panel p-5">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="label">Your roles</span>
+              {p.sim && <SimBadge label="Simulated owner" />}
+            </div>
+            <ul className="space-y-1 font-mono text-[12px] text-bone-dim">
+              {(["lpBurnFee.owner", "settlement.binder", "squareHook.polBinder", "schedule.scheduler"] as AdminRole[]).map((r) => (
+                <li key={r} className="flex justify-between gap-2">
+                  <span>{r}</span>
+                  <span className={admin.roles.includes(r) ? "text-ok" : "text-ash"}>{admin.roles.includes(r) ? "you" : admin.holders[r] ? addr(admin.holders[r]) : "—"}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <h1 className="gold-text font-display italic text-section">The Admin</h1>
-          <RuleTrio className="mb-2 mt-8" />
-        </div>
-      </section>
+        }
+      />
+      <div className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-12 md:px-8">
+        {!d && (
+          <div data-reveal className="rounded-xl border border-warn/30 bg-warn/[0.05] p-4 text-[13px] text-bone-dim">
+            No verified deployment on this network. Values below are the launch configuration's expected values; addresses appear once{" "}
+            <span className="font-mono">config/masonry-deployments.json</span> lists a validated deployment. Plan one in the{" "}
+            <Link to="/wizard" className="text-ember-hot hover:underline">
+              Wizard
+            </Link>
+            .
+          </div>
+        )}
 
-      {!deployment ? (
-        <NotConnected />
-      ) : admin.isLoading ? (
-        <Loading />
-      ) : !admin.isAdmin ? (
-        <Restricted
-          you={admin.treasuryOperator ? "" : "—"}
-          treasury={admin.treasuryOperator ?? "—"}
-          hookTrustees={admin.hookTrustees ?? "—"}
-          genesisOperator={admin.genesisOperator ?? "—"}
-        />
-      ) : (
-        <>
-          <LaunchSequence />
-          <StatusBoard
-            epoch={epoch.epoch !== undefined ? Number(epoch.epoch) : 0}
-            inBootstrap={market.phase === "bootstrap"}
-            bootstrapEpochs={Number(market.bootstrapEpochs)}
-            isTreasuryOperator={admin.isTreasuryOperator}
-            isHookTrustees={admin.isHookTrustees}
-            isGenesisOperator={admin.isGenesisOperator}
-          />
+        <section>
+          <SectionTitle kicker="Bound values" title={d ? "Deployed values" : "Expected values"} />
+          <div data-reveal className="panel overflow-x-auto p-0">
+            <table className="w-full min-w-[620px] text-[12.5px]">
+              <thead>
+                <tr className="border-b border-white/5 text-left text-ash">
+                  <th className="px-4 py-2 font-medium">Value</th>
+                  <th className="px-4 py-2 font-medium">Contract</th>
+                  <th className="px-4 py-2 font-medium">Kind</th>
+                  <th className="px-4 py-2 text-right font-medium">{d ? "On-chain" : "Expected"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ITEMS.map((it, i) => {
+                  const v = value(i);
+                  const mismatch = d && it.expect && v !== "—" && v !== it.expect;
+                  return (
+                    <tr key={it.label} className="border-b border-white/[0.04]">
+                      <td className="px-4 py-2 text-bone">{it.label}</td>
+                      <td className="px-4 py-2 font-mono text-[11px] text-ash">
+                        {it.contract}.{it.fn}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`chip h-5 px-2 text-[10px] ${it.kind === "Fixed" ? "" : it.kind === "Settable" || it.kind === "Set once" ? "chip-ember" : it.kind === "State" ? "chip-spectre" : "chip-amethyst"}`}>{it.kind}</span>
+                      </td>
+                      <td className={`num px-4 py-2 text-right ${mismatch ? "text-bad" : "text-bone"}`}>
+                        {v}
+                        {mismatch && <span className="block text-[10.5px]">config says {it.expect}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-          <OpenGenesisPanel
-            disabled={!admin.isGenesisOperator || write.isPending || receipt.isLoading}
-            onSubmit={(token, allocPoint) =>
-              broadcast("Register Genesis Stake Token", {
-                address: deployment.genesisRewardPool,
-                abi: genesisRewardPoolAbi,
-                functionName: "add",
-                args: [allocPoint, token, false, 0n],
-              })
-            }
-          />
+        <GenesisSchedulePanel />
 
-          <PostBootstrapPanel
-            currentEpoch={Number(epoch.epoch ?? 0n)}
-            bootstrapEpochs={Number(market.bootstrapEpochs)}
-            disabled={!admin.isTreasuryOperator || write.isPending || receipt.isLoading}
-            onSetExtraFunds={(daoFund, daoPct, devFund, devPct) =>
-              broadcast("Set Extra Funds", {
-                address: deployment.treasury,
-                abi: treasuryAbi,
-                functionName: "setExtraFunds",
-                args: [daoFund, daoPct, devFund, devPct],
-              })
-            }
-            disabledTax={!admin.isHookTrustees || write.isPending || receipt.isLoading}
-            onToggleTax={(enabled) =>
-              broadcast(enabled ? "Enable Hook Tax" : "Disable Hook Tax", {
-                address: deployment.hook,
-                abi: hookAbi,
-                functionName: "setAutoCalculateTax",
-                args: [enabled],
-              })
-            }
-          />
+        <AdminActions roles={admin.roles} state={state} />
 
-          <ManualTickPanel
-            currentEpoch={Number(epoch.epoch ?? 0n)}
-            nextEpochPoint={Number(epoch.nextEpochPoint ?? 0n)}
-            disabled={write.isPending || receipt.isLoading}
-            onTick={() =>
-              broadcast("Manual Tick · allocateSeigniorage", {
-                address: deployment.treasury,
-                abi: treasuryAbi,
-                functionName: "allocateSeigniorage",
-                args: [],
-              })
-            }
-          />
+        <section>
+          <SectionTitle kicker="Addresses" title="Contracts" />
+          <div data-reveal className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {masonryContractKeys.map((k) => (
+              <div key={k} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2">
+                <span className="text-[12.5px] text-bone-dim">{masonryContractLabels[k]}</span>
+                <span className="font-mono text-[11px] text-ash">{d ? addr(d.contracts[k]) : "not deployed"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <RotationStatusPanel />
-        </>
-      )}
+        <section data-reveal className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="panel p-5">
+            <div className="label mb-2">Release plan · CREATE3</div>
+            <p className="text-[13px] leading-relaxed text-bone-dim">
+              Every project address is predicted from the deployment signer and release ID before deploy, and the deploy scripts check each one before broadcasting. Plan or review it in the{" "}
+              <Link to="/wizard" className="text-ember-hot hover:underline">
+                Wizard's release step
+              </Link>
+              .
+            </p>
+          </div>
+          <div className="panel p-5">
+            <div className="label mb-2">Compound gate · not bound</div>
+            <p className="text-[13px] leading-relaxed text-bone-dim">
+              MasonryCompoundGate holds the hard-coded 3-hour clock shared by manual and keeper compounds, with an owner-set executor list. Its Genesis and Farm adapters aren't wired yet, so it has no deployment entry and{" "}
+              <span className="font-mono">setExecutor</span> isn't offered here.
+            </p>
+          </div>
+        </section>
+
+        <section data-reveal className="panel p-5">
+          <div className="label mb-2">Not offered</div>
+          <p className="text-[13px] leading-relaxed text-bone-dim">
+            No governance timelock, no Fire Tax on/off switch, no forced epoch, no owner trading pause and no Genesis pool registration — the xTOMB contracts
+            don't have them (governance timelocks and the trading pause are disabled in the release invariants).
+          </p>
+        </section>
+      </div>
     </div>
   );
 }
 
-/* ============================================================== */
-/* States                                                         */
-/* ============================================================== */
+function AdminActions({ roles, state }: { roles: AdminRole[]; state: (fn: string) => unknown }) {
+  const p = useProtocol();
+  const actions = useActions();
+  const d = p.net.deployment;
+  const [genesisCaller, setGenesisCaller] = useState("");
+  const [newOwner, setNewOwner] = useState("");
+  const [bindStaking, setBindStaking] = useState("");
+  const [polVault, setPolVault] = useState("");
+  const owner = roles.includes("lpBurnFee.owner");
+  const binder = roles.includes("settlement.binder");
+  const polBinder = roles.includes("squareHook.polBinder");
+  const bound = d ? state("staking") !== undefined && state("staking") !== zeroAddress : false;
+  const polBound = d ? state("polVault") !== undefined && state("polVault") !== zeroAddress : false;
+  const funded = d ? state("funded") === true : false;
+  const started = p.clock ? p.clock.phase !== "pre" : false;
+  const c = d?.contracts;
+  const send = (label: string, contract: MasonryContractKey, abi: Abi, fn: string, args: readonly unknown[]) =>
+    actions.admin(label, (c?.[contract] ?? zeroAddress) as Address, abi, fn, args);
 
-function NotConnected() {
-  return (
-    <section className="px-6 pb-20 md:px-12">
-      <div className="deco-panel mx-auto max-w-2xl text-center">
-        <div className="label-deco mb-3 text-deco-gold-dark">The Trust Awaits</div>
-        <h2 className="mb-4 font-display text-3xl italic text-deco-ivory md:text-4xl">
-          Connect a wallet on a configured network
-        </h2>
-        <p className="font-body text-base italic text-deco-ivory-soft">
-          The Admin console reads the operator slots on Treasury, PegDefenseHook, and
-          GenesisRewardPool. Without a connected wallet, no slot can be checked.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function Loading() {
-  return (
-    <section className="px-6 pb-20 md:px-12">
-      <div className="deco-panel mx-auto max-w-2xl text-center">
-        <p className="font-body text-base italic text-deco-gold-dark">
-          Reading the operator slots…
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function Restricted({
-  you,
-  treasury,
-  hookTrustees,
-  genesisOperator,
-}: {
-  you: string;
-  treasury: string;
-  hookTrustees: string;
-  genesisOperator: string;
-}) {
-  void you;
-  return (
-    <section className="px-6 pb-20 md:px-12">
-      <div className="deco-panel mx-auto max-w-2xl text-center">
-        <div className="label-deco mb-3 text-deco-ruby">Access Denied</div>
-        <h2 className="mb-4 font-display text-3xl italic text-deco-ivory md:text-4xl">
-          The Trust does not recognize you
-        </h2>
-        <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
-        <p className="mb-6 font-body text-base italic text-deco-ivory-soft">
-          Your wallet holds no admin role on the protocol contracts. This page is
-          gated to the operator slots on Treasury, PegDefenseHook, and
-          GenesisRewardPool. The contracts themselves enforce the same checks —
-          any unauthorized action would revert on-chain.
-        </p>
-        <div className="space-y-2 text-left font-body text-xs italic text-deco-gold-dark">
-          <div>
-            Treasury operator:{" "}
-            <code className="font-ornament text-deco-gold">{treasury}</code>
-          </div>
-          <div>
-            Hook trustees:{" "}
-            <code className="font-ornament text-deco-gold">{hookTrustees}</code>
-          </div>
-          <div>
-            Genesis operator:{" "}
-            <code className="font-ornament text-deco-gold">{genesisOperator}</code>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================== */
-/* Panels                                                         */
-/* ============================================================== */
-
-function StatusBoard({
-  epoch,
-  inBootstrap,
-  bootstrapEpochs,
-  isTreasuryOperator,
-  isHookTrustees,
-  isGenesisOperator,
-}: {
-  epoch: number;
-  inBootstrap: boolean;
-  bootstrapEpochs: number;
-  isTreasuryOperator: boolean;
-  isHookTrustees: boolean;
-  isGenesisOperator: boolean;
-}) {
-  return (
-    <section className="px-6 pb-12 md:px-12">
-      <div className="mx-auto max-w-7xl">
-        <div className="label-deco mb-6 text-center text-deco-gold-dark">Your Roles</div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-          <StatTile
-            label="Treasury Operator"
-            value={isTreasuryOperator ? "Yes" : "No"}
-            hint="setExtraFunds, setBootstrap, allocateSeigniorage"
-          />
-          <StatTile
-            label="Hook Trustees"
-            value={isHookTrustees ? "Yes" : "No"}
-            hint="setAutoCalculateTax, setTreasury, tax tier edits"
-          />
-          <StatTile
-            label="Genesis Operator"
-            value={isGenesisOperator ? "Yes" : "No"}
-            hint="add() to register stake tokens"
-          />
-          <StatTile
-            label="Phase"
-            value={inBootstrap ? `Bootstrap ${epoch}/${bootstrapEpochs}` : `Epoch ${epoch}`}
-            hint={inBootstrap ? "Unconditional expansion" : "Oracle-driven"}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function OpenGenesisPanel({
-  disabled,
-  onSubmit,
-}: {
-  disabled: boolean;
-  onSubmit: (token: `0x${string}`, allocPoint: bigint) => void;
-}) {
-  const [tokenInput, setTokenInput] = useState("");
-  const [allocPoint, setAllocPoint] = useState("100");
-
-  const tokenValid = isAddress(tokenInput.trim());
-  const allocValid = /^\d+$/.test(allocPoint) && parseInt(allocPoint, 10) > 0;
-  const canSubmit = tokenValid && allocValid && !disabled;
+  const rows: { title: string; who: string; body: React.ReactNode; disabled: string | null; run: () => void }[] = [
+    {
+      title: "Set the authorized Genesis caller",
+      who: "LP fee owner",
+      body: <input aria-label="Genesis staking address" placeholder="0x… staking contract" value={genesisCaller} onChange={(e) => setGenesisCaller(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
+      disabled: !owner ? "Only the LP fee owner can change the Genesis caller." : !isAddress(genesisCaller) ? "Enter the Genesis staking address." : null,
+      run: () => send("Set Genesis caller", "lpBurnFee", masonryGenesisLPBurnFeeAbi as Abi, "setGenesis", [genesisCaller]),
+    },
+    {
+      title: "Transfer LP fee ownership",
+      who: "LP fee owner",
+      body: <input aria-label="New owner" placeholder="0x… new owner" value={newOwner} onChange={(e) => setNewOwner(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
+      disabled: !owner ? "Only the current owner can transfer ownership." : !isAddress(newOwner) ? "Enter the new owner's address." : null,
+      run: () => send("Transfer ownership", "lpBurnFee", masonryGenesisLPBurnFeeAbi as Abi, "transferOwnership", [newOwner]),
+    },
+    {
+      title: "Bind settlement to staking",
+      who: "settlement binder · once",
+      body: <input aria-label="Staking address to bind" placeholder="0x… staking" value={bindStaking} onChange={(e) => setBindStaking(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
+      disabled: !binder ? "Only the settlement binder can bind." : bound ? "Already bound — binding happens once." : !isAddress(bindStaking) ? "Enter the staking address." : null,
+      run: () => send("Bind settlement", "settlement", masonryGenesisSettlementAbi as Abi, "bind", [bindStaking]),
+    },
+    {
+      title: "Bind the xSHARE POL vault",
+      who: "xSHARE hook POL binder · once",
+      body: <input aria-label="POL vault address" placeholder="0x… xSHARE/USDC vault" value={polVault} onChange={(e) => setPolVault(e.target.value.trim())} className="well w-full px-2 py-1.5 font-mono text-[12px] text-bone" />,
+      disabled: !polBinder ? "Only the POL binder can bind the vault." : polBound ? "Already bound — binding happens once." : !isAddress(polVault) ? "Enter the vault address." : null,
+      run: () => send("Bind POL vault", "squareHook", masonrySquareHookAbi as Abi, "bindPolVault", [polVault]),
+    },
+    {
+      title: "Fund the Genesis reward budget",
+      who: "anyone holding the budget · before start",
+      body: <p className="text-[12px] text-ash">Transfers the full reward budget of xTOMB into staking. Approve the staking contract for that amount first.</p>,
+      disabled: funded ? "Already funded." : started ? "Funding is only possible before Genesis starts." : null,
+      run: () => send("Fund Genesis", "staking", masonryGenesisStakingAbi as Abi, "fund", []),
+    },
+    {
+      title: "Sync Critical Defense",
+      who: "anyone",
+      body: <p className="text-[12px] text-ash">Applies the latest fresh TWAP to the defense state machine. Stale readings change nothing.</p>,
+      disabled: null,
+      run: () => send("Sync Critical Defense", "criticalDefense", masonryCriticalDefenseAbi as Abi, "sync", []),
+    },
+    {
+      title: "Checkpoint the xTOMB oracle",
+      who: "anyone",
+      body: <p className="text-[12px] text-ash">Records an observation without counting as a price-moving swap.</p>,
+      disabled: null,
+      run: () => send("Checkpoint oracle", "levelHook", masonryLevelHookAbi as Abi, "checkpoint", []),
+    },
+  ];
 
   return (
-    <section className="px-6 pb-12 md:px-12">
-      <div className="mx-auto max-w-3xl">
-        <div className="deco-panel">
-          <div className="label-deco mb-3 text-deco-gold-dark">I · Open Genesis</div>
-          <h2 className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl">
-            Register a Genesis Stake Token
-          </h2>
-          <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
-          <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
-            Calls <code className="font-ornament text-deco-gold">genesisRewardPool.add(allocPoint, token, false, 0)</code>.
-            Run BEFORE poolStartTime — unregistered emission is lost. Repeat per token (WETH, USDC, etc.).
-          </p>
-
-          <div className="mb-2 px-1 text-left">
-            <span className="label-deco text-deco-gold-dark">Stake Token Address</span>
-          </div>
-          <div className="mb-4 flex items-center border border-deco-gold/50 bg-deco-ground focus-within:border-deco-gold">
-            <input
-              type="text"
-              placeholder="0x4200…"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              disabled={disabled}
-              aria-label="Stake token address"
-              className="font-display w-full bg-transparent px-4 py-3 text-left text-base text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none disabled:opacity-50"
-            />
-          </div>
-
-          <div className="mb-2 px-1 text-left">
-            <span className="label-deco text-deco-gold-dark">Alloc Point</span>
-          </div>
-          <div className="mb-6 flex items-center border border-deco-gold/50 bg-deco-ground focus-within:border-deco-gold">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={allocPoint}
-              onChange={(e) => setAllocPoint(e.target.value.replace(/[^\d]/g, ""))}
-              disabled={disabled}
-              aria-label="Alloc point weight"
-              className="font-display w-full bg-transparent px-4 py-3 text-right text-2xl text-deco-ivory focus:outline-none disabled:opacity-50"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onSubmit(tokenInput.trim() as `0x${string}`, BigInt(allocPoint))}
-            disabled={!canSubmit}
-            className="btn-deco btn-deco-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Register
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PostBootstrapPanel({
-  currentEpoch,
-  bootstrapEpochs,
-  disabled,
-  onSetExtraFunds,
-  disabledTax,
-  onToggleTax,
-}: {
-  currentEpoch: number;
-  bootstrapEpochs: number;
-  disabled: boolean;
-  onSetExtraFunds: (daoFund: `0x${string}`, daoPct: bigint, devFund: `0x${string}`, devPct: bigint) => void;
-  disabledTax: boolean;
-  onToggleTax: (enabled: boolean) => void;
-}) {
-  const [daoFund, setDaoFund] = useState("");
-  const [daoPct, setDaoPct] = useState("");
-  const [devFund, setDevFund] = useState("");
-  const [devPct, setDevPct] = useState("");
-
-  const inBootstrap = currentEpoch < bootstrapEpochs;
-  const fundsValid =
-    isAddress(daoFund) &&
-    isAddress(devFund) &&
-    /^\d+(\.\d+)?$/.test(daoPct) &&
-    /^\d+(\.\d+)?$/.test(devPct);
-
-  return (
-    <section className="px-6 pb-12 md:px-12">
-      <div className="mx-auto max-w-3xl">
-        <div className="deco-panel">
-          <div className="label-deco mb-3 text-deco-gold-dark">II · Post-Bootstrap</div>
-          <h2 className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl">
-            Configure Fund Cuts &amp; Hook Tax
-          </h2>
-          <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
-          {inBootstrap && (
-            <p className="mb-4 mx-auto max-w-xl font-body text-sm italic text-deco-ruby">
-              Still in bootstrap (epoch {currentEpoch} of {bootstrapEpochs}). These
-              setters work pre-bootstrap-end but won't take effect until expansion
-              begins.
-            </p>
-          )}
-
-          {/* --- Extra Funds --- */}
-          <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <div className="label-deco mb-1 text-left text-deco-gold-dark">Dao Fund Address</div>
-              <input
-                type="text"
-                placeholder="0x…"
-                value={daoFund}
-                onChange={(e) => setDaoFund(e.target.value)}
-                disabled={disabled}
-                className="font-display w-full border border-deco-gold/50 bg-deco-ground px-3 py-2 text-left text-base text-deco-ivory focus:border-deco-gold focus:outline-none disabled:opacity-50"
-              />
+    <section>
+      <SectionTitle kicker="Supported changes" title="Actions" right={p.sim ? <SimBadge label="Simulated" /> : undefined} />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {rows.map((r) => (
+          <div key={r.title} data-reveal className="panel p-4">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-[14px] font-semibold text-bone">{r.title}</span>
+              <span className="font-mono text-[10.5px] text-ash">{r.who}</span>
             </div>
-            <div>
-              <div className="label-deco mb-1 text-left text-deco-gold-dark">Dao % (0–30)</div>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="0"
-                value={daoPct}
-                onChange={(e) => setDaoPct(maskDecimalInput(e.target.value))}
-                disabled={disabled}
-                className="font-display w-full border border-deco-gold/50 bg-deco-ground px-3 py-2 text-right text-base text-deco-ivory focus:border-deco-gold focus:outline-none disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <div className="label-deco mb-1 text-left text-deco-gold-dark">Dev Fund Address</div>
-              <input
-                type="text"
-                placeholder="0x…"
-                value={devFund}
-                onChange={(e) => setDevFund(e.target.value)}
-                disabled={disabled}
-                className="font-display w-full border border-deco-gold/50 bg-deco-ground px-3 py-2 text-left text-base text-deco-ivory focus:border-deco-gold focus:outline-none disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <div className="label-deco mb-1 text-left text-deco-gold-dark">Dev % (0–10)</div>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="0"
-                value={devPct}
-                onChange={(e) => setDevPct(maskDecimalInput(e.target.value))}
-                disabled={disabled}
-                className="font-display w-full border border-deco-gold/50 bg-deco-ground px-3 py-2 text-right text-base text-deco-ivory focus:border-deco-gold focus:outline-none disabled:opacity-50"
-              />
-            </div>
+            {r.body}
+            <button type="button" className="btn mt-3 h-9 px-4 text-[12.5px]" disabled={!!r.disabled || actions.busy || (!p.sim && !p.net.canTransact)} onClick={r.run}>
+              {p.sim ? "Simulate" : "Send"}
+            </button>
+            {(r.disabled || (!p.sim && !p.net.canTransact)) && <Reason>{r.disabled ?? p.net.reason}</Reason>}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (!fundsValid) return;
-              onSetExtraFunds(
-                daoFund as `0x${string}`,
-                BigInt(Math.round(parseFloat(daoPct) * 100)),
-                devFund as `0x${string}`,
-                BigInt(Math.round(parseFloat(devPct) * 100)),
-              );
-            }}
-            disabled={!fundsValid || disabled}
-            className="btn-deco w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Set Extra Funds
-          </button>
-
-          {/* --- Tax Toggle --- */}
-          <div className="mt-6 border-t border-deco-gold/20 pt-6">
-            <div className="mb-2 text-left">
-              <span className="label-deco text-deco-gold-dark">Hook Tax</span>
-            </div>
-            <p className="mb-4 font-body text-sm italic text-deco-ivory-soft">
-              Enable the 14-tier sell tax. Off by default at deploy; flip on
-              post-bootstrap. Burns below 1.10 ETH, routes to Treasury above.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => onToggleTax(true)}
-                disabled={disabledTax}
-                className="btn-deco flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Enable Tax
-              </button>
-              <button
-                type="button"
-                onClick={() => onToggleTax(false)}
-                disabled={disabledTax}
-                className="btn-deco flex-1 justify-center disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Disable Tax
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ManualTickPanel({
-  currentEpoch,
-  nextEpochPoint,
-  disabled,
-  onTick,
-}: {
-  currentEpoch: number;
-  nextEpochPoint: number;
-  disabled: boolean;
-  onTick: () => void;
-}) {
-  const now = Math.floor(Date.now() / 1000);
-  const ready = now >= nextEpochPoint && nextEpochPoint > 0;
-  const wait = nextEpochPoint - now;
-
-  return (
-    <section className="px-6 pb-20 md:px-12 md:pb-28">
-      <div className="mx-auto max-w-3xl">
-        <div className="deco-panel">
-          <div className="label-deco mb-3 text-deco-gold-dark">III · Manual Tick</div>
-          <h2 className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl">
-            Force An Epoch Advance
-          </h2>
-          <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
-          <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
-            Calls <code className="font-ornament text-deco-gold">treasury.allocateSeigniorage()</code> right now. Permissionless
-            post-nextEpochPoint. The GitHub Actions keeper handles this every 30
-            min on schedule; use this for one-off pushes or debugging.
-          </p>
-          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <StatTile label="Current Epoch" value={currentEpoch.toString()} hint="Treasury Counter" />
-            <StatTile
-              label="Ready?"
-              value={ready ? "Yes" : `In ${Math.max(0, wait)}s`}
-              hint={ready ? "now >= nextEpochPoint" : "Will revert if pushed early"}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onTick}
-            disabled={!ready || disabled}
-            className="btn-deco btn-deco-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Tick
-          </button>
-        </div>
+        ))}
       </div>
     </section>
   );

@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 import {BaseV4Hook} from "../../src/hooks/base/BaseV4Hook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -67,7 +67,7 @@ contract PegDefenseHookTest is BaseTest {
 
     PegDefenseHook internal hook;
     MockPoolManager internal pm;
-    OldMoney internal money;
+    PegToken internal money;
     address internal weth = makeAddr("weth");
     PoolKey internal poolKey;
 
@@ -82,7 +82,7 @@ contract PegDefenseHookTest is BaseTest {
         pm = new MockPoolManager();
 
         vm.prank(owner);
-        money = new OldMoney();
+        money = new PegToken(owner);
 
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
@@ -155,12 +155,19 @@ contract PegDefenseHookTest is BaseTest {
     function test_AfterInitialize_OnlyPoolManager() public {
         vm.prank(stranger);
         vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
-        hook.afterInitialize(address(0), poolKey, 0, 0);
+        hook.afterInitialize(trustees, poolKey, 0, 0);
+    }
+
+    function test_AfterInitialize_RejectsUnapprovedInitializer() public {
+        vm.prank(address(pm));
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.afterInitialize(stranger, poolKey, 0, 0);
+        assertFalse(hook.bound());
     }
 
     function test_AfterInitialize_RecordsState() public {
         vm.prank(address(pm));
-        hook.afterInitialize(address(0), poolKey, 0, 123);
+        hook.afterInitialize(trustees, poolKey, 0, 123);
 
         assertTrue(hook.bound());
         assertEq(hook.lastTick(), 123);
@@ -172,7 +179,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_AfterInitialize_DetectsMoneyOrientation() public {
         vm.prank(address(pm));
-        hook.afterInitialize(address(0), poolKey, 0, 0);
+        hook.afterInitialize(trustees, poolKey, 0, 0);
         // MONEY is currency0 iff its address is the lower of the two.
         bool expectedIsCurrency0 = address(money) < weth;
         assertEq(hook.moneyIsCurrency0(), expectedIsCurrency0);
@@ -180,11 +187,11 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_AfterInitialize_OneShot() public {
         vm.prank(address(pm));
-        hook.afterInitialize(address(0), poolKey, 0, 0);
+        hook.afterInitialize(trustees, poolKey, 0, 0);
 
         vm.prank(address(pm));
         vm.expectRevert(PegDefenseHook.AlreadyBound.selector);
-        hook.afterInitialize(address(0), poolKey, 0, 0);
+        hook.afterInitialize(trustees, poolKey, 0, 0);
     }
 
     function test_AfterInitialize_RejectsPoolMissingMoney() public {
@@ -199,7 +206,7 @@ contract PegDefenseHookTest is BaseTest {
 
         vm.prank(address(pm));
         vm.expectRevert(PegDefenseHook.PoolMissingMoney.selector);
-        hook.afterInitialize(address(0), badKey, 0, 0);
+        hook.afterInitialize(trustees, badKey, 0, 0);
     }
 
     // ---------------------------------------------------------------------
@@ -785,7 +792,7 @@ contract PegDefenseHookTest is BaseTest {
         int24 initialTick
     ) internal {
         vm.prank(address(pm));
-        hook.afterInitialize(address(0), poolKey, 0, initialTick);
+        hook.afterInitialize(trustees, poolKey, 0, initialTick);
     }
 
     function _emptySwap() internal pure returns (SwapParams memory) {

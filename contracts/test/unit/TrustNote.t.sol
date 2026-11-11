@@ -14,7 +14,7 @@ contract TrustNoteTest is BaseTest {
     function setUp() public override {
         super.setUp();
         vm.prank(owner);
-        bond = new TrustNote();
+        bond = new TrustNote(owner);
         vm.prank(owner);
         bond.transferTrustees(trustees);
     }
@@ -31,7 +31,7 @@ contract TrustNoteTest is BaseTest {
 
     function test_Constructor_NoInitialSupply() public {
         vm.prank(alice);
-        TrustNote fresh = new TrustNote();
+        TrustNote fresh = new TrustNote(alice);
         assertEq(fresh.totalSupply(), 0);
         assertEq(fresh.balanceOf(alice), 0);
         assertEq(fresh.owner(), alice);

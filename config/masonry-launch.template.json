@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "protocol": "masonry",
+  "note": "INCOMPLETE TEMPLATE: select the authorized LEVEL launch supply before deployment. Never deploy from null fields.",
+  "square": {
+    "maxSupply": 33333,
+    "farming": 25641,
+    "saleEscrow": 100,
+    "deployer": 1,
+    "initial": {
+      "ownerTeamDeveloper": 100,
+      "deployerDao": 100,
+      "treasury": 500,
+      "arbitrage": 50
+    },
+    "vesting": {
+      "team": 1000,
+      "developer": 1000,
+      "treasury": 2940,
+      "arbitrage": 1901
+    }
+  },
+  "level": {
+    "authorizedLaunchSupply": null,
+    "initial": {
+      "ownerTeamDeveloper": 5000,
+      "treasury": 5000,
+      "arbitrage": 1000
+    }
+  },
+  "policy": {
+    "fireTaxHardCapBps": 1200,
+    "genesisDurationSeconds": 604800,
+    "genesisLpOpenDelaySeconds": 86400,
+    "genesisLevelSellMinimumBps": 300,
+    "genesisLevelSellBurnShareBps": 10000,
+    "genesisNftRequired": true,
+    "genesisNftPriceUsdc": 50,
+    "genesisProNftPriceUsdc": 100,
+    "genesisUltraNftPriceUsdc": 500,
+    "genesisUltraMultiplier": 1,
+    "fireTaxBaselineBps": 100,
+    "fullTaxAtOrBelowPegBps": 8500,
+    "fireTaxRecoverySeconds": 25200,
+    "maximumExpansionPerEpochBps": 200,
+    "requiresFreshTwapStrictlyAbovePegBps": 10100,
+    "farmsCompoundCooldownSeconds": 10800,
+    "genesisCompoundCooldownSeconds": 10800,
+    "genesisProKeeperIntervalSeconds": 21600,
+    "genesisUltraKeeperIntervalSeconds": 10800,
+    "farmEmissionDays": 365,
+    "operationalVestingDays": 180,
+    "genesisLevelUsdcLpBurnFeeBps": 50,
+    "genesisLiquidRewardBps": 5000,
+    "genesisVestingInstallments": 16,
+    "genesisVestingIntervalSeconds": 21600,
+    "genesisWalletClaimFeeBps": 200,
+    "genesisAutomationFeeBps": 200,
+    "squareGenesisSellMinimumBps": 600,
+    "squareTaxPolBps": 1200,
+    "squareTaxUsdcReserveBps": 2000,
+    "squareTaxSquareReserveBps": 6800,
+    "criticalDefenseEntryBps": 9000,
+    "criticalDefenseExitBps": 10100,
+    "criticalRecoveryEpochs": 2,
+    "epochSeconds": 21600,
+    "criticalOracleMaxAgeSeconds": 1800,
+    "governanceTimelocksEnabled": false,
+    "ownerTradingPauseEnabled": false
+  }
+}

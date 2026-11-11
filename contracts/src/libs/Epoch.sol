@@ -55,8 +55,9 @@ abstract contract Epoch is Trustees {
     constructor(
         uint256 period_,
         uint256 startTime_,
-        uint256 startEpoch_
-    ) {
+        uint256 startEpoch_,
+        address initialTrustees
+    ) Trustees(initialTrustees) {
         _period = period_;
         _startTime = startTime_;
         _epoch = startEpoch_;

@@ -1,65 +1,28 @@
-# Old Money frontend
+# xTOMB frontend
 
-Vite + React + TypeScript + Tailwind + Wagmi/Viem.
+React, TypeScript, Vite, Wagmi and Viem. The xTOMB application entry point is `src/main.tsx`. Its Obsidian Crypt theme is based on the supplied xTOMB-UX preview. The React source and styling live in `src/xtomb/`, and the theme’s three local font assets live in `public/fonts/`.
 
-Design grammar: 1980s Miami Vice / Memphis Group / Arcade. See `Desktop\Design\files\skill-eighties.md` for the design language and `tailwind.config.ts` for the palette modes.
-
-## Setup
-
-```bash
-cd frontend
-npm install
+```sh
+npm ci
 npm run dev
+npm run build
+npm run test:browser
 ```
 
-Open http://localhost:5173. The landing page should render with the chrome OLD MONEY hero, diagonal pink band, and night-ground cards below.
+The app includes the dashboard, Genesis, Farm, Masonry, Swap, xSHARE Bridge and the protocol guide. The dashboard and Fire Tax tools use explicitly labeled sample values. Genesis membership prices, timing, fees and routing percentages are derived from `../config/masonry-launch.template.json`.
 
-## Env vars
+Wagmi uses the existing network manifest for injected-wallet connection and switching. This interface does not use legacy deployment addresses for xTOMB transactions. A verified xTOMB deployment manifest and contract bindings are required before enabling live prices, balances, NFT minting, staking or swaps. Farm staking and migration remain pending on the backend.
 
-Create `frontend/.env.local`:
 
-```
-VITE_BASE_RPC_URL=https://your-base-rpc
-VITE_BASE_SEPOLIA_RPC_URL=https://your-base-sepolia-rpc
-```
+## Release tools
 
-Defaults to public endpoints if unset (rate-limited).
+- Open `/wizard` to choose the home network, enter verified infrastructure and public operator addresses, and configure the launch supply, vesting, and optional xSHARE bridge. Contract rules such as the seven-day Genesis window and the 12% Fire Tax cap are shown as fixed protocol settings.
+- The Wizard calculates the same CREATE3 predictions as the deployment CLI in a browser worker. It saves a draft in this browser and exports separate release inputs, launch settings, Masonry addresses, and an optional disabled bridge manifest. Use public RPC URLs and addresses in drafts. Keep private RPC credentials and keys in the deploy environment.
+- Open `/admin` to import a draft or load the saved draft. Admin can verify the CreateX factory runtime hash and check for code at the planned addresses. If Genesis was deferred, Admin can check staking readiness and ask the governance wallet to confirm a start date.
+- Follow [the deployment runbook](../docs/DEPLOY.md) for reviewed constructor inputs and deployment. [Bridge activation](../docs/XSHARE_BRIDGE.md) requires verified peers, verifiers, and live round trips. The public Bridge page keeps all five routes disabled in this build.
 
-## Scripts
+The supplied v5 archive is a compiled reference. The release tools use editable React source with its Obsidian Crypt palette, typography and xTOMB mark.
 
-- `npm run dev` — Vite dev server on :5173
-- `npm run build` — TypeScript check + production build to `dist/`
-- `npm run preview` — preview the production build
-- `npm run typecheck` — type check only, no emit
+## Token artwork
 
-## Structure
-
-```
-frontend/
-├── index.html         — fonts (Oswald, Roboto Slab) + meta tags
-├── tailwind.config.ts — palette modes, shadows, fonts, animation
-├── src/
-│   ├── main.tsx       — Wagmi + React Query providers, routes
-│   ├── styles/
-│   │   └── index.css  — Tailwind layers + eighties components
-│   ├── theme/         — palette helpers (TBD)
-│   ├── components/
-│   │   ├── MemphisScatter.tsx — background shape layer
-│   │   └── ConnectButton.tsx  — wallet connect
-│   ├── routes/
-│   │   └── Landing.tsx        — Miami Vice Split hero page
-│   └── lib/
-│       └── wagmi.ts           — chain + transport config
-```
-
-## Status
-
-- ✅ Project bootstrap
-- ✅ Eighties design system (Tailwind palette modes, CSS components)
-- ✅ Landing page (Miami Vice Split: chrome hero + diagonal + night-ground 3-card)
-- ✅ Wallet connect (injected/MetaMask)
-- ⏳ Dashboard (epoch state, price, supply) — next sprint
-- ⏳ TheClub (Boardroom staking) — next sprint
-- ⏳ TheVault (reward pools) — next sprint
-- ⏳ TrustNotes (bond buy/redeem) — next sprint
-- ⏳ Swap (V4 pool) — next sprint
+The ETH and USDC icons come from the [ethereum.org brand assets](https://ethereum.org/assets/) and the [Circle USDC brand kit](https://www.circle.com/pressroom). The xTOMB and xSHARE coin marks use the existing theme’s triangle and jewel motifs.

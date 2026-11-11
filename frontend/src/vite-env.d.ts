@@ -1,6 +1,16 @@
 /// <reference types="vite/client" />
 
-declare module "@protocol-manifest" {
-  const manifest: unknown;
-  export default manifest;
+interface ImportMetaEnv {
+  /** Per-chain RPC overrides, e.g. VITE_RPC_8453 for Base. Unset chains use the viem default transport. */
+  readonly [key: `VITE_RPC_${number}`]: string | undefined;
+  /** "1" forces Preview mode (simulated chain) even when deployments are configured. */
+  readonly VITE_PREVIEW?: string;
+  /** "1" loads contracts/deployment-output/masonry-local.json (anvil rehearsal) as the only deployment. */
+  readonly VITE_LOCAL_DEPLOYMENT?: string;
+  /** "hash" | "memory" — router for static/sandboxed demo builds (default: browser history). */
+  readonly VITE_ROUTER?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }

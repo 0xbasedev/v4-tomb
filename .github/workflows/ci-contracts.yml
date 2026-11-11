@@ -1,7 +1,7 @@
 name: protocol checks
 "on":
   push:
-    branches: [main, 'feat/**']
+    branches: [main, merge, 'feat/**']
   pull_request:
   workflow_dispatch:
   schedule:
@@ -30,22 +30,27 @@ jobs:
         working-directory: contracts
   frontend:
     runs-on: ubuntu-latest
+    # Playwright's own image ships Chromium and its system libraries, so the job never
+    # touches apt. The tag must match @playwright/test in frontend/package.json.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
       - run: node scripts/protocol.mjs validate
-      - run: node --test config/schema.test.mjs
-      - run: npm ci
+      - run: node --test config/schema.test.mjs config/masonry-launch.test.mjs config/create3.test.mjs config/masonry-deployment.test.mjs
+      - run: pnpm build
         working-directory: frontend
-      - run: npm run build
-        working-directory: frontend
-      - run: npx playwright install --with-deps chromium
-        working-directory: frontend
-      - run: npm run test:browser
+      - run: pnpm test:browser
         working-directory: frontend
   invariants-deep:
     if: github.event_name == 'schedule'

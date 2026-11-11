@@ -90,7 +90,7 @@ contract OracleInvariants is StdInvariant, Test {
         source = new MockPriceSource();
         source.set(int56(0), uint32(block.timestamp));
 
-        oracle = new Oracle(source, TOKEN_A, TOKEN_B, 6 hours, block.timestamp + 1 hours);
+        oracle = new Oracle(source, TOKEN_A, TOKEN_B, 6 hours, block.timestamp + 1 hours, address(this));
 
         handler = new OracleHandler(oracle, source);
         oracle.transferTrustees(address(handler));
