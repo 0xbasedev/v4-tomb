@@ -30,8 +30,8 @@ Synthesized 2026-11-05 from the docs below plus the owner's decisions. Where doc
 - Passes (soulbound, not transferable; USDC to the DAO wallet): Genesis $50, Pro $100, Ultra $500 total. Everyone needs a pass to take part in Genesis; the $50 Genesis pass has no perks beyond participation. Buy any tier outright, or start lower and `upgrade()` in place for only the difference ($50 to Pro, $400 more to Ultra); the total paid is identical either way, and the same token is kept. Upgrades close when Genesis ends. Equal reward weight for every tier. All staking and reward entry points require a pass.
 - Perks (owner decisions 2026-11-05; all BUILT as of 2026-11-11):
   - **Genesis:** no perks; 3% Genesis deposit fee.
-  - **Pro:** opt-in keeper auto-compound **every 6 hours**; **2%** deposit fee.
-  - **Ultra:** everything in Pro, but keeper auto-compound **every 3 hours**; **0%** deposit fee; 24h early pre-stake in pool 0 at the same rate and start time as everyone else.
+  - **Pro:** opt-in keeper auto-compound **every 3 hours** (owner ruling 2026-11-14: every pass waits the same hard-coded 3 hours, by hand or by keeper; was 6 hours); **2%** deposit fee.
+  - **Ultra:** everything in Pro (same 3-hour keeper interval); **0%** deposit fee; 24h early pre-stake in pool 0 at the same rate and start time as everyone else.
   - Page copy (PassPicker perks in `launch.ts`, Docs, Genesis visuals) must change with the contract work, not before, so the UI never advertises something the contracts don't do. Ultra: everything in Pro plus pool-0 pre-stake up to 24h before start, at the same rate and start time as everyone else. (Perks as shown in the Genesis UI; unconfirmed beyond that.)
 - Emissions: 100% to pool 0 on Day 1; from Day 2, 75% LP / 25% pool 0.
 - Rewards: 50% liquid, 50% escrow in 16 claim-gated 6-hour installments, first at end + 6h. Same schedule for all tiers.

@@ -40,8 +40,8 @@ test('the deployer/DAO outright allocation is required and counted', () => {
   assert.throws(() => validateMasonryLaunch(moved), /SQUARE supply mismatch/);
 });
 
-test('keeper cadence is a fixed launch invariant: Pro 6h, Ultra 3h', () => {
-  for (const [key, value] of Object.entries({ genesisProKeeperIntervalSeconds: 10800, genesisUltraKeeperIntervalSeconds: 21600 })) {
+test('keeper cadence is a fixed launch invariant: 3h for every pass', () => {
+  for (const [key, value] of Object.entries({ genesisProKeeperIntervalSeconds: 21600, genesisUltraKeeperIntervalSeconds: 21600 })) {
     const cfg = complete();
     cfg.policy[key] = value;
     assert.throws(() => validateMasonryLaunch(cfg), /release invariant/);

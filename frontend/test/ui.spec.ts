@@ -180,14 +180,14 @@ test.describe("Preview makes zero transaction requests", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("keeper cadence follows the pass: 6h on Pro, 3h after upgrading to Ultra", async ({ page, broadcasts }) => {
+  test("keeper cadence is 3h on Pro and stays 3h after upgrading to Ultra", async ({ page, broadcasts }) => {
     await installWallet(page, "0x2105");
     await page.goto("/genesis?genesis=day2&pass=pro&wallet=0");
     await page.getByRole("button", { name: "Connect wallet" }).click();
     await expect(page.getByText(/You hold the Pro pass/)).toBeVisible();
-    await expect(page.getByText(/at most every 6 hours with a Pro pass/)).toBeVisible();
+    await expect(page.getByText(/at most every 3 hours, with a Pro or/)).toBeVisible();
     await page.getByRole("button", { name: "Opt in", exact: true }).click();
-    await expect(page.getByTestId("keeper-cadence")).toContainText("every 6h", { timeout: 10_000 });
+    await expect(page.getByTestId("keeper-cadence")).toContainText("every 3h", { timeout: 10_000 });
     await page.getByRole("button", { name: "Upgrade for 400 USDC" }).click();
     await expect(page.getByText(/You hold the Ultra pass/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("keeper-cadence")).toContainText("every 3h");

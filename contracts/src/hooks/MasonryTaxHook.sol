@@ -23,15 +23,15 @@ import {MasonryRangeManager} from "../masonry/MasonryRangeManager.sol";
 import {MasonryRangeLib} from "../masonry/MasonryRangeLib.sol";
 import {IMasonryFireTax} from "../masonry/IMasonryFireTax.sol";
 
-/// @notice Official-pool hook: oracle/range binding, optional share sell tax, and the
-/// live Fire Tax withdraw-fee view. X Tomb sells are not taxed.
+/// @notice Official-pool hook: oracle/range binding and the sell-only tax. X Tomb sells pay the
+/// dynamic Fire Tax; X Share sells pay its flat configured rate. Buys are never taxed.
 abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
     uint16 public constant MAX_TAX_BPS = MasonryRules.HARD_MAX_FIRE_TAX_BPS;
-    uint16 private constant BASE_TAX = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
-    uint256 private constant BPS = 10_000;
+    uint16 internal constant BASE_TAX = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
+    uint256 internal constant BPS = 10_000;
 
     struct OracleConfig {
         MasonryLevelOracle oracle;
@@ -225,13 +225,15 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        // X Tomb (and any hook that leaves _sellTaxBps at 0) charges no swap tax.
-        // X Share overrides this with a flat, config-driven sell tax.
+        // X Share overrides _sellTaxBps with a flat, config-driven sell tax. A hook that leaves
+        // it at 0 (X Tomb) charges the dynamic Fire Tax instead.
         uint16 rate = _sellTaxBps();
+        uint256 fee;
         if (rate == 0) {
-            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+            (fee, rate) = _fireTaxQuote(key, params);
+        } else {
+            fee = _flatTaxFee(key, params, rate);
         }
-        uint256 fee = _flatTaxFee(key, params, rate);
         if (fee == 0) return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         if (fee > uint256(uint128(type(int128).max))) revert InvalidConfiguration();
 
@@ -258,7 +260,16 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
         return FullMath.mulDiv(input, rate, BPS - rate);
     }
 
-    /// @notice 0 = no swap sell tax (X Tomb). Share hook returns the flat configured rate.
+    /// @dev The dynamic Fire Tax quote lives in the hook that charges it (X Tomb), so the
+    /// X Share hook does not carry its bytecode. The default charges nothing.
+    function _fireTaxQuote(
+        PoolKey calldata,
+        SwapParams calldata
+    ) internal virtual returns (uint256 fee, uint16 rate) {
+        return (0, 0);
+    }
+
+    /// @notice 0 = dynamic Fire Tax (X Tomb). Share hook returns the flat configured rate.
     function _sellTaxBps() internal view virtual returns (uint16) {
         return 0;
     }
@@ -325,7 +336,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
     function _project(
         PoolKey calldata key,
         SwapParams memory params
-    ) private returns (uint256 input, uint160 sqrtPrice) {
+    ) internal returns (uint256 input, uint160 sqrtPrice) {
         (bool ok, bytes memory result) = address(this).call(abi.encodeCall(this.simulate, (key, params)));
         if (ok || result.length != 68 || bytes4(result) != Simulated.selector) revert SimulationFailed();
         assembly ("memory-safe") {
@@ -340,7 +351,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
 
     function _target(
         uint256 price
-    ) private view returns (uint16) {
+    ) internal view returns (uint16) {
         return MasonryRules.targetSellTaxBps(
             price, _referencePrice(), BASE_TAX, MAX_TAX_BPS, MasonryRules.DEFAULT_FULL_TAX_DROP_BPS
         );

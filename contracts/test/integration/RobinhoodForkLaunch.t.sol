@@ -351,12 +351,8 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(pool.level)),
             IERC20(USDG),
-            IMasonryExactInputV4Router(address(new LaunchRouter())),
-            IMasonryBuybackExecutionGuard(address(guard)),
-            pool.key,
+            makeAddr("daoWallet"),
             address(this),
-            100e18,
-            100e6,
             address(this)
         );
         MasonryGenesisStaking staking = new MasonryGenesisStaking(

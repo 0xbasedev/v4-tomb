@@ -11,7 +11,7 @@ import { maskDecimalInput } from "@/lib/util/decimal";
 /**
  * Keeper compounding — MasonryGenesisStaking.setKeeper(executor, minNetShares).
  * Pro and Ultra only. The keeper you choose can compound your rewards into
- * the LP pool no more often than its tier allows (Pro 6h, Ultra 3h); each automated run
+ * the LP pool no more often than its tier allows (3 hours for Pro and Ultra); each automated run
  * pays 2% of the liquid half to the DAO wallet and must mint at least your minimum
  * net shares, or it reverts.
  */
@@ -40,8 +40,8 @@ export function KeeperPanel() {
         {p.sim && <SimBadge />}
       </div>
       <p className="max-w-2xl text-[13.5px] leading-relaxed text-bone-dim">
-        Opt in and a keeper you choose compounds your rewards into the LP pool for you: at most every {hours(every.pro)} hours with a {PASSES.pro.name} pass,
-        every {hours(every.ultra)} hours with {PASSES.ultra.name}. Compounding by hand stays on the {hours(GENESIS_POLICY.compoundCooldownSeconds)}-hour clock for every pass. Each automated run
+        Opt in and a keeper you choose compounds your rewards into the LP pool for you: at most every {hours(every.pro)} hours, with a {PASSES.pro.name} or
+        {" "}{PASSES.ultra.name} pass. Compounding by hand is on the same {hours(GENESIS_POLICY.compoundCooldownSeconds)}-hour clock for every pass. Each automated run
         pays {pct(GENESIS_POLICY.automationFeeBps)} of the liquid half to the DAO wallet; a manual compound pays none. The run reverts if it would mint fewer than
         your minimum net shares.
       </p>

@@ -144,42 +144,43 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
 
     /// Aggressive curve e2e: TWAP is at peg (no floor), but a large sell whose
     /// projected post-sale price is >=10% below peg is charged the full 12%.
-    function testXTombSellPaysNoTaxEvenWhenTheSaleDepegs() public {
-        vm.warp(schedule.end() + 1);
-        twap = 1e18;
-        uint256 treasuryBefore = level.balanceOf(TREASURY);
-        uint256 burnedBefore = level.totalBurned();
+    function testProjectedTickCrossingAppliesCeilingOnSameSale() public {
+        vm.warp(schedule.start());
         _swap(level0, -1100e18);
-        (uint160 sqrtAfter,,,) = hook.poolManager().getSlot0(hook.officialPool());
-        assertLe(MasonryLevelPrice.fromSqrtPrice(sqrtAfter, level0), 0.9e18, "sale lands >=10% below peg");
-        assertEq(level.balanceOf(TREASURY), treasuryBefore, "no X Tomb sell tax");
-        assertEq(level.totalBurned(), burnedBefore);
-        assertEq(hook.genesisLevelBurned(), 0);
+        assertEq(level.totalBurned(), 132e18);
+        assertEq(hook.raisedBps(), 1200);
+        _swap(!level0, -2000e6); // Recover spot; leave the sell recovery floor in place.
+        vm.warp(schedule.start() + 3.5 hours);
+        _swap(level0, -100e18);
+        assertEq(level.totalBurned(), 139.5e18);
+        vm.warp(schedule.start() + 7 hours);
+        _swap(level0, -100e18);
+        assertEq(level.totalBurned(), 142.5e18);
     }
 
-    function testXTombSellsStayUntaxedBeforeDuringAndAfterGenesis() public {
+    function testTaxBoundariesAndNonDuplication() public {
         vm.warp(schedule.start() - 1);
         _swap(level0, -10e18);
-        assertApproxEqAbs(level.balanceOf(TREASURY), 0.1e18, 10); // 1-wei acc rounding on net shares
+        assertEq(level.balanceOf(TREASURY), 0.388e18);
         assertEq(level.totalBurned(), 0);
 
         vm.warp(schedule.start());
         uint256 before = level.balanceOf(address(this));
         _swap(level0, -10e18);
         assertEq(before - level.balanceOf(address(this)), 10e18);
-        assertEq(level.totalBurned(), 0.3e18);
-        assertEq(hook.genesisLevelBurned(), 0.3e18);
-        assertApproxEqAbs(level.balanceOf(TREASURY), 0.1e18, 10); // 1-wei acc rounding on net shares
-        assertEq(hook.raisedBps(), 100);
+        assertEq(level.totalBurned(), 0.424e18);
+        assertEq(hook.genesisLevelBurned(), 0.424e18);
+        assertEq(level.balanceOf(TREASURY), 0.388e18);
+        assertEq(hook.raisedBps(), 424);
 
         vm.warp(schedule.end() - 1);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0);
+        assertEq(level.totalBurned(), 0.876e18);
 
         vm.warp(schedule.end());
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0);
-        assertEq(level.balanceOf(TREASURY), 0);
+        assertEq(level.totalBurned(), 0.876e18);
+        assertEq(level.balanceOf(TREASURY), 0.863e18);
     }
 
     function testBuyAndTransferAreUntaxedEvenWhenSellOracleIsUnavailable() public {
@@ -211,43 +212,43 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertEq(hook.currentWithdrawFeeBps(), 300);
     }
 
-    function testOrdinaryRecoveryNoLongerTaxesXTombSells() public {
+    function testOrdinaryRecoveryPersistsAfterGenesisEnds() public {
         vm.warp(schedule.end() - 1);
         twap = 0.85e18;
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0);
-        assertEq(hook.syncWithdrawFeeBps(), 1200);
+        assertEq(level.totalBurned(), 1.2e18);
 
         twap = 1e18;
         vm.warp(schedule.end());
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0);
-        assertEq(level.balanceOf(TREASURY), 0);
-        assertGt(hook.currentWithdrawFeeBps(), 300);
+        assertEq(level.totalBurned(), 1.2e18);
+        assertEq(level.balanceOf(TREASURY), 1.199e18);
 
         vm.warp(schedule.end() - 1 + 7 hours);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 0);
-        assertEq(hook.currentWithdrawFeeBps(), 300);
+        assertEq(level.balanceOf(TREASURY), 1.647e18);
     }
 
-    function testExactOutputXTombSellPaysNoTax() public {
+    function testExactOutputChargesOneTaxOnLevelInput() public {
         vm.warp(schedule.start());
         twap = 0.85e18;
         uint256 levelBefore = level.balanceOf(address(this));
         uint256 usdcBefore = usdc.balanceOf(address(this));
         _swap(level0, 100e6);
         uint256 paid = levelBefore - level.balanceOf(address(this));
+        uint256 burned = level.totalBurned();
         assertEq(usdc.balanceOf(address(this)) - usdcBefore, 100e6);
-        assertEq(level.totalBurned(), 0);
+        assertEq(burned, (paid - burned) * 1200 / 8800);
+        assertLe(burned * 10_000, paid * 1200);
         assertEq(level.balanceOf(TREASURY), 0);
-        assertGt(paid, 100e6); // still pays X Tomb for 100 USDG out, plus LP impact
     }
 
-    function testPartialSellNoLongerBurns() public {
+    function testPartialSellRevertsWithoutBurn() public {
         vm.warp(schedule.start());
+        vm.expectRevert();
         _swap(level0, -900_000e18);
         assertEq(level.totalBurned(), 0);
+        assertEq(hook.raisedBps(), 300);
     }
 
     function testVaultTransferredSharesRedeemAndDirectDonationsStayUnallocated() public {
@@ -383,6 +384,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         _swap(!level0, -1e6);
         (,, bool valid) = hook.oracle().latestValidatedTwap();
         assertFalse(valid);
+        vm.expectRevert();
+        _swap(level0, -10e18);
 
         vm.warp(schedule.start() - 30 minutes);
         _warmOracle();
@@ -390,7 +393,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertTrue(ready);
         assertApproxEqAbs(beforePrice, 1e18, 0.0002e18);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0);
+        assertEq(level.totalBurned(), 0.378e18);
 
         _swap(!level0, -1000e6);
         (uint256 afterPrice, uint256 observedAt, bool stillReady) = hook.oracle().latestValidatedTwap();

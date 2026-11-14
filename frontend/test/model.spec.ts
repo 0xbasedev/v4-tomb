@@ -62,11 +62,11 @@ test.describe("Genesis clock", () => {
     expect(GENESIS_POLICY.ultraMultiplier).toBe(1);
   });
 
-  test("keeper cadence: Pro every 6h, Ultra every 3h; manual compounding stays 3h for every pass", () => {
-    expect(GENESIS_POLICY.keeperIntervalSeconds).toEqual({ pro: 6 * 3600, ultra: 3 * 3600 });
+  test("keeper cadence: every 3h for Pro and Ultra, the same as manual compounding", () => {
+    expect(GENESIS_POLICY.keeperIntervalSeconds).toEqual({ pro: 3 * 3600, ultra: 3 * 3600 });
     expect(GENESIS_POLICY.compoundCooldownSeconds).toBe(3 * 3600);
-    expect(PASSES.pro.perks.join(" ")).toMatch(/every 6 hours/);
-    expect(PASSES.ultra.perks.join(" ")).toMatch(/every 3 hours instead of 6/);
+    expect(PASSES.pro.perks.join(" ")).toMatch(/every 3 hours/);
+    expect(PASSES.ultra.perks.join(" ")).not.toMatch(/instead of \d+$|every \d+ hours/);
   });
 
   test("xSHARE vesting split: 1,000 / 1,000 / 2,940 / 1,901 vested, 101 liquid with the deployer/DAO, exact to the cap", () => {

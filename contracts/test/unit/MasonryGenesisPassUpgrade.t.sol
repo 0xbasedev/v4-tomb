@@ -19,6 +19,7 @@ contract MasonryGenesisPassUpgradeTest is Test {
         start = block.timestamp + 2 days;
         schedule = new MasonryGenesisSchedule(start, address(this));
         pass = new MasonryGenesisPass(usdc, TREASURY, schedule);
+        pass.setSaleOpen(true);
         usdc.mint(ALICE, 1000e6);
         vm.prank(ALICE);
         usdc.approve(address(pass), type(uint256).max);
@@ -35,7 +36,8 @@ contract MasonryGenesisPassUpgradeTest is Test {
         MasonryGenesisPass.Tier t
     ) private returns (uint256 id) {
         vm.prank(ALICE);
-        id = pass.upgrade(t);
+        pass.upgrade(t);
+        id = pass.tokenOf(ALICE);
     }
 
     function test_upgradePaysOnlyTheDifference() public {

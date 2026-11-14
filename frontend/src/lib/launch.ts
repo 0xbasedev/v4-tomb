@@ -183,7 +183,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisUltraNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: true,
-    perks: ["Everything in Pro", `Keeper compounding every ${POLICY.genesisUltraKeeperIntervalSeconds / 3600} hours instead of ${POLICY.genesisProKeeperIntervalSeconds / 3600}`, "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
+    perks: ["Everything in Pro", "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];

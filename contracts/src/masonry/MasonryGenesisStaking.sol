@@ -35,10 +35,10 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     uint256 private constant ACC_PRECISION = 1e24;
     uint256 public constant COMPOUND_COOLDOWN = MasonryRules.COMPOUND_COOLDOWN;
     /// @notice Minimum spacing between keeper (automated) compounds of one
-    /// position, by the beneficiary's current pass tier. Manual claims and
-    /// compounds keep the shared COMPOUND_COOLDOWN for every tier.
-    uint256 public constant PRO_KEEPER_INTERVAL = 6 hours;
-    uint256 public constant ULTRA_KEEPER_INTERVAL = 3 hours;
+    /// position. Owner rule 2026-11-14: every pass waits the same hard-coded
+    /// 3 hours, by hand or by keeper, so no tier can compound faster.
+    uint256 public constant PRO_KEEPER_INTERVAL = MasonryRules.COMPOUND_COOLDOWN;
+    uint256 public constant ULTRA_KEEPER_INTERVAL = MasonryRules.COMPOUND_COOLDOWN;
     uint256 public constant ULTRA_EARLY_ACCESS = 1 days;
     /// @notice Pool-0 deposit fee by pass tier, paid in USDC to the pass Treasury.
     /// Pool 1 (LP vault) is not charged here; it uses the LP fee module.
@@ -227,8 +227,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
         nextCompoundAt[pool][beneficiary] = block.timestamp + COMPOUND_COOLDOWN;
     }
 
-    /// @dev The interval follows the tier held now, so a Pro position that
-    /// upgrades to Ultra is on the 3-hour keeper clock from its next run.
+    /// @dev Pro and Ultra share the same 3-hour keeper clock.
     function _consumeKeeperInterval(
         uint256 pool,
         address beneficiary,

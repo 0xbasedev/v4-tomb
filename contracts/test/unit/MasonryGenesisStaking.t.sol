@@ -206,18 +206,18 @@ contract MasonryGenesisStakingTest is Test {
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
-        // Three hours on, the shared cooldown has passed but a Pro keeper is on a
-        // six-hour clock; the member can still compound by hand.
-        vm.warp(schedule.lpOpens() + 3 hours);
+        // A Pro keeper waits the same three hours as everyone else.
+        vm.warp(schedule.lpOpens() + 3 hours - 1);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
+        vm.warp(schedule.lpOpens() + 3 hours);
         vm.prank(PRO);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
         assertApproxEqAbs(fee.totalFeeSharesCollected(), 5.15625e18, 10);
     }
 
-    function testKeeperCadenceIsSixHoursForProAndThreeForUltra() public {
+    function testKeeperCadenceIsThreeHoursForEveryPass() public {
         IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(0, 0);
         _stakeWithKeeper(PRO);
         _stakeWithKeeper(ULTRA);
@@ -229,27 +229,21 @@ contract MasonryGenesisStakingTest is Test {
         staking.compoundToLP(0, PRO, 1, plan);
         staking.compoundToLP(0, ULTRA, 1, plan);
         assertEq(staking.lastKeeperCompoundAt(0, PRO), t0);
-        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 6 hours);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 3 hours);
         assertEq(staking.nextKeeperCompoundAt(0, ULTRA), t0 + 3 hours);
 
         vm.warp(t0 + 3 hours - 1);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, PRO, 1, plan);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, ULTRA, 1, plan);
 
         vm.warp(t0 + 3 hours);
-        staking.compoundToLP(0, ULTRA, 1, plan);
-        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
-        staking.compoundToLP(0, PRO, 1, plan);
-
-        vm.warp(t0 + 6 hours - 1);
-        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
-        staking.compoundToLP(0, PRO, 1, plan);
-
-        vm.warp(t0 + 6 hours);
         staking.compoundToLP(0, PRO, 1, plan);
         staking.compoundToLP(0, ULTRA, 1, plan);
         vm.stopPrank();
-        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 12 hours);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 6 hours);
+        assertEq(staking.nextKeeperCompoundAt(0, ULTRA), t0 + 6 hours);
     }
 
     function testManualActionNeverShortensOrSkipsTheKeeperClock() public {
@@ -261,12 +255,12 @@ contract MasonryGenesisStakingTest is Test {
         staking.compoundToLP(0, PRO, 1, plan);
 
         // A manual claim at +5h restarts the shared 3h cooldown, so the keeper
-        // waits for both clocks: +8h, not +6h.
+        // waits for it too: +8h, although its own interval ended at +3h.
         vm.warp(t0 + 5 hours);
         vm.prank(PRO);
         staking.claim(0);
         assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 8 hours);
-        vm.warp(t0 + 6 hours);
+        vm.warp(t0 + 8 hours - 1);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, plan);
@@ -277,13 +271,14 @@ contract MasonryGenesisStakingTest is Test {
         assertEq(staking.lastKeeperCompoundAt(1, PRO), 0);
     }
 
-    function testUpgradeToUltraMovesKeeperToThreeHourClock() public {
+    function testUpgradeToUltraKeepsTheThreeHourKeeperClock() public {
         IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(0, 0);
         _stakeWithKeeper(PRO);
         uint256 t0 = schedule.lpOpens();
         vm.warp(t0);
         vm.prank(KEEPER);
         staking.compoundToLP(0, PRO, 1, plan);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 3 hours);
 
         usdc.mint(PRO, 400e6);
         vm.startPrank(PRO);
@@ -298,12 +293,12 @@ contract MasonryGenesisStakingTest is Test {
     }
 
     function testKeeperIntervalTable() public view {
-        assertEq(staking.PRO_KEEPER_INTERVAL(), 6 hours);
+        assertEq(staking.PRO_KEEPER_INTERVAL(), 3 hours);
         assertEq(staking.ULTRA_KEEPER_INTERVAL(), 3 hours);
         assertEq(staking.COMPOUND_COOLDOWN(), 3 hours);
         assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.None), 0);
         assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Genesis), 0);
-        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Pro), 6 hours);
+        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Pro), 3 hours);
         assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Ultra), 3 hours);
         // No keeper tier: there is never a keeper run to wait for.
         assertEq(staking.nextKeeperCompoundAt(0, BASIC), type(uint256).max);

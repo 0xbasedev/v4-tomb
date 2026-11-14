@@ -6,6 +6,11 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {MasonryGenesisSchedule} from "../masonry/MasonryGenesisSchedule.sol";
 import {IMasonryBurnableLevel} from "../masonry/MasonryGenesisLPBurnFee.sol";
+import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {MasonryLevelPrice} from "../masonry/MasonryLevelPrice.sol";
+import {MasonryRules} from "../masonry/MasonryRules.sol";
 import {MasonryTaxHook} from "./MasonryTaxHook.sol";
 
 /// @notice LEVEL sells burn their single tax debit during the Genesis window.
@@ -55,6 +60,58 @@ contract MasonryLevelHook is MasonryTaxHook {
             IERC20(asset).safeTransfer(taxRecipient, amount);
         }
         emit SellTax(amount, rate, genesis);
+    }
+
+    /// @dev Fire Tax on an X Tomb sell: the higher of the TWAP rate, the projected
+    /// post-sale rate, the 7-hour recovery floor and the Genesis minimum.
+    function _fireTaxQuote(
+        PoolKey calldata key,
+        SwapParams calldata params
+    ) internal override returns (uint256 fee, uint16 rate) {
+        uint16 bootstrapFloor = _bootstrapFloor();
+        bool exactInput = params.amountSpecified < 0;
+        uint16 recovery = MasonryRules.recoveryFloorBps(raisedBps, BASE_TAX, raisedAt, block.timestamp);
+        uint256 twap = _validatedTwap();
+        if (twap == 0) revert InvalidOraclePrice();
+        uint16 ordinaryFloor = MasonryRules.effectiveSellTaxBps(_target(twap), recovery, BASE_TAX);
+        uint16 minimum = ordinaryFloor < bootstrapFloor ? bootstrapFloor : ordinaryFloor;
+
+        // The largest possible net asset input gives a conservative post-sale price.
+        // Any higher tax can only reduce the executed net input and price impact.
+        SwapParams memory preview = params;
+        if (exactInput) {
+            uint256 gross = uint256(-params.amountSpecified);
+            preview.amountSpecified += int256(FullMath.mulDiv(gross, minimum, BPS));
+        }
+        (uint256 input, uint160 sqrtPrice) = _project(key, preview);
+        uint16 target = MasonryRules.effectiveSellTaxBps(
+            _target(twap), _target(MasonryLevelPrice.fromSqrtPrice(sqrtPrice, assetIsCurrency0)), BASE_TAX
+        );
+        if (target > raisedBps || (block.timestamp - raisedAt >= MasonryRules.FIRE_TAX_RECOVERY && target > BASE_TAX)) {
+            raisedBps = target;
+            raisedAt = block.timestamp;
+        }
+        rate = target > minimum ? target : minimum;
+
+        // Exact-output specifies USDC, so gross up the simulated net asset input
+        // to make the rate a share of the total asset paid.
+        uint256 taxBase = exactInput ? uint256(-params.amountSpecified) : input;
+        fee = _taxAmount(taxBase, rate, bootstrapFloor, exactInput);
+    }
+
+    function _taxAmount(
+        uint256 taxBase,
+        uint16 rate,
+        uint16 bootstrapFloor,
+        bool exactInput
+    ) private pure returns (uint256 fee) {
+        fee = FullMath.mulDiv(taxBase, rate, exactInput ? BPS : BPS - rate);
+        if (bootstrapFloor != 0) {
+            uint256 floor = FullMath.mulDivRoundingUp(taxBase, bootstrapFloor, exactInput ? BPS : BPS - bootstrapFloor);
+            uint256 ceiling = FullMath.mulDiv(taxBase, MAX_TAX_BPS, exactInput ? BPS : BPS - MAX_TAX_BPS);
+            if (floor > ceiling) revert UnrepresentableTax();
+            if (fee < floor) fee = floor;
+        }
     }
 
     function _bootstrapFloor() internal view override returns (uint16) {

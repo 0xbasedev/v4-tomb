@@ -33,7 +33,6 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
 
     event Upgraded(address indexed holder, uint256 indexed tokenId, Tier oldTier, Tier newTier, uint256 paid);
 
-
     error InvalidConfiguration();
     error InvalidPurchase();
     error Soulbound();

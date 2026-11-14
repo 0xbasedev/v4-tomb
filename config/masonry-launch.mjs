@@ -109,7 +109,7 @@ export function validateMasonryLaunch(doc) {
     requiresFreshTwapStrictlyAbovePegBps: 10100,
     farmsCompoundCooldownSeconds: 10800,
     genesisCompoundCooldownSeconds: 10800,
-    genesisProKeeperIntervalSeconds: 21600,
+    genesisProKeeperIntervalSeconds: 10800,
     genesisUltraKeeperIntervalSeconds: 10800,
     operationalVestingDays: 180,
     genesisLevelUsdcLpBurnFeeBps: 50,
