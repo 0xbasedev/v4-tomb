@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {MasonryLoyalty} from "./MasonryLoyalty.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -59,7 +60,7 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
     }
     address public immutable owner;
     address public immutable daoWallet;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1200;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 600;
     IMasonryFireTax public immutable fireTax;
 
     PoolKey private key;
@@ -87,6 +88,8 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
 
     mapping(address => RedeemRequest) public redeemRequests;
     mapping(address => uint256) public lastCompoundAt;
+    /// @notice Size-weighted time the holder has been in without withdrawing (see MasonryLoyalty).
+    mapping(address => uint256) public stakedSince;
     mapping(uint256 => address) public receiptOwner;
     uint256 private _nextReceiptId = 1;
 
@@ -133,11 +136,31 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         fireTax = fireTax_;
     }
 
-    /// @notice Live Fire Tax rate (TWAP + recovery), hard-capped at 12%.
+    /// @notice Live withdraw fee before any time-in discount (1.5% at peg, hard-capped at 6%).
     function withdrawFeeBps() public view returns (uint16) {
         uint16 bps = fireTax.currentWithdrawFeeBps();
         if (bps > MAX_WITHDRAW_FEE_BPS) revert FeeCapExceeded();
         return bps;
+    }
+
+    /// @notice The withdraw fee `user` would pay now, after their time-in discount.
+    function withdrawFeeBpsFor(
+        address user
+    ) external view returns (uint16) {
+        return MasonryLoyalty.discountedFeeBps(withdrawFeeBps(), stakedSince[user], block.timestamp);
+    }
+
+    /// @dev Shares arriving by deposit or transfer age the receiver's clock by their size.
+    /// Shares coming back from a cancelled redeem request are the holder's own and do not.
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal override {
+        if (to != address(0) && to != address(this) && from != address(this)) {
+            stakedSince[to] = MasonryLoyalty.afterDeposit(stakedSince[to], balanceOf(to), value, block.timestamp);
+        }
+        super._update(from, to, value);
     }
 
     function _chargeWithdrawFeeBps() internal returns (uint16) {
@@ -234,7 +257,9 @@ contract MasonryPooledRangeVault is ERC20, ReentrancyGuard, IUnlockCallback {
         uint256 withdrawn1 = token1.balanceOf(address(this)) - idle1;
         amount0 = withdrawn0 + idle0 * req.shares / supplyBefore;
         amount1 = withdrawn1 + idle1 * req.shares / supplyBefore;
-        uint16 feeBps = _chargeWithdrawFeeBps();
+        uint16 feeBps =
+            MasonryLoyalty.discountedFeeBps(_chargeWithdrawFeeBps(), stakedSince[msg.sender], block.timestamp);
+        stakedSince[msg.sender] = block.timestamp; // a withdrawal restarts the clock
         uint256 fee0 = amount0 * uint256(feeBps) / 10_000;
         uint256 fee1 = amount1 * uint256(feeBps) / 10_000;
         amount0 -= fee0;

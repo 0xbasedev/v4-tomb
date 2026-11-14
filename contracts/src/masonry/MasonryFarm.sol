@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MasonryLoyalty} from "./MasonryLoyalty.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IMasonryFireTax} from "./IMasonryFireTax.sol";
@@ -45,7 +46,7 @@ contract MasonryFarm is ReentrancyGuard {
     address public immutable daoWallet;
     address public immutable masonry;
     address public immutable zapper;
-    uint16 public constant MAX_WITHDRAW_FEE_BPS = 1200;
+    uint16 public constant MAX_WITHDRAW_FEE_BPS = 600;
     IMasonryFireTax public immutable fireTax;
 
     uint256 public funded;
@@ -59,6 +60,8 @@ contract MasonryFarm is ReentrancyGuard {
     mapping(uint256 => mapping(address => uint256)) public storedReward;
     mapping(uint256 => mapping(address => WithdrawRequest)) public withdrawRequests;
     mapping(uint256 => mapping(address => uint256)) public lastCompoundAt;
+    /// @notice Size-weighted time the staker has been in a pool without withdrawing (see MasonryLoyalty).
+    mapping(uint256 => mapping(address => uint256)) public stakedSince;
 
     event Funded(address indexed from, uint256 amount);
     event PoolAdded(uint256 indexed pid, address stakeToken, uint256 allocPoints);
@@ -189,6 +192,9 @@ contract MasonryFarm is ReentrancyGuard {
         _updateAll();
         _settle(pid, msg.sender);
         pools[pid].stakeToken.safeTransferFrom(msg.sender, address(this), amount);
+        stakedSince[pid][msg.sender] = MasonryLoyalty.afterDeposit(
+            stakedSince[pid][msg.sender], userStake[pid][msg.sender], amount, block.timestamp
+        );
         pools[pid].totalStaked += amount;
         userStake[pid][msg.sender] += amount;
         userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
@@ -231,7 +237,11 @@ contract MasonryFarm is ReentrancyGuard {
         pools[pid].totalStaked -= req.amount;
         userStake[pid][msg.sender] -= req.amount;
         userRewardDebt[pid][msg.sender] = userStake[pid][msg.sender] * pools[pid].accRewardPerShare / 1e18;
-        uint256 fee = req.amount * uint256(_chargeWithdrawFeeBps()) / 10_000;
+        uint256 fee = req.amount
+            * uint256(
+                MasonryLoyalty.discountedFeeBps(_chargeWithdrawFeeBps(), stakedSince[pid][msg.sender], block.timestamp)
+            ) / 10_000;
+        stakedSince[pid][msg.sender] = block.timestamp; // a withdrawal restarts the clock
         uint256 net = req.amount - fee;
         if (fee != 0) {
             pools[pid].stakeToken.safeTransfer(daoWallet, fee);
@@ -242,11 +252,19 @@ contract MasonryFarm is ReentrancyGuard {
         emit Withdrawn(msg.sender, pid, req.amount);
     }
 
-    /// @notice Live Fire Tax rate (TWAP + recovery), hard-capped at 12%.
+    /// @notice Live withdraw fee before any time-in discount (1.5% at peg, hard-capped at 6%).
     function withdrawFeeBps() public view returns (uint16) {
         uint16 bps = fireTax.currentWithdrawFeeBps();
         if (bps > MAX_WITHDRAW_FEE_BPS) revert InvalidConfiguration();
         return bps;
+    }
+
+    /// @notice The withdraw fee `user` would pay now on pool `pid`, after their time-in discount.
+    function withdrawFeeBpsFor(
+        uint256 pid,
+        address user
+    ) external view returns (uint16) {
+        return MasonryLoyalty.discountedFeeBps(withdrawFeeBps(), stakedSince[pid][user], block.timestamp);
     }
 
     function _chargeWithdrawFeeBps() internal returns (uint16) {
