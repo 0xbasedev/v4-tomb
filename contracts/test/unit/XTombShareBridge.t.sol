@@ -117,7 +117,6 @@ contract BridgeTestMailbox {
 
 contract XTombShareBridgeTest is Test {
     uint32 private constant BASE = 8453;
-    uint32 private constant ROBINHOOD = 4663;
     uint32 private constant BSC = 56;
     uint32 private constant PULSECHAIN = 369;
     uint32 private constant SONIC = 146;
@@ -163,14 +162,27 @@ contract XTombShareBridgeTest is Test {
         vm.prank(alice);
         share.approve(address(canonical), type(uint256).max);
 
-        uint32[5] memory domains = _domains();
+        uint32[4] memory domains = _domains();
         for (uint256 i; i < domains.length; ++i) {
             if (domains[i] != home) _registerSatellite(home, domains[i]);
         }
     }
 
+    /// Robinhood Chain (4663) is a Wizard chain choice only: never a route, never a home.
+    function testRobinhoodChainIsNotABridgeRoute() public {
+        vm.expectRevert(abi.encodeWithSelector(XTombShareBridge.InvalidRoute.selector, uint32(4663)));
+        canonical.registerPeer(4663, address(canonical), ROUTE_LIMIT);
+
+        vm.chainId(4663);
+        BridgeTestMailbox hood = new BridgeTestMailbox(4663);
+        vm.expectRevert(XTombShareBridge.InvalidConfiguration.selector);
+        new XTombShareBridge(
+            address(hood), address(ism), 4663, address(share), address(this), new XTombShareBridge.PeerConfig[](0)
+        );
+    }
+
     function testEveryDomainCanBeHomeAndRoundTripToEverySpoke() public {
-        uint32[5] memory domains = _domains();
+        uint32[4] memory domains = _domains();
         for (uint256 i; i < domains.length; ++i) {
             uint32 home = domains[i];
             if (home != BASE) _deployMesh(home);
@@ -180,7 +192,7 @@ contract XTombShareBridgeTest is Test {
 
     function _checkRoundTrips(
         uint32 home,
-        uint32[5] memory domains
+        uint32[4] memory domains
     ) private {
         assertTrue(canonical.isCanonical());
         assertEq(address(canonical.asset()), address(share));
@@ -500,8 +512,8 @@ contract XTombShareBridgeTest is Test {
         destination.deliver(bridge, source.localDomain(), source.sender(), source.body());
     }
 
-    function _domains() private pure returns (uint32[5] memory) {
-        return [BASE, ROBINHOOD, BSC, PULSECHAIN, SONIC];
+    function _domains() private pure returns (uint32[4] memory) {
+        return [BASE, BSC, PULSECHAIN, SONIC];
     }
 
     function _encodePeer(

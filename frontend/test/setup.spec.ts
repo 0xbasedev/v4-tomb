@@ -49,7 +49,8 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   await page.getByLabel('Include xSHARE bridge in this release').check();
   await page.getByText('Custom contract addresses (optional)', { exact: true }).click();
   await suffix.fill('b');
-  for (const name of ['Base', 'Robinhood Chain', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {
+  await expect(page.getByLabel('Robinhood Chain bridge owner', { exact: true })).toHaveCount(0);
+  for (const name of ['Base', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {
     await page.getByLabel(name + ' bridge owner', { exact: true }).fill(account);
     await page.getByLabel(name + ' message verifier', { exact: true }).fill(account);
     if (name !== 'Base') await page.getByLabel(name + ' route cap (base units)', { exact: true }).fill('1000000000000000000');
@@ -245,12 +246,13 @@ test('Admin schedules a deferred Genesis only when funded and connected to gover
   await expect(confirm).toHaveCount(0);
 });
 
-test('Bridge presents all five networks with transfers disabled', async ({ page }) => {
+test('Bridge presents all four networks with transfers disabled', async ({ page }) => {
   await page.goto('/bridge');
   await expect(page.getByRole('heading', { name: 'xSHARE Bridge' })).toBeVisible();
-  for (const name of ['Base', 'Robinhood Chain', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {
+  for (const name of ['Base', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {
     await expect(page.getByRole('button', { name: `Bridge to ${name} unavailable` })).toBeDisabled();
   }
+  await expect(page.getByRole('button', { name: 'Bridge to Robinhood Chain unavailable' })).toHaveCount(0);
   await expect(page.getByText('Validator and relayer setup required')).toBeVisible();
 });
 

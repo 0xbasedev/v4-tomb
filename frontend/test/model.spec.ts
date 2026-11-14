@@ -46,7 +46,7 @@ test.describe("Genesis clock", () => {
     expect(genesisClock(START, START).ultraEarly).toBe(false);
   });
 
-  test("a 400 wallet claim: 196 wallet, 4 Treasury, 200 vested in 16 installments", () => {
+  test("a 400 wallet claim: 196 to the claimer, 4 to the DAO wallet, 200 vested in 16 installments", () => {
     const c = walletClaim(400);
     expect(c.toWallet).toBeCloseTo(196, 9);
     expect(c.treasury).toBeCloseTo(4, 9);
@@ -250,7 +250,7 @@ test.describe("CREATE3 release planning", () => {
       ...release,
       canonicalDomain: 8453,
       canonicalTokenRole: "masonryShare",
-      routeCaps: { 4663: "100", 56: "200", 369: "300", 146: "400" },
+      routeCaps: { 56: "200", 369: "300", 146: "400" },
       bridgeOperators: Object.fromEntries(BRIDGE.networks.map(({ id }) => [id, { owner, ism: owner }])),
     });
     const mine = browserBridge(release, 8453, "masonryShare")!;

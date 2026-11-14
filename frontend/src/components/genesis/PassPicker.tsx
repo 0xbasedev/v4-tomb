@@ -9,7 +9,7 @@ import { useMagnetic } from "@/lib/motion/useMagnetic";
 
 /**
  * Genesis passes — MasonryGenesisPass: soulbound ERC-721, one per wallet,
- * bought in USDC (paid straight to Treasury) until Genesis ends. Buy any tier
+ * bought in USDC (paid straight to the DAO wallet) until Genesis ends. Buy any tier
  * outright, or upgrade in place by paying only the difference. Every pass
  * earns with the same reward weighting; tiers differ only in keeper
  * compounding (Pro, Ultra) and Ultra's 24-hour early standard staking.

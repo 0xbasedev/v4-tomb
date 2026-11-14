@@ -10,7 +10,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IHyperlaneMailbox} from "./IHyperlaneMailbox.sol";
 import {XTombBridgedShare} from "./XTombBridgedShare.sol";
 
-/// @notice Moves xSHARE between its home chain and one of four satellites through Hyperlane.
+/// @notice Moves xSHARE between its home chain and one of three satellites through Hyperlane.
 contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -247,6 +247,6 @@ contract XTombShareBridge is Ownable2Step, ReentrancyGuard {
     function _supported(
         uint32 domain
     ) private pure returns (bool) {
-        return domain == 8453 || domain == 4663 || domain == 56 || domain == 369 || domain == 146;
+        return domain == 8453 || domain == 56 || domain == 369 || domain == 146;
     }
 }

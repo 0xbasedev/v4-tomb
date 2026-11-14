@@ -319,7 +319,7 @@ export function ReleaseStep({
         </div>
         {!bridgeHome ? (
           <p className="text-[13px] text-bone-dim">
-            {chainName} isn't one of the five bridge networks, so this release can't be the bridge home. The bridge connects {BRIDGE.networks.map((n) => n.name).join(", ")}; pick one of them as the home chain to plan it.
+            {chainName} isn't one of the four bridge networks, so this release can't be the bridge home. The bridge connects {BRIDGE.networks.map((n) => n.name).join(", ")}; pick one of them as the home chain to plan it.
           </p>
         ) : !plan?.bridge ? (
           <p className="text-[13px] text-bone-dim">{searching ? "Planning…" : "Enter the signer and release ID to predict the bridge and Bridged xSHARE addresses."}</p>

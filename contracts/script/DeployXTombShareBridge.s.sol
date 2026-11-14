@@ -34,7 +34,7 @@ contract DeployXTombShareBridge is Create3Config {
     ) external returns (XTombShareBridge bridge) {
         string memory path = vm.envOr("XSHARE_BRIDGE_CONFIG", string("../config/xshare-bridge.json"));
         string memory config = vm.readFile(path);
-        if (vm.parseJsonUint(config, ".schemaVersion") != 1 || networkIndex >= 5) revert InvalidManifest();
+        if (vm.parseJsonUint(config, ".schemaVersion") != 1 || networkIndex >= 4) revert InvalidManifest();
 
         Create3Plan memory plan = _readCreate3(config, ".create3");
         uint32 canonical = _domain(vm.parseJsonUint(config, ".canonicalDomain"));
@@ -92,11 +92,11 @@ contract DeployXTombShareBridge is Create3Config {
         uint32 canonical
     ) private view returns (XTombShareBridge.PeerConfig[] memory peers) {
         bool isHome = local.domain == canonical;
-        peers = new XTombShareBridge.PeerConfig[](isHome ? 4 : 1);
+        peers = new XTombShareBridge.PeerConfig[](isHome ? 3 : 1);
         Predicted memory predicted = _predict(config, plan);
-        uint32[5] memory domains;
+        uint32[4] memory domains;
         uint256 count;
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 4; ++i) {
             Network memory remote = _network(config, i);
             for (uint256 j; j < i; ++j) {
                 if (domains[j] == remote.domain) revert InvalidManifest();
@@ -159,7 +159,7 @@ contract DeployXTombShareBridge is Create3Config {
     function _domain(
         uint256 domain
     ) private pure returns (uint32) {
-        if (domain != 8453 && domain != 4663 && domain != 56 && domain != 369 && domain != 146) {
+        if (domain != 8453 && domain != 56 && domain != 369 && domain != 146) {
             revert InvalidManifest();
         }
         return uint32(domain);

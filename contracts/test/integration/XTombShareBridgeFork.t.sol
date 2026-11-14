@@ -52,7 +52,7 @@ contract XTombShareBridgeForkTest is Test, Create3Config {
         BridgeForkShare token;
     }
 
-    function testForkRealMailboxesAcrossFiveChains() external {
+    function testForkRealMailboxesAcrossFourChains() external {
         vm.skip(!vm.envOr("XSHARE_BRIDGE_FORKS", false));
 
         string memory config = vm.readFile("../config/xshare-bridge.json");
@@ -70,7 +70,7 @@ contract XTombShareBridgeForkTest is Test, Create3Config {
         home.token.approve(address(home.bridge), type(uint256).max);
         vm.deal(address(this), 10 ether);
 
-        for (uint256 i = 1; i < 5; ++i) {
+        for (uint256 i = 1; i < 4; ++i) {
             _roundTrip(plan, config, string.concat(".networks[", vm.toString(i), "]"), home);
         }
     }
