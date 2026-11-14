@@ -4,11 +4,11 @@ pragma solidity 0.8.26;
 /// @notice Pure economic rules to be wired into the Masonry-specific v4 hook,
 /// Treasury and launch allocator. This module does not modify Old Money runtime.
 library MasonryRules {
-    uint16 internal constant HARD_MAX_FIRE_TAX_BPS = 1_200;
+    uint16 internal constant HARD_MAX_FIRE_TAX_BPS = 1200;
     uint16 internal constant HARD_MAX_EXPANSION_BPS = 200;
     uint16 internal constant DEFAULT_BASE_FIRE_TAX_BPS = 100;
-    uint16 internal constant DEFAULT_MAX_FIRE_TAX_BPS = 1_200;
-    uint16 internal constant DEFAULT_FULL_TAX_DROP_BPS = 1_500;
+    uint16 internal constant DEFAULT_MAX_FIRE_TAX_BPS = 1200;
+    uint16 internal constant DEFAULT_FULL_TAX_DROP_BPS = 1500;
     uint16 internal constant EXPANSION_THRESHOLD_BPS = 10_100;
     uint256 internal constant FIRE_TAX_RECOVERY = 7 hours;
     uint256 internal constant COMPOUND_COOLDOWN = 3 hours;
@@ -48,8 +48,8 @@ library MasonryRules {
         uint16 fullTaxDropBps
     ) internal pure returns (uint16) {
         if (
-            peg == 0 || baselineBps > maximumBps || maximumBps > HARD_MAX_FIRE_TAX_BPS
-                || fullTaxDropBps == 0 || fullTaxDropBps > 10_000
+            peg == 0 || baselineBps > maximumBps || maximumBps > HARD_MAX_FIRE_TAX_BPS || fullTaxDropBps == 0
+                || fullTaxDropBps > 10_000
         ) revert InvalidParameters();
         if (price >= peg) return baselineBps;
         uint256 bottom = peg * (10_000 - fullTaxDropBps) / 10_000;
@@ -62,26 +62,27 @@ library MasonryRules {
 
     /// @notice Floor after an observed higher Fire Tax target. A new sale
     /// must not reset raisedAt unless a genuinely higher rate is observed.
-    function recoveryFloorBps(uint16 raisedBps, uint16 baselineBps, uint256 raisedAt, uint256 nowTs)
-        internal
-        pure
-        returns (uint16)
-    {
+    function recoveryFloorBps(
+        uint16 raisedBps,
+        uint16 baselineBps,
+        uint256 raisedAt,
+        uint256 nowTs
+    ) internal pure returns (uint16) {
         if (raisedBps > HARD_MAX_FIRE_TAX_BPS || baselineBps > raisedBps) revert InvalidParameters();
         if (nowTs <= raisedAt) return raisedBps;
         uint256 elapsed = nowTs - raisedAt;
         if (elapsed >= FIRE_TAX_RECOVERY) return baselineBps;
-        return baselineBps
-            + uint16(uint256(raisedBps - baselineBps) * (FIRE_TAX_RECOVERY - elapsed) / FIRE_TAX_RECOVERY);
+        return
+            baselineBps + uint16(uint256(raisedBps - baselineBps) * (FIRE_TAX_RECOVERY - elapsed) / FIRE_TAX_RECOVERY);
     }
 
     /// @notice Combine separately validated TWAP, guarded execution-price
     /// and recovery-floor rates. Never accept a rate beyond 12%.
-    function effectiveSellTaxBps(uint16 twapRate, uint16 projectedRate, uint16 recoveryFloor)
-        internal
-        pure
-        returns (uint16)
-    {
+    function effectiveSellTaxBps(
+        uint16 twapRate,
+        uint16 projectedRate,
+        uint16 recoveryFloor
+    ) internal pure returns (uint16) {
         if (
             twapRate > HARD_MAX_FIRE_TAX_BPS || projectedRate > HARD_MAX_FIRE_TAX_BPS
                 || recoveryFloor > HARD_MAX_FIRE_TAX_BPS
@@ -92,11 +93,11 @@ library MasonryRules {
 
     /// @notice Expansion only from a fresh validated TWAP strictly above
     /// 1.01 of the configured peg. Never authorize expansion via spot alone.
-    function eligibleForExpansion(uint256 twapPrice, uint256 pegPrice, bool hasFreshValidatedTwap)
-        internal
-        pure
-        returns (bool)
-    {
+    function eligibleForExpansion(
+        uint256 twapPrice,
+        uint256 pegPrice,
+        bool hasFreshValidatedTwap
+    ) internal pure returns (bool) {
         if (!hasFreshValidatedTwap || pegPrice == 0) return false;
         return twapPrice > pegPrice * EXPANSION_THRESHOLD_BPS / 10_000;
     }

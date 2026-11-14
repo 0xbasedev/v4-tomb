@@ -80,7 +80,7 @@ export function usePlan(): Plan {
     }
     return {
       headline: "The xTOMB/USDC LP pool is open and carries 75% of Genesis emissions.",
-      primary: { title: "Stake xTOMB/USDC LP", why: "Add liquidity to the official vault, then stake the shares. A 0.5% LP burn fee is taken once per deposit.", cta: "Open Genesis", to: "/genesis", tone: "ember" },
+      primary: { title: "Stake xTOMB/USDC LP", why: "Add liquidity to the official vault, then stake the shares. A 0.5% LP fee goes to the Treasury as protocol-owned liquidity, once per deposit.", cta: "Open Genesis", to: "/genesis", tone: "ember" },
       secondary: { title: "Compound rewards into the LP pool", why: "", cta: "Compound", to: "/genesis", tone: "neutral" },
       avoid: avoidSell,
     };

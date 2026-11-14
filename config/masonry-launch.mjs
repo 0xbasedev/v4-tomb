@@ -35,15 +35,13 @@ export function validateMasonryLaunch(doc) {
   const source = obj(d.level, 'level');
   const levelInitial = obj(source.initial, 'level.initial');
   const policy = obj(d.policy, 'policy');
-  const genesisBurn = obj(d.genesisBurnExecution, 'genesisBurnExecution');
-  positiveRawAmount(genesisBurn.maxFeeSharesPerCallBaseUnits, 'genesisBurnExecution.maxFeeSharesPerCallBaseUnits');
-  positiveRawAmount(genesisBurn.maxUsdcPerCallBaseUnits, 'genesisBurnExecution.maxUsdcPerCallBaseUnits');
 
   const squareCap = positive(s.maxSupply, 'square.maxSupply');
   const farms = nonnegative(s.farming, 'square.farming');
   const sale = nonnegative(s.saleEscrow, 'square.saleEscrow');
   const deployer = nonnegative(s.deployer, 'square.deployer');
-  const initialAmounts = ['ownerTeamDeveloper', 'treasury', 'arbitrage']
+  // deployerDao: xSHARE minted outright to the deployer/DAO (dev) address, on top of `square.deployer`.
+  const initialAmounts = ['ownerTeamDeveloper', 'deployerDao', 'treasury', 'arbitrage']
     .map((k) => nonnegative(initial[k], `square.initial.${k}`));
   const vestingAmounts = ['team', 'developer', 'treasury', 'arbitrage']
     .map((k) => nonnegative(vested[k], `square.vesting.${k}`));
@@ -74,6 +72,8 @@ export function validateMasonryLaunch(doc) {
     requiresFreshTwapStrictlyAbovePegBps: 10100,
     farmsCompoundCooldownSeconds: 10800,
     genesisCompoundCooldownSeconds: 10800,
+    genesisProKeeperIntervalSeconds: 21600,
+    genesisUltraKeeperIntervalSeconds: 10800,
     farmEmissionDays: 365,
     operationalVestingDays: 180,
     genesisLevelUsdcLpBurnFeeBps: 50,
@@ -99,5 +99,6 @@ export function validateMasonryLaunch(doc) {
   if (policy.fullTaxAtOrBelowPegBps !== 8500) throw new Error('full Fire Tax threshold must be 0.85 of peg');
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),
+    liquidDeployerSquare: deployer + initialAmounts[1],
     initialLevelFunding: levelLaunchFunding, levelLaunchSupply };
 }

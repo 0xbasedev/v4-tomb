@@ -18,6 +18,6 @@ export default defineConfig({
   server: {
     port: 5173,
     open: false,
-    fs: { allow: [".", configDir] },
+    fs: { allow: [".", configDir, fileURLToPath(new URL("../contracts/deployment-output", import.meta.url))] },
   },
 });

@@ -28,7 +28,7 @@ test('Wizard validates inputs, predicts addresses, exports a release, and restor
   await page.getByLabel('Genesis start (local time)').fill(tomorrow);
   for (const [name, value] of [
     ['xTOMB authorized launch supply', '10000'],
-    ['xSHARE team vesting', '6941'], ['xSHARE developer vesting', '0'],
+    ['xSHARE team vesting', '6841'], ['xSHARE developer vesting', '0'],
     ['xSHARE Treasury vesting', '0'], ['xSHARE arbitrage vesting', '0'],
   ]) await page.getByLabel(name, { exact: true }).fill(value);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -157,7 +157,7 @@ test('Admin schedules a deferred Genesis only when funded and connected to gover
       network: '8453', chainId: '8453', chainName: 'Base', nativeSymbol: 'ETH', rpcUrl: 'https://rpc.example.test/',
       releaseId, deployer: account, governance: account, treasury: account,
       usdc: account, poolManager: account, positionManager: account, permit2: account,
-      pegSupply: '12000', vestTeam: '6941', vestDeveloper: '0', vestTreasury: '0', vestArbitrage: '0',
+      pegSupply: '12000', vestTeam: '6841', vestDeveloper: '0', vestTreasury: '0', vestArbitrage: '0',
     };
     localStorage.setItem('xtomb:release-draft:v1', JSON.stringify({ schemaVersion: 1, type: 'xtomb-release-draft', fields }));
     Object.assign(window, {

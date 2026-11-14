@@ -30,6 +30,10 @@ jobs:
         working-directory: contracts
   frontend:
     runs-on: ubuntu-latest
+    # Playwright's own image ships Chromium and its system libraries, so the job never
+    # touches apt. The tag must match @playwright/test in frontend/package.json.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -45,8 +49,6 @@ jobs:
       - run: node scripts/protocol.mjs validate
       - run: node --test config/schema.test.mjs config/masonry-launch.test.mjs config/create3.test.mjs config/masonry-deployment.test.mjs
       - run: pnpm build
-        working-directory: frontend
-      - run: pnpm exec playwright install --with-deps chromium
         working-directory: frontend
       - run: pnpm test:browser
         working-directory: frontend

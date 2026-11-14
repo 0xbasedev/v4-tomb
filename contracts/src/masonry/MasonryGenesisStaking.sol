@@ -34,7 +34,18 @@ contract MasonryGenesisStaking is ReentrancyGuard {
 
     uint256 private constant ACC_PRECISION = 1e24;
     uint256 public constant COMPOUND_COOLDOWN = MasonryRules.COMPOUND_COOLDOWN;
+    /// @notice Minimum spacing between keeper (automated) compounds of one
+    /// position, by the beneficiary's current pass tier. Manual claims and
+    /// compounds keep the shared COMPOUND_COOLDOWN for every tier.
+    uint256 public constant PRO_KEEPER_INTERVAL = 6 hours;
+    uint256 public constant ULTRA_KEEPER_INTERVAL = 3 hours;
     uint256 public constant ULTRA_EARLY_ACCESS = 1 days;
+    /// @notice Pool-0 deposit fee by pass tier, paid in USDC to the pass Treasury.
+    /// Pool 1 (LP vault) is not charged here; it uses the LP fee module.
+    uint16 public constant GENESIS_DEPOSIT_FEE_BPS = 300;
+    uint16 public constant PRO_DEPOSIT_FEE_BPS = 200;
+    uint16 public constant ULTRA_DEPOSIT_FEE_BPS = 0;
+    uint256 private constant BPS = 10_000;
 
     struct Pool {
         uint256 totalStaked;
@@ -62,6 +73,8 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     mapping(address => address) public keeper;
     mapping(address => uint256) public minimumNetCompoundShares;
     mapping(uint256 => mapping(address => uint256)) public nextCompoundAt;
+    /// @notice When a keeper last compounded this position (0 = never).
+    mapping(uint256 => mapping(address => uint256)) public lastKeeperCompoundAt;
     bool public funded;
 
     error InvalidConfiguration();
@@ -73,6 +86,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     error Cooldown();
 
     event Staked(address indexed beneficiary, uint256 indexed pool, uint256 netShares);
+    event DepositFeePaid(address indexed beneficiary, MasonryGenesisPass.Tier tier, uint256 fee);
     event Withdrawn(address indexed beneficiary, uint256 indexed pool, uint256 shares);
     event Settled(address indexed beneficiary, uint256 indexed sourcePool, uint256 levelAmount, bool compounded);
 
@@ -93,7 +107,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
         if (
             standardAsset_ == lpAsset || standardAsset_ == level || lpAsset == level
                 || address(standardAsset_).code.length == 0 || address(settlement_).code.length == 0
-                || lpFee_.usdc() != pass_.usdc() || budget == 0
+                || lpFee_.usdc() != pass_.usdc() || standardAsset_ != lpFee_.usdc() || budget == 0
         ) revert InvalidConfiguration();
         rewardBudget = budget;
     }
@@ -124,7 +138,24 @@ contract MasonryGenesisStaking is ReentrancyGuard {
 
         _checkpoint(pool, msg.sender);
         _receive(asset, amount);
-        _credit(pool, msg.sender, amount);
+        uint256 fee;
+        if (pool == 0) {
+            fee = Math.mulDiv(amount, depositFeeBps(tier), BPS);
+            if (fee != 0) {
+                asset.safeTransfer(pass.treasury(), fee);
+                emit DepositFeePaid(msg.sender, tier, fee);
+            }
+        }
+        _credit(pool, msg.sender, amount - fee);
+    }
+
+    function depositFeeBps(
+        MasonryGenesisPass.Tier tier
+    ) public pure returns (uint16) {
+        if (tier == MasonryGenesisPass.Tier.Genesis) return GENESIS_DEPOSIT_FEE_BPS;
+        if (tier == MasonryGenesisPass.Tier.Pro) return PRO_DEPOSIT_FEE_BPS;
+        if (tier == MasonryGenesisPass.Tier.Ultra) return ULTRA_DEPOSIT_FEE_BPS;
+        revert NotEligible();
     }
 
     function withdraw(
@@ -175,6 +206,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
             minNetShares = Math.max(minNetShares, minimumNetCompoundShares[beneficiary]);
         }
         if (minNetShares == 0) revert InvalidAmount();
+        if (automated) _consumeKeeperInterval(sourcePool, beneficiary, tier);
         _consumeCooldown(sourcePool, beneficiary);
         uint256 reward = _takeReward(sourcePool, beneficiary);
 
@@ -193,6 +225,40 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     ) private {
         if (block.timestamp < nextCompoundAt[pool][beneficiary]) revert Cooldown();
         nextCompoundAt[pool][beneficiary] = block.timestamp + COMPOUND_COOLDOWN;
+    }
+
+    /// @dev The interval follows the tier held now, so a Pro position that
+    /// upgrades to Ultra is on the 3-hour keeper clock from its next run.
+    function _consumeKeeperInterval(
+        uint256 pool,
+        address beneficiary,
+        MasonryGenesisPass.Tier tier
+    ) private {
+        uint256 last = lastKeeperCompoundAt[pool][beneficiary];
+        if (last != 0 && block.timestamp < last + keeperInterval(tier)) revert Cooldown();
+        lastKeeperCompoundAt[pool][beneficiary] = block.timestamp;
+    }
+
+    /// @notice Keeper cadence for a pass tier; 0 means the tier has no keeper.
+    function keeperInterval(
+        MasonryGenesisPass.Tier tier
+    ) public pure returns (uint256) {
+        if (tier == MasonryGenesisPass.Tier.Ultra) return ULTRA_KEEPER_INTERVAL;
+        if (tier == MasonryGenesisPass.Tier.Pro) return PRO_KEEPER_INTERVAL;
+        return 0;
+    }
+
+    /// @notice Earliest time a keeper may next compound `beneficiary`'s rewards
+    /// from `pool`: the later of the shared cooldown and the tier's keeper
+    /// interval. Returns type(uint256).max when the account has no keeper tier.
+    function nextKeeperCompoundAt(
+        uint256 pool,
+        address beneficiary
+    ) external view returns (uint256) {
+        uint256 interval = keeperInterval(pass.tierOf(beneficiary));
+        if (interval == 0) return type(uint256).max;
+        uint256 last = lastKeeperCompoundAt[pool][beneficiary];
+        return Math.max(nextCompoundAt[pool][beneficiary], last == 0 ? 0 : last + interval);
     }
 
     function _credit(

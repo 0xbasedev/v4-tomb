@@ -17,7 +17,7 @@ import { GENESIS_POLICY as G } from "@/lib/launch";
  *               6h after the previous is claimed; each release also pays 2%.
  *   Compound    the liquid half (minus a 2% keeper fee when automated) sells
  *               part of itself for USDC — paying the Fire Tax on that sell leg —
- *               and mints xTOMB/USDC vault shares; the 0.5% LP burn fee is taken
+ *               and mints xTOMB/USDC vault shares; the 0.5% LP fee (to Treasury) is taken
  *               once from the gross shares. Claims and compounds share one
  *               3-hour clock per source pool.
  */
@@ -111,7 +111,7 @@ export function compoundSplit(reward: number, opts: { automated: boolean; sellSh
   const budget = liquid - keeperFee;
   const sold = budget * (opts.sellShare ?? 0.5);
   const fireTax = fee(sold, opts.taxBps);
-  // Value that lands as gross LP shares, before the 0.5% LP burn fee.
+  // Value that lands as gross LP shares, before the 0.5% LP fee.
   const gross = budget - fireTax;
   const lpBurn = fee(gross, G.lpBurnFeeBps);
   return { reward, liquid, vested, keeperFee, budget, sold, fireTax, gross, lpBurn, net: gross - lpBurn };

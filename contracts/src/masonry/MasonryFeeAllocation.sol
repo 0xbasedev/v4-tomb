@@ -14,8 +14,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 /// Later TWAP changes do not retroactively change collection earmarks.
 library MasonryFeeAllocation {
     uint256 internal constant BPS = 10_000;
-    uint256 internal constant POL_BPS = 1_200;
-    uint256 internal constant USDC_RESERVE_BPS = 2_000;
+    uint256 internal constant POL_BPS = 1200;
+    uint256 internal constant USDC_RESERVE_BPS = 2000;
 
     struct SquareTax {
         uint256 polSquare;
@@ -24,7 +24,10 @@ library MasonryFeeAllocation {
         uint256 buyAndBurnSquare;
     }
 
-    function allocateSquare(uint256 amount, bool criticalDefense) internal pure returns (SquareTax memory a) {
+    function allocateSquare(
+        uint256 amount,
+        bool criticalDefense
+    ) internal pure returns (SquareTax memory a) {
         if (criticalDefense) {
             a.buyAndBurnSquare = amount;
             return a;

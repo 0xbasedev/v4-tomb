@@ -100,8 +100,8 @@ export function Modal({
 export function Row({ k, v, sub, strong, tone }: { k: ReactNode; v: ReactNode; sub?: string; strong?: boolean; tone?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 whitespace-nowrap text-ash">{k}</dt>
-      <dd className={`num text-right ${tone ?? (strong ? "text-[15px] text-bone" : "text-bone-dim")}`}>
+      <dt className="min-w-[38%] text-ash">{k}</dt>
+      <dd className={`num min-w-0 text-right ${tone ?? (strong ? "text-[15px] text-bone" : "text-bone-dim")}`}>
         {v}
         {sub && <span className="ml-2 text-[11px] text-ash">{sub}</span>}
       </dd>

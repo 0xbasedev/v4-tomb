@@ -17,10 +17,20 @@ for (const width of [412, 320]) {
       await page.goto(r, { waitUntil: "domcontentloaded" });
       await page.locator("main, body").first().waitFor();
       await page.waitForTimeout(600);
-      const d = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      // clientWidth, not innerWidth: a phone widens innerWidth to fit overflowing content, which hides the overflow.
+      const d = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       if (d > 1) over.push(`${r} +${d}px`);
     }
     expect(over).toEqual([]);
+  });
+
+  test(`Swap stays inside ${width}px with an LP exit loaded`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 860 });
+    await page.goto("/swap?genesis=day2");
+    await page.getByRole("button", { name: /^Exit LP to USDC/ }).click();
+    await page.getByLabel(/^Amount of .* to pay$/).fill("10");
+    await expect(page.getByText("Take it as xTOMB instead")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   });
 }
 

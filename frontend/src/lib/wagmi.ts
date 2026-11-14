@@ -3,6 +3,7 @@ import { http, createConfig, type Transport } from "wagmi";
 import {
   arbitrum,
   arbitrumSepolia,
+  foundry,
   avalanche,
   base,
   baseSepolia,
@@ -49,6 +50,7 @@ const KNOWN: Chain[] = [
   arbitrumSepolia,
   unichainSepolia,
   sepolia,
+  foundry,
 ];
 
 const listed = new Set(REGISTRY.chains.map((c) => c.id));

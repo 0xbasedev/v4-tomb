@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
@@ -58,7 +58,7 @@ contract EpochCycleTest is BaseTest {
         // 1. Deploy tokens — owner becomes initial trustees on each.
         vm.startPrank(owner);
         money = new PegToken(owner);
-        estate = new ShareToken(startTime, communityFund, devFund, owner);
+        estate = new ShareToken(ShareTokenProfiles.legacy(startTime, communityFund, devFund, owner), owner);
         trustnote = new TrustNote(owner);
         vm.stopPrank();
 

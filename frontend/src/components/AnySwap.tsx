@@ -114,8 +114,8 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
 
   return (
     <div data-reveal className="panel panel-raised w-full p-4 md:p-5">
-      <div className="mb-3 flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="font-display text-[15px] font-semibold text-bone">Swap</span>
           <span className={`chip h-6 whitespace-nowrap ${plan.ok ? (mode === "remove" ? "chip-spectre" : "") : "chip-warn"}`}>{modeLabel}</span>
           {p.sim && <SimBadge />}
@@ -123,7 +123,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
         <button
           type="button"
           onClick={() => setSettings((s) => !s)}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-[11px] text-ash transition-colors hover:bg-white/5 hover:text-bone-dim"
+          className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 font-mono text-[11px] text-ash transition-colors hover:bg-white/5 hover:text-bone-dim"
           aria-expanded={settings}
         >
           Slippage <span className={slippageBps > 500 ? "text-warn" : "text-bone-dim"}>{(slippageBps / 100).toFixed(1)}%</span> ⚙

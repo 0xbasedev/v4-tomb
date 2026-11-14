@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { formatUnits, zeroAddress, type Address } from "viem";
+import { erc20Abi, formatUnits, zeroAddress, type Address } from "viem";
 
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
 import {
@@ -27,7 +27,7 @@ import { useNetworkStatus, type NetworkState } from "./useNetworkStatus";
  *
  * Preview: the simulated chain (lib/preview.tsx), flagged `sim: true`.
  * Live:    multicall reads against the verified deployment (MasonryGenesis*,
- *          the two hooks, the oracle, Critical Defense, the LP burn fee and
+ *          the two hooks, the oracle, Critical Defense, the LP fee module and
  *          ERC-20 metadata). Values the contracts don't expose stay null and
  *          the screens say "—", never a made-up number.
  */
@@ -69,10 +69,13 @@ export interface ProtocolState {
     totals: Record<0 | 1, number | null>;
     positions: Record<0 | 1, { shares: number; pending: number } | null>;
     nextCompoundAt: Record<0 | 1, number>;
+    /** Earliest keeper run per source pool (shared cooldown and the tier's keeper interval); null without a keeper tier. */
+    nextKeeperCompoundAt: Record<0 | 1, number | null>;
     keeper: { executor: Address | null; minNetShares: number };
   };
   tranches: Tranche[];
-  lpBurn: { totalShares: number | null; levelBurned: number | null; pendingShares: number | null; pendingUsdc: number | null };
+  /** Genesis LP deposit fee: LP shares collected and forwarded to the Treasury as POL. */
+  lpFee: { totalShares: number | null; sentToTreasury: number | null };
   /** Static LP fee of each official pool (pool key), bps. */
   poolFeeBps: Record<TaxedAsset, number>;
   /** Share of an LP share's value held in its asset (sets the sell leg of an LP exit). */
@@ -141,10 +144,12 @@ export function useProtocol(): ProtocolState {
           ? { 0: { shares: preview.positions[0].shares, pending: preview.pending[0] }, 1: { shares: preview.positions[1].shares, pending: preview.pending[1] } }
           : { 0: null, 1: null },
         nextCompoundAt: preview.nextCompoundAt,
+        // Preview never runs a keeper, so only the shared cooldown can hold one back.
+        nextKeeperCompoundAt: preview.pass === "pro" || preview.pass === "ultra" ? preview.nextCompoundAt : { 0: null, 1: null },
         keeper: preview.keeper,
       },
       tranches: connected ? preview.tranches : [],
-      lpBurn: { totalShares: 1_284.2, levelBurned: 642.1, pendingShares: 0, pendingUsdc: 0 },
+      lpFee: { totalShares: 1_284.2, sentToTreasury: 1_284.2 },
       poolFeeBps: { xTOMB: SIM_POOLS.xTOMB.feeBps, xSHARE: SIM_POOLS.xSHARE.feeBps },
       lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
       now: preview.now,
@@ -170,6 +175,9 @@ export function useProtocol(): ProtocolState {
 }
 
 /** Live multicall reads. Returns nulls (never samples) for anything unread. */
+/** The contract returns uint256 max when the account's pass has no keeper. */
+const keeperAt = (v: bigint | undefined): number | null => (v === undefined || v > 2n ** 48n ? null : Number(v));
+
 function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omit<ProtocolState, "net" | "account"> {
   const user = account ?? zeroAddress;
   const c = d?.contracts;
@@ -208,19 +216,33 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "minimumNetCompoundShares", args: [user] }, // 27
           { address: c.settlement, abi: masonryGenesisSettlementAbi, functionName: "trancheCount", args: [user] }, // 28
           { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalFeeSharesCollected" }, // 29
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalLevelBurnedFromLPFees" }, // 30
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingFeeShares" }, // 31
-          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "pendingBurnUSDC" }, // 32
-          { address: c.level, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 33
-          { address: c.square, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
-          { address: c.usdc, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
-          { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 36
-          { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 37
-          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 38
+          { address: c.lpBurnFee, abi: masonryGenesisLPBurnFeeAbi, functionName: "totalSharesSentToTreasury" }, // 30
+          { address: c.level, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 31
+          { address: c.square, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 32
+          { address: c.usdc, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 33
+          { address: c.levelVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 34
+          { address: c.squareVault, abi: iERC20Abi, functionName: "balanceOf", args: [user] }, // 35
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "oracle" }, // 36
+          { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [0n, user] }, // 37
+          { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [1n, user] }, // 38
         ]
       : [],
     query: { enabled, refetchInterval: 15_000 },
   });
+  // Pool 0 shares are denominated in the deployment-bound standard asset, so
+  // read which asset that is and its decimals instead of assuming 18 (or USDC).
+  const stdAssetRead = useReadContracts({
+    allowFailure: true,
+    contracts: c ? [{ address: c.staking, abi: masonryGenesisStakingAbi, functionName: "standardAsset" }] : [],
+    query: { enabled },
+  });
+  const stdAsset = ok<Address>(stdAssetRead.data?.[0]) ?? null;
+  const stdDecRead = useReadContracts({
+    allowFailure: true,
+    contracts: stdAsset ? [{ address: stdAsset, abi: erc20Abi, functionName: "decimals" }] : [],
+    query: { enabled: !!stdAsset },
+  });
+  const stdDecimals = ok<number>(stdDecRead.data?.[0]) ?? null;
   const r = reads.data ?? [];
   const count = Number(ok<bigint>(r[28]) ?? 0n);
   const trancheReads = useReadContracts({
@@ -238,7 +260,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   });
 
   // xSHARE's own validated TWAP lives in the oracle its hook created.
-  const squareOracle = ok<Address>(r[38]);
+  const squareOracle = ok<Address>(r[36]);
   const squareTwapRead = useReadContracts({
     allowFailure: true,
     contracts: squareOracle ? [{ address: squareOracle, abi: masonryLevelOracleAbi, functionName: "latestValidatedTwap" }] : [],
@@ -259,13 +281,14 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   const defenseActive = ok<boolean>(r[2]) ?? false;
   const ref = n18(ok<bigint>(r[10]));
   const tier = ok<number>(r[17]);
-  const pos = (i: number) => {
+  // decimals: pool 0 → standard asset (unknown until read), pool 1 → LP vault shares (18).
+  const pos = (i: number, decimals: number | null) => {
     const v = ok<readonly [bigint, bigint, bigint]>(r[i]);
-    return v ? { shares: Number(formatUnits(v[0], 18)), pending: Number(formatUnits(v[2], 18)) } : null;
+    return v && decimals !== null ? { shares: Number(formatUnits(v[0], decimals)), pending: Number(formatUnits(v[2], 18)) } : null;
   };
-  const pool = (i: number) => {
+  const pool = (i: number, decimals: number | null) => {
     const v = ok<readonly [bigint, bigint, bigint]>(r[i]);
-    return v ? Number(formatUnits(v[0], 18)) : null;
+    return v && decimals !== null ? Number(formatUnits(v[0], decimals)) : null;
   };
   const raisedX = Number(ok<number>(r[5]) ?? 100);
   const raisedAtX = Number(ok<bigint>(r[6]) ?? 0n);
@@ -276,7 +299,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     .map((t) => ok<readonly [bigint, bigint, number]>(t))
     .filter((t): t is readonly [bigint, bigint, number] => !!t)
     .map((t) => ({ amount: Number(formatUnits(t[0], 18)), nextRelease: Number(t[1]), releasedInstallments: Number(t[2]) }));
-  const usdcBal = ok<bigint>(r[35]);
+  const usdcBal = ok<bigint>(r[33]);
 
   return {
     sim: false,
@@ -311,22 +334,23 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     // and vault share prices need pool state, so those stay unknown rather than guessed.
     prices: { xTOMB: twap, USDC: 1, xSHARE: squareTwap, "xTOMB-USDC": null, "xSHARE-USDC": null },
     balances: {
-      xTOMB: n18(ok<bigint>(r[33])),
-      xSHARE: n18(ok<bigint>(r[34])),
+      xTOMB: n18(ok<bigint>(r[31])),
+      xSHARE: n18(ok<bigint>(r[32])),
       USDC: usdcBal !== undefined ? Number(formatUnits(usdcBal, 6)) : null,
-      "xTOMB-USDC": n18(ok<bigint>(r[36])),
-      "xSHARE-USDC": n18(ok<bigint>(r[37])),
+      "xTOMB-USDC": n18(ok<bigint>(r[34])),
+      "xSHARE-USDC": n18(ok<bigint>(r[35])),
     },
     staking: {
       funded: ok<boolean>(r[18]) ?? null,
       budget: n18(ok<bigint>(r[19])),
-      totals: { 0: pool(20), 1: pool(21) },
-      positions: { 0: pos(22), 1: pos(23) },
+      totals: { 0: pool(20, stdDecimals), 1: pool(21, 18) },
+      positions: { 0: pos(22, stdDecimals), 1: pos(23, 18) },
       nextCompoundAt: { 0: Number(ok<bigint>(r[24]) ?? 0n), 1: Number(ok<bigint>(r[25]) ?? 0n) },
+      nextKeeperCompoundAt: { 0: keeperAt(ok<bigint>(r[37])), 1: keeperAt(ok<bigint>(r[38])) },
       keeper: { executor: keeper && keeper !== zeroAddress ? keeper : null, minNetShares: n18(ok<bigint>(r[27])) ?? 0 },
     },
     tranches,
-    lpBurn: { totalShares: n18(ok<bigint>(r[29])), levelBurned: n18(ok<bigint>(r[30])), pendingShares: n18(ok<bigint>(r[31])), pendingUsdc: n18(ok<bigint>(r[32])) },
+    lpFee: { totalShares: n18(ok<bigint>(r[29])), sentToTreasury: n18(ok<bigint>(r[30])) },
     poolFeeBps: { xTOMB: (d?.pools.level.fee ?? 0) / 100, xSHARE: (d?.pools.square.fee ?? 0) / 100 },
     lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
     now: nowSec,

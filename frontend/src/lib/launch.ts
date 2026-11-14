@@ -15,8 +15,30 @@ import type { MasonryDeployment, OfficialRegistry } from "@config/masonry-deploy
  */
 export const LAUNCH = launch;
 export const POLICY = launch.policy;
-export const REGISTRY = registryJson as unknown as OfficialRegistry;
-export const DEPLOYMENTS = (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
+/**
+ * Local rehearsal (VITE_LOCAL_DEPLOYMENT=1): the anvil deployment written by
+ * contracts/script/DeployMasonryLocal.s.sol becomes the only deployment, and
+ * its chain (31337, marked testnet) joins the registry with the locally
+ * deployed PoolManager and USDC. Off by default; production builds never see it.
+ */
+const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+const localFiles =
+  viteEnv.VITE_LOCAL_DEPLOYMENT === "1"
+    ? (import.meta.glob("../../../contracts/deployment-output/masonry-local.json", { eager: true, import: "default" }) as Record<string, MasonryDeployment>)
+    : {};
+export const LOCAL_DEPLOYMENT: MasonryDeployment | null = Object.values(localFiles)[0] ?? null;
+
+const officialRegistry = registryJson as unknown as OfficialRegistry;
+export const REGISTRY: OfficialRegistry = LOCAL_DEPLOYMENT
+  ? {
+      ...officialRegistry,
+      chains: [
+        ...officialRegistry.chains,
+        { id: LOCAL_DEPLOYMENT.chainId, name: "Local (anvil)", testnet: true, poolManager: LOCAL_DEPLOYMENT.contracts.poolManager, usdc: LOCAL_DEPLOYMENT.contracts.usdc },
+      ],
+    }
+  : officialRegistry;
+export const DEPLOYMENTS = LOCAL_DEPLOYMENT ? [LOCAL_DEPLOYMENT] : (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
 
 const bps = (n: number) => n / 10_000;
 export const pct = (b: number, digits = 2) => `${+(b / 100).toFixed(digits)}%`;
@@ -83,6 +105,8 @@ export const GENESIS_POLICY = {
   automationFeeBps: POLICY.genesisAutomationFeeBps,
   lpBurnFeeBps: POLICY.genesisLevelUsdcLpBurnFeeBps,
   compoundCooldownSeconds: POLICY.genesisCompoundCooldownSeconds,
+  /** MasonryGenesisStaking.PRO_KEEPER_INTERVAL / ULTRA_KEEPER_INTERVAL — minimum spacing between keeper runs. */
+  keeperIntervalSeconds: { pro: POLICY.genesisProKeeperIntervalSeconds, ultra: POLICY.genesisUltraKeeperIntervalSeconds },
   /** MasonryGenesisStaking.ULTRA_EARLY_ACCESS — Ultra may pre-stake in the standard pool. */
   ultraEarlySeconds: 86_400,
   ultraMultiplier: POLICY.genesisUltraMultiplier,
@@ -117,7 +141,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisNftPriceUsdc,
     keeper: false,
     earlyStandardStaking: false,
-    perks: ["Stake, claim and withdraw by hand", "Compound into the LP pool by hand from Day 2"],
+    perks: ["Stake, claim and withdraw by hand", "Compound into the LP pool by hand from Day 2", "3% fee on standard-pool deposits"],
   },
   pro: {
     id: "pro",
@@ -126,7 +150,7 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisProNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: false,
-    perks: ["Everything in Genesis", `Opt in to keeper compounding (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
+    perks: ["Everything in Genesis", "2% fee on standard-pool deposits instead of 3%", `Opt in to keeper compounding every ${POLICY.genesisProKeeperIntervalSeconds / 3600} hours (${pct(POLICY.genesisAutomationFeeBps)} of the liquid half per run)`],
   },
   ultra: {
     id: "ultra",
@@ -135,7 +159,11 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisUltraNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: true,
-    perks: ["Everything in Pro", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
+    perks: ["Everything in Pro", `Keeper compounding every ${POLICY.genesisUltraKeeperIntervalSeconds / 3600} hours instead of ${POLICY.genesisProKeeperIntervalSeconds / 3600}`, "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
+
+/** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the Treasury. */
+export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 0 };
+export const depositFeeBps = (tier: PassTier | null | undefined): number => (tier ? DEPOSIT_FEE_BPS[tier] : DEPOSIT_FEE_BPS.genesis);

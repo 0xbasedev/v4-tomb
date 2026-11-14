@@ -14,13 +14,7 @@ import {
     IMasonryBurnableLevel,
     IMasonryRedeemableLPVault
 } from "../../src/masonry/MasonryGenesisLPBurnFee.sol";
-import {
-    MockMasonryLevel,
-    MockMasonryUSDC,
-    MockMasonryRedeemableVault,
-    MockMasonryV4Router,
-    MockMasonryBurnGuard
-} from "./MasonryGenesisLPBurnFee.t.sol";
+import {MockMasonryLevel, MockMasonryUSDC, MockMasonryRedeemableVault} from "./MasonryGenesisLPBurnFee.t.sol";
 
 contract MockGenesisSettlement is IMasonryGenesisSettlement {
     MockMasonryLevel private immutable level;
@@ -83,18 +77,12 @@ contract MasonryGenesisStakingTest is Test {
         address c1 = address(level) < address(usdc) ? address(usdc) : address(level);
         PoolKey memory key = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
         vault.setPoolKey(key);
-        MockMasonryBurnGuard guard = new MockMasonryBurnGuard();
-        guard.setPoolKey(key);
         fee = new MasonryGenesisLPBurnFee(
             IMasonryRedeemableLPVault(address(vault)),
             IMasonryBurnableLevel(address(level)),
             usdc,
-            new MockMasonryV4Router(level, usdc),
-            guard,
-            key,
+            TREASURY,
             address(this),
-            10_000e18,
-            10_000e6,
             address(this)
         );
         staking = new MasonryGenesisStaking(pass, fee, new MockGenesisSettlement(level, vault), usdc, 7000e18);
@@ -209,18 +197,123 @@ contract MasonryGenesisStakingTest is Test {
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
         (uint256 shares,,) = staking.positions(1, PRO);
-        assertEq(shares, 995e18);
-        assertEq(fee.totalFeeSharesCollected(), 5e18);
+        assertApproxEqAbs(shares, 995e18, 1e3); // Pro stakes 98 net of the 2% deposit fee; 1-wei acc rounding
+        assertApproxEqAbs(fee.totalFeeSharesCollected(), 5e18, 10);
         vm.prank(KEEPER);
         vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
 
-        vm.prank(PRO);
-        staking.setKeeper(KEEPER, 1);
+        // Three hours on, the shared cooldown has passed but a Pro keeper is on a
+        // six-hour clock; the member can still compound by hand.
         vm.warp(schedule.lpOpens() + 3 hours);
         vm.prank(KEEPER);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
         staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
-        assertEq(fee.totalFeeSharesCollected(), 5.15625e18);
+        vm.prank(PRO);
+        staking.compoundToLP(0, PRO, 1, IMasonryGenesisSettlement.CompoundPlan(0, 0));
+        assertApproxEqAbs(fee.totalFeeSharesCollected(), 5.15625e18, 10);
+    }
+
+    function testKeeperCadenceIsSixHoursForProAndThreeForUltra() public {
+        IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(0, 0);
+        _stakeWithKeeper(PRO);
+        _stakeWithKeeper(ULTRA);
+        uint256 t0 = schedule.lpOpens();
+        vm.warp(t0);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), 0);
+
+        vm.startPrank(KEEPER);
+        staking.compoundToLP(0, PRO, 1, plan);
+        staking.compoundToLP(0, ULTRA, 1, plan);
+        assertEq(staking.lastKeeperCompoundAt(0, PRO), t0);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 6 hours);
+        assertEq(staking.nextKeeperCompoundAt(0, ULTRA), t0 + 3 hours);
+
+        vm.warp(t0 + 3 hours - 1);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, ULTRA, 1, plan);
+
+        vm.warp(t0 + 3 hours);
+        staking.compoundToLP(0, ULTRA, 1, plan);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, PRO, 1, plan);
+
+        vm.warp(t0 + 6 hours - 1);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, PRO, 1, plan);
+
+        vm.warp(t0 + 6 hours);
+        staking.compoundToLP(0, PRO, 1, plan);
+        staking.compoundToLP(0, ULTRA, 1, plan);
+        vm.stopPrank();
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 12 hours);
+    }
+
+    function testManualActionNeverShortensOrSkipsTheKeeperClock() public {
+        IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(0, 0);
+        _stakeWithKeeper(PRO);
+        uint256 t0 = schedule.lpOpens();
+        vm.warp(t0);
+        vm.prank(KEEPER);
+        staking.compoundToLP(0, PRO, 1, plan);
+
+        // A manual claim at +5h restarts the shared 3h cooldown, so the keeper
+        // waits for both clocks: +8h, not +6h.
+        vm.warp(t0 + 5 hours);
+        vm.prank(PRO);
+        staking.claim(0);
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 8 hours);
+        vm.warp(t0 + 6 hours);
+        vm.prank(KEEPER);
+        vm.expectRevert(MasonryGenesisStaking.Cooldown.selector);
+        staking.compoundToLP(0, PRO, 1, plan);
+        vm.warp(t0 + 8 hours);
+        vm.prank(KEEPER);
+        staking.compoundToLP(0, PRO, 1, plan);
+        // The keeper interval is tracked per source pool.
+        assertEq(staking.lastKeeperCompoundAt(1, PRO), 0);
+    }
+
+    function testUpgradeToUltraMovesKeeperToThreeHourClock() public {
+        IMasonryGenesisSettlement.CompoundPlan memory plan = IMasonryGenesisSettlement.CompoundPlan(0, 0);
+        _stakeWithKeeper(PRO);
+        uint256 t0 = schedule.lpOpens();
+        vm.warp(t0);
+        vm.prank(KEEPER);
+        staking.compoundToLP(0, PRO, 1, plan);
+
+        usdc.mint(PRO, 400e6);
+        vm.startPrank(PRO);
+        usdc.approve(address(pass), 400e6);
+        pass.upgrade(MasonryGenesisPass.Tier.Ultra);
+        vm.stopPrank();
+        assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 3 hours);
+
+        vm.warp(t0 + 3 hours);
+        vm.prank(KEEPER);
+        staking.compoundToLP(0, PRO, 1, plan);
+    }
+
+    function testKeeperIntervalTable() public view {
+        assertEq(staking.PRO_KEEPER_INTERVAL(), 6 hours);
+        assertEq(staking.ULTRA_KEEPER_INTERVAL(), 3 hours);
+        assertEq(staking.COMPOUND_COOLDOWN(), 3 hours);
+        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.None), 0);
+        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Genesis), 0);
+        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Pro), 6 hours);
+        assertEq(staking.keeperInterval(MasonryGenesisPass.Tier.Ultra), 3 hours);
+        // No keeper tier: there is never a keeper run to wait for.
+        assertEq(staking.nextKeeperCompoundAt(0, BASIC), type(uint256).max);
+    }
+
+    function _stakeWithKeeper(
+        address user
+    ) private {
+        vm.warp(schedule.start());
+        vm.startPrank(user);
+        staking.deposit(0, 100e6);
+        staking.setKeeper(KEEPER, 1);
+        vm.stopPrank();
     }
 
     function testUltraAndGenesisEarnEqualRewardsOnEqualStake() public {
@@ -234,8 +327,64 @@ contract MasonryGenesisStakingTest is Test {
         staking.claim(0);
         vm.prank(ULTRA);
         staking.claim(0);
-        assertEq(level.balanceOf(BASIC), 500e18);
-        assertEq(level.balanceOf(ULTRA), 500e18);
+        // Same deposit, different fee: rewards follow NET shares (3% vs 0%), not gross deposits.
+        (uint256 basicNet,,) = staking.positions(0, BASIC);
+        (uint256 ultraNet,,) = staking.positions(0, ULTRA);
+        assertEq(basicNet, 97e6);
+        assertEq(ultraNet, 100e6);
+        assertApproxEqAbs(level.balanceOf(BASIC) * ultraNet, level.balanceOf(ULTRA) * basicNet, 1e18);
+        assertApproxEqAbs(level.balanceOf(BASIC) + level.balanceOf(ULTRA), 1000e18, 10);
+    }
+
+    function testPoolZeroDepositFeeByTierGoesToTreasuryInUsdc() public {
+        vm.warp(schedule.start());
+        uint256 t0 = usdc.balanceOf(TREASURY);
+        uint256 collected;
+        address[3] memory users = [BASIC, PRO, ULTRA];
+        uint256[3] memory net = [uint256(97e6), 98e6, 100e6];
+        for (uint256 i; i < 3; ++i) {
+            uint256 before = usdc.balanceOf(users[i]);
+            vm.prank(users[i]);
+            staking.deposit(0, 100e6);
+            (uint256 shares,,) = staking.positions(0, users[i]);
+            assertEq(shares, net[i], "net shares");
+            assertEq(before - usdc.balanceOf(users[i]), 100e6, "user pays gross");
+            collected += 100e6 - net[i];
+            assertEq(usdc.balanceOf(TREASURY) - t0, collected, "treasury receives each fee in USDC");
+        }
+        (uint256 total,,) = staking.pools(0);
+        assertEq(total, 295e6, "only net shares earn");
+        assertEq(usdc.balanceOf(address(staking)), 295e6, "staking holds net only");
+    }
+
+    function testDepositFeeEmitsAndUltraPaysNone() public {
+        vm.warp(schedule.start());
+        vm.expectEmit(true, false, false, true);
+        emit MasonryGenesisStaking.DepositFeePaid(BASIC, MasonryGenesisPass.Tier.Genesis, 3e6);
+        vm.prank(BASIC);
+        staking.deposit(0, 100e6);
+        uint256 t0 = usdc.balanceOf(TREASURY);
+        vm.prank(ULTRA);
+        staking.deposit(0, 100e6);
+        assertEq(usdc.balanceOf(TREASURY), t0, "Ultra pays 0%");
+    }
+
+    function testDepositFeeBpsTable() public view {
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Genesis), 300);
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Pro), 200);
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Ultra), 0);
+    }
+
+    function testWithdrawReturnsNetSharesOnly() public {
+        vm.warp(schedule.start());
+        vm.startPrank(BASIC);
+        staking.deposit(0, 100e6);
+        uint256 before = usdc.balanceOf(BASIC);
+        staking.withdraw(0, 97e6);
+        assertEq(usdc.balanceOf(BASIC) - before, 97e6);
+        vm.expectRevert();
+        staking.withdraw(0, 1);
+        vm.stopPrank();
     }
 
     function _expectClosed(

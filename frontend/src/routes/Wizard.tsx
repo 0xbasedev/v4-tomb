@@ -50,8 +50,10 @@ const POLICY_LABEL: Record<string, string> = {
   genesisVestingIntervalSeconds: "Installment interval",
   genesisWalletClaimFeeBps: "Wallet claim fee",
   genesisAutomationFeeBps: "Keeper fee",
-  genesisLevelUsdcLpBurnFeeBps: "Genesis LP burn fee",
+  genesisLevelUsdcLpBurnFeeBps: "Genesis LP deposit fee (to Treasury as POL)",
   genesisCompoundCooldownSeconds: "Genesis compound cooldown",
+  genesisProKeeperIntervalSeconds: "Pro keeper interval",
+  genesisUltraKeeperIntervalSeconds: "Ultra keeper interval",
   farmsCompoundCooldownSeconds: "Farm compound cooldown",
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
@@ -297,7 +299,7 @@ function AllocStep({ doc, setDoc, result }: { doc: Doc; setDoc: (d: Doc) => void
   };
   const s = doc.square;
   const sum =
-    s.farming + s.saleEscrow + s.deployer + s.initial.ownerTeamDeveloper + s.initial.treasury + s.initial.arbitrage + Object.values(s.vesting).reduce((a: number, b) => a + ((b as number | null) ?? 0), 0);
+    s.farming + s.saleEscrow + s.deployer + s.initial.ownerTeamDeveloper + s.initial.deployerDao + s.initial.treasury + s.initial.arbitrage + Object.values(s.vesting).reduce((a: number, b) => a + ((b as number | null) ?? 0), 0);
   return (
     <section data-reveal className="panel p-5 md:p-6">
       <h2 className="font-display text-lg font-semibold text-bone">2 · Allocations</h2>
@@ -310,7 +312,7 @@ function AllocStep({ doc, setDoc, result }: { doc: Doc; setDoc: (d: Doc) => void
         <NumField label="Initial · owner/team/dev" value={s.initial.ownerTeamDeveloper} onChange={(n) => set((d) => void (d.square.initial.ownerTeamDeveloper = n ?? 0))} />
         <NumField label="Initial · Treasury" value={s.initial.treasury} onChange={(n) => set((d) => void (d.square.initial.treasury = n ?? 0))} />
         <NumField label="Initial · arbitrage" value={s.initial.arbitrage} onChange={(n) => set((d) => void (d.square.initial.arbitrage = n ?? 0))} />
-        <div />
+        <NumField label="Initial · deployer/DAO outright" value={s.initial.deployerDao} onChange={(n) => set((d) => void (d.square.initial.deployerDao = n ?? 0))} hint="liquid, on top of Deployer" />
         {(["team", "developer", "treasury", "arbitrage"] as const).map((k) => (
           <NumField key={k} label={`Vesting · ${k}`} value={(s.vesting as Record<string, number | null>)[k]} onChange={(n) => set((d) => void ((d.square.vesting as Record<string, number | null>)[k] = n))} hint={`${POLICY.operationalVestingDays}-day linear`} />
         ))}
@@ -416,9 +418,6 @@ function PoolsStep({ pools, setPools, issues }: { pools: Pools; setPools: (p: Po
         {field("maxSquarePerRoute", "Max xSHARE per route", "caps each routed sale")}
         {field("maxDeviationBps", "Max route deviation (bps)")}
       </div>
-      <p className="mt-3 font-mono text-[11px] text-ash">
-        Genesis burn execution limits (from the template): {LAUNCH.genesisBurnExecution.maxFeeSharesPerCallBaseUnits} shares · {LAUNCH.genesisBurnExecution.maxUsdcPerCallBaseUnits} USDC base units per call.
-      </p>
       {issues.length > 0 && (
         <ul className="mt-3 space-y-1 text-[12px] text-warn" role="status">
           {issues.map((x) => (

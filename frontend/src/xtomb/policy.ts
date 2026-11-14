@@ -7,8 +7,8 @@ export const percent = (bps: number) => `${bps / 100}%`;
 
 export const tiers = [
   { name: "Genesis", price: policy.genesisNftPriceUsdc, tone: "ember", details: ["Manual staking and claims", "Manual LP compounding from Day 2"] },
-  { name: "Pro", price: policy.genesisProNftPriceUsdc, tone: "spectre", details: ["All Genesis access", "Opt in to keeper compounding"] },
-  { name: "Ultra", price: policy.genesisUltraNftPriceUsdc, tone: "amethyst", details: ["All Pro access", "24-hour early access to standard staking", "Same reward weighting as every tier"] },
+  { name: "Pro", price: policy.genesisProNftPriceUsdc, tone: "spectre", details: ["All Genesis access", `Opt in to keeper compounding every ${policy.genesisProKeeperIntervalSeconds / 3600} hours`] },
+  { name: "Ultra", price: policy.genesisUltraNftPriceUsdc, tone: "amethyst", details: ["All Pro access", `Keeper compounding every ${policy.genesisUltraKeeperIntervalSeconds / 3600} hours`, "24-hour early access to standard staking", "Same reward weighting as every tier"] },
 ] as const;
 
 /** Mirrors the Solidity curve's integer steps for normalized sample prices. */
