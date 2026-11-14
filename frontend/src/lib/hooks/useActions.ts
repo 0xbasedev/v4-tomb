@@ -197,7 +197,7 @@ export function useActions() {
       );
     },
 
-    deposit(pool: 0 | 1, amount: number, standardAsset: Address | null, onDone?: () => void) {
+    deposit(pool: 0 | 1, amount: number, _standardAsset: Address | null, onDone?: () => void) {
       const label = pool === 0 ? `Stake ${amount} in the standard pool` : `Stake ${amount} LP in the ${pegPair("xTOMB")} pool`;
       if (preview.enabled) return sim(label, () => preview.act.deposit(pool, amount), onDone);
       if (!c) return run(label, []);

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "protocol": "masonry",
   "daoWallet": "0x0000000000000000000000000000000000000001",
-  "note": "INCOMPLETE TEMPLATE: select all vesting amounts and authorized LEVEL launch supply before deployment. Never deploy from null fields.",
+  "note": "INCOMPLETE TEMPLATE: select the authorized LEVEL launch supply before deployment. Never deploy from null fields.",
   "square": {
     "maxSupply": 33333,
     "farming": 25641,

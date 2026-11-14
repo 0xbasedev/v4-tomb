@@ -6,7 +6,7 @@ import { expect, test } from "./fixtures";
  * recommended next move is reachable without hunting.
  */
 
-const ROUTES = ["/", "/dashboard", "/genesis", "/genesis?genesis=ended", "/farm", "/masonry", "/swap", "/swap?mode=liquidity", "/bonds", "/bridge", "/docs", "/admin", "/wizard"];
+const ROUTES = ["/", "/dashboard", "/genesis", "/genesis?genesis=ended", "/farm", "/masonry", "/swap", "/swap?mode=liquidity", "/bonds", "/docs", "/admin", "/wizard"];
 
 for (const width of [412, 320]) {
   test(`no horizontal overflow at ${width}px`, async ({ page }) => {
@@ -38,7 +38,7 @@ test("thumb bar replaces the desktop nav; More holds the rest", async ({ page })
   await page.goto("/dashboard?preview=1");
   const bar = page.getByRole("navigation", { name: "Primary" });
   await expect(bar).toBeVisible();
-  for (const label of ["Dashboard", "Genesis", "Swap", "Bridge"]) await expect(bar.getByRole("link", { name: label })).toBeVisible();
+  for (const label of ["Dashboard", "Genesis", "Masonry", "Swap"]) await expect(bar.getByRole("link", { name: label })).toBeVisible();
   await bar.getByRole("button", { name: /More/ }).click();
   await expect(page.getByRole("link", { name: "Docs" }).last()).toBeVisible();
 });

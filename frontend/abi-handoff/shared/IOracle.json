@@ -25,6 +25,25 @@
   },
   {
     "type": "function",
+    "name": "isFresh",
+    "inputs": [
+      {
+        "name": "maxAge",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "twap",
     "inputs": [
       {

@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { erc20Abi, formatUnits, zeroAddress, type Address } from "viem";
+import { erc20Abi, formatUnits, zeroAddress, type Address, type Abi } from "viem";
 
 import { liveDeployment, useSelectedNetwork } from "@/lib/networks";
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
@@ -87,6 +87,8 @@ export interface ProtocolState {
 }
 
 const n18 = (v: unknown) => (typeof v === "bigint" ? Number(formatUnits(v, 18)) : null);
+/** One multicall entry, typed loosely: forty differently-typed reads make the inferred result tuple too deep for the compiler. */
+type ReadCall = { address: Address; abi: Abi; functionName: string; args?: readonly unknown[]; chainId: number };
 const ok = <T,>(r: { status: string; result?: unknown } | undefined): T | undefined => (r && r.status === "success" ? (r.result as T) : undefined);
 
 export function useProtocol(): ProtocolState {
@@ -171,7 +173,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
   const reads = useReadContracts({
     allowFailure: true,
     contracts: c
-      ? [
+      ? ([
           { address: c.schedule, abi: masonryGenesisScheduleAbi, functionName: "start" }, // 0
           { address: c.levelOracle, abi: masonryLevelOracleAbi, functionName: "latestValidatedTwap" }, // 1
           { address: c.criticalDefense, abi: masonryCriticalDefenseAbi, functionName: "active" }, // 2
@@ -212,7 +214,7 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [0n, user] }, // 37
           { address: c.staking, abi: masonryGenesisStakingAbi, functionName: "nextKeeperCompoundAt", args: [1n, user] }, // 38
           { address: c.pass, abi: masonryGenesisPassAbi, functionName: "saleOpen" }, // 39
-        ].map((entry) => ({ ...entry, chainId: d!.chainId }))
+        ].map((entry) => ({ ...entry, chainId: d!.chainId })) as ReadCall[])
       : [],
     query: { enabled, refetchInterval: 15_000 },
   });
@@ -230,7 +232,8 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     query: { enabled: !!stdAsset },
   });
   const stdDecimals = ok<number>(stdDecRead.data?.[0]) ?? null;
-  const r = reads.data ?? [];
+  // Forty mixed reads make the inferred result tuple too deep for the compiler; every entry is read through ok<T>().
+  const r = ((reads as { data?: unknown }).data ?? []) as readonly ({ status: string; result?: unknown } | undefined)[];
   const count = Number(ok<bigint>(r[28]) ?? 0n);
   const trancheReads = useReadContracts({
     allowFailure: true,

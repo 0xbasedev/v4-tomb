@@ -239,7 +239,8 @@ test.describe("Bridge and release plan", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("four networks, all disabled; Robinhood Chain is not one; Sonic awaits relayer and verifier setup", async ({ page, broadcasts }) => {
+  // Skipped while the bridge page is hidden (owner ruling 2026-11-14).
+  test.skip("four networks, all disabled; Robinhood Chain is not one; Sonic awaits relayer and verifier setup", async ({ page, broadcasts }) => {
     await page.goto("/bridge");
     const nets = page.getByTestId("bridge-networks");
     for (const name of ["Base", "BNB Smart Chain", "PulseChain", "Sonic"]) await expect(nets).toContainText(name);
@@ -252,7 +253,7 @@ test.describe("Bridge and release plan", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("Wizard predicts addresses from signer + release ID and the Bridge page shows them", async ({ page, broadcasts }) => {
+  test("Wizard predicts addresses from signer + release ID; no link leads to the hidden Bridge page", async ({ page, broadcasts }) => {
     test.setTimeout(120_000);
     await page.goto("/wizard?preview=1");
     await page.getByRole("button", { name: /Base\s*8453/ }).click();
@@ -265,11 +266,8 @@ test.describe("Bridge and release plan", () => {
     await expect(masonry).toContainText("0x35c8 ✓");
     await expect(page.getByTestId("predicted-bridge")).toContainText("xshareBridge");
 
-    await page.getByRole("link", { name: /(^|\s)Bridge$/ }).filter({ visible: true }).first().click();
-    await expect(page.getByText(/Home chain in your release plan: Base/)).toBeVisible();
-    await expect(page.getByTestId("bridge-networks").locator("[data-network=base]")).toContainText(/home · original xSHARE/);
-    await expect(page.getByTestId("bridge-networks").locator("[data-network=pulsechain]")).toContainText(/token 0x.*predicted/);
-    await expect(page.getByRole("button", { name: "Bridge unavailable" })).toBeDisabled();
+    // The bridge page is hidden, so nothing may link to it.
+    await expect(page.getByRole("link", { name: /(^|\s)Bridge$/ })).toHaveCount(0);
     await expectNoTransactionRequests(page, broadcasts);
   });
 

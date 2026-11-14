@@ -3,7 +3,7 @@ import type { Address } from "viem";
 
 import { sellTax, type TaxedAsset } from "@/lib/fireTax";
 import { compoundSplit, cumulativeEmitted, genesisClock, walletClaim, type Tranche } from "@/lib/genesis";
-import { DEPLOYMENTS, depositFeeBps, GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
+import { depositFeeBps, GENESIS_POLICY, PASSES, type PassTier } from "@/lib/launch";
 import { stepDefense } from "@/lib/market";
 import type { TokenId } from "@/lib/tokens";
 

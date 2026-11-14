@@ -35,7 +35,7 @@ export const REGISTRY: OfficialRegistry = LOCAL_DEPLOYMENT
       ...officialRegistry,
       chains: [
         ...officialRegistry.chains,
-        { id: LOCAL_DEPLOYMENT.chainId, name: "Local (anvil)", testnet: true, poolManager: LOCAL_DEPLOYMENT.contracts.poolManager, usdc: LOCAL_DEPLOYMENT.contracts.usdc },
+        { id: LOCAL_DEPLOYMENT.chainId, name: "Local (anvil)", testnet: true, poolManager: LOCAL_DEPLOYMENT.contracts.poolManager, usdc: LOCAL_DEPLOYMENT.contracts.usdc, pegToken: LOCAL_DEPLOYMENT.contracts.usdc, pegTokenSymbol: "USDC", pegTokenDecimals: 6 },
       ],
     }
   : officialRegistry;

@@ -246,7 +246,8 @@ test('Admin schedules a deferred Genesis only when funded and connected to gover
   await expect(confirm).toHaveCount(0);
 });
 
-test('Bridge presents all four networks with transfers disabled', async ({ page }) => {
+// Skipped while the bridge page is hidden (owner ruling 2026-11-14).
+test.skip('Bridge presents all four networks with transfers disabled', async ({ page }) => {
   await page.goto('/bridge');
   await expect(page.getByRole('heading', { name: 'xSHARE Bridge' })).toBeVisible();
   for (const name of ['Base', 'BNB Smart Chain', 'PulseChain', 'Sonic']) {

@@ -9,7 +9,6 @@ const template = JSON.parse(readFileSync(new URL('./masonry-launch.template.json
 
 const completeLaunch = () => {
   const doc = structuredClone(template);
-  doc.square.vesting = { team: 3000, developer: 2500, treasury: 941, arbitrage: 500 };
   doc.level.authorizedLaunchSupply = 11000;
   return doc;
 };

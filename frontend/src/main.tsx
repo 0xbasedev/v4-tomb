@@ -15,7 +15,8 @@ import { Dashboard } from "./routes/Dashboard";
 import { Genesis } from "./routes/Genesis";
 import { Masonry } from "./routes/Masonry";
 import { Farm } from "./routes/Farm";
-import { Bridge } from "./routes/Bridge";
+// The xSHARE bridge page is hidden (owner ruling 2026-11-14): its code stays in routes/Bridge.tsx,
+// but nothing links to it and it has no route until the bridge is brought back.
 import { Wizard } from "./routes/Wizard";
 import { Bonds } from "./routes/Bonds";
 import { Swap } from "./routes/Swap";
@@ -58,7 +59,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   <Route path="/farm" element={<Farm />} />
                   <Route path="/masonry" element={<Masonry />} />
                   <Route path="/bonds" element={<Bonds />} />
-                  <Route path="/bridge" element={<Bridge />} />
                   <Route path="/swap" element={<Swap />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/wizard" element={<Wizard />} />
