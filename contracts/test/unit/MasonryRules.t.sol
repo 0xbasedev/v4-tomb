@@ -16,28 +16,43 @@ contract MasonryRulesTest is Test {
         this.validateSquareAllocations(vested);
     }
 
-    function test_TaxAtPegIsOnePercent() public pure {
-        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, 100, 1200, 1000), 100);
-        assertEq(MasonryRules.targetSellTaxBps(12e17, 1e18, 100, 1200, 1000), 100);
+    uint16 private constant TOMB = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
+    uint16 private constant SHARE = MasonryRules.SHARE_BASE_SELL_TAX_BPS;
+    uint16 private constant WITHDRAW = MasonryRules.WITHDRAW_BASE_FEE_BPS;
+    uint16 private constant CAP = MasonryRules.HARD_MAX_FIRE_TAX_BPS;
+    uint16 private constant DROP = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
+
+    function test_OwnerRatesAreHardCoded() public pure {
+        assertEq(TOMB, 50); // X Tomb sells: 0.5% at or above peg
+        assertEq(SHARE, 300); // X Share sells: 3% at or above peg
+        assertEq(WITHDRAW, 150); // withdrawals: 1.5% at or above peg
+        assertEq(CAP, 600); // 6% for all three
+        assertEq(MasonryRules.DEFAULT_MAX_FIRE_TAX_BPS, 600);
+        assertEq(DROP, 1000); // reached 10% under peg
+        assertEq(MasonryRules.GENESIS_TAX_BPS, 600);
+        assertEq(MasonryRules.GENESIS_TAX_DECAY_BPS, 30);
+        assertEq(MasonryRules.EPOCH, 6 hours);
     }
 
-    function test_TaxAtOrBelowEightyFiveCentsIsTwelvePercent() public pure {
-        assertEq(MasonryRules.targetSellTaxBps(85e16, 1e18, 100, 1200, 1000), 1200);
-        assertEq(MasonryRules.targetSellTaxBps(70e16, 1e18, 100, 1200, 1000), 1200);
+    function test_XTombCurveBreakpoints() public pure {
+        assertEq(MasonryRules.targetSellTaxBps(12e17, 1e18, TOMB, CAP, DROP), 50); // above peg
+        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, TOMB, CAP, DROP), 50); // at peg
+        assertEq(MasonryRules.targetSellTaxBps(1e18 - 1, 1e18, TOMB, CAP, DROP), 50); // dust below peg
+        assertEq(MasonryRules.targetSellTaxBps(98e16, 1e18, TOMB, CAP, DROP), 295); // 2% below
+        assertEq(MasonryRules.targetSellTaxBps(95e16, 1e18, TOMB, CAP, DROP), 438); // 5% below
+        assertEq(MasonryRules.targetSellTaxBps(90e16 + 1, 1e18, TOMB, CAP, DROP), 599);
+        assertEq(MasonryRules.targetSellTaxBps(90e16, 1e18, TOMB, CAP, DROP), 600); // 10% below
+        assertEq(MasonryRules.targetSellTaxBps(50e16, 1e18, TOMB, CAP, DROP), 600);
+        assertEq(MasonryRules.targetSellTaxBps(0, 1e18, TOMB, CAP, DROP), 600);
     }
 
-    function test_SqrtCurveBreakpoints() public pure {
-        uint16 d = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
-        assertEq(d, 1000);
-        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, 100, 1200, d), 100); // at peg 1.00%
-        assertEq(MasonryRules.targetSellTaxBps(98e16, 1e18, 100, 1200, d), 591); // 2% below ~5.9%
-        assertEq(MasonryRules.targetSellTaxBps(95e16, 1e18, 100, 1200, d), 877); // 5% below ~8.8%
-        assertEq(MasonryRules.targetSellTaxBps(90e16, 1e18, 100, 1200, d), 1200); // 10% below 12%
-        assertEq(MasonryRules.targetSellTaxBps(90e16 + 1, 1e18, 100, 1200, d), 1199);
-        assertEq(MasonryRules.targetSellTaxBps(50e16, 1e18, 100, 1200, d), 1200);
-        assertEq(MasonryRules.targetSellTaxBps(0, 1e18, 100, 1200, d), 1200);
-        assertEq(MasonryRules.targetSellTaxBps(105e16, 1e18, 100, 1200, d), 100); // above peg 1%
-        assertEq(MasonryRules.targetSellTaxBps(1e18 - 1, 1e18, 100, 1200, d), 100); // dust below peg
+    function test_XShareCurveBreakpoints() public pure {
+        assertEq(MasonryRules.targetSellTaxBps(11e17, 1e18, SHARE, CAP, DROP), 300); // above peg
+        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, SHARE, CAP, DROP), 300); // at peg
+        assertEq(MasonryRules.targetSellTaxBps(98e16, 1e18, SHARE, CAP, DROP), 434); // 2% below
+        assertEq(MasonryRules.targetSellTaxBps(95e16, 1e18, SHARE, CAP, DROP), 512); // 5% below
+        assertEq(MasonryRules.targetSellTaxBps(90e16, 1e18, SHARE, CAP, DROP), 600); // 10% below
+        assertEq(MasonryRules.targetSellTaxBps(1, 1e18, SHARE, CAP, DROP), 600);
     }
 
     function testFuzz_SqrtCurveMonotonic(
@@ -45,92 +60,79 @@ contract MasonryRulesTest is Test {
         uint128 b
     ) public pure {
         (uint256 lo, uint256 hi) = a < b ? (uint256(a), uint256(b)) : (uint256(b), uint256(a));
-        uint16 d = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
         assertGe(
-            MasonryRules.targetSellTaxBps(lo, 1e18, 100, 1200, d), MasonryRules.targetSellTaxBps(hi, 1e18, 100, 1200, d)
+            MasonryRules.targetSellTaxBps(lo, 1e18, TOMB, CAP, DROP),
+            MasonryRules.targetSellTaxBps(hi, 1e18, TOMB, CAP, DROP)
         );
     }
 
-    function testFuzz_SqrtCurveAtLeastQuadratic(
+    /// Fast up: the square-root curve is never below a straight line from base to cap.
+    function testFuzz_SqrtCurveAtLeastLinear(
         uint64 price
     ) public pure {
         uint256 p = bound(uint256(price), 9e17, 1e18);
         uint256 progress = (1e18 - p) * 10_000 / 1e17;
-        uint256 oldTax = 100 + 1100 * (progress * progress / 10_000) / 10_000;
-        assertGe(MasonryRules.targetSellTaxBps(p, 1e18, 100, 1200, 1000), oldTax);
+        uint256 linear = TOMB + uint256(CAP - TOMB) * progress / 10_000;
+        assertGe(MasonryRules.targetSellTaxBps(p, 1e18, TOMB, CAP, DROP), linear);
     }
 
     function test_FireTaxHardCapRejectsHigherValue() public {
         vm.expectRevert(MasonryRules.InvalidParameters.selector);
-        this.targetSellTaxBps(1201);
+        this.targetSellTaxBps(601);
     }
 
     function test_ProjectedSellRaisesTaxOnSameTrade() public pure {
-        uint16 twap = MasonryRules.targetSellTaxBps(1e18, 1e18, 100, 1200, 1000);
-        uint16 projected = MasonryRules.targetSellTaxBps(85e16, 1e18, 100, 1200, 1000);
-        assertEq(MasonryRules.effectiveSellTaxBps(twap, projected, 100), 1200);
+        uint16 twap = MasonryRules.targetSellTaxBps(1e18, 1e18, TOMB, CAP, DROP);
+        uint16 projected = MasonryRules.targetSellTaxBps(85e16, 1e18, TOMB, CAP, DROP);
+        assertEq(MasonryRules.effectiveSellTaxBps(twap, projected, TOMB), 600);
     }
 
-    function test_ThreePercentFloorCurveBreakpoints() public pure {
-        uint16 b = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
-        uint16 m = MasonryRules.DEFAULT_MAX_FIRE_TAX_BPS;
-        uint16 d = MasonryRules.DEFAULT_FULL_TAX_DROP_BPS;
-        assertEq(b, 300);
-        assertEq(MasonryRules.targetSellTaxBps(11e17, 1e18, b, m, d), 300); // above peg
-        assertEq(MasonryRules.targetSellTaxBps(1e18, 1e18, b, m, d), 300); // at peg
-        assertEq(MasonryRules.targetSellTaxBps(98e16, 1e18, b, m, d), 702); // 2% below
-        assertEq(MasonryRules.targetSellTaxBps(95e16, 1e18, b, m, d), 936); // 5% below
-        assertEq(MasonryRules.targetSellTaxBps(90e16, 1e18, b, m, d), 1200); // 10% below
-        assertEq(MasonryRules.targetSellTaxBps(1, 1e18, b, m, d), 1200);
-    }
-
-    function test_ThreePercentFloorRecoveryDecaysOverSevenHours() public pure {
-        uint16 b = MasonryRules.DEFAULT_BASE_FIRE_TAX_BPS;
-        uint256 start = 100_000;
-        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start), 1200);
-        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 3.5 hours), 750);
-        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 7 hours - 1), 300);
-        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 7 hours), 300);
-        assertEq(MasonryRules.recoveryFloorBps(1200, b, start, start + 30 days), 300);
-    }
-
-    function testFuzz_ThreePercentFloorBounds(
-        uint128 price
-    ) public pure {
-        uint16 tax = MasonryRules.targetSellTaxBps(price, 1e18, 300, 1200, 1000);
-        assertGe(tax, 300);
-        assertLe(tax, 1200);
-    }
-
+    /// Slow down: a raised rate falls back to the base over seven hours.
     function test_SevenHourTaxRecovery() public pure {
         uint256 start = 100_000;
-        assertEq(MasonryRules.recoveryFloorBps(1200, 100, start, start), 1200);
-        assertEq(MasonryRules.recoveryFloorBps(1200, 100, start, start + 3.5 hours), 650);
-        assertEq(MasonryRules.recoveryFloorBps(1200, 100, start, start + 7 hours), 100);
+        assertEq(MasonryRules.recoveryFloorBps(600, TOMB, start, start), 600);
+        assertEq(MasonryRules.recoveryFloorBps(600, TOMB, start, start + 3.5 hours), 325);
+        assertEq(MasonryRules.recoveryFloorBps(600, TOMB, start, start + 7 hours - 1), 50);
+        assertEq(MasonryRules.recoveryFloorBps(600, TOMB, start, start + 7 hours), 50);
+        assertEq(MasonryRules.recoveryFloorBps(600, SHARE, start, start + 3.5 hours), 450);
+        assertEq(MasonryRules.recoveryFloorBps(600, SHARE, start, start + 30 days), 300);
     }
 
-    function test_WithdrawFeeMatchesFireTaxAtPegTenPercentAndDecay() public pure {
+    function test_GenesisTaxIsSixPercentThenFallsThirtyBpsPerEpoch() public pure {
+        uint256 end = 1_000_000;
+        assertEq(MasonryRules.genesisTaxFloorBps(false, 0, end), 0); // no start set
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end - 8 days), 0); // before Genesis
+        assertEq(MasonryRules.genesisTaxFloorBps(true, end, end - 1), 600);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end), 600);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end + 6 hours - 1), 600);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end + 6 hours), 570);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end + 19 * 6 hours), 30);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end + 20 * 6 hours), 0);
+        assertEq(MasonryRules.genesisTaxFloorBps(false, end, end + 3650 days), 0);
+    }
+
+    function test_WithdrawFeeIsOnePointFiveToSixPercentWithDecay() public pure {
         uint256 peg = 1e18;
-        uint16 b = 300;
-        uint16 m = 1200;
-        uint16 d = 1000;
         uint256 t0 = 1_000_000;
-        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, b, t0, t0), 300);
-        assertEq(MasonryRules.withdrawFeeBps(90e16, peg, b, m, d, b, t0, t0), 1200);
-        assertEq(MasonryRules.withdrawFeeBps(70e16, peg, b, m, d, b, t0, t0), 1200);
-        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0), 1200);
-        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0 + 3.5 hours), 750);
-        assertEq(MasonryRules.withdrawFeeBps(peg, peg, b, m, d, 1200, t0, t0 + 7 hours), 300);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, WITHDRAW, CAP, DROP, TOMB, t0, t0), 150);
+        assertEq(MasonryRules.withdrawFeeBps(98e16, peg, WITHDRAW, CAP, DROP, TOMB, t0, t0), 351);
+        assertEq(MasonryRules.withdrawFeeBps(90e16, peg, WITHDRAW, CAP, DROP, TOMB, t0, t0), 600);
+        assertEq(MasonryRules.withdrawFeeBps(70e16, peg, WITHDRAW, CAP, DROP, TOMB, t0, t0), 600);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, WITHDRAW, CAP, DROP, 600, t0, t0), 600);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, WITHDRAW, CAP, DROP, 600, t0, t0 + 3.5 hours), 375);
+        assertEq(MasonryRules.withdrawFeeBps(peg, peg, WITHDRAW, CAP, DROP, 600, t0, t0 + 7 hours), 150);
     }
 
-    function testFuzz_WithdrawFeeNeverExceedsTwelvePercent(
+    function testFuzz_WithdrawFeeStaysBetweenOnePointFiveAndSixPercent(
         uint128 price,
+        uint16 raised,
         uint32 elapsed
     ) public pure {
+        uint16 r = uint16(bound(raised, TOMB, CAP));
         uint16 fee =
-            MasonryRules.withdrawFeeBps(price == 0 ? 1 : uint256(price), 1e18, 300, 1200, 1000, 1200, 0, elapsed);
-        assertGe(fee, 300);
-        assertLe(fee, 1200);
+            MasonryRules.withdrawFeeBps(price == 0 ? 1 : uint256(price), 1e18, WITHDRAW, CAP, DROP, r, 0, elapsed);
+        assertGe(fee, 150);
+        assertLe(fee, 600);
     }
 
     function test_ExpansionRequiresStrictlyAboveOnePointZeroOne() public pure {
@@ -146,20 +148,20 @@ contract MasonryRulesTest is Test {
         this.expansionUpperBound(201);
     }
 
-    function testFuzz_FireTaxNeverExceedsTwelvePercent(
+    function testFuzz_FireTaxNeverExceedsSixPercent(
         uint128 price
     ) public pure {
-        uint16 tax = MasonryRules.targetSellTaxBps(uint256(price), 1e18, 100, 1200, 1000);
-        assertGe(tax, 100);
-        assertLe(tax, 1200);
+        uint16 tax = MasonryRules.targetSellTaxBps(uint256(price), 1e18, TOMB, CAP, DROP);
+        assertGe(tax, 50);
+        assertLe(tax, 600);
     }
 
-    function testFuzz_RecoveryNeverExceedsTwelvePercent(
+    function testFuzz_RecoveryNeverExceedsSixPercent(
         uint32 elapsed
     ) public pure {
-        uint16 tax = MasonryRules.recoveryFloorBps(1200, 100, 100, 100 + uint256(elapsed));
-        assertGe(tax, 100);
-        assertLe(tax, 1200);
+        uint16 tax = MasonryRules.recoveryFloorBps(600, TOMB, 100, 100 + uint256(elapsed));
+        assertGe(tax, 50);
+        assertLe(tax, 600);
     }
 
     function validateSquareAllocations(
@@ -171,7 +173,7 @@ contract MasonryRulesTest is Test {
     function targetSellTaxBps(
         uint16 maximumBps
     ) external pure {
-        MasonryRules.targetSellTaxBps(90e16, 1e18, 100, maximumBps, 1000);
+        MasonryRules.targetSellTaxBps(90e16, 1e18, 50, maximumBps, 1000);
     }
 
     function expansionUpperBound(

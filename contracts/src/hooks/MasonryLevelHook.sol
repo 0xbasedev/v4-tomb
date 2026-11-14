@@ -17,7 +17,7 @@ import {MasonryTaxHook} from "./MasonryTaxHook.sol";
 contract MasonryLevelHook is MasonryTaxHook {
     using SafeERC20 for IERC20;
 
-    uint16 public constant GENESIS_MIN_TAX_BPS = 300;
+    uint16 public constant GENESIS_MIN_TAX_BPS = MasonryRules.GENESIS_TAX_BPS;
     MasonryGenesisSchedule public immutable schedule;
     address public immutable taxRecipient;
     uint256 public genesisLevelBurned;
@@ -52,14 +52,10 @@ contract MasonryLevelHook is MasonryTaxHook {
         uint16 rate
     ) internal override {
         poolManager.take(Currency.wrap(asset), address(this), amount);
-        bool genesis = schedule.active();
-        if (genesis) {
-            IMasonryBurnableLevel(asset).burn(amount);
-            genesisLevelBurned += amount;
-        } else {
-            IERC20(asset).safeTransfer(taxRecipient, amount);
-        }
-        emit SellTax(amount, rate, genesis);
+        // Owner rule 2026-11-14: the X Tomb sell tax is always burned, in Genesis and after it.
+        IMasonryBurnableLevel(asset).burn(amount);
+        if (schedule.active()) genesisLevelBurned += amount;
+        emit SellTax(amount, rate, true);
     }
 
     /// @dev Fire Tax on an X Tomb sell: the higher of the TWAP rate, the projected
@@ -108,14 +104,15 @@ contract MasonryLevelHook is MasonryTaxHook {
         fee = FullMath.mulDiv(taxBase, rate, exactInput ? BPS : BPS - rate);
         if (bootstrapFloor != 0) {
             uint256 floor = FullMath.mulDivRoundingUp(taxBase, bootstrapFloor, exactInput ? BPS : BPS - bootstrapFloor);
-            uint256 ceiling = FullMath.mulDiv(taxBase, MAX_TAX_BPS, exactInput ? BPS : BPS - MAX_TAX_BPS);
+            // Rounded up like the floor: the Genesis Tax equals the cap, so both must round the same way.
+            uint256 ceiling = FullMath.mulDivRoundingUp(taxBase, MAX_TAX_BPS, exactInput ? BPS : BPS - MAX_TAX_BPS);
             if (floor > ceiling) revert UnrepresentableTax();
             if (fee < floor) fee = floor;
         }
     }
 
     function _bootstrapFloor() internal view override returns (uint16) {
-        return schedule.active() ? GENESIS_MIN_TAX_BPS : 0;
+        return MasonryRules.genesisTaxFloorBps(schedule.active(), schedule.end(), block.timestamp);
     }
 
     function _referencePrice() internal pure override returns (uint256) {

@@ -145,42 +145,48 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
     /// Aggressive curve e2e: TWAP is at peg (no floor), but a large sell whose
     /// projected post-sale price is >=10% below peg is charged the full 12%.
     function testProjectedTickCrossingAppliesCeilingOnSameSale() public {
-        vm.warp(schedule.start());
+        // Long after Genesis, so the Genesis Tax has fully decayed and the curve applies alone.
+        vm.warp(schedule.end() + 30 days);
+        uint256 t0 = block.timestamp;
         _swap(level0, -1100e18);
-        assertEq(level.totalBurned(), 132e18);
-        assertEq(hook.raisedBps(), 1200);
+        assertEq(level.totalBurned(), 66e18, "fast up: the sale's own price impact sets 6%");
+        assertEq(hook.raisedBps(), 600);
         _swap(!level0, -2000e6); // Recover spot; leave the sell recovery floor in place.
-        vm.warp(schedule.start() + 3.5 hours);
-        _swap(level0, -100e18);
-        assertEq(level.totalBurned(), 139.5e18);
-        vm.warp(schedule.start() + 7 hours);
-        _swap(level0, -100e18);
-        assertEq(level.totalBurned(), 142.5e18);
+        vm.warp(t0 + 3.5 hours);
+        uint256 before = level.totalBurned();
+        _swap(level0, -1e18);
+        assertEq(level.totalBurned() - before, 0.0325e18, "slow down: 3.25% halfway through the 7-hour recovery");
+        vm.warp(t0 + 7 hours);
+        before = level.totalBurned();
+        _swap(level0, -1e18);
+        assertEq(level.totalBurned() - before, 0.005e18, "back to 0.5% at peg");
     }
 
     function testTaxBoundariesAndNonDuplication() public {
         vm.warp(schedule.start() - 1);
-        _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 0.388e18);
-        assertEq(level.totalBurned(), 0);
+        _swap(level0, -1e18);
+        // Before Genesis there is no Genesis Tax: 0.5% at peg plus this sale's own price impact.
+        uint256 preStart = level.totalBurned();
+        assertEq(preStart, 0.0066e18);
+        assertEq(hook.genesisLevelBurned(), 0);
 
         vm.warp(schedule.start());
         uint256 before = level.balanceOf(address(this));
         _swap(level0, -10e18);
         assertEq(before - level.balanceOf(address(this)), 10e18);
-        assertEq(level.totalBurned(), 0.424e18);
-        assertEq(hook.genesisLevelBurned(), 0.424e18);
-        assertEq(level.balanceOf(TREASURY), 0.388e18);
-        assertEq(hook.raisedBps(), 424);
+        assertEq(level.totalBurned() - preStart, 0.6e18);
+        assertEq(hook.genesisLevelBurned(), 0.6e18);
 
         vm.warp(schedule.end() - 1);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.876e18);
+        assertEq(level.totalBurned() - preStart, 1.2e18);
+        assertEq(hook.genesisLevelBurned(), 1.2e18);
 
         vm.warp(schedule.end());
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.876e18);
-        assertEq(level.balanceOf(TREASURY), 0.863e18);
+        assertEq(level.totalBurned() - preStart, 1.8e18, "still burned after Genesis");
+        assertEq(hook.genesisLevelBurned(), 1.2e18);
+        assertEq(level.balanceOf(TREASURY), 0);
     }
 
     function testBuyAndTransferAreUntaxedEvenWhenSellOracleIsUnavailable() public {
@@ -194,39 +200,42 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertEq(hook.genesisLevelBurned(), 0);
     }
 
-    function testWithdrawFeeUsesTwapFireTaxAndSevenHourDecay() public {
+    function testWithdrawFeeIsOnePointFiveToSixPercentWithSevenHourDecay() public {
         vm.warp(schedule.end() + 1);
         twap = 1e18;
         hook.checkpoint();
-        assertEq(hook.currentWithdrawFeeBps(), 300);
+        assertEq(hook.currentWithdrawFeeBps(), 150);
 
         twap = 0.9e18;
-        assertEq(hook.syncWithdrawFeeBps(), 1200);
-        assertEq(hook.raisedBps(), 1200);
+        assertEq(hook.syncWithdrawFeeBps(), 600);
+        assertEq(hook.raisedBps(), 600);
 
         twap = 1e18;
-        assertEq(hook.currentWithdrawFeeBps(), 1200);
+        assertEq(hook.currentWithdrawFeeBps(), 600);
         vm.warp(block.timestamp + 3.5 hours);
-        assertEq(hook.currentWithdrawFeeBps(), 750);
+        assertEq(hook.currentWithdrawFeeBps(), 375);
         vm.warp(block.timestamp + 3.5 hours);
-        assertEq(hook.currentWithdrawFeeBps(), 300);
+        assertEq(hook.currentWithdrawFeeBps(), 150);
     }
 
-    function testOrdinaryRecoveryPersistsAfterGenesisEnds() public {
+    function testTaxKeepsBurningAfterGenesisWhileGenesisTaxDecays() public {
         vm.warp(schedule.end() - 1);
         twap = 0.85e18;
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 1.2e18);
+        assertEq(level.totalBurned(), 0.6e18);
 
+        // Genesis is over: the tax is still burned, and the Genesis Tax has not decayed yet.
         twap = 1e18;
         vm.warp(schedule.end());
         _swap(level0, -10e18);
         assertEq(level.totalBurned(), 1.2e18);
-        assertEq(level.balanceOf(TREASURY), 1.199e18);
+        assertEq(hook.genesisLevelBurned(), 0.6e18);
 
-        vm.warp(schedule.end() - 1 + 7 hours);
+        // One full epoch after the end the Genesis Tax is 5.7%.
+        vm.warp(schedule.end() + 6 hours);
         _swap(level0, -10e18);
-        assertEq(level.balanceOf(TREASURY), 1.647e18);
+        assertEq(level.totalBurned(), 1.77e18);
+        assertEq(level.balanceOf(TREASURY), 0, "the X Tomb sell tax is never paid out");
     }
 
     function testExactOutputChargesOneTaxOnLevelInput() public {
@@ -238,8 +247,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 paid = levelBefore - level.balanceOf(address(this));
         uint256 burned = level.totalBurned();
         assertEq(usdc.balanceOf(address(this)) - usdcBefore, 100e6);
-        assertEq(burned, (paid - burned) * 1200 / 8800);
-        assertLe(burned * 10_000, paid * 1200);
+        assertApproxEqAbs(burned, (paid - burned) * 600 / 9400, 1);
+        assertLe(burned * 10_000, paid * 600 + 10_000);
         assertEq(level.balanceOf(TREASURY), 0);
     }
 
@@ -248,7 +257,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         vm.expectRevert();
         _swap(level0, -900_000e18);
         assertEq(level.totalBurned(), 0);
-        assertEq(hook.raisedBps(), 300);
+        assertEq(hook.raisedBps(), 50);
     }
 
     function testVaultTransferredSharesRedeemAndDirectDonationsStayUnallocated() public {
@@ -393,7 +402,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertTrue(ready);
         assertApproxEqAbs(beforePrice, 1e18, 0.0002e18);
         _swap(level0, -10e18);
-        assertEq(level.totalBurned(), 0.378e18);
+        assertEq(level.totalBurned(), 0.6e18); // Genesis Tax
 
         _swap(!level0, -1000e6);
         (uint256 afterPrice, uint256 observedAt, bool stillReady) = hook.oracle().latestValidatedTwap();
@@ -566,29 +575,80 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         assertLt(level.balanceOf(TREASURY), 0.003e18);
     }
 
-    function testShareSellTaxIsFlatThreePercentBuysUntaxedAndBuyAndBurnCutsXTomb() public {
-        (MasonrySquareHook squareHook, MockMasonryLevel square, PoolKey memory squareKey) = _squarePool();
-        assertEq(squareHook.shareSellTaxBps(), 300);
-        vm.warp(schedule.start());
+    function testShareTaxAtPegGoesToDaoAndUnderPegBuysAndBurnsXTomb() public {
+        (MasonrySquareHook squareHook,, PoolKey memory squareKey) = _squarePool();
+        // After Genesis and its decay: the ordinary curve applies alone.
+        vm.warp(schedule.end() + 30 days);
         hook.checkpoint();
         squareHook.checkpoint();
-        vm.warp(schedule.start() + 30 minutes);
+        vm.warp(block.timestamp + 30 minutes);
         _swap(!level0, -1e6);
         _swapOn(squareKey, !squareHook.assetIsCurrency0(), -1e6);
-        assertEq(squareHook.pendingBuybackSquare(), 0, "buys are not taxed");
+        assertEq(squareHook.usdcReserveSquare() + squareHook.pendingBuybackSquare(), 0, "buys are not taxed");
 
-        uint256 sold = 100e18;
-        _swapOn(squareKey, squareHook.assetIsCurrency0(), -int256(sold));
-        assertEq(squareHook.pendingBuybackSquare(), sold * 300 / 10_000);
-        assertEq(squareHook.polSquare(), 0);
-        assertEq(squareHook.retainedSquare(), 0);
-        assertEq(level.totalBurned(), 0);
+        // At peg: 3%, earmarked for the DAO wallet.
+        assertEq(squareHook.shareSellTaxBps(), 300);
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -200e18);
+        assertEq(squareHook.usdcReserveSquare(), 6e18);
+        assertEq(squareHook.pendingBuybackSquare(), 0);
+        // A route only runs while spot is near the TWAP, so let buyers bring the price back first.
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -188e6);
+        uint256 daoBefore = usdc.balanceOf(TREASURY);
+        squareHook.sweepToDao();
+        assertEq(squareHook.usdcReserveSquare(), 0);
+        assertGt(squareHook.usdcRouted(), 5e6 - 1);
+        assertEq(usdc.balanceOf(TREASURY) - daoBefore, squareHook.usdcRouted());
+        assertEq(squareHook.levelBurned(), 0);
 
+        // X Tomb 10% under peg: 6%, earmarked to buy and burn X Tomb.
+        twap = 0.9e18;
+        assertEq(squareHook.shareSellTaxBps(), 600);
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
+        assertEq(squareHook.pendingBuybackSquare(), 6e18);
+        assertEq(squareHook.usdcReserveSquare(), 0);
+        twap = 1e18;
         uint256 burnedBefore = level.totalBurned();
         squareHook.buyAndBurn();
-        assertEq(squareHook.pendingBuybackSquare(), 0);
+        assertEq(squareHook.pendingBuybackSquare(), 0, "the bucket is fixed when the tax is collected");
         assertGt(squareHook.levelBurned(), 0);
         assertEq(level.totalBurned() - burnedBefore, squareHook.levelBurned());
+    }
+
+    function testShareTaxRoutesWaitForFiveDollars() public {
+        (MasonrySquareHook squareHook,, PoolKey memory squareKey) = _squarePool();
+        vm.warp(schedule.end() + 30 days);
+        hook.checkpoint();
+        squareHook.checkpoint();
+        vm.warp(block.timestamp + 30 minutes);
+        _swap(!level0, -1e6);
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -1e6);
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18); // 3 X Share of tax, about $3
+        vm.expectRevert();
+        squareHook.sweepToDao();
+        assertEq(squareHook.usdcReserveSquare(), 3e18);
+        _swapOn(squareKey, squareHook.assetIsCurrency0(), -100e18);
+        _swapOn(squareKey, !squareHook.assetIsCurrency0(), -194e6); // buyers bring spot back near the TWAP
+        squareHook.sweepToDao();
+        assertEq(squareHook.usdcReserveSquare(), 0);
+    }
+
+    function testGenesisTaxIsSixPercentThenFallsThirtyBpsPerEpoch() public {
+        (MasonrySquareHook squareHook,,) = _squarePool();
+        vm.warp(schedule.start());
+        assertEq(squareHook.shareSellTaxBps(), 600);
+        vm.warp(schedule.end() - 1);
+        assertEq(squareHook.shareSellTaxBps(), 600);
+        vm.warp(schedule.end());
+        assertEq(squareHook.shareSellTaxBps(), 600);
+        vm.warp(schedule.end() + 6 hours);
+        assertEq(squareHook.shareSellTaxBps(), 570);
+        vm.warp(schedule.end() + 9 * 6 hours);
+        assertEq(squareHook.shareSellTaxBps(), 330);
+        // The decay stops at the 3% base.
+        vm.warp(schedule.end() + 10 * 6 hours);
+        assertEq(squareHook.shareSellTaxBps(), 300);
+        vm.warp(schedule.end() + 30 days);
+        assertEq(squareHook.shareSellTaxBps(), 300);
     }
 
     function testSquarePolVaultMintsRedeemableSharesToTreasury() public {
@@ -608,8 +668,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         _swapOn(squareKey, !square0, -1e6);
         _swapOn(squareKey, square0, -100e18);
         assertEq(pol.balanceOf(TREASURY), 0, "sell tax no longer auto-funds POL");
-        assertEq(squareHook.pendingBuybackSquare(), 3e18);
-        assertEq(squareHook.polSquare(), 0);
+        assertEq(squareHook.usdcReserveSquare(), 6e18, "Genesis Tax, earmarked for the DAO wallet at peg");
     }
 
     function testSquarePrepaidRouterPreservesSettlementAndAccruesBuyback() public {
@@ -623,8 +682,8 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 before = square.balanceOf(address(this));
         hook.poolManager().unlock(abi.encode(squareKey, square0, uint256(100e18)));
         assertEq(before - square.balanceOf(address(this)), 100e18);
-        assertEq(squareHook.deferredSquareClaims(), 3e18);
-        assertEq(squareHook.pendingBuybackSquare(), 3e18);
+        assertEq(squareHook.deferredSquareClaims(), 6e18);
+        assertEq(squareHook.usdcReserveSquare(), 6e18);
         assertEq(hook.poolManager().balanceOf(TREASURY, Currency.wrap(address(square)).toId()), 0);
     }
 
@@ -678,9 +737,9 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         uint256 before = square.balanceOf(address(this));
         _swapOn(squareKey, squareHook.assetIsCurrency0(), -1000e18);
         assertEq(before - square.balanceOf(address(this)), 1000e18);
-        assertEq(squareHook.pendingBuybackSquare(), 30e18);
+        assertEq(squareHook.usdcReserveSquare(), 60e18);
         assertEq(squareHook.usdcRouted(), 0);
-        assertEq(square.balanceOf(address(squareHook)), squareHook.pendingBuybackSquare());
+        assertEq(square.balanceOf(address(squareHook)), squareHook.usdcReserveSquare());
     }
 
     function _realGenesis()
@@ -762,7 +821,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         square = new MockMasonryLevel();
         MasonryCriticalDefense defense = new MasonryCriticalDefense(hook.oracle());
         MasonrySquareHook.RoutingConfig memory config =
-            MasonrySquareHook.RoutingConfig(key, TREASURY, address(this), 1e18, 100e18, 300, defense, 300);
+            MasonrySquareHook.RoutingConfig(key, TREASURY, address(this), 1e18, 100e18, 300, defense);
         IPoolManager manager = hook.poolManager();
         uint160 flags = uint160(address(hook)) & HookMiner.FLAG_MASK;
         MasonryTaxHook.OracleConfig memory oracleConfig = _nextOracle();

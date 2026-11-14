@@ -82,8 +82,6 @@ contract DeployMasonryLocal is Script {
     uint256 internal constant GENESIS_REWARD_BUDGET = 1_050_000 ether; // not in the template — owner decision
     uint256 internal constant SEED_LIQUIDITY = 1e16;
     uint256 internal constant SQUARE_REFERENCE_PRICE = 120e18;
-    // Local rehearsal value only; a real launch reads policy.shareSellTaxBps from its config.
-    uint16 internal constant SQUARE_SELL_TAX_BPS = 600;
 
     /// xSHARE vesting remainder (owner decision 2026-11-05; config/masonry-launch.template.json):
     /// four 180-day linear streams totalling 6,841, plus 100 minted outright to the deployer/DAO.
@@ -268,7 +266,7 @@ contract DeployMasonryLocal is Script {
     ) internal {
         d.defense = new MasonryCriticalDefense(d.levelHook.oracle());
         MasonrySquareHook.RoutingConfig memory rc = MasonrySquareHook.RoutingConfig(
-            d.levelKey, d.treasury, d.deployer, SQUARE_REFERENCE_PRICE, 100 ether, 300, d.defense, SQUARE_SELL_TAX_BPS
+            d.levelKey, d.treasury, d.deployer, SQUARE_REFERENCE_PRICE, 100 ether, 300, d.defense
         );
         address oracle = vm.computeCreateAddress(d.deployer, vm.getNonce(d.deployer));
         MasonryTaxHook.OracleConfig memory oc = MasonryTaxHook.OracleConfig(MasonryLevelOracle(oracle), d.deployer);

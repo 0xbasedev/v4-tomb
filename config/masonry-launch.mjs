@@ -97,7 +97,12 @@ export function validateMasonryLaunch(doc) {
   for (const [key, value] of Object.entries({
     genesisDurationSeconds: 604800,
     genesisLpOpenDelaySeconds: 86400,
-    genesisLevelSellMinimumBps: 300,
+    genesisLevelSellMinimumBps: 600,
+    genesisTaxDecayBpsPerEpoch: 30,
+    fireTaxBaselineBps: 50,
+    fireTaxHardCapBps: 600,
+    shareSellTaxBps: 300,
+    withdrawFeeBaselineBps: 150,
     genesisLevelSellBurnShareBps: 10000,
     genesisNftRequired: true,
     genesisNftPriceUsdc: 50,
@@ -119,9 +124,6 @@ export function validateMasonryLaunch(doc) {
     genesisWalletClaimFeeBps: 200,
     genesisAutomationFeeBps: 200,
     squareGenesisSellMinimumBps: 600,
-    squareTaxPolBps: 1200,
-    squareTaxUsdcReserveBps: 2000,
-    squareTaxSquareReserveBps: 6800,
     criticalDefenseEntryBps: 9000,
     criticalDefenseExitBps: 10100,
     criticalRecoveryEpochs: 2,
@@ -133,11 +135,6 @@ export function validateMasonryLaunch(doc) {
   }
   if (policy.fullTaxAtOrBelowPegBps !== 9000) throw new Error('full Fire Tax threshold must be 0.90 of peg');
 
-  const baseline = nonnegative(policy.fireTaxBaselineBps, 'policy.fireTaxBaselineBps');
-  const hardCap = nonnegative(policy.fireTaxHardCapBps, 'policy.fireTaxHardCapBps');
-  if (baseline < 300) throw new Error('policy.fireTaxBaselineBps: 3% floor (300) is required');
-  if (hardCap > 1200) throw new Error('policy.fireTaxHardCapBps: cannot exceed 12% (1200)');
-  if (baseline > hardCap) throw new Error('policy.fireTaxBaselineBps: cannot exceed fireTaxHardCapBps');
 
   const expansion = nonnegative(policy.maximumExpansionPerEpochBps, 'policy.maximumExpansionPerEpochBps');
   if (expansion < 1 || expansion > 200) {
@@ -182,10 +179,6 @@ export function validateMasonryLaunch(doc) {
     'farmCancelHint', 'farmCompoundLabel', 'farmCancelLabel', 'farmCompleteWithdrawLabel', 'farmFireTaxNote',
   ]) {
     requiredText(policy[key], `policy.${key}`);
-  }
-  const shareSellTax = nonnegative(policy.shareSellTaxBps, 'policy.shareSellTaxBps');
-  if (shareSellTax < 1 || shareSellTax > 1200) {
-    throw new Error('policy.shareSellTaxBps: must be 1–1200 (12% cap)');
   }
 
   return { squareCap, allocatedSquare: allocated, vestedSquare: sum(vestingAmounts),

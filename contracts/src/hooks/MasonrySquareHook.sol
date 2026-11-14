@@ -2,6 +2,8 @@
 pragma solidity 0.8.26;
 
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {MasonryRules} from "../masonry/MasonryRules.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
@@ -17,18 +19,23 @@ import {IMasonryBurnableLevel} from "../masonry/MasonryGenesisLPBurnFee.sol";
 import {MasonrySquareSwapLib} from "../masonry/MasonrySquareSwapLib.sol";
 import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
 
-/// @notice Flat X Share sell tax. Proceeds accumulate and are spent on an X Tomb
-/// buy-and-burn via a separate permissionless call (not inside the user swap).
+/// @notice X Share sell tax: 3% while X Tomb is at or above peg, rising to 6% when X Tomb is
+/// 10% under peg (fast up, 7-hour recovery down), and never below the Genesis Tax.
+/// Tax collected while X Tomb is at or above peg is sold for the stablecoin and sent to the DAO
+/// wallet. Tax collected while X Tomb is under peg buys X Tomb and burns it. Both happen through
+/// separate permissionless calls (not inside the user swap), once at least $5 has built up.
 contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
     using SafeERC20 for IERC20;
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
 
-    uint16 public constant BOOTSTRAP_TAX_BPS = 600;
-    uint256 private constant ROUTE_GAS = 650_000;
-    uint16 public immutable shareSellTaxBps;
+    uint16 public constant BOOTSTRAP_TAX_BPS = MasonryRules.GENESIS_TAX_BPS;
+    uint256 private constant LEVEL_PEG = 1e18;
+    /// @notice X Share tax collected under peg, waiting to buy and burn X Tomb.
     uint256 public pendingBuybackSquare;
+    /// @notice Smallest batch a route will sell: $5 of the pool's stablecoin.
+    uint256 public immutable minRouteQuote;
 
     struct RoutingConfig {
         PoolKey levelPool;
@@ -38,7 +45,6 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         uint128 maxSquarePerRoute;
         uint16 maxDeviationBps;
         MasonryCriticalDefense defense;
-        uint16 shareSellTaxBps;
     }
 
     MasonryGenesisSchedule public immutable schedule;
@@ -52,23 +58,15 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
     address public immutable polBinder;
     IMasonryPolSink public polVault;
     PoolKey private levelPool;
-    uint256 public polSquare;
-    uint256 public polUsdc;
+    /// @notice X Share tax collected at or above peg, waiting to be sold for the DAO wallet.
     uint256 public usdcReserveSquare;
-    uint256 public retainedSquare;
     uint256 public deferredSquareClaims;
-    uint256 public criticalSquare;
     uint256 public usdcRouted;
     uint256 public levelBurned;
 
     error UnsafeRoute();
 
     event SellTax(uint256 squareAmount, uint16 rateBps);
-    event SquareAllocated(uint256 pol, uint256 usdcReserve, uint256 retained, uint256 critical);
-    event RouteDeferred(bool indexed critical);
-    event PolDeferred();
-    event ClaimMaterializationDeferred();
-    event PolFunded(uint256 shares, uint256 square, uint256 usdc);
     event RouteSettled(bool indexed critical, uint256 squareIn, uint256 amountOut);
 
     constructor(
@@ -88,8 +86,7 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
                     != usdc || config.treasury == address(0) || config.polBinder == address(0)
                 || config.squareReferencePrice == 0 || config.squareReferencePrice > 1e36
                 || config.maxSquarePerRoute == 0 || config.maxSquarePerRoute > uint256(uint128(type(int128).max))
-                || config.maxDeviationBps == 0 || config.maxDeviationBps > 500 || config.shareSellTaxBps == 0
-                || config.shareSellTaxBps > MAX_TAX_BPS
+                || config.maxDeviationBps == 0 || config.maxDeviationBps > 500
         ) revert InvalidConfiguration();
         polBinder = config.polBinder;
         levelPool = config.levelPool;
@@ -103,11 +100,36 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         squareReferencePrice = config.squareReferencePrice;
         maxSquarePerRoute = config.maxSquarePerRoute;
         maxDeviationBps = config.maxDeviationBps;
-        shareSellTaxBps = config.shareSellTaxBps;
+        minRouteQuote = 5 * 10 ** IERC20Metadata(usdc).decimals();
     }
 
     function _sellTaxBps() internal view override returns (uint16) {
-        return shareSellTaxBps;
+        return shareSellTaxBps();
+    }
+
+    /// @notice Current X Share sell tax. Follows the X Tomb peg: the curve's rate at the X Tomb
+    /// TWAP, held up by X Tomb's 7-hour recovery floor and by the Genesis Tax. With no valid
+    /// X Tomb TWAP the full 6% applies.
+    function shareSellTaxBps() public view returns (uint16 rate) {
+        uint16 base = MasonryRules.SHARE_BASE_SELL_TAX_BPS;
+        uint256 twap = _levelTwap();
+        if (twap == 0) return MAX_TAX_BPS;
+        rate = MasonryRules.targetSellTaxBps(twap, LEVEL_PEG, base, MAX_TAX_BPS, MasonryRules.DEFAULT_FULL_TAX_DROP_BPS);
+        uint16 raised = levelHook.raisedBps();
+        uint16 recovery =
+            MasonryRules.recoveryFloorBps(raised < base ? base : raised, base, levelHook.raisedAt(), block.timestamp);
+        if (recovery > rate) rate = recovery;
+        uint16 floor = _bootstrapFloor();
+        if (floor > rate) rate = floor;
+    }
+
+    /// @dev The validated X Tomb TWAP, or 0 when there is none.
+    function _levelTwap() private view returns (uint256) {
+        try levelHook.peekValidatedTwap() returns (uint256 price) {
+            return price;
+        } catch {
+            return 0;
+        }
     }
 
     function bindPolVault(
@@ -136,26 +158,36 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
         } else {
             poolManager.take(square, address(this), amount);
         }
-        pendingBuybackSquare += amount;
+        // Under peg the tax buys and burns X Tomb; otherwise it is sold for the DAO wallet.
+        // The bucket is fixed at collection time and later price changes do not move it.
+        if (_levelTwap() < LEVEL_PEG) pendingBuybackSquare += amount;
+        else usdcReserveSquare += amount;
         emit SellTax(amount, rate);
     }
 
-    /// @notice Permissionless X Share → USDG → X Tomb buy-and-burn.
+    /// @notice Permissionless X Share → stablecoin → X Tomb buy-and-burn of the under-peg tax.
     /// Not invoked from `afterSwap`, so it cannot sandwich or reenter the user's swap.
     /// Slippage is bounded by TWAP (`maxDeviationBps`) inside MasonrySquareSwapLib.swapGuarded.
     function buyAndBurn() external {
-        poolManager.unlock("");
+        poolManager.unlock(abi.encode(true));
+    }
+
+    /// @notice Permissionless X Share → stablecoin sale of the at-or-above-peg tax, paid to the DAO wallet.
+    function sweepToDao() external {
+        poolManager.unlock(abi.encode(false));
     }
 
     function unlockCallback(
-        bytes calldata
+        bytes calldata data
     ) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert OnlySelf();
-        _executeBuyback();
+        _route(abi.decode(data, (bool)));
         return "";
     }
 
-    function _executeBuyback() private {
+    function _route(
+        bool burn
+    ) private {
         if (deferredSquareClaims != 0) {
             uint256 materialize = deferredSquareClaims < maxSquarePerRoute ? deferredSquareClaims : maxSquarePerRoute;
             deferredSquareClaims -= materialize;
@@ -163,122 +195,19 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
             poolManager.burn(address(this), square.toId(), materialize);
             poolManager.take(square, address(this), materialize);
         }
-        uint256 amount = pendingBuybackSquare < maxSquarePerRoute ? pendingBuybackSquare : maxSquarePerRoute;
-        if (amount == 0) revert UnsafeRoute();
-        pendingBuybackSquare -= amount;
-        PoolKey memory squarePool = officialPoolKey();
-        uint256 usdcAmount = MasonrySquareSwapLib.swapGuarded(
-            poolManager, squarePool, oracle, assetIsCurrency0, amount, true, maxDeviationBps
-        );
-        _recordPool(true);
-        uint256 received = MasonrySquareSwapLib.swapGuarded(
-            poolManager,
-            levelPool,
-            levelHook.oracle(),
-            !levelHook.levelIsCurrency0(),
-            usdcAmount,
-            false,
-            maxDeviationBps
-        );
-        IMasonryBurnableLevel(levelHook.level()).burn(received);
-        levelBurned += received;
-        emit RouteSettled(true, amount, received);
-    }
-
-    function _afterSell(
-        PoolKey calldata squarePool
-    ) internal override {
-        // Preserve a composable caller's in-progress ERC20 settlement snapshot.
-        if (!poolManager.getSyncedCurrency().isAddressZero()) return;
-        if (deferredSquareClaims != 0 && gasleft() > 250_000) {
-            try this.materializeClaims{gas: 100_000}() {}
-            catch {
-                emit ClaimMaterializationDeferred();
-            }
-        }
-        if (usdcReserveSquare != 0 && gasleft() > ROUTE_GAS + 150_000) {
-            try this.route{gas: ROUTE_GAS}(squarePool, false) {}
-            catch {
-                emit RouteDeferred(false);
-            }
-        }
-        if (criticalSquare != 0 && gasleft() > ROUTE_GAS + 150_000) {
-            try this.route{gas: ROUTE_GAS}(squarePool, true) {}
-            catch {
-                emit RouteDeferred(true);
-            }
-        }
-        if (address(polVault) != address(0) && (polSquare != 0 || polUsdc != 0) && gasleft() > ROUTE_GAS + 150_000) {
-            try this.routePol{gas: ROUTE_GAS}(squarePool) {}
-            catch {
-                emit PolDeferred();
-            }
-        }
-    }
-
-    function materializeClaims() external {
-        if (msg.sender != address(this)) revert OnlySelf();
-        uint256 amount = deferredSquareClaims < maxSquarePerRoute ? deferredSquareClaims : maxSquarePerRoute;
-        deferredSquareClaims -= amount;
-        Currency square = Currency.wrap(asset);
-        poolManager.burn(address(this), square.toId(), amount);
-        poolManager.take(square, address(this), amount);
-    }
-
-    function routePol(
-        PoolKey calldata squarePool
-    ) external {
-        if (msg.sender != address(this)) revert OnlySelf();
-        uint256 squareBudget = polSquare < maxSquarePerRoute ? polSquare : maxSquarePerRoute;
-        (, int24 tick,,) = poolManager.getSlot0(officialPool);
-        bool onlySquare = assetIsCurrency0 ? tick < polVault.tickLower() : tick >= polVault.tickUpper();
-        bool onlyUsdc = assetIsCurrency0 ? tick >= polVault.tickUpper() : tick < polVault.tickLower();
-        uint256 sellAmount = onlySquare ? 0 : onlyUsdc ? squareBudget : squareBudget / 2;
-
-        uint256 twap = oracle.validatedPrice(officialPool);
-        MasonrySquareSwapLib.checkDeviation(
-            MasonrySquareSwapLib.price(poolManager, officialPool, assetIsCurrency0), twap, maxDeviationBps
-        );
-        if (sellAmount != 0) {
-            polUsdc += MasonrySquareSwapLib.swapGuarded(
-                poolManager, squarePool, oracle, assetIsCurrency0, sellAmount, true, maxDeviationBps
-            );
-            polSquare -= sellAmount;
-            squareBudget -= sellAmount;
-            _recordPool(true);
-        }
-
-        IERC20 square = IERC20(asset);
-        IERC20 usdc = IERC20(Currency.unwrap(assetIsCurrency0 ? squarePool.currency1 : squarePool.currency0));
-        square.forceApprove(address(polVault), squareBudget);
-        usdc.forceApprove(address(polVault), polUsdc);
-        (uint256 shares, uint256 squareUsed, uint256 usdcUsed) =
-            polVault.depositFromHook(squareBudget, polUsdc, treasury);
-        square.forceApprove(address(polVault), 0);
-        usdc.forceApprove(address(polVault), 0);
-        polSquare -= squareUsed;
-        polUsdc -= usdcUsed;
-        emit PolFunded(shares, squareUsed, usdcUsed);
-    }
-
-    /// @dev Self-only and reached from the original swap callback. A failed
-    /// route rolls back its own swaps, transfers, and earmark changes.
-    function route(
-        PoolKey calldata squarePool,
-        bool critical
-    ) external {
-        if (msg.sender != address(this)) revert OnlySelf();
-        uint256 available = critical ? criticalSquare : usdcReserveSquare;
+        uint256 available = burn ? pendingBuybackSquare : usdcReserveSquare;
         uint256 amount = available < maxSquarePerRoute ? available : maxSquarePerRoute;
-        if (critical) criticalSquare -= amount;
+        if (amount == 0) revert UnsafeRoute();
+        if (burn) pendingBuybackSquare -= amount;
         else usdcReserveSquare -= amount;
-
         uint256 usdcAmount = MasonrySquareSwapLib.swapGuarded(
-            poolManager, squarePool, oracle, assetIsCurrency0, amount, true, maxDeviationBps
+            poolManager, officialPoolKey(), oracle, assetIsCurrency0, amount, true, maxDeviationBps
         );
-        _recordPool(true); // The PoolManager skips hooks for the hook's own SQUARE swap.
+        // Wait until at least $5 has built up.
+        if (usdcAmount < minRouteQuote) revert UnsafeRoute();
+        _recordPool(true); // The PoolManager skips hooks for the hook's own X Share swap.
         uint256 received = usdcAmount;
-        if (critical) {
+        if (burn) {
             received = MasonrySquareSwapLib.swapGuarded(
                 poolManager,
                 levelPool,
@@ -291,15 +220,14 @@ contract MasonrySquareHook is MasonryTaxHook, IUnlockCallback {
             IMasonryBurnableLevel(levelHook.level()).burn(received);
             levelBurned += received;
         } else {
-            Currency usdc = assetIsCurrency0 ? squarePool.currency1 : squarePool.currency0;
-            IERC20(Currency.unwrap(usdc)).safeTransfer(treasury, received);
+            IERC20(quoteToken).safeTransfer(treasury, received);
             usdcRouted += received;
         }
-        emit RouteSettled(critical, amount, received);
+        emit RouteSettled(burn, amount, received);
     }
 
     function _bootstrapFloor() internal view override returns (uint16) {
-        return schedule.active() ? BOOTSTRAP_TAX_BPS : 0;
+        return MasonryRules.genesisTaxFloorBps(schedule.active(), schedule.end(), block.timestamp);
     }
 
     function _referencePrice() internal view override returns (uint256) {

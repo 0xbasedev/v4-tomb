@@ -52,9 +52,10 @@ export function masonryPlanBlockers(plan, opts = {}) {
   }
   const p = opts.policy;
   if (p) {
-    if (!(p.fireTaxHardCapBps <= 1200)) out.push('fireTaxHardCapBps above 12% cap');
-    if (p.fireTaxBaselineBps > p.fireTaxHardCapBps) out.push('fireTaxBaselineBps above hard cap');
-    if (!(p.shareSellTaxBps >= 1 && p.shareSellTaxBps <= 1200)) out.push('shareSellTaxBps above 12% cap');
+    // The contracts hard-code these rates; a config that disagrees describes a different protocol.
+    if (p.fireTaxHardCapBps !== 600) out.push('fireTaxHardCapBps must be the 6% cap');
+    if (p.fireTaxBaselineBps !== 50) out.push('fireTaxBaselineBps must be 0.5%');
+    if (p.shareSellTaxBps !== 300) out.push('shareSellTaxBps must be 3%');
   }
   return out;
 }

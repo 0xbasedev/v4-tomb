@@ -10,7 +10,7 @@ const release = {
 };
 const plan = planMasonry(release);
 const infra = { poolManager: '0x' + '33'.repeat(20), positionManager: '0x' + '44'.repeat(20), permit2: '0x' + '55'.repeat(20), universalRouter: '0x' + '66'.repeat(20), pegToken: '0x' + '77'.repeat(20) };
-const policy = { fireTaxHardCapBps: 1200, fireTaxBaselineBps: 300, shareSellTaxBps: 300 };
+const policy = { fireTaxHardCapBps: 600, fireTaxBaselineBps: 50, shareSellTaxBps: 300 };
 
 test('a complete plan has no blockers', () => {
   assert.deepEqual(masonryPlanBlockers(plan, { expectedChainId: 4663, create3Address, infrastructure: infra, pegToken: { decimals: 6 }, registryPegDecimals: 6, policy }), []);
@@ -26,8 +26,9 @@ test('each mismatch is a hard blocker', () => {
     [{ ...plan, addresses: { ...plan.addresses, masonryTaxHook: '0x' + 'ab'.repeat(20) } }, {}, /permission bits|salt/],
     [plan, { infrastructure: { ...infra, permit2: null } }, /missing dependency: permit2/],
     [plan, { pegToken: { decimals: 18 }, registryPegDecimals: 6 }, /wrong peg token decimals/],
-    [plan, { policy: { ...policy, shareSellTaxBps: 1300 } }, /12% cap/],
-    [plan, { policy: { ...policy, fireTaxHardCapBps: 1300 } }, /12% cap/],
+    [plan, { policy: { ...policy, shareSellTaxBps: 600 } }, /must be 3%/],
+    [plan, { policy: { ...policy, fireTaxHardCapBps: 1200 } }, /6% cap/],
+    [plan, { policy: { ...policy, fireTaxBaselineBps: 300 } }, /must be 0.5%/],
   ];
   for (const [p, o, re] of cases) {
     const b = masonryPlanBlockers(p, { expectedChainId: 4663, create3Address, ...o });

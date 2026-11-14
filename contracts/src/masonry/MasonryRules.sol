@@ -6,10 +6,19 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 /// @notice Pure economic rules to be wired into the Masonry-specific v4 hook,
 /// Treasury and launch allocator. This module does not modify Old Money runtime.
 library MasonryRules {
-    uint16 internal constant HARD_MAX_FIRE_TAX_BPS = 1200;
+    /// @dev Owner rules 2026-11-14. Sell tax tops out at 6% for both tokens, reached when X Tomb
+    /// is 10% under peg. At or above peg X Tomb sells pay 0.5% and X Share sells pay 3%.
+    /// Liquidity withdrawals pay 1.5% at peg, rising to the same 6%.
+    uint16 internal constant HARD_MAX_FIRE_TAX_BPS = 600;
+    uint16 internal constant SHARE_BASE_SELL_TAX_BPS = 300;
+    uint16 internal constant WITHDRAW_BASE_FEE_BPS = 150;
+    /// @dev The Genesis Tax: 6% on every sell while Genesis runs, then 0.3% lower each epoch.
+    uint16 internal constant GENESIS_TAX_BPS = 600;
+    uint16 internal constant GENESIS_TAX_DECAY_BPS = 30;
+    uint256 internal constant EPOCH = 6 hours;
     uint16 internal constant HARD_MAX_EXPANSION_BPS = 200;
-    uint16 internal constant DEFAULT_BASE_FIRE_TAX_BPS = 300;
-    uint16 internal constant DEFAULT_MAX_FIRE_TAX_BPS = 1200;
+    uint16 internal constant DEFAULT_BASE_FIRE_TAX_BPS = 50;
+    uint16 internal constant DEFAULT_MAX_FIRE_TAX_BPS = 600;
     uint16 internal constant DEFAULT_FULL_TAX_DROP_BPS = 1000;
     uint16 internal constant EXPANSION_THRESHOLD_BPS = 10_100;
     uint256 internal constant FIRE_TAX_RECOVERY = 7 hours;
@@ -94,6 +103,20 @@ library MasonryRules {
         return selected > recoveryFloor ? selected : recoveryFloor;
     }
 
+    /// @notice Minimum sell tax from the Genesis Tax. 6% while Genesis is active; after it ends
+    /// the minimum falls by 0.3% per completed six-hour epoch until it reaches zero and the
+    /// ordinary curve applies alone. Zero before Genesis starts or while no start is set.
+    function genesisTaxFloorBps(
+        bool active,
+        uint256 genesisEnd,
+        uint256 nowTs
+    ) internal pure returns (uint16) {
+        if (active) return GENESIS_TAX_BPS;
+        if (genesisEnd == 0 || nowTs < genesisEnd) return 0;
+        uint256 decayed = (nowTs - genesisEnd) / EPOCH * GENESIS_TAX_DECAY_BPS;
+        return decayed >= GENESIS_TAX_BPS ? 0 : GENESIS_TAX_BPS - uint16(decayed);
+    }
+
     /// @notice Liquidity withdraw fee: Fire Tax curve on the validated TWAP
     /// only (no spot / projected execution price), floored by 7-hour recovery.
     /// Spot is omitted so a single-block sandwich cannot spike the withdraw fee.
@@ -108,7 +131,9 @@ library MasonryRules {
         uint256 nowTs
     ) internal pure returns (uint16) {
         if (twapPrice == 0) revert InvalidParameters();
-        uint16 recovery = recoveryFloorBps(raisedBps_, baselineBps, raisedAt, nowTs);
+        // The sell curve starts lower than the withdraw curve, so its raised rate can sit below this baseline.
+        uint16 recovery =
+            recoveryFloorBps(raisedBps_ < baselineBps ? baselineBps : raisedBps_, baselineBps, raisedAt, nowTs);
         uint16 twapRate = targetSellTaxBps(twapPrice, peg, baselineBps, maximumBps, fullTaxDropBps);
         return effectiveSellTaxBps(twapRate, twapRate, recovery);
     }

@@ -154,7 +154,7 @@ contract MasonryProductionInvariantsTest is BaseTest {
         assertLe(preview, fair);
     }
 
-    function testFuzz_FireTaxNeverExceeds12Percent(
+    function testFuzz_FireTaxNeverExceedsSixPercent(
         uint256 priceRaw,
         uint16 baselineRaw,
         uint16 maximumRaw,
@@ -165,19 +165,19 @@ contract MasonryProductionInvariantsTest is BaseTest {
     ) public {
         uint256 peg = 1e18;
         uint256 price = bound(priceRaw, 0, 2e18);
-        uint16 baseline = uint16(bound(baselineRaw, 0, 1200));
-        uint16 maximum = uint16(bound(maximumRaw, baseline, 1200));
+        uint16 baseline = uint16(bound(baselineRaw, 0, 600));
+        uint16 maximum = uint16(bound(maximumRaw, baseline, 600));
         uint16 drop = uint16(bound(dropRaw, 1, 10_000));
         uint16 target = MasonryRules.targetSellTaxBps(price, peg, baseline, maximum, drop);
         assertLe(target, MasonryRules.HARD_MAX_FIRE_TAX_BPS);
 
-        uint16 raised = uint16(bound(raisedRaw, baseline, 1200));
+        uint16 raised = uint16(bound(raisedRaw, baseline, 600));
         uint256 elapsed = bound(elapsedRaw, 0, 14 hours);
         uint16 floor = MasonryRules.recoveryFloorBps(raised, baseline, 1000, 1000 + elapsed);
         assertLe(floor, MasonryRules.HARD_MAX_FIRE_TAX_BPS);
 
-        uint16 projected = uint16(bound(projectedRaw, 0, 1200));
+        uint16 projected = uint16(bound(projectedRaw, 0, 600));
         uint16 effective = MasonryRules.effectiveSellTaxBps(target, projected, floor);
-        assertLe(effective, 1200);
+        assertLe(effective, 600);
     }
 }

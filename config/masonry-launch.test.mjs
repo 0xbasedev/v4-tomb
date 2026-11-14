@@ -87,9 +87,6 @@ test('other SQUARE supply maxima are configurable with exact reconciliation', ()
 test('Genesis LP fee, SQUARE treasury splits and critical defense are fixed release invariants', () => {
   for (const [key, value] of Object.entries({
     genesisLevelUsdcLpBurnFeeBps: 100,
-    squareTaxPolBps: 1500,
-    squareTaxUsdcReserveBps: 1000,
-    squareTaxSquareReserveBps: 7500,
     criticalDefenseEntryBps: 8500,
     criticalDefenseExitBps: 10000,
     criticalRecoveryEpochs: 1,
@@ -107,7 +104,12 @@ test('confirmed Genesis rules are fixed launch invariants', () => {
   for (const [key, value] of Object.entries({
     genesisDurationSeconds: 86400,
     genesisLpOpenDelaySeconds: 0,
-    genesisLevelSellMinimumBps: 1200,
+    genesisLevelSellMinimumBps: 300,
+    genesisTaxDecayBpsPerEpoch: 0,
+    fireTaxBaselineBps: 300,
+    fireTaxHardCapBps: 1200,
+    shareSellTaxBps: 600,
+    withdrawFeeBaselineBps: 300,
     genesisLevelSellBurnShareBps: 0,
     genesisNftRequired: false,
     genesisNftPriceUsdc: 0,
@@ -129,8 +131,6 @@ test('confirmed Genesis rules are fixed launch invariants', () => {
 
 test('out-of-bounds configurable tokenomics are rejected', () => {
   const cases = [
-    ['fireTaxBaselineBps', 200, /3% floor/],
-    ['fireTaxHardCapBps', 2000, /cannot exceed 12%/],
     ['maximumExpansionPerEpochBps', 300, /1–200|2% hard cap/],
     ['maximumExpansionPerEpochBps', 0, /1–200|2% hard cap/],
     ['farmEmissionDays', 0, /1–3650/],
@@ -149,15 +149,10 @@ test('out-of-bounds configurable tokenomics are rejected', () => {
     cfg.policy[key] = value;
     assert.throws(() => validateMasonryLaunch(cfg), pattern, key);
   }
-  const inverted = complete();
-  inverted.policy.fireTaxBaselineBps = 1200;
-  inverted.policy.fireTaxHardCapBps = 600;
-  assert.throws(() => validateMasonryLaunch(inverted), /cannot exceed fireTaxHardCapBps/);
 });
 
 test('stricter in-bound tokenomics defaults are accepted', () => {
   const cfg = complete();
-  cfg.policy.fireTaxHardCapBps = 900;
   cfg.policy.maximumExpansionPerEpochBps = 100;
   cfg.policy.farmEmissionDays = 180;
   cfg.policy.criticalOracleMaxAgeSeconds = 600;
@@ -206,14 +201,12 @@ test('daoWallet rejects the zero address and missing farm copy', () => {
   assert.throws(() => validateMasonryLaunch(claim), /farmClaimToWallet/);
 });
 
-test('share sell tax is required and capped at 1200 bps', () => {
+test('share sell tax base is fixed at 3%', () => {
   const cfg = complete();
   cfg.policy.shareSellTaxBps = 1300;
-  assert.throws(() => validateMasonryLaunch(cfg), /12% cap/);
+  assert.throws(() => validateMasonryLaunch(cfg), /shareSellTaxBps/);
   const zero = complete();
   zero.policy.shareSellTaxBps = 0;
-  assert.throws(() => validateMasonryLaunch(zero), /12% cap|1–1200/);
-  const ok = complete();
-  ok.policy.shareSellTaxBps = 300;
-  assert.equal(validateMasonryLaunch(ok).squareCap, 33333);
+  assert.throws(() => validateMasonryLaunch(zero), /shareSellTaxBps/);
+  assert.equal(validateMasonryLaunch(complete()).squareCap, 33333);
 });

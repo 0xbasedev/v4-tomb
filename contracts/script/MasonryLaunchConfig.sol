@@ -91,10 +91,9 @@ library MasonryLaunchConfig {
     function validate(
         MasonryLaunchParams memory p
     ) internal pure {
-        if (p.fireTaxBaselineBps < 300) revert InvalidLaunchConfig("fireTaxBaselineBps");
-        if (p.fireTaxHardCapBps > 1200 || p.fireTaxBaselineBps > p.fireTaxHardCapBps) {
-            revert InvalidLaunchConfig("fireTaxHardCapBps");
-        }
+        // The contracts hard-code these; the config mirrors them (X Tomb 0.5% at peg, 6% cap, X Share 3% at peg).
+        if (p.fireTaxBaselineBps != 50) revert InvalidLaunchConfig("fireTaxBaselineBps");
+        if (p.fireTaxHardCapBps != 600) revert InvalidLaunchConfig("fireTaxHardCapBps");
         if (p.expansionRateBps == 0 || p.expansionRateBps > 200) revert InvalidLaunchConfig("expansionRateBps");
         if (p.farmEmissionDays == 0 || p.farmEmissionDays > 3650) revert InvalidLaunchConfig("farmEmissionDays");
         if (p.farmWholeTokens == 0) revert InvalidLaunchConfig("farmWholeTokens");
@@ -113,7 +112,7 @@ library MasonryLaunchConfig {
             revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");
         }
         if (p.farmClaimToWallet) revert InvalidLaunchConfig("farmClaimToWallet");
-        if (p.shareSellTaxBps == 0 || p.shareSellTaxBps > 1200) revert InvalidLaunchConfig("shareSellTaxBps");
+        if (p.shareSellTaxBps != 300) revert InvalidLaunchConfig("shareSellTaxBps");
         if (p.rangeLevelPegAnchor) {
             _validateRange(
                 p.rangeLevelLowerHalfWidthBps < p.rangeLevelUpperHalfWidthBps

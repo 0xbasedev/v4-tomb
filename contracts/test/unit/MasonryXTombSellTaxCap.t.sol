@@ -8,12 +8,12 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {MasonryRules} from "../../src/masonry/MasonryRules.sol";
 import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 
-/// @notice Sum every tax an xTOMB sell can hit and compare with Jesse's
-/// 12% (1200 bps) combined cap. Official masonry and leftover PegDefense
+/// @notice Sum every tax an xTOMB sell can hit and compare with the owner's
+/// 6% (600 bps) sell-tax cap (owner rule 2026-11-14; was 12%). Official masonry and leftover PegDefense
 /// paths are separate: a v4 pool has one hook, so they never stack.
 ///
 /// Findings (also true on 8c6dd0b unless noted):
-/// 1. Official MasonryTaxHook + static 3000-pip pool fee = 1230 bps at
+/// 1. Official MasonryTaxHook + static 3000-pip pool fee = 630 bps at
 ///    worst Fire Tax. MasonryTaxHook.beforeSwap returns fee `0` without
 ///    OVERRIDE_FEE_FLAG, so PoolManager keeps the pool's 30 bp LP fee.
 ///    File: contracts/src/masonry/MasonryTaxHook.sol:216-220 (same idea
@@ -27,14 +27,14 @@ import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 /// Genesis LP burn (50 bps) is a deposit/compound share fee, not an AMM
 /// sell tax, and is not added here.
 contract MasonryXTombSellTaxCapTest is Test {
-    uint16 internal constant BASELINE = 300;
-    uint16 internal constant CAP = 1200;
+    uint16 internal constant BASELINE = 50;
+    uint16 internal constant CAP = 600;
     uint16 internal constant FULL_DROP = 1000;
     uint256 internal constant PEG = 1e18;
     /// Uniswap v4 static fee on the official masonry pool (3000 pips = 30 bps).
     uint256 internal constant OFFICIAL_POOL_LP_FEE_BPS = 30;
 
-    function testOfficialFireTaxAloneStaysAtOrUnder12PercentAtWorstDepegAndDecay() public {
+    function testOfficialFireTaxAloneStaysAtOrUnderSixPercentAtWorstDepegAndDecay() public {
         uint16 depeg = MasonryRules.targetSellTaxBps(70e16, PEG, BASELINE, CAP, FULL_DROP);
         uint16 atFloor = MasonryRules.targetSellTaxBps(90e16, PEG, BASELINE, CAP, FULL_DROP);
         uint16 deeper = MasonryRules.targetSellTaxBps(50e16, PEG, BASELINE, CAP, FULL_DROP);
@@ -50,7 +50,7 @@ contract MasonryXTombSellTaxCapTest is Test {
         assertEq(MasonryRules.HARD_MAX_FIRE_TAX_BPS, CAP);
     }
 
-    function testOfficialMasonrySellPathExceeds12PercentOnceStaticLpFeeIsIncluded() public {
+    function testOfficialMasonrySellPathIsSixPointThreePercentOnceStaticLpFeeIsIncluded() public {
         uint16 fire = MasonryRules.effectiveSellTaxBps(
             MasonryRules.targetSellTaxBps(70e16, PEG, BASELINE, CAP, FULL_DROP),
             MasonryRules.targetSellTaxBps(70e16, PEG, BASELINE, CAP, FULL_DROP),
@@ -60,13 +60,13 @@ contract MasonryXTombSellTaxCapTest is Test {
         // FINDING: MasonryTaxHook.sol:216-220 (our branch and 8c6dd0b).
         // Hook returns (selector, 0, 0) — fee override 0 without
         // OVERRIDE_FEE_FLAG — so the official 3000-pip LP fee still applies
-        // on top of a 1200 bps Fire Tax = 1230 bps combined.
+        // on top of a 600 bps Fire Tax = 630 bps combined.
         emit log_named_uint("official Fire Tax bps", fire);
         emit log_named_uint("official static LP fee bps", OFFICIAL_POOL_LP_FEE_BPS);
         emit log_named_uint("official combined sell tax bps", total);
-        assertEq(fire, 1200);
-        assertEq(total, 1230);
-        assertGt(total, 1200);
+        assertEq(fire, 600);
+        assertEq(total, 630);
+        assertGt(total, 600);
     }
 
     function testPegDefenseHookPathIfLaunchedExceeds12Percent() public {

@@ -24,7 +24,7 @@ import {MasonryRangeLib} from "../masonry/MasonryRangeLib.sol";
 import {IMasonryFireTax} from "../masonry/IMasonryFireTax.sol";
 
 /// @notice Official-pool hook: oracle/range binding and the sell-only tax. X Tomb sells pay the
-/// dynamic Fire Tax; X Share sells pay its flat configured rate. Buys are never taxed.
+/// dynamic Fire Tax (0.5% to 6%); X Share sells pay 3% to 6% on the same X Tomb peg. Buys are never taxed.
 abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -225,7 +225,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
         }
 
-        // X Share overrides _sellTaxBps with a flat, config-driven sell tax. A hook that leaves
+        // X Share overrides _sellTaxBps with its own rate. A hook that leaves
         // it at 0 (X Tomb) charges the dynamic Fire Tax instead.
         uint16 rate = _sellTaxBps();
         uint256 fee;
@@ -269,7 +269,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
         return (0, 0);
     }
 
-    /// @notice 0 = dynamic Fire Tax (X Tomb). Share hook returns the flat configured rate.
+    /// @notice 0 = dynamic Fire Tax (X Tomb). The share hook returns its current rate.
     function _sellTaxBps() internal view virtual returns (uint16) {
         return 0;
     }
@@ -300,7 +300,7 @@ abstract contract MasonryTaxHook is BaseV4Hook, IMasonryFireTax {
         return MasonryRules.withdrawFeeBps(
             twap,
             _referencePrice(),
-            BASE_TAX,
+            MasonryRules.WITHDRAW_BASE_FEE_BPS,
             MAX_TAX_BPS,
             MasonryRules.DEFAULT_FULL_TAX_DROP_BPS,
             raisedBps,
