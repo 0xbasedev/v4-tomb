@@ -20,6 +20,8 @@ jobs:
       RPC_URL: ${{ secrets.RPC_URL }}
       KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
       PROTOCOL_NETWORK_INDEX: ${{ vars.PROTOCOL_NETWORK_INDEX || '0' }}
+      # Same manifest the frontend build and launch scripts read; `validate` checks they agree.
+      PROTOCOL_CONFIG: ${{ github.workspace }}/${{ vars.PROTOCOL_CONFIG || 'config/networks.json' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

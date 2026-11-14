@@ -16,29 +16,13 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
   const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending, isError } = useConnect();
   const { disconnect } = useDisconnect();
-  const { chains, switchChain, isPending: switching } = useSwitchChain();
+  const { chains } = useSwitchChain();
   const preview = usePreview();
 
   if (isConnected && address) {
     const known = chains.some((c) => c.id === chainId);
     return (
       <div className="flex items-center gap-1.5">
-        <select
-          aria-label="Network"
-          value={known ? chainId : ""}
-          disabled={switching}
-          onChange={(e) => switchChain({ chainId: Number(e.target.value) })}
-          className={`hidden h-9 max-w-[150px] rounded-full border bg-white/[0.03] px-3 font-mono text-[11.5px] outline-none sm:block ${known ? "border-white/10 text-bone-dim" : "border-bad/50 text-bad"}`}
-        >
-          <option value="" disabled>
-            Unsupported network
-          </option>
-          {chains.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           onClick={() => disconnect()}
@@ -46,7 +30,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
           className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] pl-2.5 pr-3 font-mono text-[12px] text-bone-dim hover:border-white/20 hover:text-bone"
         >
           <span className={`h-2 w-2 rounded-full ${known ? "bg-ok" : "bg-bad"}`} />
-          {address.slice(0, 6)}…{address.slice(-4)}
+          <span className="hidden sm:inline">{address.slice(0, 6)}…{address.slice(-4)}</span><span className="sm:hidden">Wallet</span>
         </button>
       </div>
     );
@@ -61,7 +45,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
         className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-warn/35 bg-warn/[0.06] pl-2.5 pr-3 font-mono text-[12px] text-warn hover:border-warn/60"
       >
         <span className="h-2 w-2 rounded-full bg-warn" />
-        Sample {PREVIEW_ADDRESS.slice(0, 6)}…{PREVIEW_ADDRESS.slice(-4)}
+        Sample <span className="hidden sm:inline">{PREVIEW_ADDRESS.slice(0, 6)}…{PREVIEW_ADDRESS.slice(-4)}</span>
       </button>
     );
   }
@@ -78,7 +62,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
         type="button"
         onClick={() => connector && connect({ connector })}
         disabled={isPending || !connector}
-        className={`btn btn-primary ${compact ? "h-9 px-4 text-[13px]" : "h-10 px-5"}`}
+        className={`btn btn-primary ${compact ? "h-9 max-w-[80px] truncate px-2 text-[11px] sm:max-w-none sm:px-4 sm:text-[13px]" : "h-10 px-5"}`}
       >
         {isPending ? "Confirm in wallet…" : !connector ? "No wallet found" : "Connect wallet"}
       </button>

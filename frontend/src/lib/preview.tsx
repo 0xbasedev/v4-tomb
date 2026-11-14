@@ -8,9 +8,9 @@ import { stepDefense } from "@/lib/market";
 import type { TokenId } from "@/lib/tokens";
 
 /**
- * Preview — a simulated chain for review and demos, on whenever no verified
- * deployment exists (config/masonry-deployments.json is empty today), or with
- * `?preview=1`. Every value it produces is SAMPLE data and every screen says
+ * Preview — an explicit simulated chain for review and demos, enabled only
+ * with `?preview=1` or the dedicated VITE_PREVIEW demo build. Missing launch
+ * addresses never enable it implicitly. Every value it produces is SAMPLE data and every screen says
  * so. It never asks a wallet to sign or send anything: actions mutate this
  * in-memory state and post a "Simulated" toast.
  *
@@ -59,7 +59,7 @@ function initialEnabled(): boolean {
   if (p === "0") return false;
   if (p === "1") return true;
   if (import.meta.env.VITE_PREVIEW === "1") return true;
-  return DEPLOYMENTS.length === 0;
+  return false;
 }
 
 /** Sample market depth for the projected post-sale price (constant product). */
@@ -91,6 +91,8 @@ export interface PreviewState {
   start: number;
   /** False while the schedule contract's start is 0 (deployed unscheduled). */
   scheduled: boolean;
+  saleOpen: boolean;
+  setSaleOpen: (open: boolean) => void;
   offset: number;
   setOffset: (s: number) => void;
   /** Back to "deployed, start = 0". */
@@ -147,6 +149,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
   const [offset, setOffsetState] = useState(initialOffset);
   // Genesis start is anchored so that `now - start === offset` at the moment it's set.
   const [start, setStart] = useState(() => mountedAt.current - initialOffset());
+  const [saleOpen, setSaleOpen] = useState(() => q().get("sale") !== "closed");
   const [scheduled, setScheduled] = useState(() => q().get("genesis") !== "unscheduled");
   const [twap, setTwap] = useState(() => {
     const p = Number(q().get("price"));
@@ -261,6 +264,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
       push(`Schedule Genesis for ${new Date(startUnix * 1000).toUTCString()}`);
     },
     purchase: (t) => {
+      if (!saleOpen || pass || (scheduled && now >= start + GENESIS_POLICY.durationSeconds)) throw new Error("Sale not open yet");
       setPass(t);
       setBalances((b) => ({ ...b, USDC: b.USDC - PASSES[t].priceUsdc }));
       push(`Buy ${PASSES[t].name} pass · ${PASSES[t].priceUsdc} USDC`);
@@ -302,7 +306,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     compound: (pool, automated) => {
       const reward = settle(pool);
       const tax = sellTax({ asset: "xTOMB", twap: oracleFresh ? twap : null, projected: twap, raisedBps: raised.xTOMB.bps, raisedAt: raised.xTOMB.at, now, genesisActive: clock.active });
-      const s = compoundSplit(reward, { automated, taxBps: tax.rateBps ?? 0 });
+      const s = compoundSplit(reward, { automated, taxBps: 0 }); // X Tomb sells are no longer taxed
       const lpPrice = 2 * twap;
       const shares = (s.net * twap) / lpPrice;
       setPositions((p) => {
@@ -354,6 +358,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     now,
     start,
     scheduled,
+    saleOpen, setSaleOpen,
     offset: now - start,
     setOffset: (o: number) => {
       setScheduled(true);

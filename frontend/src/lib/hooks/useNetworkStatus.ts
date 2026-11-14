@@ -1,9 +1,9 @@
+import { PRIMARY, liveDeployment, useSelectedNetwork } from "@/lib/networks";
 import { useAccount } from "wagmi";
 import type { Address } from "viem";
 
 import type { MasonryDeployment } from "@config/masonry-deployment.mjs";
 import { bridgeNetwork } from "@/lib/create3";
-import { DEPLOYMENTS, REGISTRY } from "@/lib/launch";
 import { PREVIEW_ADDRESS, usePreview } from "@/lib/preview";
 import { chainName } from "@/lib/wagmi";
 
@@ -44,8 +44,9 @@ export interface NetworkState {
 export function useNetworkStatus(): NetworkState {
   const preview = usePreview();
   const { address, isConnected, chainId } = useAccount();
-  const supported = chainId !== undefined && REGISTRY.chains.some((c) => c.id === chainId);
-  const deployment = chainId !== undefined ? (DEPLOYMENTS.find((d) => d.chainId === chainId) ?? null) : null;
+  const { selected } = useSelectedNetwork();
+  const supported = chainId === PRIMARY.id && selected === chainId;
+  const deployment = chainId !== undefined ? liveDeployment(chainId) : null;
   const walletAddress = isConnected && address ? address : null;
 
   const bridgeOnly = !supported && bridgeNetwork(chainId) !== null;

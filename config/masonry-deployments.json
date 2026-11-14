@@ -1,5 +1,5 @@
 {
   "schemaVersion": 1,
-  "note": "Verified xTOMB deployments, one record per chain, each validated by parseMasonryDeployment against official-infrastructure.json. Empty until a deployment is verified: the frontend runs in Preview (simulated) mode and sends no transactions.",
+  "note": "Verified protocol deployments only. Empty until launched and verified. Frontend defaults to not launched yet; simulation requires explicit preview=1.",
   "deployments": []
 }

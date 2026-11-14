@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
 
+import { PRIMARY } from "@/lib/networks";
+const pReferenceSymbol = PRIMARY.referenceToken?.symbol ?? "USDC";
+
 import { Sigil } from "@/components/brand/Sigil";
 import { Reason, SimBadge } from "@/components/Status";
 import { useActions, useNetworkStatus, useProtocol } from "@/lib/hooks";
@@ -63,7 +66,7 @@ export function PassPicker() {
               pass={PASSES[id]}
               held={p.pass}
               closed={closed}
-              reason={p.genesisScheduled === false ? "Pass sales open once Genesis is scheduled — the pass contract rejects purchases while the start is unset." : !net.preview ? net.reason : null}
+              reason={p.saleOpen !== true ? "Sale not open yet" : !net.preview ? net.reason : null}
             />
           ))}
         </div>
@@ -72,7 +75,7 @@ export function PassPicker() {
   );
 }
 
-function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string | null; closed: boolean; reason: string | null }) {
+function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: PassTier | null; closed: boolean; reason: string | null }) {
   const actions = useActions();
   const cta = useRef<HTMLButtonElement>(null);
   useMagnetic(cta, 0.16);
@@ -100,8 +103,8 @@ function PassCard({ pass, held, closed, reason }: { pass: PassDef; held: string 
         <div className="min-w-0 pt-1">
           <h3 className="font-display text-[17px] font-semibold tracking-[-0.02em] text-bone">{pass.name}</h3>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span className={`font-display text-3xl font-semibold tracking-[-0.04em] ${ultra ? "spectre-text" : "text-bone"}`}>{pass.priceUsdc}</span>
-            <span className="font-mono text-[11px] text-ash">USDC</span>
+            <span className={`font-display text-3xl font-semibold tracking-[-0.04em] ${ultra ? "spectre-text" : "text-bone"}`}>{held && upgrade ? pass.priceUsdc - PASSES[held].priceUsdc : pass.priceUsdc}</span>
+            <span className="font-mono text-[11px] text-ash">{pReferenceSymbol}</span>
           </div>
           <span className="chip mt-2 h-5 px-2 text-[10px]">Soulbound ERC-721</span>
         </div>

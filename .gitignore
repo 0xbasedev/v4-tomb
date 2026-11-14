@@ -33,6 +33,10 @@ desktop.ini
 *.swp
 *~
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Build artifacts
 *.log
 

@@ -15,12 +15,13 @@ export interface WalletLog {
   refused: string[];
 }
 
-export async function installWallet(page: Page, chainIdHex = "0x2105") {
-  await page.addInitScript((chain) => {
+export async function installWallet(page: Page, chainIdHex = "0x2105", behavior: "normal" | "missing" | "rejected" = "normal") {
+  await page.addInitScript(({ chain, behavior }) => {
     const log = { calls: [] as string[], refused: [] as string[] };
     (window as unknown as { __wallet: typeof log }).__wallet = log;
     const accounts = ["0x1111111111111111111111111111111111111111"];
     let chainId = chain;
+    let missing = behavior === "missing";
     const listeners: Record<string, ((...a: unknown[]) => void)[]> = {};
     const emit = (e: string, v: unknown) => (listeners[e] ?? []).forEach((f) => f(v));
     const provider = {
@@ -36,6 +37,8 @@ export async function installWallet(page: Page, chainIdHex = "0x2105") {
           case "net_version":
             return String(parseInt(chainId, 16));
           case "wallet_switchEthereumChain":
+            if (behavior === "rejected") throw Object.assign(new Error("User declined switch"), { code: 4001 });
+            if (missing) { missing = false; throw Object.assign(new Error("Unknown chain"), { code: 4902 }); }
             chainId = (params?.[0] as { chainId: string }).chainId;
             emit("chainChanged", chainId);
             return null;
@@ -60,7 +63,7 @@ export async function installWallet(page: Page, chainIdHex = "0x2105") {
       removeListener: (e: string, f: (...a: unknown[]) => void) => void (listeners[e] = (listeners[e] ?? []).filter((x) => x !== f)),
     };
     (window as unknown as { ethereum: typeof provider }).ethereum = provider;
-  }, chainIdHex);
+  }, { chain: chainIdHex, behavior });
 }
 
 export const test = base.extend<{ broadcasts: string[] }>({

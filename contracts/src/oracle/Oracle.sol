@@ -95,6 +95,16 @@ contract Oracle is IOracle, Epoch {
     }
 
     /// @inheritdoc IOracle
+    function isFresh(
+        uint256 maxAge
+    ) external view returns (bool) {
+        if (!initialized || maxAge == 0) return false;
+        uint256 last = uint256(blockTimestampLast);
+        if (block.timestamp < last) return false;
+        return block.timestamp - last <= maxAge;
+    }
+
+    /// @inheritdoc IOracle
     function twap(
         address _token,
         uint256 _amountIn

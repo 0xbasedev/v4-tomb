@@ -8,6 +8,7 @@ pragma solidity 0.8.26;
  *         storage layout.
  */
 interface IBoardroom {
+    function totalSupply() external view returns (uint256);
     function balanceOf(
         address member
     ) external view returns (uint256);

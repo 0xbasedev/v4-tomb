@@ -3,7 +3,7 @@ export const fieldHelp: Record<string, string> = {
   chainId: "The network's official number. For example, Base is 8453. Get it from the network's documentation.",
   nativeSymbol: "The symbol for the coin that pays network fees, such as ETH on Base.",
   rpcUrl: "The web address Admin uses to read this blockchain. Use the network's public HTTPS endpoint.",
-  usdc: "The 6-decimal USDC contract on this chain. The protocol uses it for the official trading pair and Genesis pass payments.",
+  usdc: "The peg token on this chain (USDG on Robinhood, USDC elsewhere), as listed in config/official-infrastructure.json. The protocol uses it for the official trading pair and Genesis pass payments.",
   poolManager: "Uniswap V4's core contract. It manages the pool where xTOMB trades against USDC.",
   positionManager: "Uniswap V4's contract for creating and managing liquidity positions.",
   permit2: "Uniswap's shared contract for granting token-spending permissions.",

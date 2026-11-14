@@ -3,22 +3,18 @@ import { useRef } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { PlannedBadge, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
-import { legacyTreasuryAbi, legacyTrustNoteAbi } from "@/lib/abis/masonry";
+import { masonryBondAbi } from "@/lib/abis/masonry";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
- * Bond Office — a clearly labelled planned preview. The handoff carries the
- * Old Money Treasury and TrustNote ABIs for reference only; they establish no
- * xBOND address, rate, cap or policy. Issuance and redemption stay disabled
- * until a verified deployment exposes both actions, and no rates, caps,
- * reserve balances or returns are shown.
+ * Bond Office — MasonryBond is implemented (buy below peg by burning xTOMB,
+ * redeem above peg 1:1) but actions stay disabled until a verified launch
+ * address is published. Discount/debt/supply numbers are constructor
+ * placeholders, not approved tokenomics.
  */
-const WHY = "No verified xBOND contract exposes issuance and redemption yet.";
+const WHY = "MasonryBond is implemented locally, but no verified launch address is published yet.";
 
-const LEGACY = {
-  treasury: legacyTreasuryAbi.filter((x) => x.type === "function").length,
-  trustNote: legacyTrustNoteAbi.filter((x) => x.type === "function").length,
-};
+const ABI_FNS = masonryBondAbi.filter((x) => x.type === "function").length;
 
 export function Bonds() {
   const root = useRef<HTMLDivElement>(null);
@@ -26,10 +22,10 @@ export function Bonds() {
   return (
     <div ref={root}>
       <PageHeader
-        eyebrow="Bond Office · planned preview"
+        eyebrow="Bond Office · not launched"
         token="xBOND"
         title={<span className="amethyst-text">Bond Office</span>}
-        lede="A planned way to defend the peg with bonds. Nothing here is live: the bond contract, its economics and its deployment are still to be verified."
+        lede="Buy xBOND below peg by burning xTOMB; redeem above peg 1:1 for xTOMB. Discounts are bounded (max 2×) and debt/supply caps are launch placeholders. Nothing is live until a verified address is published."
         aside={
           <div className="panel p-5">
             <div className="mb-2 flex items-center justify-between">
@@ -73,10 +69,10 @@ export function Bonds() {
           </section>
         ))}
         <section data-reveal className="panel p-5 lg:col-span-2">
-          <div className="label mb-2">What the handoff includes</div>
+          <div className="label mb-2">What this page binds to</div>
           <p className="text-[13px] leading-relaxed text-bone-dim">
-            Two Old Money reference interfaces — Treasury ({LEGACY.treasury} functions) and TrustNote ({LEGACY.trustNote} functions) — to study the legacy bond
-            flow. They are not xBOND, set no live address or policy, and nothing on this page calls them.
+            The MasonryBond ABI ({ABI_FNS} functions): buy below peg, redeem above peg, preview quotes, and the
+            placeholder discount/debt/supply caps. This page does not call the legacy Treasury or TrustNote path.
           </p>
         </section>
       </div>

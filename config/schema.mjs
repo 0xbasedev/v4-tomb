@@ -42,6 +42,11 @@ export function parseNetworks(document) {
     for (const key of infrastructureKeys) {
       if (infrastructure[key] !== null && !address(infrastructure[key])) fail(`invalid infrastructure.${key}`);
     }
+    if (network.pegToken !== undefined) {
+      const peg = network.pegToken;
+      if (!object(peg) || !string(peg.symbol) || !address(peg.address) || /^0x0{40}$/i.test(peg.address)
+        || !Number.isInteger(peg.decimals) || peg.decimals < 0 || peg.decimals > 36) fail(`invalid pegToken for chain ${id}`);
+    }
     const create3 = network.create3;
     if (create3 != null) {
       if (!object(create3) || !address(create3.factory) || !address(create3.deployer)

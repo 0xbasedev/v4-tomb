@@ -91,3 +91,14 @@ test('vesting streams are optional, but complete and distinct when recorded', ()
   clash.vesting = { ...record.vesting, treasury: clash.contracts.treasury };
   assert.throws(() => parseMasonryDeployment(clash, registry), /vesting\.treasury repeats treasury/);
 });
+
+test('officialChain fails closed when the peg token is not named or disagrees with usdc', () => {
+  const rh = officialChain(registry, 4663);
+  assert.equal(rh.pegTokenSymbol, 'USDG');
+  const broken = structuredClone(registry);
+  delete broken.chains.find((c) => c.id === 4663).pegTokenDecimals;
+  assert.throws(() => officialChain(broken, 4663), /pegToken/);
+  const mismatch = structuredClone(registry);
+  mismatch.chains.find((c) => c.id === 4663).usdc = '0x' + '1'.repeat(40);
+  assert.throws(() => officialChain(mismatch, 4663), /pegToken/);
+});

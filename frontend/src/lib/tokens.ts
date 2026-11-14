@@ -1,11 +1,13 @@
+import { PEG } from "@/lib/peg";
+
 /**
  * Token registry — what the dapp lets you hold, trade or stake.
  *
- * Official pairs are xTOMB/USDC and xSHARE/USDC, each a Uniswap v4 pool with
+ * Official pairs are xTOMB and xSHARE against the chain's peg token, each a Uniswap v4 pool with
  * its own Fire Tax hook. Their LP tokens are the vault shares minted by
  * MasonryLevelUsdcVault and MasonrySquareUsdcVault (one fixed tick range
  * each, redeemable for both underlying tokens). ETH is listed so the picker
- * can explain why it isn't routable; xBOND is a planned preview.
+ * can explain why it isn't routable; xBOND is implemented (MasonryBond) but not launched.
  */
 
 export type TokenId = "xTOMB" | "xSHARE" | "USDC" | "xTOMB-USDC" | "xSHARE-USDC" | "ETH" | "xBOND";
@@ -27,11 +29,11 @@ export interface TokenDef {
 export const TOKENS: Record<TokenId, TokenDef> = {
   xTOMB: { id: "xTOMB", symbol: "xTOMB", name: "xTomb · peg asset", decimals: 18, kind: "protocol", contract: "LEVEL" },
   xSHARE: { id: "xSHARE", symbol: "xSHARE", name: "xShare · share asset", decimals: 18, kind: "protocol", contract: "SQUARE" },
-  USDC: { id: "USDC", symbol: "USDC", name: "USD Coin (native, Circle)", decimals: 6, kind: "base" },
+  USDC: { id: "USDC", symbol: PEG.symbol, name: `${PEG.symbol} (chain reference token)`, decimals: PEG.quoteDecimals, kind: "base" },
   "xTOMB-USDC": {
     id: "xTOMB-USDC",
-    symbol: "xTOMB-USDC LP",
-    name: "xTOMB / USDC vault shares",
+    symbol: `xTOMB-${PEG.symbol} LP`,
+    name: `xTOMB / ${PEG.symbol} vault shares`,
     decimals: 18,
     kind: "lp",
     pair: ["xTOMB", "USDC"],
@@ -39,15 +41,15 @@ export const TOKENS: Record<TokenId, TokenDef> = {
   },
   "xSHARE-USDC": {
     id: "xSHARE-USDC",
-    symbol: "xSHARE-USDC LP",
-    name: "xSHARE / USDC vault shares",
+    symbol: `xSHARE-${PEG.symbol} LP`,
+    name: `xSHARE / ${PEG.symbol} vault shares`,
     decimals: 18,
     kind: "lp",
     pair: ["xSHARE", "USDC"],
     contract: "MasonrySquareUsdcVault",
   },
   ETH: { id: "ETH", symbol: "ETH", name: "Ether — no official pool", decimals: 18, kind: "native" },
-  xBOND: { id: "xBOND", symbol: "xBOND", name: "xBond — planned", decimals: 18, kind: "planned" },
+  xBOND: { id: "xBOND", symbol: "xBOND", name: "X Bond (MasonryBond — not launched)", decimals: 18, kind: "planned", contract: "MasonryBond" },
 };
 
 export const isLp = (id: TokenId) => TOKENS[id].kind === "lp";
@@ -60,4 +62,4 @@ export const isLp = (id: TokenId) => TOKENS[id].kind === "lp";
 export const SWAP_TOKENS: TokenId[] = ["xTOMB", "xSHARE", "USDC", "xTOMB-USDC", "xSHARE-USDC", "ETH"];
 
 /** Compact label for chips ("xTOMB·USDC" for an LP). */
-export const shortLabel = (id: TokenId) => (TOKENS[id].pair ? `${TOKENS[id].pair![0]}·${TOKENS[id].pair![1]}` : TOKENS[id].symbol);
+export const shortLabel = (id: TokenId) => (TOKENS[id].pair ? `${TOKENS[TOKENS[id].pair![0]].symbol}·${TOKENS[TOKENS[id].pair![1]].symbol}` : TOKENS[id].symbol);

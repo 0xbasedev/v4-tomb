@@ -1,6 +1,7 @@
 import launch from "@config/masonry-launch.template.json" with { type: "json" };
 import registryJson from "@config/official-infrastructure.json" with { type: "json" };
 import deploymentsJson from "@config/masonry-deployments.json" with { type: "json" };
+import { parseMasonryDeployment } from "@config/masonry-deployment.mjs";
 import type { MasonryDeployment, OfficialRegistry } from "@config/masonry-deployment.mjs";
 
 /**
@@ -38,7 +39,11 @@ export const REGISTRY: OfficialRegistry = LOCAL_DEPLOYMENT
       ],
     }
   : officialRegistry;
-export const DEPLOYMENTS = LOCAL_DEPLOYMENT ? [LOCAL_DEPLOYMENT] : (deploymentsJson as { deployments: MasonryDeployment[] }).deployments;
+export const DEPLOYMENTS = LOCAL_DEPLOYMENT
+  ? [LOCAL_DEPLOYMENT]
+  : (deploymentsJson as { deployments: MasonryDeployment[] }).deployments.filter((record) => {
+      try { parseMasonryDeployment(record, REGISTRY); return true; } catch { return false; }
+    });
 
 const bps = (n: number) => n / 10_000;
 export const pct = (b: number, digits = 2) => `${+(b / 100).toFixed(digits)}%`;
@@ -61,11 +66,11 @@ export const LEVEL_SUPPLY = {
   initial: launch.level.initial,
 };
 
-/** Fire Tax parameters shared by the xTOMB/USDC and xSHARE/USDC hooks. */
+/** Fire Tax parameters: the live liquidity withdraw fee (not an X Tomb swap tax). */
 export const FIRE = {
   baselineBps: POLICY.fireTaxBaselineBps,
   capBps: POLICY.fireTaxHardCapBps,
-  /** At or below this share of the reference price the cap applies (0.85). */
+  /** At or below this share of the reference price the cap applies (0.90). */
   fullTaxAt: bps(POLICY.fullTaxAtOrBelowPegBps),
   recoverySeconds: POLICY.fireTaxRecoverySeconds,
   genesisFloorBps: { xTOMB: POLICY.genesisLevelSellMinimumBps, xSHARE: POLICY.squareGenesisSellMinimumBps } as const,
@@ -74,6 +79,9 @@ export const FIRE = {
 };
 
 /** Normal xSHARE fee routing — shares of collected tax, never of the gross sale. */
+/** Flat official X Share sell tax (config-driven, hard-capped at 12%). */
+export const SHARE_SELL_TAX_BPS = POLICY.shareSellTaxBps as number;
+
 export const SQUARE_ROUTING = {
   polBps: POLICY.squareTaxPolBps,
   usdcReserveBps: POLICY.squareTaxUsdcReserveBps,
@@ -116,7 +124,23 @@ export const GENESIS_POLICY = {
 export const FARM_POLICY = {
   compoundCooldownSeconds: POLICY.farmsCompoundCooldownSeconds,
   emissionDays: POLICY.farmEmissionDays,
+  claimToWallet: POLICY.farmClaimToWallet,
+  withdrawCooldownSeconds: POLICY.farmWithdrawCooldownSeconds,
+  zapLabel: POLICY.farmZapLabel,
+  zapNotice: POLICY.farmZapNotice,
+  withdrawTitle: POLICY.farmWithdrawTitle,
+  cooldownNotice: POLICY.farmCooldownNotice,
+  forfeitNotice: POLICY.farmForfeitNotice,
+  cancelHint: POLICY.farmCancelHint,
+  compoundLabel: POLICY.farmCompoundLabel,
+  cancelLabel: POLICY.farmCancelLabel,
+  completeWithdrawLabel: POLICY.farmCompleteWithdrawLabel,
+  fireTaxNote: POLICY.farmFireTaxNote,
+  withdrawFeeBps: POLICY.liquidityWithdrawFeeBps,
 };
+
+/** Single destination for protocol fees and forfeits (UI label: DAO wallet). */
+export const DAO_WALLET = launch.daoWallet as string;
 
 /** Pass tiers, matching MasonryGenesisPass.Tier: None = 0, Genesis = 1, Pro = 2, Ultra = 3. */
 export type PassTier = "genesis" | "pro" | "ultra";
@@ -167,3 +191,8 @@ export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
 /** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the DAO wallet. */
 export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 0 };
 export const depositFeeBps = (tier: PassTier | null | undefined): number => (tier ? DEPOSIT_FEE_BPS[tier] : DEPOSIT_FEE_BPS.genesis);
+/** Protocol-owned concentrated range defaults, tuned per official pool. */
+export const RANGE_POLICY = {
+  level: POLICY.rangeLevel,
+  square: POLICY.rangeSquare,
+};

@@ -217,11 +217,45 @@ contract TreasuryTest is BaseTest {
     function test_SetDiscountPercent_Caps() public {
         vm.prank(owner);
         vm.expectRevert(Treasury.DiscountPercentTooHigh.selector);
-        treasury.setDiscountPercent(20_001);
+        treasury.setDiscountPercent(10_001);
+
+        vm.prank(owner);
+        treasury.setDiscountPercent(10_000);
+        assertEq(treasury.discountPercent(), 10_000);
 
         vm.prank(owner);
         treasury.setDiscountPercent(5000);
         assertEq(treasury.discountPercent(), 5000);
+    }
+
+    function test_Initialize_RejectsNonInitializer() public {
+        Treasury fresh = new Treasury(owner);
+        address[] memory excluded = new address[](0);
+        vm.prank(stranger);
+        vm.expectRevert(Treasury.NotOperator.selector);
+        fresh.initialize(
+            address(money),
+            address(trustnote),
+            address(estate),
+            address(oracle),
+            address(boardroom),
+            startTime,
+            excluded
+        );
+    }
+
+    function test_SetMaxDiscountRate_Bounded() public {
+        vm.prank(owner);
+        vm.expectRevert(Treasury.DiscountRateOutOfRange.selector);
+        treasury.setMaxDiscountRate(0);
+
+        vm.prank(owner);
+        vm.expectRevert(Treasury.DiscountRateOutOfRange.selector);
+        treasury.setMaxDiscountRate(2e18 + 1);
+
+        vm.prank(owner);
+        treasury.setMaxDiscountRate(2e18);
+        assertEq(treasury.maxDiscountRate(), 2e18);
     }
 
     function test_SetExtraFunds_StoresAddressesAndShares() public {

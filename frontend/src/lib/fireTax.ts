@@ -1,19 +1,27 @@
-import { FIRE } from "@/lib/launch";
+import { FIRE, SHARE_SELL_TAX_BPS } from "@/lib/launch";
+import { PEG } from "@/lib/peg";
 
 /**
- * Fire Tax — one sell tax per sale, computed the way the hooks do it
- * (MasonryRules + MasonryTaxHook._quote on the merge branch):
+ * Fire Tax now prices liquidity withdrawals (farm / pooled vault), not X Tomb
+ * swaps. X Tomb sells are untaxed. The withdraw fee is:
+ *
+ *   rate = max( target(validated TWAP), recovery floor )
+ *
+ * Official X Share sells pay a separate flat `shareSellTaxBps` (default 3%)
+ * that accumulates for an X Tomb buy-and-burn outside the user swap.
+ *
+ * Historical sell-tax quote (kept for share-sale UI / docs):
  *
  *   rate = max( target(validated TWAP),
  *               target(projected post-sale price),
  *               recovery floor,
- *               Genesis floor (while Genesis runs),
- *               baseline 1% )
+ *               Genesis floor (while Genesis runs) )
  *
- *   target(p)  baseline at or above the reference price, the 12% cap at or
- *              below 0.85 × reference, quadratic in between.
+ *   target(p)  3% baseline at or above the reference price, the 12% cap at or
+ *              below 0.90 × reference, square-root curve in between (mirrors
+ *              MasonryRules.targetSellTaxBps).
  *   recovery   after a higher target is observed the floor decays linearly
- *              back to the baseline over seven hours.
+ *              back to the 3% baseline over seven hours.
  *   Genesis    3% on xTOMB sells, 6% on xSHARE sells, for the seven days.
  *
  * Every input is capped at 12%, so the result is too. Buys and wallet
@@ -36,7 +44,8 @@ export function targetBps(priceOverReference: number): number {
   const bottom = Math.floor((peg * (BPS - DROP_BPS)) / BPS);
   if (price <= bottom) return FIRE.capBps;
   const progress = Math.floor(((peg - price) * BPS) / (peg - bottom));
-  const nonlinear = Math.floor((progress * progress) / BPS);
+  // Integer floor-sqrt, matching OpenZeppelin Math.sqrt(progress * 10_000).
+  const nonlinear = Math.floor(Math.sqrt(progress * BPS));
   return FIRE.baselineBps + Math.floor(((FIRE.capBps - FIRE.baselineBps) * nonlinear) / BPS);
 }
 
@@ -72,6 +81,24 @@ export interface TaxQuote {
   blocked?: string;
 }
 
+/** On-swap tax: X Tomb pays none; X Share pays the flat configured sell tax. */
+export function officialSellTax(asset: TaxedAsset): TaxQuote {
+  if (asset === "xTOMB") {
+    return {
+      rateBps: 0,
+      driver: "baseline",
+      parts: { baseline: 0, twap: 0, projected: 0, recovery: 0, genesis: 0 },
+      burned: false,
+    };
+  }
+  return {
+    rateBps: SHARE_SELL_TAX_BPS,
+    driver: "baseline",
+    parts: { baseline: SHARE_SELL_TAX_BPS, twap: 0, projected: 0, recovery: 0, genesis: 0 },
+    burned: false,
+  };
+}
+
 export function sellTax(i: TaxInputs): TaxQuote {
   const genesis = i.genesisActive ? FIRE.genesisFloorBps[i.asset] : 0;
   const parts: Record<TaxDriver, number> = {
@@ -95,9 +122,23 @@ export function sellTax(i: TaxInputs): TaxQuote {
   let driver: TaxDriver = "baseline";
   let rate = 0;
   for (const d of order) if (parts[d] > rate) (rate = parts[d]), (driver = d);
-  // Anything sitting at the baseline isn't driving the rate.
-  if (rate <= FIRE.baselineBps) driver = "baseline";
+  // Anything sitting at the baseline isn't driving the rate, unless Genesis
+  // is what pinned it there (xTOMB's Genesis floor now equals the 3% baseline).
+  if (rate <= FIRE.baselineBps && driver !== "genesis") driver = "baseline";
   return { rateBps: Math.min(rate, FIRE.capBps), driver, parts, burned: i.asset === "xTOMB" && i.genesisActive && FIRE.genesisBurnShare >= 1 };
+}
+
+/** Withdraw fee: TWAP + recovery only (no projected spot, which is sandwichable). */
+export function withdrawFee(i: Pick<TaxInputs, "twap" | "raisedBps" | "raisedAt" | "now">): TaxQuote {
+  return sellTax({
+    asset: "xTOMB",
+    twap: i.twap,
+    projected: i.twap,
+    raisedBps: i.raisedBps,
+    raisedAt: i.raisedAt,
+    now: i.now,
+    genesisActive: false,
+  });
 }
 
 export const DRIVER_LABEL: Record<TaxDriver, string> = {
@@ -111,7 +152,7 @@ export const DRIVER_LABEL: Record<TaxDriver, string> = {
 /** Where the tax goes, in words. */
 export function taxDestination(asset: TaxedAsset, genesisActive: boolean, criticalDefense: boolean): string {
   if (asset === "xTOMB") return genesisActive ? "burned in full (Genesis)" : "sent to the hook's fee recipient";
-  return criticalDefense ? "100% to xTOMB buy-and-burn (Critical Defense)" : "12% POL · 20% USDC reserve · 68% xSHARE reserve";
+  return criticalDefense ? "100% to xTOMB buy-and-burn (Critical Defense)" : `12% POL · 20% ${PEG.symbol} reserve · 68% xSHARE reserve`;
 }
 
 /** Seconds until a raised floor is fully back at the baseline. */

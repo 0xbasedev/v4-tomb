@@ -26,8 +26,13 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     mapping(address => Tier) public tierOf;
     mapping(address => uint256) public tokenOf;
     uint256 private nextId;
+    bool public saleOpen;
 
-    event Upgraded(address indexed account, uint256 indexed tokenId, Tier from, Tier to, uint256 paid);
+    event SaleOpenChanged(bool open);
+    error Unauthorized();
+
+    event Upgraded(address indexed holder, uint256 indexed tokenId, Tier oldTier, Tier newTier, uint256 paid);
+
 
     error InvalidConfiguration();
     error InvalidPurchase();
@@ -46,6 +51,20 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
         schedule = schedule_;
     }
 
+    /// @notice The immutable Genesis scheduler controls the membership sale independently of staking.
+    function setSaleOpen(
+        bool open
+    ) external {
+        if (msg.sender != schedule.scheduler()) revert Unauthorized();
+        saleOpen = open;
+        emit SaleOpenChanged(open);
+    }
+
+    function _saleAvailable() internal view returns (bool) {
+        uint256 end = schedule.end();
+        return saleOpen && (end == 0 || block.timestamp < end);
+    }
+
     function price(
         Tier tier
     ) public pure returns (uint256) {
@@ -58,7 +77,7 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     function purchase(
         Tier tier
     ) external nonReentrant returns (uint256 tokenId) {
-        if (block.timestamp >= schedule.end() || tierOf[msg.sender] != Tier.None) revert InvalidPurchase();
+        if (!_saleAvailable() || tierOf[msg.sender] != Tier.None) revert InvalidPurchase();
         uint256 cost = price(tier);
         tierOf[msg.sender] = tier;
         tokenId = ++nextId;
@@ -67,18 +86,19 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
         _safeMint(msg.sender, tokenId);
     }
 
-    /// @notice Raise an existing pass to a higher tier for the price difference.
-    /// The same soulbound token is kept; only the tier changes.
+    /// @notice Move the caller's pass to a strictly higher tier by paying the price difference.
+    /// @dev Same tokenId, tier changes in place; no transfer occurs, so the soulbound rule is untouched.
     function upgrade(
-        Tier to
-    ) external nonReentrant returns (uint256 tokenId) {
-        Tier from = tierOf[msg.sender];
-        if (block.timestamp >= schedule.end() || from == Tier.None || to <= from) revert InvalidPurchase();
-        uint256 cost = price(to) - price(from);
-        tierOf[msg.sender] = to;
-        tokenId = tokenOf[msg.sender];
-        usdc.safeTransferFrom(msg.sender, treasury, cost);
-        emit Upgraded(msg.sender, tokenId, from, to, cost);
+        Tier newTier
+    ) external nonReentrant returns (uint256 paid) {
+        Tier oldTier = tierOf[msg.sender];
+        if (!_saleAvailable() || oldTier == Tier.None || newTier <= oldTier) {
+            revert InvalidPurchase();
+        }
+        paid = price(newTier) - price(oldTier);
+        tierOf[msg.sender] = newTier;
+        usdc.safeTransferFrom(msg.sender, treasury, paid);
+        emit Upgraded(msg.sender, tokenOf[msg.sender], oldTier, newTier, paid);
     }
 
     function _update(

@@ -1,4 +1,5 @@
 import type { TaxQuote, TaxedAsset } from "@/lib/fireTax";
+import { PEG } from "@/lib/peg";
 import { TOKENS, type TokenId } from "@/lib/tokens";
 
 /**
@@ -12,7 +13,7 @@ import { TOKENS, type TokenId } from "@/lib/tokens";
  */
 
 export type LegKind = "sell" | "buy" | "redeem";
-export type Pool = "xTOMB/USDC" | "xSHARE/USDC";
+export type Pool = "xTOMB/USDC" | "xSHARE/USDC"; // internal ids; labels use PEG.symbol
 
 export interface Leg {
   kind: LegKind;
@@ -32,8 +33,8 @@ const POOL_OF: Record<TaxedAsset, Pool> = { xTOMB: "xTOMB/USDC", xSHARE: "xSHARE
 const LP_OF: Partial<Record<TokenId, TaxedAsset>> = { "xTOMB-USDC": "xTOMB", "xSHARE-USDC": "xSHARE" };
 const asset = (id: TokenId): TaxedAsset | null => (id === "xTOMB" || id === "xSHARE" ? id : null);
 
-const sell = (a: TaxedAsset, share: number): Leg => ({ kind: "sell", label: `Sell ${a} → USDC`, asset: a, pool: POOL_OF[a], valueShare: share });
-const buy = (a: TaxedAsset, share: number): Leg => ({ kind: "buy", label: `Buy ${a} with USDC`, asset: a, pool: POOL_OF[a], valueShare: share });
+const sell = (a: TaxedAsset, share: number): Leg => ({ kind: "sell", label: `Sell ${a} → ${PEG.symbol}`, asset: a, pool: POOL_OF[a], valueShare: share });
+const buy = (a: TaxedAsset, share: number): Leg => ({ kind: "buy", label: `Buy ${a} with ${PEG.symbol}`, asset: a, pool: POOL_OF[a], valueShare: share });
 
 /**
  * `lpAssetShare` is the share of an LP's value held in its asset (xTOMB or
@@ -42,9 +43,9 @@ const buy = (a: TaxedAsset, share: number): Leg => ({ kind: "buy", label: `Buy $
 export function planRoute(input: TokenId, output: TokenId, lpAssetShare: Partial<Record<TaxedAsset, number>> = {}): RoutePlan {
   if (input === output) return { ok: false, reason: "Pick two different tokens." };
   if (input === "ETH" || output === "ETH") {
-    return { ok: false, reason: "No official ETH pool. The official pairs are xTOMB/USDC and xSHARE/USDC — swap ETH for USDC elsewhere first." };
+    return { ok: false, reason: `No official ETH pool. The official pairs are xTOMB/${PEG.symbol} and xSHARE/${PEG.symbol} — swap ETH for ${PEG.symbol} elsewhere first.` };
   }
-  if (input === "xBOND" || output === "xBOND") return { ok: false, reason: "xBOND is a planned preview with no market." };
+  if (input === "xBOND" || output === "xBOND") return { ok: false, reason: "xBOND has no swap market; buy and redeem through MasonryBond once launched." };
 
   const ai = asset(input);
   const ao = asset(output);
@@ -57,7 +58,7 @@ export function planRoute(input: TokenId, output: TokenId, lpAssetShare: Partial
   if (lpOut) {
     return {
       ok: false,
-      reason: `Adding liquidity takes both tokens: ${TOKENS[output].pair![0]} and USDC go into the vault together. There's no zap contract to do it from one token.`,
+      reason: `Adding liquidity takes both tokens: ${TOKENS[output].pair![0]} and ${PEG.symbol} go into the vault together. There's no zap contract to do it from one token.`,
       suggest: "liquidity",
     };
   }
@@ -68,7 +69,7 @@ export function planRoute(input: TokenId, output: TokenId, lpAssetShare: Partial
     if (output === lpIn) return { ok: true, mode: "remove", txCount: 2, legs: [redeem, buy(lpIn, 1 - share)] };
     return {
       ok: false,
-      reason: `From ${TOKENS[input].symbol} the contracts reach ${lpIn} and USDC. Redeem to both, then swap — ${output} needs a route through the other pool.`,
+      reason: `From ${TOKENS[input].symbol} the contracts reach ${lpIn} and ${PEG.symbol}. Redeem to both, then swap — ${output} needs a route through the other pool.`,
       suggest: "pair-tokens",
     };
   }
