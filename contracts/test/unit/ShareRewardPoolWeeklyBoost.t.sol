@@ -6,7 +6,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {ShareRewardPool} from "../../src/distribution/ShareRewardPool.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
-import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {ShareToken, ShareTokenProfiles} from "../../src/tokens/ShareToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -96,7 +96,7 @@ contract ShareRewardPoolWeeklyBoostTest is BaseTest {
         poolStart = t0 + 1 hours;
 
         vm.prank(owner);
-        estate = new ShareToken(t0, communityFund, devFund, owner);
+        estate = new ShareToken(ShareTokenProfiles.legacy(t0, communityFund, devFund, owner), owner);
 
         vm.prank(owner);
         pool = new ShareRewardPool(address(estate), poolStart, owner);

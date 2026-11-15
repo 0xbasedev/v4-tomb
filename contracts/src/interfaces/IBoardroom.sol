@@ -12,7 +12,6 @@ interface IBoardroom {
     function balanceOf(
         address member
     ) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
     function earned(
         address member
     ) external view returns (uint256);
