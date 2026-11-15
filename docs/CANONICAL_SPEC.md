@@ -70,6 +70,79 @@ The **dev address is Owner, Operator and Admin** and has the privileged Admin-pa
 
 Mint only on fresh TWAP strictly > 1.01, max 2% of circulating xTOMB per 6-hour epoch, no catch-up for missed epochs, no stale-oracle bypass. The inherited `core/Treasury.sol` is WETH/bond-era and must not ship as Masonry.
 
+## Safe Mode, the Fire Pit and Keep Printing (owner decision 2026-11-15, NOT YET BUILT)
+
+**The peg is $1 and does not move.** Fire Tax, Critical Defense, expansion eligibility and every other defense keep measuring from $1. What this section adds is a **premium target: a TWAP of 1.20**. The protocol rallies its users while the TWAP is still far above peg and expansion is still printing, instead of waiting for an underpeg to fight. That is the point of difference from Tomb, and page copy should say so plainly: "We don't wait for the underpeg to fight."
+
+Why it works on the user: fighting for a fork that has already lost its peg feels like wasted time and money. Sacrificing while the interface is still healthy, the TWAP is well over $1 and rewards are still printing feels good, and the reward is visible: Safe Mode ends and the full green interface and health bar come back.
+
+Nothing in this section may be advertised before the contract behind it exists (same rule as every other perk). It depends on Treasury expansion (G2) and Masonry (G5).
+
+### Safe Mode
+
+- **Enters at a TWAP of 1.19** (fresh validated TWAP at or below 1.19). Returns to normal once the TWAP is back at 1.20.
+- The interface is responsive to conditions. Normal state: full green interface and a full health bar. Safe Mode: a visibly different state that sends users to the Fire Pit and to Keep Printing. Expansion is **still printing** in Safe Mode, and the copy says so.
+- Safe Mode is a rally, not a restriction on trading. The standing rules hold: no owner/keeper trading pause, and nothing optional may revert a sale or deposit.
+
+### Fire Pit (new page)
+
+Animated fire and a couple of cards. Users are encouraged to visit whenever Safe Mode is on.
+
+- **USDC card:** deposit USDC; it buys LEVEL through the official pool and burns it.
+- **LEVEL card:** throw LEVEL into the pit; it is burned.
+- **Nothing is given in return** except the feeling of helping (and the lodge status below). The page must say this before the user signs.
+- Burns count toward the token's cumulative total burned.
+
+### Keep Printing (new page)
+
+Shows every way the protocol deploys capital to keep printing, and explains that we act above peg.
+
+- Two deposit boxes, USDC and LEVEL. The USDC box is called **the Overpegger**.
+- **Under each box, show exactly what happens when you deposit**, step by step, from the contract's real behavior.
+- The LEVEL side can simply link out: "Burn some LEVEL in the Fire Pit".
+- **In the middle, a live list of actions**, read from on-chain events, in this voice:
+  - "0x8t5.. threw 364 LEVEL in the Fire Pit"
+  - "0x844 threw a hefty $500 USDC in the Overpegger."
+
+### Masonry claim during Safe Mode
+
+At a TWAP of 1.19, a modal appears **before** the usual claim confirmation:
+
+> We're rallying the community to keep our nice premium 1.2 TWAP. Consider participating by sacrificing this claim to the Fire Pit, dumping some USDC into the Overpegger, or manually throwing LEVEL into the pit. Participating is rewarded with a higher status in the lodge and frees up your rewards once we're back at 1.2, among other looser policy.
+
+- **Green button, "Fight!":** the pending LEVEL is claimed and burned in one action, shown in the same modal: "Claiming and…" then "Burned 164 LEVEL" with a link to the transaction.
+- **Red button, "I'm Claiming":** the modal fades into the usual claim confirmation. Claiming is never blocked.
+
+### Lodge status
+
+Participating (sacrificing a claim, using the Overpegger, throwing LEVEL in the pit) earns a **higher status in the lodge**. Per the modal copy it also "frees up your rewards once we're back at 1.2, among other looser policy".
+
+### What has to be built
+
+- **Fire Pit contract:** `burn LEVEL` and `spend USDC → buy LEVEL on the official pool → burn`, with a caller-supplied minimum output. Buys are untaxed, so the full USDC amount buys LEVEL. It holds no balance between calls and has no owner withdrawal. Sacrificed USDC is not a fee, so the "fees go to the DAO wallet" rule does not apply to it.
+- **Masonry `claim and burn`:** one call that burns the caller's pending LEVEL instead of paying it out. It must emit the burned amount for the modal and the feed.
+- **Events** for every sacrifice (who, which path, amount), so the live list and lodge status come from chain data and never from a database.
+- **Safe Mode read:** one view that returns the current state from the fresh validated TWAP, used by every page. A stale TWAP must never switch Safe Mode off (same principle as Critical Defense).
+- **Frontend:** the Fire Pit and Keep Printing routes, the health bar, the Safe Mode theme, the Masonry pre-claim modal, and a "Your next move" entry that points to the Fire Pit while Safe Mode is on.
+
+### Open (owner to decide; do not build on a guess)
+
+- **Token name in copy.** The owner's copy above says LEVEL. The public name elsewhere in this file is xTOMB (LEVEL is the older source name). Pick one for these pages.
+- **What the Overpegger does with USDC.** Stated: it is the USDC box on Keep Printing. Not stated: whether it is the same buy-and-burn as the Fire Pit's USDC card or a different deployment of capital (for example buying and holding as protocol-owned liquidity). Recommendation: make it the same contract call as the Fire Pit's USDC card, so there is one audited path and one feed.
+- **What "frees up your rewards" means.** It implies some reward policy tightens during Safe Mode and loosens for participants once the TWAP is back at 1.20. No tightening rule has been decided. Until one is, the modal copy promises something no contract does, so that sentence cannot ship.
+- **Lodge status:** the ranks, how sacrifices are scored (USDC value, LEVEL count, or count of actions), whether status expires, and what "looser policy" each rank unlocks.
+- **Entry and exit:** one line at 1.20, or a gap (enter at 1.19, exit only after a full six-hour checkpoint at or above 1.20) so the interface does not flicker between states. Recommendation: the checkpoint rule.
+- **Lower bound.** What the interface shows between $1.01 and 1.19 versus below $1.01 (expansion off) and at or below $0.90 (Critical Defense). Recommendation: Safe Mode covers 1.01–1.19; below that, the existing defense states take over.
+- **"1.9" in the owner's note** ("twap is well over 1 (1.9)") is read here as 1.19.
+- **Limits:** a minimum or maximum per sacrifice, and whether the Fire Pit accepts deposits when Safe Mode is off.
+
+### In the same spirit (PROPOSED, not approved)
+
+- **Rally meter:** on the Fire Pit and the health bar, show how much has been burned this rally and how far the TWAP is from 1.20, so a sacrifice visibly moves something.
+- **"Safe Mode ended" moment:** when the TWAP is back at 1.20, the interface turns green for everyone at once, and participants see what they personally burned during that rally.
+- **Claim half, burn half:** a third option in the Masonry modal between "Fight!" and "I'm Claiming".
+- **Rally prompt on the sell preview:** during Safe Mode, the Swap page shows a quiet line beside a LEVEL sell: "Selling now lengthens Safe Mode. Burn a little in the Fire Pit instead?" It never blocks the sale.
+
 ## Still open
 
 6,941 split; `authorizedLaunchSupply`; reward budget; Genesis deposit-fee policy (the 50 bps LP fee is separate); multi-pool Genesis; tier perks beyond the base; Harvest All / Compound All / Robot Arms; Farm migration; target-chain calibration (liquidity floor, TWAP cadence, guard tolerances, tick range).
