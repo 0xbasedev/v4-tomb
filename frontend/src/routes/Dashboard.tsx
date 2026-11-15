@@ -40,7 +40,7 @@ export function Dashboard() {
     <div ref={root}>
       <PageHeader
         eyebrow={p.sim ? "Dashboard · simulated data" : "Dashboard"}
-        title="The peg, on one screen"
+        title="Patience Pays, A Lot"
         lede="Inspect the validated TWAP, the planned expansion rule, Critical Defense and where xSHARE's sell tax goes."
         aside={
           <div className="panel panel-raised p-5 lg:w-[440px]">

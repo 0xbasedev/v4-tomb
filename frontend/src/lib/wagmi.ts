@@ -1,4 +1,5 @@
 import { bridgeNetwork } from "@/lib/create3";
+import { defineChain } from "viem";
 import { http, createConfig, type Transport } from "wagmi";
 import {
   bsc, pulsechain, sonic,
@@ -25,7 +26,6 @@ import {
 import { injected } from "wagmi/connectors";
 
 import networkConfig from "@config/frontend-networks.json";
-import { defineChain } from "viem";
 import { DEPLOYMENTS, REGISTRY } from "@/lib/launch";
 
 /**

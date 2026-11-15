@@ -1,7 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { KeeperPanel } from "@/components/genesis/KeeperPanel";
+import { Modal } from "@/components/Modal";
+import { ClaimAllToLp } from "@/components/genesis/ClaimAllToLp";
 import { PassPicker } from "@/components/genesis/PassPicker";
 import { PoolPanel } from "@/components/genesis/PoolPanel";
 import { VestingPanel } from "@/components/genesis/VestingPanel";
@@ -23,6 +25,7 @@ export function Genesis() {
   const root = useRef<HTMLDivElement>(null);
   const p = useProtocol();
   const c = p.clock;
+  const [claimDetails, setClaimDetails] = useState(false);
   useReveal(root, [c?.phase]);
   const ex = walletClaim(400);
 
@@ -74,6 +77,7 @@ export function Genesis() {
             <PoolPanel pool={0} />
             <PoolPanel pool={1} />
           </div>
+          {c?.phase !== "ended" && <ClaimAllToLp />}
         </section>
 
         <section data-reveal className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -101,11 +105,18 @@ export function Genesis() {
                 <dd className="num text-[17px] text-amethyst">{ex.vested}</dd>
               </div>
             </dl>
-            <p className="mt-3 text-[12.5px] leading-relaxed text-bone-dim">
-              50% liquid, 50% vested (the 50/50 split is separate from the 75% LP emission share). The {pct(GENESIS_POLICY.walletFeeBps)} claim fee applies to the
-              liquid half and to each vesting release; the vested half releases in {GENESIS_POLICY.installments} six-hour installments, each opening when you
-              claim the one before.
-            </p>
+            <button type="button" className="btn btn-ghost mt-4 h-9 px-4 text-[12.5px]" onClick={() => setClaimDetails(true)}>
+              Details
+            </button>
+            {claimDetails && (
+              <Modal kicker="How a claim settles" title="The 50/50, the fee, and the vesting" onClose={() => setClaimDetails(false)}>
+                <p className="text-[13.5px] leading-relaxed text-bone-dim">
+                  Every claim settles 50% liquid, 50% vested — that 50/50 split is separate from the 75% LP emission share. The{" "}
+                  {pct(GENESIS_POLICY.walletFeeBps)} claim fee applies to the liquid half and to each vesting release; the vested half releases in{" "}
+                  {GENESIS_POLICY.installments} six-hour installments, each opening when you claim the one before.
+                </p>
+              </Modal>
+            )}
           </div>
           <div className="panel p-5 md:p-6">
             <span className="label">Sells during Genesis</span>
@@ -174,7 +185,7 @@ function Timeline({ clock, simulated }: { clock: GenesisClock; simulated: boolea
       </div>
       <div className="mt-3 flex items-center gap-2 text-[12px] text-ash">
         <span className="h-2 w-2 rounded-sm bg-ember-hot/70" />
-        {clock.lpOpen ? "LP pool open · 75% of emissions" : ended ? "LP pool closed with Genesis" : clock.phase === "pre" ? (clock.ultraEarly ? "Ultra early staking is open (standard pool)" : "Ultra may pre-stake 24h before the start") : `LP pool opens Day ${LP_DAY} · in ${fmtDuration(clock.secondsToLp)}`}
+        {clock.lpOpen ? "LP pool open" : ended ? "LP pool closed with Genesis" : clock.phase === "pre" ? (clock.ultraEarly ? "Ultra early staking is open (standard pool)" : "Ultra may pre-stake 24h before the start") : `LP pool opens Day ${LP_DAY} · in ${fmtDuration(clock.secondsToLp)}`}
       </div>
     </div>
   );

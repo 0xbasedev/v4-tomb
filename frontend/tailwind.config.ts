@@ -76,6 +76,10 @@ export default {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        "pool-glow": {
+          "0%, 100%": { boxShadow: "0 0 0 1px rgba(255,106,43,0.35), 0 0 32px -6px rgba(255,106,43,0.35)" },
+          "50%": { boxShadow: "0 0 0 1px rgba(255,106,43,0.7), 0 0 58px -4px rgba(255,106,43,0.6)" },
+        },
         "spin-slow": {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
@@ -88,6 +92,7 @@ export default {
       animation: {
         "ember-flow": "ember-flow 6s ease-in-out infinite",
         breathe: "breathe 2.4s ease-in-out infinite",
+        "pool-glow": "pool-glow 3.2s ease-in-out infinite",
         "spin-slow": "spin-slow 90s linear infinite",
         "spin-slower": "spin-slow 160s linear infinite reverse",
         shimmer: "shimmer 1.6s linear infinite",
