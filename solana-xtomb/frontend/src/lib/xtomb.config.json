@@ -1,0 +1,236 @@
+{
+ "compound": {
+  "hard_cap_hours_per_user_per_pool": 3,
+  "keeper_fee_percent_of_liquid": 2,
+  "manual_fee_percent": 0,
+  "shared_cooldown_hours": 3
+ },
+ "critical_defense": {
+  "enter_at_fresh_twap_at_or_below": 0.9,
+  "exit_after_consecutive_checkpoints_above": 1.01,
+  "exit_checkpoint_count": 2,
+  "in_defense_xshare_tax_routing": "100% xSHARE -> USDC -> xTOMB buy-and-burn"
+ },
+ "farm": {
+  "admin_can_add_pools": true,
+  "compound_gate_hours": 3,
+  "emissions_xshare_365d": 25641,
+  "pools_configured_in_wizard": true
+ },
+ "fee_split_operational": {
+  "applies_to": [
+   "genesis deposit fees",
+   "claim fees",
+   "keeper fees",
+   "other operational fees"
+  ],
+  "arbitrage_percent": 15,
+  "dev_percent": 15,
+  "team_percent": 20,
+  "treasury_percent": 50
+ },
+ "genesis": {
+  "claim_fee_during_genesis": "Fire Tax rate (xTOMB schedule), burned 100%",
+  "claim_fee_percent": 2,
+  "day1_standard_share_percent": 100,
+  "day2_lp_share_percent": 75,
+  "day2_standard_share_percent": 25,
+  "default_deposit_fee_percent": 2,
+  "deposit_fee_destination": "config treasury wallet (not a contract)",
+  "duration_days": 7,
+  "first_vesting_claim_hours_after_genesis_end": 6,
+  "lp_deposit_fee_destination": "config treasury wallet as POL (LP tokens held as liquidity, not redeemed or burned; Q8, Jess 2026-11-08)",
+  "lp_deposit_fee_percent_of_gross_shares": 0.5,
+  "reward_split_liquid_percent": 50,
+  "reward_split_vested_percent": 50,
+  "stake_assets": [
+   "USDC",
+   "SOL",
+   "JLP",
+   "WETH",
+   "WBTC"
+  ],
+  "ultra_nft_stake_share_percent": 5,
+  "ultra_prestake_hours_before_start": 24,
+  "vesting_installment_hours": 6,
+  "vesting_installments": 16
+ },
+ "masonry": {
+  "bootstrap_epochs": 2,
+  "bootstrap_only_above_twap": 0.9,
+  "bootstrap_rate_percent_per_epoch": 3,
+  "claim_fee": "Fire Tax rate (xTOMB schedule) at all times, to Treasury post-Genesis",
+  "epoch_0_manual_admin_trigger_only": true,
+  "epoch_hours": 6,
+  "epochs_lazy": true,
+  "expansion_cap_percent_per_epoch": 2,
+  "expansion_requires_fresh_twap_above": 1.01,
+  "no_catch_up_issuance": true
+ },
+ "meta": {
+  "note": "Whole numbers and percentages only. Lamports/base units are computed by deploy scripts. Any change after deploy goes through admin instructions with events, never silent edits.",
+  "program_id_devnet": "4En9hXzHXTSNvwizNya8oit7MTLfsJxsShnMLgkjttEY",
+  "protocol": "Solana xTOMB",
+  "source_spec": "SOLANA-XTOMB-SPEC.md (2026-11-05), EVM v4 baseline Nov 4 2026 merge 7e3115f",
+  "version": "0.1.0"
+ },
+ "oracle": {
+  "authority": "designated keeper key in config, rotatable by admin",
+  "buys_stay_available_on_stale": true,
+  "fail_closed_on_stale_for_withdrawals": true,
+  "freshness_minutes": 30
+ },
+ "passes": {
+  "Genesis": {
+   "auto_compound_hours": null,
+   "deposit_fee_percent": 2,
+   "early_stake_hours": 0,
+   "price_usdc": 50
+  },
+  "Pro": {
+   "auto_compound_hours": 6,
+   "deposit_fee_percent": 1,
+   "early_stake_hours": 0,
+   "price_usdc": 100
+  },
+  "Ultra": {
+   "auto_compound_hours": 3,
+   "deposit_fee_percent": 0,
+   "early_stake_hours": 24,
+   "price_usdc": 300
+  },
+  "one_per_wallet": true,
+  "proceeds_to": "config treasury wallet (not a contract)",
+  "soulbound": true,
+  "upgrade_costs": {
+   "Genesis_to_Pro": 50,
+   "Genesis_to_Ultra": 250,
+   "Pro_to_Ultra": 200
+  },
+  "upgrades_close_at_genesis_end": true,
+  "upgrades_in_place": true
+ },
+ "tokens": {
+  "USDC": {
+   "decimals": 6,
+   "role": "quote and payment asset"
+  },
+  "xBOND": {
+   "cap": null,
+   "decimals": 6,
+   "max_outstanding_config": true,
+   "role": "bond, discount/redeem instrument"
+  },
+  "xSHARE": {
+   "cap": 33333,
+   "decimals": 6,
+   "role": "capped share asset"
+  },
+  "xTOMB": {
+   "decimals": 6,
+   "peg_reference_usdc": 1.0,
+   "role": "peg asset, Genesis reward"
+  }
+ },
+ "wallets": {
+  "dev_wallet": "",
+  "note": "All four fee/allocation recipients are wallet addresses in config, not contracts. Fill at deploy time.",
+  "oracle_authority": "",
+  "team_wallet": "",
+  "trading_bot_wallet": "",
+  "treasury_wallet": ""
+ },
+ "withdrawal_fire_tax": {
+  "admin_configurable": true,
+  "applies_to": [
+   "genesis unstake",
+   "farm withdrawals",
+   "masonry exits"
+  ],
+  "baseline_percent_xshare": 6,
+  "baseline_percent_xtomb": 3,
+  "buys_and_transfers_percent": 0,
+  "curve": "shared quadratic increment (+11 pts at 85% of reference) over per-token baselines; xSHARE caps ~$0.89, xTOMB ~$0.86, both at the 12% cap at/below $0.85",
+  "display_name": "Fire Tax",
+  "display_name_alternative": "Fire Hose",
+  "genesis_minimum_xshare_percent": 6,
+  "genesis_minimum_xtomb_percent": 3,
+  "healthy_override": "admin can zero both taxes via set_fire_tax_zeroed",
+  "max_percent": 12,
+  "one_debit": true,
+  "recovery_floor_decay_hours": 7,
+  "recovery_floor_rest_percent": 3,
+  "xshare_tax_split": {
+   "protocol_owned_liquidity_percent": 12,
+   "treasury_usdc_reserve_percent": 20,
+   "treasury_xshare_percent": 68
+  },
+  "xtomb_tax_after_genesis": "to Treasury",
+  "xtomb_tax_genesis": "100% burn"
+ },
+ "wizard": {
+  "deploy_gates": [
+   "no audit",
+   "no live-chain verification"
+  ],
+  "deploys": true,
+  "dry_run_first": true,
+  "hostile_validation": true,
+  "network_default": "devnet",
+  "steps": [
+   "Chain/Network",
+   "Tokens & Supply",
+   "Allocations & Vesting",
+   "Passes & Fees",
+   "Pools",
+   "Genesis Schedule",
+   "Review & Deploy"
+  ]
+ },
+ "xbond": {
+  "accepted_payins": [
+   "usdc (config usdc_mint, $1, premium)",
+   "wrapped SOL (native mint, oracle-posted SOL price, premium)",
+   "xTOMB (TWAP-priced, 3% premium default, paid xTOMB BURNED classic-bond style)"
+  ],
+  "backing": "bot/admin deposit LP via deposit_bond_backing into PDA vault [bond-lp-vault] (created by set_bond_config); counted in bond_backing_lp",
+  "buy_burns_xtomb": true,
+  "buy_only_below_twap": 1.0,
+  "model": "lp-zap (Jess 2026-11-08): face denominated in xTOMB LP; buy custodies the pay-in for the operator LP-creation leg, redemption pays LP from backing; xTOMB pay-ins are the exception - they burn (classic bond) at a 3% premium instead of custoding",
+  "no_partial_fill": true,
+  "payin_custody": "per-mint PDA vault [bond-payin, mint]; bot/admin withdraw via withdraw_bond_payin (USDC / wrapped SOL only - xTOMB pay-ins burn, never custodied)",
+  "premium_admin": "bond_premium_bps via set_bond_config; stored 0 = compiled default",
+  "premium_bps_default": 1000,
+  "redeem_from_expansion_allowance_only": false,
+  "redeem_only_above_twap": 1.0,
+  "redeem_payout": "pro-rata LP: face x min(bond_backing_lp, vault balance) / bond_outstanding; whole amount queues when entitlement is 0",
+  "xtomb_premium_admin": "bond_xtomb_premium_bps via set_bond_xtomb_premium; stored 0 = compiled default",
+  "xtomb_premium_bps_default": 300
+ },
+ "xshare_allocations": {
+  "arbitrage_launch": 0,
+  "deployer": 1,
+  "farm_emissions_365d": 25641,
+  "sale_escrow": 100,
+  "team_dev_launch": 100,
+  "total": 33333,
+  "treasury_launch": 550,
+  "vesting_180d_linear": 6941,
+  "vesting_split": {
+   "arbitrage": 0,
+   "developer": 2000,
+   "team": 2500,
+   "treasury": 2441
+  }
+ },
+ "xtomb_launch": {
+  "arbitrage": 1000,
+  "authorized_launch_supply": null,
+  "genesis_reward_budget": 30000,
+  "team_dev": 5000,
+  "total_launch": 11000,
+  "treasury": 5000,
+  "vesting": "linear",
+  "vesting_days": 180
+ }
+}

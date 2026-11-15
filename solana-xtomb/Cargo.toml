@@ -1,0 +1,18 @@
+[workspace]
+members = ["programs/xtomb"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+# PATCH 2026-11-05: vendored anchor-syn (copied read-only from
+# ~/workspace/lodge-solana-v2/vendor/anchor-syn). anchor-syn 0.30.1 calls
+# proc-macro2 Span::source_file(), removed in proc-macro2 1.0.107, so the IDL
+# step fails even when the SBF program compiles. The vendored copy replaces
+# that call with local_file()/file(). IDL generation only — the program
+# itself does not depend on anchor-syn.
+[patch.crates-io]
+anchor-syn = { path = "vendor/anchor-syn" }
+anchor-derive-serde = { path = "vendor/anchor-derive-serde" }

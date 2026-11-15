@@ -1,0 +1,3940 @@
+{
+  "address": "4En9hXzHXTSNvwizNya8oit7MTLfsJxsShnMLgkjttEY",
+  "metadata": {
+    "name": "xtomb",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Solana xTOMB fork: Genesis passes, Fire Tax exits, xBOND, lazy-epoch Masonry"
+  },
+  "instructions": [
+    {
+      "name": "add_pool",
+      "discriminator": [
+        115,
+        230,
+        212,
+        211,
+        175,
+        49,
+        39,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset_mint_account"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        },
+        {
+          "name": "kind",
+          "type": "u8"
+        },
+        {
+          "name": "asset_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "weight_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "advance_epoch",
+      "discriminator": [
+        93,
+        138,
+        234,
+        218,
+        241,
+        230,
+        132,
+        38
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "masonry_pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  4,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xtomb_mint",
+          "writable": true
+        },
+        {
+          "name": "masonry_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "trigger_epoch0",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "buy_bond",
+      "discriminator": [
+        213,
+        80,
+        222,
+        237,
+        246,
+        145,
+        5,
+        94
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payin_mint",
+          "docs": [
+            "Mutable: an xTOMB pay-in burns against this mint."
+          ],
+          "writable": true
+        },
+        {
+          "name": "buyer_payin",
+          "writable": true
+        },
+        {
+          "name": "payin_vault",
+          "docs": [
+            "created (or validated) manually in the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "buyer_xbond",
+          "writable": true
+        },
+        {
+          "name": "xbond_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "payin_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "buy_pass",
+      "discriminator": [
+        57,
+        144,
+        218,
+        182,
+        67,
+        42,
+        234,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pass",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "docs": [
+            "Fresh keypair: the new Metaplex Core asset (the soulbound NFT)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buyer_usdc",
+          "writable": true
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "mpl_core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "tier",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "buyback_and_burn",
+      "discriminator": [
+        121,
+        156,
+        154,
+        165,
+        194,
+        86,
+        180,
+        130
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "caller_xtomb",
+          "writable": true
+        },
+        {
+          "name": "xtomb_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim",
+      "discriminator": [
+        62,
+        198,
+        214,
+        193,
+        213,
+        159,
+        108,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rewards_vault",
+          "docs": [
+            "Rewards vault paying this pool: the Genesis rewards vault for",
+            "standard/LP/Ultra pools, the Masonry vault for the Masonry pool.",
+            "Must be xTOMB and owned by the config PDA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "treasury_xtomb",
+          "writable": true
+        },
+        {
+          "name": "user_xtomb",
+          "writable": true
+        },
+        {
+          "name": "xtomb_mint",
+          "docs": [
+            "xTOMB mint — needed to burn the Genesis claim Fire Tax."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "compound",
+      "discriminator": [
+        165,
+        208,
+        251,
+        78,
+        242,
+        160,
+        141,
+        47
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owner",
+          "docs": [
+            "(manual) or any keeper (keeper compound, Pro/Ultra only)."
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pass"
+        },
+        {
+          "name": "rewards_vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_xtomb",
+          "writable": true
+        },
+        {
+          "name": "xtomb_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        },
+        {
+          "name": "is_keeper",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "create_mints",
+      "discriminator": [
+        71,
+        106,
+        121,
+        68,
+        208,
+        125,
+        224,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xtomb_mint",
+          "docs": [
+            "Anchor `init` is deliberately NOT used here: nine `init` accounts",
+            "blow the 4KB BPF stack in `try_accounts` (Access violation in",
+            "stack frame 3). Creation is done explicitly in the handler."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "xshare_mint",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "xbond_mint",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "rewards_vault",
+          "docs": [
+            "created by this instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "farm_vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_vault_xtomb",
+          "writable": true
+        },
+        {
+          "name": "treasury_vault_xshare",
+          "writable": true
+        },
+        {
+          "name": "vesting_vault",
+          "writable": true
+        },
+        {
+          "name": "masonry_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit_bond_backing",
+      "discriminator": [
+        97,
+        39,
+        44,
+        155,
+        237,
+        231,
+        229,
+        126
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "caller_lp",
+          "writable": true
+        },
+        {
+          "name": "bond_lp_vault",
+          "docs": [
+            "set_bond_config; validated manually in the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "harvest",
+      "discriminator": [
+        228,
+        241,
+        31,
+        182,
+        53,
+        169,
+        59,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "farm_vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_xshare",
+          "writable": true
+        },
+        {
+          "name": "user_xshare",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "treasury_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "team_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "dev_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "bot_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "oracle_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "usdc_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "genesis_start_ts",
+          "type": "i64"
+        },
+        {
+          "name": "genesis_reward_budget",
+          "type": "u64"
+        },
+        {
+          "name": "bond_max_outstanding",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem_bond",
+      "discriminator": [
+        237,
+        148,
+        187,
+        58,
+        24,
+        181,
+        75,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "bond_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_xbond",
+          "writable": true
+        },
+        {
+          "name": "user_lp",
+          "writable": true
+        },
+        {
+          "name": "xbond_mint",
+          "writable": true
+        },
+        {
+          "name": "bond_lp_vault",
+          "docs": [
+            "set_bond_config; validated manually in the instruction (it may",
+            "legitimately not exist yet, in which case redemptions queue)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_bond_config",
+      "discriminator": [
+        165,
+        131,
+        62,
+        211,
+        241,
+        154,
+        137,
+        122
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "lp_mint"
+        },
+        {
+          "name": "bond_lp_vault",
+          "docs": [
+            "validated) manually in the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "premium_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_bond_xtomb_premium",
+      "discriminator": [
+        60,
+        198,
+        71,
+        28,
+        52,
+        230,
+        241,
+        251
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "premium_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_fee_config",
+      "discriminator": [
+        221,
+        222,
+        52,
+        206,
+        114,
+        198,
+        64,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "claim_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "keeper_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "lp_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "treasury_bps",
+          "type": "u16"
+        },
+        {
+          "name": "team_bps",
+          "type": "u16"
+        },
+        {
+          "name": "dev_bps",
+          "type": "u16"
+        },
+        {
+          "name": "bot_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_fire_tax_config",
+      "discriminator": [
+        93,
+        202,
+        87,
+        132,
+        135,
+        87,
+        241,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "base_xtomb_bps",
+          "type": "u16"
+        },
+        {
+          "name": "base_xshare_bps",
+          "type": "u16"
+        },
+        {
+          "name": "cap_bps",
+          "type": "u16"
+        },
+        {
+          "name": "rest_bps",
+          "type": "u16"
+        },
+        {
+          "name": "recovery_secs",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_fire_tax_zeroed",
+      "discriminator": [
+        158,
+        249,
+        78,
+        24,
+        134,
+        161,
+        36,
+        171
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "zeroed",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_maintenance",
+      "discriminator": [
+        140,
+        127,
+        65,
+        146,
+        113,
+        50,
+        131,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "maintenance",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_oracle",
+      "discriminator": [
+        186,
+        128,
+        81,
+        104,
+        74,
+        79,
+        18,
+        224
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "twap_e6",
+          "type": "u64"
+        },
+        {
+          "name": "ts",
+          "type": "i64"
+        },
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_pass_config",
+      "discriminator": [
+        97,
+        110,
+        179,
+        125,
+        83,
+        162,
+        119,
+        173
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "price_genesis_usdc",
+          "type": "u64"
+        },
+        {
+          "name": "price_pro_usdc",
+          "type": "u64"
+        },
+        {
+          "name": "price_ultra_usdc",
+          "type": "u64"
+        },
+        {
+          "name": "deposit_fee_genesis_bps",
+          "type": "u16"
+        },
+        {
+          "name": "deposit_fee_pro_bps",
+          "type": "u16"
+        },
+        {
+          "name": "deposit_fee_ultra_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_sol_price",
+      "discriminator": [
+        151,
+        237,
+        70,
+        191,
+        232,
+        81,
+        138,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "price_e6",
+          "type": "u64"
+        },
+        {
+          "name": "ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_wallets",
+      "discriminator": [
+        249,
+        24,
+        183,
+        250,
+        74,
+        184,
+        250,
+        187
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "treasury_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "team_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "dev_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "bot_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "stake",
+      "discriminator": [
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pass",
+          "docs": [
+            "(standard / LP / Ultra-NFT); ignored for farm / Masonry."
+          ],
+          "writable": true
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_token",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "is_ultra_nft",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "unstake",
+      "discriminator": [
+        90,
+        95,
+        107,
+        42,
+        205,
+        124,
+        50,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "arg",
+                "path": "pool_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pass",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "tax_destination",
+          "writable": true
+        },
+        {
+          "name": "xtomb_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool_id",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "upgrade_pass",
+      "discriminator": [
+        204,
+        93,
+        145,
+        47,
+        139,
+        220,
+        158,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pass",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer_usdc",
+          "writable": true
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_tier",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_bond_payin",
+      "discriminator": [
+        226,
+        98,
+        163,
+        36,
+        171,
+        134,
+        182,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payin_mint"
+        },
+        {
+          "name": "payin_vault",
+          "docs": [
+            "validated manually in the instruction."
+          ],
+          "writable": true
+        },
+        {
+          "name": "caller_payin",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BondPosition",
+      "discriminator": [
+        210,
+        131,
+        115,
+        68,
+        40,
+        66,
+        77,
+        179
+      ]
+    },
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "Pass",
+      "discriminator": [
+        40,
+        247,
+        140,
+        113,
+        56,
+        14,
+        57,
+        44
+      ]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    },
+    {
+      "name": "Position",
+      "discriminator": [
+        170,
+        188,
+        143,
+        228,
+        122,
+        64,
+        247,
+        208
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BondBackingDeposited",
+      "discriminator": [
+        49,
+        87,
+        20,
+        152,
+        16,
+        48,
+        122,
+        141
+      ]
+    },
+    {
+      "name": "BondBought",
+      "discriminator": [
+        19,
+        22,
+        148,
+        57,
+        63,
+        220,
+        112,
+        75
+      ]
+    },
+    {
+      "name": "BondConfigSet",
+      "discriminator": [
+        116,
+        240,
+        164,
+        118,
+        35,
+        244,
+        79,
+        175
+      ]
+    },
+    {
+      "name": "BondPayinWithdrawn",
+      "discriminator": [
+        255,
+        211,
+        26,
+        18,
+        156,
+        113,
+        4,
+        16
+      ]
+    },
+    {
+      "name": "BondRedeemed",
+      "discriminator": [
+        188,
+        237,
+        184,
+        77,
+        43,
+        59,
+        193,
+        108
+      ]
+    },
+    {
+      "name": "BondXtombPremiumSet",
+      "discriminator": [
+        146,
+        23,
+        173,
+        69,
+        27,
+        233,
+        161,
+        125
+      ]
+    },
+    {
+      "name": "BuybackBurned",
+      "discriminator": [
+        186,
+        84,
+        241,
+        202,
+        152,
+        185,
+        0,
+        115
+      ]
+    },
+    {
+      "name": "Claimed",
+      "discriminator": [
+        217,
+        192,
+        123,
+        72,
+        108,
+        150,
+        248,
+        33
+      ]
+    },
+    {
+      "name": "Compounded",
+      "discriminator": [
+        187,
+        212,
+        188,
+        187,
+        183,
+        29,
+        107,
+        152
+      ]
+    },
+    {
+      "name": "ConfigInitialized",
+      "discriminator": [
+        181,
+        49,
+        200,
+        156,
+        19,
+        167,
+        178,
+        91
+      ]
+    },
+    {
+      "name": "EpochSettled",
+      "discriminator": [
+        32,
+        219,
+        45,
+        156,
+        250,
+        115,
+        190,
+        255
+      ]
+    },
+    {
+      "name": "FeeConfigSet",
+      "discriminator": [
+        138,
+        91,
+        57,
+        52,
+        79,
+        250,
+        22,
+        183
+      ]
+    },
+    {
+      "name": "FireTaxConfigSet",
+      "discriminator": [
+        239,
+        81,
+        243,
+        76,
+        171,
+        232,
+        67,
+        146
+      ]
+    },
+    {
+      "name": "FireTaxZeroedSet",
+      "discriminator": [
+        224,
+        235,
+        97,
+        137,
+        13,
+        1,
+        0,
+        152
+      ]
+    },
+    {
+      "name": "Harvested",
+      "discriminator": [
+        249,
+        229,
+        78,
+        151,
+        106,
+        185,
+        149,
+        11
+      ]
+    },
+    {
+      "name": "MaintenanceSet",
+      "discriminator": [
+        207,
+        150,
+        154,
+        31,
+        216,
+        56,
+        129,
+        35
+      ]
+    },
+    {
+      "name": "MintsCreated",
+      "discriminator": [
+        126,
+        231,
+        85,
+        61,
+        67,
+        151,
+        104,
+        71
+      ]
+    },
+    {
+      "name": "OracleSet",
+      "discriminator": [
+        115,
+        135,
+        7,
+        243,
+        213,
+        60,
+        174,
+        119
+      ]
+    },
+    {
+      "name": "PassBought",
+      "discriminator": [
+        193,
+        155,
+        106,
+        220,
+        20,
+        169,
+        248,
+        39
+      ]
+    },
+    {
+      "name": "PassConfigSet",
+      "discriminator": [
+        167,
+        8,
+        188,
+        203,
+        232,
+        69,
+        50,
+        65
+      ]
+    },
+    {
+      "name": "PassUpgraded",
+      "discriminator": [
+        0,
+        110,
+        17,
+        205,
+        251,
+        179,
+        119,
+        100
+      ]
+    },
+    {
+      "name": "PoolAdded",
+      "discriminator": [
+        38,
+        229,
+        6,
+        208,
+        172,
+        23,
+        178,
+        179
+      ]
+    },
+    {
+      "name": "SolPriceSet",
+      "discriminator": [
+        227,
+        223,
+        41,
+        124,
+        44,
+        9,
+        23,
+        34
+      ]
+    },
+    {
+      "name": "Staked",
+      "discriminator": [
+        11,
+        146,
+        45,
+        205,
+        230,
+        58,
+        213,
+        240
+      ]
+    },
+    {
+      "name": "Unstaked",
+      "discriminator": [
+        27,
+        179,
+        156,
+        215,
+        47,
+        71,
+        195,
+        7
+      ]
+    },
+    {
+      "name": "WalletsSet",
+      "discriminator": [
+        74,
+        17,
+        98,
+        215,
+        46,
+        148,
+        124,
+        102
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotAdmin",
+      "msg": "Caller is not the admin"
+    },
+    {
+      "code": 6001,
+      "name": "NotOracle",
+      "msg": "Caller is not the oracle authority or admin"
+    },
+    {
+      "code": 6002,
+      "name": "Maintenance",
+      "msg": "Program is in maintenance mode"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidTier",
+      "msg": "Invalid pass tier (must be 1 Genesis, 2 Pro, or 3 Ultra)"
+    },
+    {
+      "code": 6004,
+      "name": "PassAlreadyOwned",
+      "msg": "Wallet already owns a pass (one per wallet)"
+    },
+    {
+      "code": 6005,
+      "name": "NoPass",
+      "msg": "No pass found for this wallet"
+    },
+    {
+      "code": 6006,
+      "name": "NotAnUpgrade",
+      "msg": "Upgrade must move to a higher tier"
+    },
+    {
+      "code": 6007,
+      "name": "PassSalesClosed",
+      "msg": "Pass purchases and upgrades are closed (Genesis ended)"
+    },
+    {
+      "code": 6008,
+      "name": "GenesisNotStarted",
+      "msg": "Genesis has not started yet (Ultra pre-stake opens T-24h)"
+    },
+    {
+      "code": 6009,
+      "name": "GenesisEnded",
+      "msg": "Genesis has ended; deposits and compounds are closed"
+    },
+    {
+      "code": 6010,
+      "name": "LpNotOpen",
+      "msg": "LP staking opens on Day 2 (T+24h)"
+    },
+    {
+      "code": 6011,
+      "name": "PoolInactive",
+      "msg": "Pool is not active"
+    },
+    {
+      "code": 6012,
+      "name": "WrongPoolKind",
+      "msg": "Pool kind does not match this operation"
+    },
+    {
+      "code": 6013,
+      "name": "WrongPoolId",
+      "msg": "Pool id does not match its canonical kind (1 standard, 2 LP, 3 ultra, 4 masonry, 10+ farm)"
+    },
+    {
+      "code": 6014,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6015,
+      "name": "InsufficientStake",
+      "msg": "Insufficient staked balance"
+    },
+    {
+      "code": 6016,
+      "name": "InsufficientBalance",
+      "msg": "Insufficient token balance"
+    },
+    {
+      "code": 6017,
+      "name": "CompoundTooSoon",
+      "msg": "Compound or claim too soon: the 3h per-user-per-pool cap has not elapsed"
+    },
+    {
+      "code": 6018,
+      "name": "OracleStale",
+      "msg": "Oracle data is stale (older than 30 min); withdrawals fail closed, buys stay available"
+    },
+    {
+      "code": 6019,
+      "name": "BondBuyClosed",
+      "msg": "TWAP is not below $1.00; xBOND buys are closed"
+    },
+    {
+      "code": 6020,
+      "name": "BondRedeemClosed",
+      "msg": "TWAP is not above $1.00; xBOND redemptions are closed"
+    },
+    {
+      "code": 6021,
+      "name": "BondMaxOutstanding",
+      "msg": "xBOND purchase would exceed the configured max outstanding"
+    },
+    {
+      "code": 6022,
+      "name": "Epoch0NotTriggered",
+      "msg": "Epoch 0 has not been triggered by the admin yet"
+    },
+    {
+      "code": 6023,
+      "name": "EpochNotDue",
+      "msg": "No epoch is due yet"
+    },
+    {
+      "code": 6024,
+      "name": "MintsAlreadyCreated",
+      "msg": "Mints have already been created"
+    },
+    {
+      "code": 6025,
+      "name": "BadFeeSplit",
+      "msg": "Operational fee split must sum to 10000 bps"
+    },
+    {
+      "code": 6026,
+      "name": "InsufficientRewards",
+      "msg": "Rewards vault holds too little to pay this claim"
+    },
+    {
+      "code": 6027,
+      "name": "UltraAlreadyStaked",
+      "msg": "Ultra pass is already staked as an NFT position"
+    },
+    {
+      "code": 6028,
+      "name": "RequiresUltraPass",
+      "msg": "Ultra NFT staking requires the Ultra pass"
+    },
+    {
+      "code": 6029,
+      "name": "RequiresKeeperTier",
+      "msg": "Keeper compounding requires a Pro or Ultra pass"
+    },
+    {
+      "code": 6030,
+      "name": "NothingToCompound",
+      "msg": "No liquid rewards to compound"
+    },
+    {
+      "code": 6031,
+      "name": "NothingToClaim",
+      "msg": "Nothing accrued to claim"
+    },
+    {
+      "code": 6032,
+      "name": "BuybackGuard",
+      "msg": "TWAP guard rejected the buyback (requires fresh TWAP at or below $1.01)"
+    },
+    {
+      "code": 6033,
+      "name": "NotBot",
+      "msg": "Caller is not the trading-bot wallet or admin"
+    },
+    {
+      "code": 6034,
+      "name": "BadTokenAccount",
+      "msg": "Token account mint or owner does not match the config"
+    },
+    {
+      "code": 6035,
+      "name": "BadVaultPda",
+      "msg": "Vault account is not the expected program-derived address"
+    },
+    {
+      "code": 6036,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6037,
+      "name": "BadFireTaxConfig",
+      "msg": "Invalid Fire Tax config (cap above the 12% ceiling, a baseline or resting rate above the cap, or a recovery window out of range)"
+    },
+    {
+      "code": 6038,
+      "name": "BondPayinRejected",
+      "msg": "Bond pay-in asset is not accepted (pay with USDC, wrapped SOL, or xTOMB)"
+    },
+    {
+      "code": 6039,
+      "name": "BondSolPriceMissing",
+      "msg": "No SOL price has been posted; SOL bond pay-ins are unavailable"
+    },
+    {
+      "code": 6040,
+      "name": "BondLpMintNotSet",
+      "msg": "Bond LP mint is not registered yet (admin must call set_bond_config first)"
+    },
+    {
+      "code": 6041,
+      "name": "BadBondConfig",
+      "msg": "Invalid bond config (premium above 100%, or the LP mint is locked by existing backing)"
+    },
+    {
+      "code": 6042,
+      "name": "BadPassConfig",
+      "msg": "Invalid pass config (a price of zero, or a deposit fee above 1000 bps)"
+    }
+  ],
+  "types": [
+    {
+      "name": "BondBackingDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "backing_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondBought",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "payin_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "payin_amount",
+            "type": "u64"
+          },
+          {
+            "name": "usd_value_e6",
+            "type": "u64"
+          },
+          {
+            "name": "premium_applied",
+            "type": "bool"
+          },
+          {
+            "name": "xbond_face",
+            "type": "u64"
+          },
+          {
+            "name": "twap_e6",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "premium_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondPayinWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "payin_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "xbond",
+            "type": "u64"
+          },
+          {
+            "name": "queued_redeem",
+            "docs": [
+              "Redemptions queued when the expansion allowance was exhausted",
+              "(xBOND stays in the user's wallet until settled; no partial fill)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondRedeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "xbond_amount",
+            "type": "u64"
+          },
+          {
+            "name": "lp_received",
+            "type": "u64"
+          },
+          {
+            "name": "queued",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BondXtombPremiumSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "premium_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackBurned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "twap_e6",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Claimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "liquid_net",
+            "type": "u64"
+          },
+          {
+            "name": "liquid_fee",
+            "type": "u64"
+          },
+          {
+            "name": "vesting_released",
+            "type": "u64"
+          },
+          {
+            "name": "vesting_fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Compounded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "liquid_compounded",
+            "type": "u64"
+          },
+          {
+            "name": "fire_tax",
+            "type": "u64"
+          },
+          {
+            "name": "keeper_fee",
+            "type": "u64"
+          },
+          {
+            "name": "lp_fee",
+            "type": "u64"
+          },
+          {
+            "name": "credited_lp",
+            "type": "u64"
+          },
+          {
+            "name": "keeper",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "team_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "bot_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "xtomb_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xshare_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xbond_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "genesis_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "genesis_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "genesis_reward_budget",
+            "docs": [
+              "Prefunded Genesis reward budget (base units of xTOMB)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "genesis_rewards_distributed",
+            "docs": [
+              "xTOMB already settled out of the Genesis budget (accounting)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "genesis_emission_per_sec",
+            "docs": [
+              "Genesis emission rate, base units of xTOMB per second."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "farm_emission_per_sec",
+            "docs": [
+              "Farm emission rate, base units of xSHARE per second (25,641 / 365d)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "oracle_twap_e6",
+            "docs": [
+              "Latest oracle TWAP, USDC e6 (1_000_000 = $1.00)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "oracle_ts",
+            "type": "i64"
+          },
+          {
+            "name": "current_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "epoch0_open",
+            "type": "bool"
+          },
+          {
+            "name": "last_epoch_ts",
+            "type": "i64"
+          },
+          {
+            "name": "critical_defense",
+            "type": "bool"
+          },
+          {
+            "name": "defense_above_checkpoints",
+            "type": "u8"
+          },
+          {
+            "name": "circulating_xtomb",
+            "docs": [
+              "Minted xTOMB supply tracked by the program (mint - burn)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "expansion_allowance",
+            "docs": [
+              "xTOMB mint budget available for bond redemptions."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bond_outstanding",
+            "type": "u64"
+          },
+          {
+            "name": "bond_max_outstanding",
+            "type": "u64"
+          },
+          {
+            "name": "recovery_floor_bps",
+            "type": "u16"
+          },
+          {
+            "name": "recovery_floor_ts",
+            "type": "i64"
+          },
+          {
+            "name": "maintenance",
+            "type": "bool"
+          },
+          {
+            "name": "treasury_bps",
+            "docs": [
+              "Operational fee split (bps, must sum to 10_000)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "team_bps",
+            "type": "u16"
+          },
+          {
+            "name": "dev_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bot_bps",
+            "type": "u16"
+          },
+          {
+            "name": "claim_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "keeper_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "fee_display_name",
+            "docs": [
+              "Display name of the exit fee (\"Fire Tax\"); \"Fire Hose\" is the",
+              "config-comment alternative Jess floated."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "xshare_tax_pending_burn",
+            "docs": [
+              "xSHARE Fire Tax collected while in Critical Defense, earmarked for",
+              "buy-and-burn conversion (conversion itself is off-chain/bot work)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "fire_tax_base_xtomb_bps",
+            "docs": [
+              "xTOMB withdrawal Fire Tax baseline at/above peg, bps (default 300)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fire_tax_base_xshare_bps",
+            "docs": [
+              "xSHARE withdrawal Fire Tax baseline at/above peg, bps (default 600)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fire_tax_cap_bps",
+            "docs": [
+              "Fire Tax cap for both tokens, bps (default 1200; never above the",
+              "1200 hard ceiling — the setter validates)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fire_tax_rest_bps",
+            "docs": [
+              "Recovery floor resting rate for both tokens, bps (default 300)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fire_tax_recovery_secs",
+            "docs": [
+              "Recovery floor decay window, seconds (default 25_200 = 7h)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "fire_tax_zeroed",
+            "docs": [
+              "Healthy override: while true, both withdrawal Fire Taxes are 0."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bond_premium_bps",
+            "docs": [
+              "Premium credited on native-token / USDC bond pay-ins, bps of",
+              "pay-in value (default 1000 = 10%). Set via set_bond_config."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "bond_lp_mint",
+            "docs": [
+              "The xTOMB LP mint bonds are denominated in. Redemption pays LP",
+              "of this mint out of the bond backing vault. Set (once the LP",
+              "exists) via set_bond_config, which also creates the vault."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bond_backing_lp",
+            "docs": [
+              "LP the operator has deposited into the bond backing vault via",
+              "deposit_bond_backing. Redemption entitlements are computed",
+              "against this counter (capped by the vault's real balance)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sol_price_e6",
+            "docs": [
+              "Oracle-posted SOL price, USD e6 per whole SOL (0 = unset).",
+              "Prices the wrapped-SOL bond pay-in leg; posted with",
+              "set_sol_price by the oracle authority or admin."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sol_price_ts",
+            "docs": [
+              "Timestamp of the last SOL price post (freshness-gated like",
+              "the TWAP: SOL pay-ins fail closed on a stale price)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bond_xtomb_premium_bps",
+            "docs": [
+              "Premium credited on xTOMB bond pay-ins, bps of pay-in value",
+              "(default 300 = 3%; a stored 0 resolves to the compiled",
+              "default, same convention as bond_premium_bps). xTOMB",
+              "pay-ins BURN like a classic bond (Jess 2026-11-08) instead",
+              "of custoding in the pay-in vault. Set via",
+              "set_bond_xtomb_premium. Appended 2026-11-08 (tail-append,",
+              "same spare-capacity pattern)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "pass_price_genesis_usdc",
+            "docs": [
+              "Genesis pass price, whole USDC (default 50)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pass_price_pro_usdc",
+            "docs": [
+              "Pro pass price, whole USDC (default 100)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pass_price_ultra_usdc",
+            "docs": [
+              "Ultra pass price, whole USDC (default 300)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pass_deposit_fee_genesis_bps",
+            "docs": [
+              "Standard-pool deposit fee for Genesis pass holders, bps",
+              "(default 200 = 2%)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "pass_deposit_fee_pro_bps",
+            "docs": [
+              "Standard-pool deposit fee for Pro pass holders, bps",
+              "(default 100 = 1%)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "pass_deposit_fee_ultra_bps",
+            "docs": [
+              "Standard-pool deposit fee for Ultra pass holders, bps",
+              "(default 0)."
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "genesis_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "genesis_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "genesis_reward_budget",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epochs_processed",
+            "type": "u64"
+          },
+          {
+            "name": "current_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "minted_to_masonry",
+            "type": "u64"
+          },
+          {
+            "name": "added_to_allowance",
+            "type": "u64"
+          },
+          {
+            "name": "critical_defense",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "claim_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "keeper_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "treasury_bps",
+            "type": "u16"
+          },
+          {
+            "name": "team_bps",
+            "type": "u16"
+          },
+          {
+            "name": "dev_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bot_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FireTaxConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "base_xtomb_bps",
+            "type": "u16"
+          },
+          {
+            "name": "base_xshare_bps",
+            "type": "u16"
+          },
+          {
+            "name": "cap_bps",
+            "type": "u16"
+          },
+          {
+            "name": "rest_bps",
+            "type": "u16"
+          },
+          {
+            "name": "recovery_secs",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FireTaxZeroedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "zeroed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Harvested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "amount_net",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MaintenanceSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maintenance",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintsCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "xtomb_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xshare_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xbond_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "twap_e6",
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pass",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "docs": [
+              "1 = Genesis, 2 = Pro, 3 = Ultra."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "asset",
+            "docs": [
+              "Metaplex Core asset (soulbound NFT) for this pass."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "purchased_ts",
+            "type": "i64"
+          },
+          {
+            "name": "ultra_staked",
+            "docs": [
+              "True while the Ultra NFT itself is staked in Genesis."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PassBought",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "price_usdc",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PassConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price_genesis_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "price_pro_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "price_ultra_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "deposit_fee_genesis_bps",
+            "type": "u16"
+          },
+          {
+            "name": "deposit_fee_pro_bps",
+            "type": "u16"
+          },
+          {
+            "name": "deposit_fee_ultra_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PassUpgraded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "from_tier",
+            "type": "u8"
+          },
+          {
+            "name": "to_tier",
+            "type": "u8"
+          },
+          {
+            "name": "paid_usdc",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "kind",
+            "docs": [
+              "0 standard, 1 LP, 2 farm, 3 masonry, 4 ultra-NFT."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "asset_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "docs": [
+              "PDA-owned token vault holding staked principal."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_staked",
+            "type": "u64"
+          },
+          {
+            "name": "acc_per_share",
+            "docs": [
+              "Accumulated xTOMB (or xSHARE for farm pools) per staked unit, x ACC_SCALE."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "last_update_ts",
+            "type": "i64"
+          },
+          {
+            "name": "weight_bps",
+            "docs": [
+              "Farm pool weight in bps of the farm emission rate (farm pools only)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolAdded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "kind",
+            "type": "u8"
+          },
+          {
+            "name": "asset_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "weight_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Position",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_kind",
+            "type": "u8"
+          },
+          {
+            "name": "asset_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Staked principal (base units). Ultra-NFT positions hold 1 pseudo-unit."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reward_debt",
+            "docs": [
+              "Reward debt, TOKEN-denominated: `amount * acc_per_share /",
+              "ACC_SCALE` at the last settle. Pending rewards are the",
+              "position's current token entitlement minus this debt — the",
+              "debt is NOT a per-share quantity."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "accrued_liquid",
+            "docs": [
+              "Settled rewards awaiting claim: liquid half (xTOMB, or xSHARE on",
+              "farm positions)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accrued_vested",
+            "docs": [
+              "Settled rewards awaiting vesting (xTOMB, Genesis pools only)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vesting_total",
+            "docs": [
+              "Total vested rewards in the current tranche (base units)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vesting_claimed_amount",
+            "docs": [
+              "Base units of the tranche already released."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vesting_claimed_installments",
+            "docs": [
+              "Installments already released (0..16)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "vesting_next_ts",
+            "docs": [
+              "Unix time the next vesting installment opens."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_cooldown_ts",
+            "docs": [
+              "Shared 3h claim+compound clock (last claim or compound, 0 = never)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "genesis",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SolPriceSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price_e6",
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Staked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "credited",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Unstaked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "tax",
+            "type": "u64"
+          },
+          {
+            "name": "tax_rate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "net",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletsSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "team_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "bot_wallet",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

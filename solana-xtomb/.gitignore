@@ -1,0 +1,20 @@
+# Build output / caches
+target/
+.anchor/
+node_modules/
+**/node_modules/
+
+# Local screenshots / design captures
+design-shots/
+real-design-shots/
+
+# Secrets — never commit keypairs or local env
+*-keypair.json
+deploy/*.json
+.env.local
+**/.env.local
+
+# Next.js build output
+.next/
+**/.next/
+out/
