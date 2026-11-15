@@ -64,6 +64,9 @@ contract ShareRewardPool {
 
     IERC20 public immutable share;
     address public operator;
+    /// @notice The one caller allowed to deposit on a beneficiary's behalf
+    /// (the protocol zap). Set by the operator; address(0) disables it.
+    address public zapOperator;
 
     PoolInfo[] public poolInfo;
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
@@ -119,8 +122,10 @@ contract ShareRewardPool {
     event WeekLengthSet(uint256 secondsLength);
     event BoostWeekClosed(uint256 indexed week, uint256 eligibleTotal, uint256 boostAmount);
     event BoostClaimed(address indexed user, uint256 amount);
+    event ZapOperatorUpdated(address indexed previous, address indexed next);
 
     error NotOperator();
+    error NotZapOperator();
     error StartTimeInPast();
     error PoolAlreadyExists();
     error WithdrawAmountTooHigh();
@@ -153,6 +158,10 @@ contract ShareRewardPool {
         boostPercent = 5;
         weekLength = 7 days;
         boostLastSettle = _poolStartTime;
+    }
+
+    function poolLength() external view returns (uint256) {
+        return poolInfo.length;
     }
 
     function checkPoolDuplicate(
@@ -562,18 +571,46 @@ contract ShareRewardPool {
         uint256 _pid,
         uint256 _amount
     ) external {
+        _deposit(_pid, _amount, msg.sender);
+    }
+
+    /// @notice Deposit on behalf of a beneficiary. Callable ONLY by the
+    /// allowlisted zap operator. Tokens are pulled from the caller; the
+    /// position, pending-reward payout and reward debt all belong to the
+    /// beneficiary, exactly as if they had deposited themselves.
+    function depositFor(
+        uint256 _pid,
+        uint256 _amount,
+        address _beneficiary
+    ) external {
+        if (msg.sender != zapOperator) revert NotZapOperator();
+        _deposit(_pid, _amount, _beneficiary);
+    }
+
+    function setZapOperator(
+        address _zapOperator
+    ) external onlyOperator {
+        emit ZapOperatorUpdated(zapOperator, _zapOperator);
+        zapOperator = _zapOperator;
+    }
+
+    function _deposit(
+        uint256 _pid,
+        uint256 _amount,
+        address _beneficiary
+    ) private {
         PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
+        UserInfo storage user = userInfo[_pid][_beneficiary];
         // Farm activity settles boost accrual and any settled credit, but
         // never touches eligibility — only Masonry stake changes do (§18).
         _settleBoost();
-        _settleUserBoost(msg.sender);
+        _settleUserBoost(_beneficiary);
         updatePool(_pid);
         if (user.amount > 0) {
             uint256 pending = user.amount * pool.accSharePerShare / 1e18 - user.rewardDebt;
             if (pending > 0) {
-                _safeShareTransfer(msg.sender, pending);
-                emit RewardPaid(msg.sender, pending);
+                _safeShareTransfer(_beneficiary, pending);
+                emit RewardPaid(_beneficiary, pending);
             }
         }
         if (_amount > 0) {
@@ -581,7 +618,7 @@ contract ShareRewardPool {
             user.amount += _amount;
         }
         user.rewardDebt = user.amount * pool.accSharePerShare / 1e18;
-        emit Deposit(msg.sender, _pid, _amount);
+        emit Deposit(_beneficiary, _pid, _amount);
     }
 
     function withdraw(

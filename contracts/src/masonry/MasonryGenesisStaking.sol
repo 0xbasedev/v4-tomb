@@ -76,15 +76,21 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     /// @notice When a keeper last compounded this position (0 = never).
     mapping(uint256 => mapping(address => uint256)) public lastKeeperCompoundAt;
     bool public funded;
+    /// @notice The one caller allowed to deposit on a beneficiary's behalf
+    /// (the protocol zap). Set by the Genesis scheduler; address(0)
+    /// disables it.
+    address public zapOperator;
 
     error InvalidConfiguration();
     error InvalidPool();
     error NotEligible();
+    error NotZapOperator();
     error PoolClosed();
     error InvalidAmount();
     error Unfunded();
     error Cooldown();
 
+    event ZapOperatorUpdated(address indexed previous, address indexed next);
     event Staked(address indexed beneficiary, uint256 indexed pool, uint256 netShares);
     event DepositFeePaid(address indexed beneficiary, MasonryGenesisPass.Tier tier, uint256 fee);
     event Withdrawn(address indexed beneficiary, uint256 indexed pool, uint256 shares);
@@ -123,8 +129,40 @@ contract MasonryGenesisStaking is ReentrancyGuard {
         uint256 pool,
         uint256 amount
     ) external nonReentrant {
+        _deposit(pool, amount, msg.sender);
+    }
+
+    /// @notice Deposit on behalf of a beneficiary. Callable ONLY by the
+    /// allowlisted zap operator. Assets are pulled from the caller; the
+    /// pass-tier gate, pool gates, reward checkpoint and credit all read
+    /// the beneficiary, exactly as if they had deposited themselves.
+    function depositFor(
+        uint256 pool,
+        uint256 amount,
+        address beneficiary
+    ) external nonReentrant {
+        if (msg.sender != zapOperator) revert NotZapOperator();
+        _deposit(pool, amount, beneficiary);
+    }
+
+    /// @notice The Genesis scheduler administers the zap allowlist (this
+    /// contract has no other admin role; the scheduler is the identity
+    /// that fixed the Genesis clock).
+    function setZapOperator(
+        address newZapOperator
+    ) external {
+        if (msg.sender != schedule.scheduler()) revert NotEligible();
+        emit ZapOperatorUpdated(zapOperator, newZapOperator);
+        zapOperator = newZapOperator;
+    }
+
+    function _deposit(
+        uint256 pool,
+        uint256 amount,
+        address beneficiary
+    ) private {
         if (!funded) revert Unfunded();
-        MasonryGenesisPass.Tier tier = _member(msg.sender);
+        MasonryGenesisPass.Tier tier = _member(beneficiary);
         IERC20 asset = _asset(pool);
         if (pool == 1) {
             if (!schedule.lpOpen()) revert PoolClosed();
@@ -136,7 +174,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
             ) revert PoolClosed();
         }
 
-        _checkpoint(pool, msg.sender);
+        _checkpoint(pool, beneficiary);
         _receive(asset, amount);
         uint256 fee;
         if (pool == 0) {
@@ -146,7 +184,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
                 emit DepositFeePaid(msg.sender, tier, fee);
             }
         }
-        _credit(pool, msg.sender, amount - fee);
+        _credit(pool, beneficiary, amount - fee);
     }
 
     function depositFeeBps(
