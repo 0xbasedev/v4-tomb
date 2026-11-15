@@ -8,7 +8,7 @@ import { ProtocolRangeStatus } from "@/components/ProtocolRangeStatus";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { Segmented } from "@/components/docs/kit";
 import { SimBadge } from "@/components/Status";
-import { DRIVER_LABEL, recoveryFloorBps, sellTax, targetBps, type TaxedAsset } from "@/lib/fireTax";
+import { DRIVER_LABEL, SELL_BASE_BPS, sellTax, type TaxedAsset } from "@/lib/fireTax";
 import { useProtocol } from "@/lib/hooks";
 import { FIRE, pct } from "@/lib/launch";
 import { PEG } from "@/lib/peg";
@@ -17,7 +17,7 @@ import { useReveal } from "@/lib/motion/useReveal";
 /** One-tap starting points — each is just a pair in the same card. */
 const PRESETS: { title: string; detail: string; pair: SwapPair }[] = [
   { title: "Buy xTOMB", detail: `${PEG.symbol} → xTOMB · never taxed`, pair: { input: "USDC", output: "xTOMB" } },
-  { title: "Sell xTOMB", detail: `xTOMB → ${PEG.symbol} · no sell tax`, pair: { input: "xTOMB", output: "USDC" } },
+  { title: "Sell xTOMB", detail: `xTOMB → ${PEG.symbol} · sell tax burned`, pair: { input: "xTOMB", output: "USDC" } },
   { title: "Exit LP to " + PEG.symbol, detail: "redeem, then sell the xTOMB half", pair: { input: "xTOMB-USDC", output: "USDC" } },
   { title: "Exit LP to xTOMB", detail: `redeem, then buy with the ${PEG.symbol} half`, pair: { input: "xTOMB-USDC", output: "xTOMB" } },
 ];
@@ -36,7 +36,8 @@ export function Swap() {
   const mode = params.get("mode") === "liquidity" ? "liquidity" : "swap";
   useReveal(root);
 
-  const ratio = asset === "xTOMB" ? p.market.twap : p.market.twap !== null ? (p.prices.xSHARE ?? 0) / (p.hooks.xSHARE.reference ?? 1) : null;
+  // Both tokens' sell tax follows the xTOMB TWAP.
+  const ratio = p.market.twap;
   const quote = p.taxFor(asset, 1_000);
 
   return (
@@ -44,7 +45,7 @@ export function Swap() {
       <PageHeader
         eyebrow={p.sim ? "Swap · simulated" : "Swap"}
         title="Official pools only"
-        lede={`The official ${PEG.symbol} pairs on Uniswap v4. X Tomb swaps are not taxed. Official X Share sells pay a flat 3% that later buys and burns X Tomb. Liquidity withdrawals use the live Fire Tax rate. Pool fees are itemized separately.`}
+        lede={`The official ${PEG.symbol} pairs on Uniswap v4. Buys are never taxed. X Tomb sells pay ${pct(SELL_BASE_BPS.xTOMB)} at peg and X Share sells ${pct(SELL_BASE_BPS.xSHARE)}, both rising to ${pct(FIRE.capBps)} when X Tomb is 10% under peg. Pool fees are itemized separately.`}
       />
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
@@ -114,7 +115,8 @@ function TaxExplorer() {
   const [projected, setProjected] = useState("1.0000");
   const [recovery, setRecovery] = useState("1");
   const rec = parseFloat(recovery);
-  const invalid = !(rec >= 1 && rec <= FIRE.capBps / 100) || !(parseFloat(twap) > 0) || !(parseFloat(projected) > 0);
+  // A raised rate under the token's base rate is lifted to it, as the contract does.
+  const invalid = !(rec >= 0 && rec <= FIRE.capBps / 100) || !(parseFloat(twap) > 0) || !(parseFloat(projected) > 0);
   const q = sellTax({ asset, twap: parseFloat(twap), projected: parseFloat(projected), raisedBps: Math.round(rec * 100), raisedAt: 0, now: 0, genesisActive: genesis });
   const rate = direction === "buy" ? 0 : invalid ? null : q.rateBps;
   return (
@@ -166,8 +168,8 @@ function TaxExplorer() {
           {direction === "buy"
             ? "Buys are never taxed."
             : invalid
-              ? `Recovery floor must be 1–${FIRE.capBps / 100}%.`
-              : `${DRIVER_LABEL[q.driver!]} · TWAP ${pct(targetBps(parseFloat(twap)))}, projected ${pct(targetBps(parseFloat(projected)))}, recovery ${pct(recoveryFloorBps(Math.round(rec * 100), 0, 0))}`}
+              ? `Recovery floor must be 0–${FIRE.capBps / 100}%.`
+              : `${DRIVER_LABEL[q.driver!]} · TWAP ${pct(q.parts.twap)}${asset === "xTOMB" ? `, projected ${pct(q.parts.projected)}` : ""}, recovery ${pct(q.parts.recovery)}`}
         </div>
       </div>
     </section>

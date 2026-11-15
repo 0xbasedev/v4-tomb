@@ -204,13 +204,15 @@ contract MasonryFarmTest is BaseTest {
         vm.warp(block.timestamp + 1800);
         farm.update();
         uint256 pendingAtComplete = farm.pending(0, alice);
+        // Ten days in: the time-in discount has taken 71 bps off the 300 bps fee.
+        assertEq(farm.withdrawFeeBpsFor(0, alice), 229);
+        uint256 lpFee = 100 ether * 229 / 10_000;
         vm.prank(alice);
         farm.completeWithdraw(0);
 
         assertEq(share.balanceOf(daoWallet) - daoBefore, pendingAtComplete, "exact forfeit to daoWallet");
         assertEq(share.balanceOf(alice), aliceShareBefore, "no X Share reaches the wallet");
         assertEq(farm.pending(0, alice), 0);
-        uint256 lpFee = 100 ether * uint256(fireTax.currentWithdrawFeeBps()) / 10_000;
         assertEq(lp.balanceOf(alice), 100 ether - lpFee);
         assertEq(lp.balanceOf(daoWallet), lpFee);
     }
@@ -218,9 +220,9 @@ contract MasonryFarmTest is BaseTest {
     function test_WithdrawFeeFollowsLiveFireTaxAndSixDecimalRounding() public {
         assertEq(uint256(1_000_001) * 300 / 10_000, 30_000);
         assertEq(farm.withdrawFeeBps(), 300);
-        fireTax.set(1200);
-        assertEq(farm.withdrawFeeBps(), 1200);
-        fireTax.set(1201);
+        fireTax.set(600);
+        assertEq(farm.withdrawFeeBps(), 600);
+        fireTax.set(601);
         vm.expectRevert(MasonryFarm.InvalidConfiguration.selector);
         farm.withdrawFeeBps();
         fireTax.set(1);

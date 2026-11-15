@@ -9,6 +9,7 @@ import { TokenIcon } from "@/components/TokenIcon";
 import { DRIVER_LABEL, taxDestination } from "@/lib/fireTax";
 import { useActions, useProtocol, useSwapSimulation } from "@/lib/hooks";
 import { pct } from "@/lib/launch";
+import { squareTaxBurns } from "@/lib/market";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 import { labelPeg, usd } from "@/lib/peg";
@@ -226,7 +227,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
             tone={!sellLeg ? "text-ok" : heavy ? "text-bad" : notable ? "text-warn" : "text-bone-dim"}
           />
           {sellLeg && !!sellLeg.tax?.rateBps && (
-            <Row k="Tax goes to" v={taxDestination(sellLeg.asset, !!p.clock?.active, p.market.defense.active)} />
+            <Row k="Tax goes to" v={taxDestination(sellLeg.asset, squareTaxBurns(p.market.twap, p.market.fresh))} />
           )}
           {quote?.amountOut != null && (
             <div className="border-t border-white/5 pt-2">

@@ -9,7 +9,7 @@ import { DRIVER_LABEL, targetBps } from "@/lib/fireTax";
 import { fmtDuration } from "@/lib/genesis";
 import { useProtocol } from "@/lib/hooks";
 import { DEFENSE, EXPANSION, FIRE, POLICY, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
-import { PHASE_META, expansionCap, marketPhase } from "@/lib/market";
+import { PHASE_META, expansionCap, marketPhase, squareTaxBurns } from "@/lib/market";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useReveal } from "@/lib/motion/useReveal";
 import { usePreview } from "@/lib/preview";
@@ -138,35 +138,28 @@ export function Dashboard() {
           <SectionTitle kicker="xSHARE sell tax" title="Where the fee goes" right={p.sim ? <SimBadge /> : undefined} />
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Routing
-              title="Normal routing"
-              active={!m.defense.active}
-              note="Shares of the collected tax, not of the sale."
-              rows={[
-                { k: "Protocol-owned xSHARE/USDC LP", bps: SQUARE_ROUTING.polBps, tone: "bg-spectre" },
-                { k: "USDC reserve (sold for USDC)", bps: SQUARE_ROUTING.usdcReserveBps, tone: "bg-[#5b9dff]" },
-                { k: "Retained xSHARE reserve", bps: SQUARE_ROUTING.squareReserveBps, tone: "bg-amethyst" },
-              ]}
+              title="xTOMB at or above peg"
+              active={!squareTaxBurns(m.twap, m.fresh)}
+              note={"The whole tax, set when it is collected. Sent once $" + SQUARE_ROUTING.minRouteUsd + " has built up."}
+              rows={[{ k: "xSHARE → USDC → DAO wallet", bps: 10_000, tone: "bg-[#5b9dff]" }]}
               balances={[
-                ["Earmarked for POL", p.hooks.xSHARE.pol, "xSHARE"],
-                ["Earmarked for USDC reserve", p.hooks.xSHARE.usdcReserve, "xSHARE"],
-                ["Retained", p.hooks.xSHARE.retained, "xSHARE"],
-                ["USDC routed", p.hooks.xSHARE.usdcRouted, "USDC"],
+                ["Waiting to be sold for the DAO wallet", p.hooks.xSHARE.pendingDao, "xSHARE"],
+                ["USDC paid to the DAO wallet", p.hooks.xSHARE.usdcRouted, "USDC"],
               ]}
             />
             <Routing
-              title="Critical Defense"
-              active={m.defense.active}
-              note="Only new eligible fee revenue; prior earmarks, user capital and Treasury principal are untouched."
+              title="xTOMB under peg"
+              active={squareTaxBurns(m.twap, m.fresh)}
+              note={"Also the route when there is no valid TWAP. Burned once $" + SQUARE_ROUTING.minRouteUsd + " has built up."}
               rows={[{ k: "xSHARE → USDC → xTOMB, burned", bps: 10_000, tone: "bg-bad" }]}
               balances={[
-                ["Earmarked for buy-and-burn", p.hooks.xSHARE.critical, "xSHARE"],
+                ["Waiting to buy and burn", p.hooks.xSHARE.pendingBurn, "xSHARE"],
                 ["xTOMB burned by xSHARE routing", p.hooks.xSHARE.levelBurned, "xTOMB"],
               ]}
             />
           </div>
           <p className="mt-3 text-[12px] text-ash">
-            xTOMB's own sell tax is separate: burned in full during Genesis, sent to the hook's fee recipient afterwards. Treasury-held xTOMB is never sold for
-            fee routing.
+            xTOMB's own sell tax is separate and is always burned in full. Treasury-held xTOMB is never sold for fee routing.
           </p>
         </section>
 

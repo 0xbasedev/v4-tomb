@@ -1,4 +1,4 @@
-import { DEFENSE, EXPANSION, SQUARE_ROUTING, pct } from "@/lib/launch";
+import { DEFENSE, EXPANSION, pct } from "@/lib/launch";
 
 /**
  * Market state from the validated xTOMB TWAP (MasonryLevelOracle) and
@@ -41,7 +41,7 @@ export const PHASE_META: Record<MarketPhase, { label: string; title: string; chi
     detail: `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: MasonryTreasury may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB to the Masonry (X Share/WETH LP stakers).`,
   },
   band: { label: "At peg", title: "Inside the peg band", chip: "chip", detail: `Between $1.00 and $${EXPANSION.gate.toFixed(2)}: no expansion, baseline Fire Tax.` },
-  tax: { label: "Below peg", title: "Below peg — the Fire Tax rises", chip: "chip-amethyst", detail: "Sells pay a higher Fire Tax as the TWAP falls toward $0.90, where it reaches the 12% cap." },
+  tax: { label: "Below peg", title: "Below peg — the Fire Tax rises", chip: "chip-amethyst", detail: "Sells pay a higher Fire Tax as the TWAP falls toward $0.90, where it reaches the 6% cap." },
   defense: {
     label: "Critical Defense",
     title: "Critical Defense is active",
@@ -57,15 +57,14 @@ export function expansionCap(circulating: number, twap: number | null, fresh: bo
   return (circulating * EXPANSION.maxPerEpochBps) / 10_000;
 }
 
-/** Split of a collected xSHARE tax amount. */
-export function squareTaxSplit(amount: number, critical: boolean) {
-  if (critical) return { pol: 0, usdcReserve: 0, squareReserve: 0, buyBurn: amount };
-  return {
-    pol: (amount * SQUARE_ROUTING.polBps) / 10_000,
-    usdcReserve: (amount * SQUARE_ROUTING.usdcReserveBps) / 10_000,
-    squareReserve: (amount * SQUARE_ROUTING.squareReserveBps) / 10_000,
-    buyBurn: 0,
-  };
+/** True when collected xSHARE tax takes the buy-and-burn route: xTOMB under peg, or no valid TWAP. */
+export function squareTaxBurns(twap: number | null, fresh: boolean): boolean {
+  return !fresh || twap === null || twap < 1;
+}
+
+/** Route of a collected xSHARE tax amount: all of it to the DAO wallet, or all of it to buy-and-burn. */
+export function squareTaxSplit(amount: number, underPeg: boolean) {
+  return underPeg ? { dao: 0, buyBurn: amount } : { dao: amount, buyBurn: 0 };
 }
 
 /**

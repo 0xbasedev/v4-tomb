@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { recoveryFloorBps, sellTax, targetBps, type TaxQuote } from "../src/lib/fireTax";
+import { SELL_BASE_BPS, WITHDRAW_BASE_BPS, genesisFloorBps, recoveryFloorBps, sellTax, targetBps, timeInFeeBps, withdrawFee, type TaxQuote } from "../src/lib/fireTax";
 import { emissionShare, genesisClock, walletClaim } from "../src/lib/genesis";
 import { DEFENSE, EXPANSION, FIRE, GENESIS_POLICY, PASSES, SQUARE_SUPPLY } from "../src/lib/launch";
-import { expansionCap, marketPhase, stepDefense } from "../src/lib/market";
+import { expansionCap, marketPhase, squareTaxBurns, squareTaxSplit, stepDefense } from "../src/lib/market";
 import { planRoute, quoteRoute } from "../src/lib/routes";
 
 /**
@@ -79,22 +79,30 @@ test.describe("Genesis clock", () => {
   });
 });
 
-test.describe("Fire Tax", () => {
+test.describe("Sell tax and withdraw fee", () => {
   const base = { raisedBps: 0, raisedAt: 0, now: 0 };
 
-  test("baseline 3% at or above the reference, 12% cap at or below 0.90", () => {
-    expect(FIRE.baselineBps).toBe(300);
+  test("xTOMB: 0.5% at or above peg, the 6% cap at or below 0.90", () => {
+    expect(FIRE.baselineBps).toBe(50);
+    expect(FIRE.capBps).toBe(600);
     expect(FIRE.fullTaxAt).toBeCloseTo(0.9, 10);
-    expect(targetBps(1)).toBe(FIRE.baselineBps);
-    expect(targetBps(1.2)).toBe(300);
-    expect(targetBps(0.9)).toBe(1200);
-    expect(targetBps(0.85)).toBe(1200);
-    expect(targetBps(0.5)).toBe(1200);
-    expect(targetBps(0.98)).toBe(702);
-    expect(targetBps(0.95)).toBe(936);
+    expect(targetBps(1)).toBe(50);
+    expect(targetBps(1.2)).toBe(50);
+    expect(targetBps(0.9)).toBe(600);
+    expect(targetBps(0.85)).toBe(600);
+    expect(targetBps(0.98)).toBe(295);
+    expect(targetBps(0.95)).toBe(438);
   });
 
-  test("one rate: the highest of TWAP, projected, recovery and Genesis floor, capped at 12%", () => {
+  test("xSHARE follows the xTOMB peg: 3% at or above, 6% at 10% under", () => {
+    expect(SELL_BASE_BPS.xSHARE).toBe(300);
+    expect(sellTax({ asset: "xSHARE", twap: 1, projected: null, genesisActive: false, ...base }).rateBps).toBe(300);
+    expect(sellTax({ asset: "xSHARE", twap: 0.9, projected: null, genesisActive: false, ...base }).rateBps).toBe(600);
+    // A projected price moves xTOMB's rate, not xSHARE's.
+    expect(sellTax({ asset: "xSHARE", twap: 1, projected: 0.9, genesisActive: false, ...base }).rateBps).toBe(300);
+  });
+
+  test("one rate: the highest of TWAP, projected, recovery and Genesis Tax, capped at 6%", () => {
     const q = sellTax({ asset: "xTOMB", twap: 1, projected: 0.9, genesisActive: false, ...base });
     expect(q.driver).toBe("projected");
     expect(q.rateBps).toBe(targetBps(0.9));
@@ -102,25 +110,62 @@ test.describe("Fire Tax", () => {
     expect(capped.rateBps).toBe(FIRE.capBps);
   });
 
-  test("Genesis floors: 3% xTOMB (burned in full), 6% xSHARE", () => {
+  test("Genesis Tax: 6% on both tokens, then 0.3% lower per six-hour epoch", () => {
     const l = sellTax({ asset: "xTOMB", twap: 1, projected: 1, genesisActive: true, ...base });
     const s = sellTax({ asset: "xSHARE", twap: 1, projected: 1, genesisActive: true, ...base });
-    expect([l.rateBps, l.driver, l.burned]).toEqual([300, "genesis", true]);
-    expect([s.rateBps, s.driver, s.burned]).toEqual([600, "genesis", false]);
-    const after = sellTax({ asset: "xTOMB", twap: 1, projected: 1, genesisActive: false, ...base });
-    expect([after.rateBps, after.driver, after.burned]).toEqual([300, "baseline", false]);
+    expect([l.rateBps, l.driver]).toEqual([600, "genesis"]);
+    expect([s.rateBps, s.driver]).toEqual([600, "genesis"]);
+    const END = 1_000_000;
+    expect(genesisFloorBps(false, END, END)).toBe(600);
+    expect(genesisFloorBps(false, END, END + 6 * 3600 - 1)).toBe(600);
+    expect(genesisFloorBps(false, END, END + 6 * 3600)).toBe(570);
+    expect(genesisFloorBps(false, END, END + 3 * 6 * 3600)).toBe(510);
+    expect(genesisFloorBps(false, END, END + 20 * 6 * 3600)).toBe(0);
+    expect(genesisFloorBps(false, null, END)).toBe(0);
+    // The decay stops mattering once it meets the token's own rate.
+    const late = { raisedBps: 0, raisedAt: 0, now: END + 11 * 6 * 3600, genesisActive: false, genesisEnd: END };
+    expect(sellTax({ asset: "xTOMB", twap: 1, projected: null, ...late }).rateBps).toBe(270);
+    expect(sellTax({ asset: "xSHARE", twap: 1, projected: null, ...late }).rateBps).toBe(300);
   });
 
-  test("recovery floor decays linearly to baseline over 7h", () => {
-    expect(recoveryFloorBps(1200, 0, 0)).toBe(1200);
-    expect(recoveryFloorBps(1200, 0, FIRE.recoverySeconds / 2)).toBe(750);
-    expect(recoveryFloorBps(1200, 0, FIRE.recoverySeconds)).toBe(300);
+  test("where the tax goes: xTOMB always burns; xSHARE burns only under peg", () => {
+    const at = { projected: null, genesisActive: false, ...base };
+    expect(sellTax({ asset: "xTOMB", twap: 1.02, ...at }).burned).toBe(true);
+    expect(sellTax({ asset: "xTOMB", twap: 0.95, ...at }).burned).toBe(true);
+    expect(sellTax({ asset: "xSHARE", twap: 1, ...at }).burned).toBe(false);
+    expect(sellTax({ asset: "xSHARE", twap: 0.999, ...at }).burned).toBe(true);
+    expect(squareTaxBurns(1, true)).toBe(false);
+    expect(squareTaxBurns(0.99, true)).toBe(true);
+    expect(squareTaxBurns(1.05, false)).toBe(true);
+    expect(squareTaxSplit(10, false)).toEqual({ dao: 10, buyBurn: 0 });
+    expect(squareTaxSplit(10, true)).toEqual({ dao: 0, buyBurn: 10 });
   });
 
-  test("stale oracle: the hook rejects the sell", () => {
+  test("recovery floor decays linearly to the base rate over 7h", () => {
+    expect(recoveryFloorBps(600, 0, 0)).toBe(600);
+    expect(recoveryFloorBps(600, 0, FIRE.recoverySeconds / 2)).toBe(325);
+    expect(recoveryFloorBps(600, 0, FIRE.recoverySeconds)).toBe(50);
+  });
+
+  test("no valid TWAP: xTOMB sells are rejected, xSHARE sells pay the full 6% and burn", () => {
     const q = sellTax({ asset: "xTOMB", twap: null, projected: null, genesisActive: false, ...base });
     expect(q.rateBps).toBeNull();
-    expect(q.blocked).toMatch(/rejects sells/);
+    expect(q.blocked).toMatch(/rejects xTOMB sells/);
+    const s = sellTax({ asset: "xSHARE", twap: null, projected: null, genesisActive: false, ...base });
+    expect([s.rateBps, s.burned]).toEqual([600, true]);
+  });
+
+  test("withdraw fee: 1.5% to 6%, and time in takes up to half off over three weeks", () => {
+    expect(WITHDRAW_BASE_BPS).toBe(150);
+    expect(withdrawFee({ twap: 1, ...base }).rateBps).toBe(150);
+    expect(withdrawFee({ twap: 0.9, ...base }).rateBps).toBe(600);
+    const T = 1_700_000_000;
+    expect(timeInFeeBps(600, null, T)).toBe(600);
+    expect(timeInFeeBps(600, T, T)).toBe(600);
+    expect(timeInFeeBps(600, T, T + 7 * DAY)).toBe(500);
+    expect(timeInFeeBps(600, T, T + 21 * DAY)).toBe(300);
+    expect(timeInFeeBps(600, T, T + 365 * DAY)).toBe(300);
+    expect(timeInFeeBps(300, T, T + 6 * 3600 + 1)).toBe(299); // same case as the contract test
   });
 });
 

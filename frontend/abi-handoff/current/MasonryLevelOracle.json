@@ -93,6 +93,35 @@
   {
     "type": "function",
     "name": "latestValidatedTwap",
+    "inputs": [
+      {
+        "name": "window",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "price",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "observedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "valid",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latestValidatedTwap",
     "inputs": [],
     "outputs": [
       {

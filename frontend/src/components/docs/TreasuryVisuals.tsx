@@ -145,12 +145,8 @@ export function RoutingSplit() {
   const root = useRef<HTMLDivElement>(null);
   const [critical, setCritical] = useState(false);
   const lanes: Lane[] = critical
-    ? [{ k: "xTOMB buy-and-burn", sub: "MasonryCriticalDefense", share: 1, color: "#ff3b5c" }]
-    : [
-        { k: "Protocol LP", sub: "xSHARE/USDC, protocol-owned", share: SQUARE_ROUTING.polBps / 10_000, color: "#3ee7ff" },
-        { k: "USDC reserve", sub: "sold to USDC", share: SQUARE_ROUTING.usdcReserveBps / 10_000, color: "#5b9dff" },
-        { k: "xSHARE reserve", sub: "held as xSHARE", share: SQUARE_ROUTING.squareReserveBps / 10_000, color: "#b48cff" },
-      ];
+    ? [{ k: "xTOMB buy-and-burn", sub: "sold for USDC, buys xTOMB, burned", share: 1, color: "#ff3b5c" }]
+    : [{ k: "DAO wallet", sub: "sold for USDC", share: 1, color: "#5b9dff" }];
   // Geometry: the source column is split exactly by share; destination boxes get a
   // minimum height so every label fits, with the leftover space shared by share.
   const W = 520;
@@ -197,7 +193,7 @@ export function RoutingSplit() {
   );
 
   return (
-    <Stage caption="Shares of the collected xSHARE sell tax, never of the sale. Critical Defense redirects only new eligible revenue; earlier earmarks keep their purpose.">
+    <Stage caption={"All of the collected xSHARE sell tax takes one route, set by the xTOMB peg when it is collected. Each route runs once $" + SQUARE_ROUTING.minRouteUsd + " has built up."}>
       <div ref={root}>
         <div className="mb-3 flex gap-1">
           {[false, true].map((c) => (
@@ -208,7 +204,7 @@ export function RoutingSplit() {
               onClick={() => setCritical(c)}
               className={`rounded-lg border px-2.5 py-1.5 text-[12px] ${critical === c ? (c ? "border-bad/60 bg-bad/10 text-bad" : "border-spectre/60 bg-spectre/10 text-spectre") : "border-white/[0.08] text-ash"}`}
             >
-              {c ? "Critical Defense" : "Normal"}
+              {c ? "xTOMB under peg" : "At or above peg"}
             </button>
           ))}
         </div>

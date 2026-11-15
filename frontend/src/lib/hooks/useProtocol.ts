@@ -15,7 +15,7 @@ import {
   masonryLevelOracleAbi,
   masonrySquareHookAbi,
 } from "@/lib/abis/masonry";
-import { officialSellTax, type TaxQuote, type TaxedAsset } from "@/lib/fireTax";
+import { officialSellTax, sellTax, type TaxQuote, type TaxedAsset } from "@/lib/fireTax";
 import { genesisClock, type GenesisClock, type Tranche } from "@/lib/genesis";
 import { DEFENSE, PASSES, PASS_TIER_FROM_ID, type PassTier } from "@/lib/launch";
 import { marketPhase, type MarketPhase } from "@/lib/market";
@@ -55,10 +55,12 @@ export interface ProtocolState {
       raisedBps: number;
       raisedAt: number;
       reference: number | null;
-      pol: number | null;
-      usdcReserve: number | null;
-      retained: number | null;
-      critical: number | null;
+      /** Collected at or above peg, waiting to be sold for the DAO wallet. */
+      pendingDao: number | null;
+      /** Collected under peg, waiting to buy and burn xTOMB. */
+      pendingBurn: number | null;
+      /** Live xSHARE sell tax from the hook. */
+      sellTaxBps: number | null;
       levelBurned: number | null;
       usdcRouted: number | null;
     };
@@ -125,10 +127,9 @@ export function useProtocol(): ProtocolState {
           raisedBps: preview.raised.xSHARE.bps,
           raisedAt: preview.raised.xSHARE.at,
           reference: SIM_SQUARE_REFERENCE,
-          pol: 41.2,
-          usdcReserve: 68.6,
-          retained: 233.4,
-          critical: preview.defense.active ? 12.4 : 0,
+          pendingDao: 68.6,
+          pendingBurn: preview.defense.active ? 12.4 : 0,
+          sellTaxBps: null,
           levelBurned: 2_140,
           usdcRouted: 8_220,
         },
@@ -153,7 +154,17 @@ export function useProtocol(): ProtocolState {
       poolFeeBps: { xTOMB: SIM_POOLS.xTOMB.feeBps, xSHARE: SIM_POOLS.xSHARE.feeBps },
       lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
       now: preview.now,
-      taxFor: (asset, _valueUsd) => officialSellTax(asset),
+      taxFor: (asset, _valueUsd) =>
+        sellTax({
+          asset,
+          twap,
+          projected: null,
+          raisedBps: preview.raised.xTOMB.bps,
+          raisedAt: preview.raised.xTOMB.at,
+          now: preview.now,
+          genesisActive: !!clock?.active,
+          genesisEnd: clock?.end ?? null,
+        }),
     };
     void twap;
     return p;
@@ -185,10 +196,10 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "raisedBps" }, // 8
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "raisedAt" }, // 9
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "squareReferencePrice" }, // 10
-          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "polSquare" }, // 11
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "pendingBuybackSquare" }, // 11
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "usdcReserveSquare" }, // 12
-          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "retainedSquare" }, // 13
-          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "criticalSquare" }, // 14
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "shareSellTaxBps" }, // 13
+          { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "minRouteQuote" }, // 14 (not shown; keeps the read indexes stable)
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "levelBurned" }, // 15
           { address: c.squareHook, abi: masonrySquareHookAbi, functionName: "usdcRouted" }, // 16
           { address: c.pass, abi: masonryGenesisPassAbi, functionName: "tierOf", args: [user] }, // 17
@@ -312,10 +323,9 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
         raisedBps: raisedS,
         raisedAt: raisedAtS,
         reference: ref,
-        pol: n18(ok<bigint>(r[11])),
-        usdcReserve: n18(ok<bigint>(r[12])),
-        retained: n18(ok<bigint>(r[13])),
-        critical: n18(ok<bigint>(r[14])),
+        pendingDao: n18(ok<bigint>(r[12])),
+        pendingBurn: n18(ok<bigint>(r[11])),
+        sellTaxBps: ok<number>(r[13]) ?? null,
         levelBurned: n18(ok<bigint>(r[15])),
         usdcRouted: (() => {
           const v = ok<bigint>(r[16]);
@@ -347,7 +357,20 @@ function useLiveReads(d: MasonryDeployment | null, account: Address | null): Omi
     poolFeeBps: { xTOMB: (d?.pools.level.fee ?? 0) / 100, xSHARE: (d?.pools.square.fee ?? 0) / 100 },
     lpAssetShare: { xTOMB: 0.5, xSHARE: 0.5 },
     now: nowSec,
-    taxFor: (asset, _valueUsd) => officialSellTax(asset),
+    // Before the oracle has a first valid TWAP, show the base rate rather than a blocked quote.
+    taxFor: (asset, _valueUsd) =>
+      twap === null
+        ? officialSellTax(asset)
+        : sellTax({
+            asset,
+            twap: fresh ? twap : null,
+            projected: null,
+            raisedBps: raisedX,
+            raisedAt: raisedAtX,
+            now: nowSec,
+            genesisActive: !!clock?.active,
+            genesisEnd: clock?.end ?? null,
+          }),
   };
 }
 

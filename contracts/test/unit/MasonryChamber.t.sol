@@ -62,7 +62,7 @@ contract MasonryChamberTest is BaseTest {
         chamber.withdraw(10 ether);
         vm.warp(block.timestamp + 5 hours);
         uint256 beforeLp = lp.balanceOf(alice);
-        uint256 fee = 100 ether * uint256(fireTax.currentWithdrawFeeBps()) / 10_000;
+        uint256 fee = 100 ether * uint256(chamber.withdrawFeeBpsFor(alice)) / 10_000;
         vm.prank(alice);
         chamber.withdraw(100 ether);
         assertEq(lp.balanceOf(alice), beforeLp + 100 ether - fee);
@@ -74,22 +74,25 @@ contract MasonryChamberTest is BaseTest {
     function test_OrdinaryWithdrawChargesLiveFireTaxAtPegMinusTenAndCap() public {
         vm.warp(block.timestamp + 6 hours + 1);
         assertEq(chamber.withdrawFeeBps(), 300, "peg / baseline");
+        // Six hours in earns 1 bps of time-in discount: 300 * 50% * 21601s / 21 days, rounded down.
+        assertEq(chamber.withdrawFeeBpsFor(alice), 299, "time-in discount after six hours");
         uint256 before = lp.balanceOf(alice);
         vm.prank(alice);
         chamber.withdraw(100 ether);
-        assertEq(lp.balanceOf(alice), before + 97 ether);
-        assertEq(lp.balanceOf(daoWallet), 3 ether);
+        assertEq(lp.balanceOf(alice), before + 97.01 ether);
+        assertEq(lp.balanceOf(daoWallet), 2.99 ether);
+        assertEq(chamber.withdrawFeeBpsFor(alice), 300, "a withdrawal restarts the clock");
 
-        fireTax.set(1200);
-        assertEq(chamber.withdrawFeeBps(), 1200, "-10% / hard cap");
+        fireTax.set(600);
+        assertEq(chamber.withdrawFeeBps(), 600, "-10% / hard cap");
         before = lp.balanceOf(alice);
         uint256 dao = lp.balanceOf(daoWallet);
         vm.prank(alice);
         chamber.withdraw(100 ether);
-        assertEq(lp.balanceOf(alice), before + 88 ether);
-        assertEq(lp.balanceOf(daoWallet), dao + 12 ether);
+        assertEq(lp.balanceOf(alice), before + 94 ether);
+        assertEq(lp.balanceOf(daoWallet), dao + 6 ether);
 
-        fireTax.set(1201);
+        fireTax.set(601);
         vm.expectRevert(MasonryChamber.InvalidConfiguration.selector);
         chamber.withdrawFeeBps();
         vm.prank(alice);
@@ -113,7 +116,7 @@ contract MasonryChamberTest is BaseTest {
         chamber.claim();
         assertGt(level.balanceOf(alice), 0);
         // Claim must not restart the already-elapsed stake cooldown.
-        uint256 fee = 10 ether * uint256(fireTax.currentWithdrawFeeBps()) / 10_000;
+        uint256 fee = 10 ether * uint256(chamber.withdrawFeeBpsFor(alice)) / 10_000;
         uint256 beforeLp = lp.balanceOf(alice);
         vm.prank(alice);
         chamber.withdraw(10 ether);

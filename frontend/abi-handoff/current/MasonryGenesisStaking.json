@@ -213,6 +213,29 @@
   },
   {
     "type": "function",
+    "name": "depositFor",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "beneficiary",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "fund",
     "inputs": [],
     "outputs": [],
@@ -521,6 +544,19 @@
   },
   {
     "type": "function",
+    "name": "setZapOperator",
+    "inputs": [
+      {
+        "name": "newZapOperator",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "settlement",
     "inputs": [],
     "outputs": [
@@ -562,6 +598,19 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "zapOperator",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -670,6 +719,25 @@
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "ZapOperatorUpdated",
+    "inputs": [
+      {
+        "name": "previous",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "next",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "Cooldown",
     "inputs": []
@@ -692,6 +760,11 @@
   {
     "type": "error",
     "name": "NotEligible",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotZapOperator",
     "inputs": []
   },
   {

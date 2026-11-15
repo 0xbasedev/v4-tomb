@@ -16,7 +16,8 @@ import { PreviewDock } from "@/components/PreviewDock";
 import { TokenIcon } from "@/components/TokenIcon";
 import { NetworkNote, SimBadge } from "@/components/Status";
 import { useProtocol } from "@/lib/hooks";
-import { DEFENSE, EPOCH_SECONDS, EXPANSION, FIRE, SQUARE_SUPPLY, pct } from "@/lib/launch";
+import { WITHDRAW_BASE_BPS } from "@/lib/fireTax";
+import { DEFENSE, EPOCH_SECONDS, EXPANSION, FIRE, SQUARE_ROUTING, SQUARE_SUPPLY, pct } from "@/lib/launch";
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 import { GenesisStrip } from "@/components/GenesisStrip";
@@ -124,9 +125,9 @@ export function Landing() {
             ))}
           </h1>
           <p className="hero-fade mt-6 max-w-xl text-[18px] leading-relaxed text-bone-dim md:text-[20px]">
-            xTOMB targets $1 in {REFERENCE_SYMBOL}. Liquidity withdrawals pay one <span className="text-ember-hot">Fire Tax</span> — {pct(FIRE.baselineBps)} at peg,
-            up to 12% under pressure — and xSHARE's sell tax funds <span className="text-spectre">protocol liquidity</span> or, in
-            Critical Defense, <span className="text-bad">buys and burns xTOMB</span>. Genesis opens the first path in.
+            xTOMB targets $1 in {REFERENCE_SYMBOL}. Sells pay one <span className="text-ember-hot">Fire Tax</span> — {pct(FIRE.baselineBps)} at peg,
+            up to {pct(FIRE.capBps)} under pressure — and it is always burned. xSHARE's sell tax goes to the <span className="text-spectre">DAO wallet</span> at peg
+            and, under peg, <span className="text-bad">buys and burns xTOMB</span>. Genesis opens the first path in.
           </p>
           <div className="hero-fade mt-9 flex flex-wrap items-center gap-3">
             <Link ref={launch} to={genesisLive ? "/genesis" : "/dashboard"} className="btn btn-primary h-14 px-8 text-[15px]">
@@ -200,7 +201,7 @@ export function Landing() {
               tone: "ember-text",
               ring: "hover:border-ember/40",
               role: "The peg",
-              body: `Targets $1 in ${REFERENCE_SYMBOL} on the official xTOMB/${REFERENCE_SYMBOL} pool. X Tomb swaps are not taxed. Completing a liquidity withdrawal charges the live Fire Tax (${pct(FIRE.baselineBps)}–${pct(FIRE.capBps)} on the TWAP). Official X Share sells pay a flat 3% that buys and burns X Tomb.`,
+              body: `Targets $1 in ${REFERENCE_SYMBOL} on the official xTOMB/${REFERENCE_SYMBOL} pool. Buys are never taxed. Sells pay ${pct(FIRE.baselineBps)} at peg, rising to ${pct(FIRE.capBps)} at 10% under, and the tax is always burned. Liquidity withdrawals pay ${pct(WITHDRAW_BASE_BPS)}–${pct(FIRE.capBps)}, with up to half off for time in.`,
               want: "Swap or add liquidity",
               to: "/swap",
             },
@@ -209,7 +210,7 @@ export function Landing() {
               tone: "spectre-text",
               ring: "hover:border-spectre/40",
               role: "The claim",
-              body: `Capped at ${SQUARE_SUPPLY.cap.toLocaleString()} (configured). Its sell tax normally funds 12% protocol LP, 20% ${REFERENCE_SYMBOL} reserve and 68% xSHARE reserve; in Critical Defense 100% buys and burns xTOMB.`,
+              body: `Capped at ${SQUARE_SUPPLY.cap.toLocaleString()} (configured). Sells pay ${pct(SQUARE_ROUTING.baseBps)} while xTOMB is at peg, rising to ${pct(SQUARE_ROUTING.capBps)} at 10% under. At peg the tax is sold for ${REFERENCE_SYMBOL} and paid to the DAO wallet; under peg it buys and burns xTOMB.`,
               want: "See the routing",
               to: "/dashboard",
             },

@@ -78,14 +78,18 @@ export const FIRE = {
   genesisBurnShare: bps(POLICY.genesisLevelSellBurnShareBps),
 };
 
-/** Normal xSHARE fee routing — shares of collected tax, never of the gross sale. */
-/** Flat official X Share sell tax (config-driven, hard-capped at 12%). */
+/** Base xSHARE sell tax, charged while xTOMB is at or above peg. It rises to the cap at 10% under. */
 export const SHARE_SELL_TAX_BPS = POLICY.shareSellTaxBps as number;
 
+/**
+ * Where collected xSHARE sell tax goes. The whole amount takes one route, fixed when it is
+ * collected: at or above the xTOMB peg it is sold for the stablecoin and paid to the DAO wallet;
+ * under peg (or with no valid TWAP) it buys xTOMB and burns it. Each route waits for $5.
+ */
 export const SQUARE_ROUTING = {
-  polBps: POLICY.squareTaxPolBps,
-  usdcReserveBps: POLICY.squareTaxUsdcReserveBps,
-  squareReserveBps: POLICY.squareTaxSquareReserveBps,
+  baseBps: SHARE_SELL_TAX_BPS,
+  capBps: POLICY.fireTaxHardCapBps as number,
+  minRouteUsd: 5,
 };
 
 export const DEFENSE = {

@@ -10,7 +10,7 @@ import { TokenIcon } from "@/components/TokenIcon";
 import { masonryChamberAbi, masonryFarmAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
 import { DAO_WALLET, FARM_POLICY, FIRE, pct, SQUARE_SUPPLY } from "@/lib/launch";
-import { withdrawFee } from "@/lib/fireTax";
+import { WITHDRAW_BASE_BPS, withdrawFee } from "@/lib/fireTax";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
@@ -267,8 +267,8 @@ function WithdrawCooldownModal({
     functionName: "withdrawFeeBps",
     query: { enabled: Boolean(chamber) },
   });
-  const quoted = withdrawFee({ twap: 1, raisedBps: FIRE.baselineBps, raisedAt: 0, now: 0 });
-  const fallbackBps = quoted.rateBps ?? FIRE.baselineBps;
+  const quoted = withdrawFee({ twap: 1, raisedBps: WITHDRAW_BASE_BPS, raisedAt: 0, now: 0 });
+  const fallbackBps = quoted.rateBps ?? WITHDRAW_BASE_BPS;
   const liveWithdrawFeeBps = farmFee.data !== undefined ? Number(farmFee.data) : fallbackBps;
   const masonryWithdrawFeeBps = masonryFee.data !== undefined ? Number(masonryFee.data) : fallbackBps;
   const total = FARM_POLICY.withdrawCooldownSeconds;
@@ -304,8 +304,8 @@ function WithdrawCooldownModal({
           <p className="mt-1 text-[11px] text-ash">DAO wallet · {DAO_WALLET}</p>
           <p className="mt-2 text-[13px] text-bone" data-testid="withdraw-fee">
             Farm withdrawal fee: {pct(liveWithdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
-            Masonry ordinary withdrawals use the same live Fire Tax ({pct(masonryWithdrawFeeBps)}).
-            This is the live Fire Tax on the official X Tomb TWAP ({pct(FIRE.baselineBps)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Not a swap tax.
+            Masonry ordinary withdrawals use the same live fee ({pct(masonryWithdrawFeeBps)}).
+            It follows the official X Tomb TWAP ({pct(WITHDRAW_BASE_BPS)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Time in without withdrawing takes up to half off over three weeks. Not a swap tax.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">

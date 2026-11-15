@@ -9,7 +9,7 @@ import { TokenIcon } from "@/components/TokenIcon";
 import { masonryChamberAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
 import { EXPANSION, FIRE, POLICY, SQUARE_ROUTING, pct } from "@/lib/launch";
-import { withdrawFee } from "@/lib/fireTax";
+import { WITHDRAW_BASE_BPS, withdrawFee } from "@/lib/fireTax";
 import { PHASE_META } from "@/lib/market";
 import { useReveal } from "@/lib/motion/useReveal";
 
@@ -96,8 +96,8 @@ export function Masonry() {
             <div data-reveal className="panel p-5">
               <div className="label mb-2">xSHARE sell tax · normal</div>
               <p className="text-[13.5px] text-bone-dim">
-                {pct(SQUARE_ROUTING.polBps)} to protocol-owned xSHARE/{`USDC`} LP, {pct(SQUARE_ROUTING.usdcReserveBps)} sold into the reserve,{" "}
-                {pct(SQUARE_ROUTING.squareReserveBps)} retained as xSHARE — shares of the collected tax.
+                {pct(SQUARE_ROUTING.baseBps)} while xTOMB is at or above peg, rising to {pct(SQUARE_ROUTING.capBps)} at 10% under. At or above peg
+                the tax is sold for USDC and paid to the DAO wallet. Under peg it buys xTOMB and burns it.
               </p>
               <Link to="/dashboard" className="mt-3 inline-block font-mono text-[12px] text-spectre hover:underline">
                 Live routing on the dashboard →
@@ -134,12 +134,22 @@ function MasonryWithdrawFeeNote() {
     functionName: "withdrawFeeBps",
     query: { enabled: Boolean(chamber) },
   });
-  const quoted = withdrawFee({ twap: 1, raisedBps: FIRE.baselineBps, raisedAt: 0, now: 0 });
-  const bps = masonryFee.data !== undefined ? Number(masonryFee.data) : (quoted.rateBps ?? FIRE.baselineBps);
+  // The staker's own fee, after the time-in discount. Needs a connected wallet.
+  const ownFee = useReadContract({
+    address: chamber,
+    abi: masonryChamberAbi,
+    functionName: "withdrawFeeBpsFor",
+    args: p.account ? [p.account] : undefined,
+    query: { enabled: Boolean(chamber && p.account) },
+  });
+  const quoted = withdrawFee({ twap: 1, raisedBps: WITHDRAW_BASE_BPS, raisedAt: 0, now: 0 });
+  const bps = masonryFee.data !== undefined ? Number(masonryFee.data) : (quoted.rateBps ?? WITHDRAW_BASE_BPS);
+  const own = ownFee.data !== undefined ? Number(ownFee.data) : null;
   return (
     <p className="mt-3 text-[13px] text-bone" data-testid="masonry-withdraw-fee">
       Ordinary Masonry withdrawals charge {pct(bps)} of withdrawn LP to the DAO wallet
-      (live Fire Tax: {pct(FIRE.baselineBps)} at peg, up to {pct(FIRE.capBps)} at 10% below).
+      ({pct(WITHDRAW_BASE_BPS)} at peg, up to {pct(FIRE.capBps)} at 10% below). Time in without withdrawing takes up to half off over three weeks.
+      {own !== null && own < bps ? ` Your fee now: ${pct(own)}.` : ""}
     </p>
   );
 }

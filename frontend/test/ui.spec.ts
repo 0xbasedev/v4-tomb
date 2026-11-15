@@ -57,7 +57,7 @@ test.describe("Swap and the Fire Tax", () => {
     await expect(page.getByText("±8%").first()).toBeVisible();
   });
 
-  test("buys pay 0%, xTOMB sells pay no Fire Tax (pool fee only)", async ({ page, broadcasts }) => {
+  test("buys pay 0%; xTOMB sells pay the Fire Tax, which is burned", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=ended&preview=1");
     await preset(page, "Buy xTOMB");
     await amountIn(page).fill("100");
@@ -67,29 +67,32 @@ test.describe("Swap and the Fire Tax", () => {
 
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDG · 0% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("0%");
+    // One epoch after Genesis the Genesis Tax has decayed from 6% to 5.7%.
+    await expect(page.getByText("Sell xTOMB → USDG · 5.7% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("5.7% on the xTOMB sold");
+    await expect(feeRow(page)).toContainText("Genesis Tax");
+    await expect(page.locator("dl")).toContainText(/burned in full/i);
     await expect(page.locator("dl")).toContainText(/Pool fee · xTOMB\/USDG/);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("during Genesis an xTOMB sell is still untaxed and does not burn", async ({ page, broadcasts }) => {
+  test("during Genesis an xTOMB sell pays the 6% Genesis Tax and it burns", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=day2&preview=1");
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("100");
-    await expect(page.getByText("Sell xTOMB → USDG · 0% tax")).toBeVisible();
-    await expect(feeRow(page)).toContainText("0%");
-    await expect(page.locator("dl")).not.toContainText(/burned in full/i);
+    await expect(page.getByText("Sell xTOMB → USDG · 6% tax")).toBeVisible();
+    await expect(feeRow(page)).toContainText("Genesis Tax");
+    await expect(page.locator("dl")).toContainText(/burned in full/i);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("LP → USDC has no xTOMB sell tax on the sell leg", async ({ page, broadcasts }) => {
+  test("LP → USDC taxes only the xTOMB half that is sold", async ({ page, broadcasts }) => {
     await page.goto("/swap?genesis=day2&preview=1");
     await preset(page, "Exit LP to USDG");
     await amountIn(page).fill("10");
     await expect(page.getByText(/^Redeem xTOMB/)).toBeVisible();
-    await expect(page.getByText(/Sell xTOMB → USDG · 0% tax/)).toBeVisible();
-    await expect(feeRow(page)).toContainText(/0% on the xTOMB sold \(50% of value\)/);
+    await expect(page.getByText(/Sell xTOMB → USDG · 6% tax/)).toBeVisible();
+    await expect(feeRow(page)).toContainText(/6% on the xTOMB sold \(50% of value\)/);
     await expectNoTransactionRequests(page, broadcasts);
   });
 
@@ -103,12 +106,12 @@ test.describe("Swap and the Fire Tax", () => {
     await expectNoTransactionRequests(page, broadcasts);
   });
 
-  test("stale oracle: xTOMB sells still go through, buys still go through", async ({ page, broadcasts }) => {
+  test("stale oracle: xTOMB sells are rejected, buys still go through", async ({ page, broadcasts }) => {
     await page.goto("/swap?oracle=stale&preview=1");
     await preset(page, "Sell xTOMB");
     await amountIn(page).fill("10");
-    await expect(feeRow(page)).toContainText("0%");
-    await expect(page.getByRole("button", { name: /^Sell.*\(simulated\)$|^Swap \(simulated\)$/ })).toBeEnabled();
+    await expect(feeRow(page)).toContainText("sell rejected");
+    await expect(page.getByRole("button", { name: "Sell rejected" })).toBeDisabled();
 
     await preset(page, "Buy xTOMB");
     await amountIn(page).fill("10");
@@ -336,7 +339,8 @@ test.describe("Farm zap and withdraw cooldown", () => {
     await expect(page.getByText(/forfeited to the DAO wallet/i)).toBeVisible();
     await expect(page.getByText("You can cancel this timer by hitting Send to Masonry or Cancel.")).toBeVisible();
     const dialog = page.getByRole("dialog");
-    await expect(page.getByTestId("withdraw-fee")).toContainText("3%");
+    await expect(page.getByTestId("withdraw-fee")).toContainText("Farm withdrawal fee: 1.5%");
+    await expect(page.getByTestId("withdraw-fee")).toContainText("up to 6% at 10% below");
     await expect(dialog.getByRole("button", { name: "Send to Masonry" }).first()).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Complete withdrawal" })).toBeDisabled();
