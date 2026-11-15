@@ -74,15 +74,21 @@ contract ShareRewardPoolTest is BaseTest {
         vm.prank(alice);
         pool.deposit(0, 100 ether);
 
+        // The 5% weekly boost is baked in (Jess, 2026-11-09): with this
+        // pool's 100 alloc points the boost weight is 100*5/95 = 5, so the
+        // pool earns 100/105 of the schedule and the boost accrues the
+        // other 5/105. Expectations are the carved amounts; the 1,000-wei
+        // tolerance covers the accSharePerShare two-step floor dust
+        // (measured deviation: under 100 wei).
         // Halfway through (185 days of 370).
         vm.warp(poolStart + 185 days);
-        uint256 expected = 185 days * pool.SHARE_PER_SECOND();
-        assertApproxEqAbs(pool.pendingShare(0, alice), expected, 1);
+        uint256 expected = 185 days * pool.SHARE_PER_SECOND() * 100 / 105;
+        assertApproxEqAbs(pool.pendingShare(0, alice), expected, 1_000);
 
-        // After the full year — capped at TOTAL_REWARDS (modulo dust).
+        // After the full year — capped at the carved share of TOTAL_REWARDS.
         vm.warp(poolStart + 400 days);
-        uint256 full = 370 days * pool.SHARE_PER_SECOND();
-        assertApproxEqAbs(pool.pendingShare(0, alice), full, 1);
+        uint256 full = 370 days * pool.SHARE_PER_SECOND() * 100 / 105;
+        assertApproxEqAbs(pool.pendingShare(0, alice), full, 1_000);
     }
 
     function test_Withdraw_PaysSharePendingThenReturnsLp() public {
@@ -96,13 +102,15 @@ contract ShareRewardPoolTest is BaseTest {
         pool.deposit(0, 100 ether);
 
         vm.warp(poolStart + 30 days);
-        uint256 expected = 30 days * pool.SHARE_PER_SECOND();
+        // Carved expectation, as in test_StakerEarnsAcrossYear: the pool
+        // pays 100/105 of the 30-day schedule with the boost baked in.
+        uint256 expected = 30 days * pool.SHARE_PER_SECOND() * 100 / 105;
         uint256 estateBefore = estate.balanceOf(alice);
 
         vm.prank(alice);
         pool.withdraw(0, 100 ether);
 
         assertEq(lp.balanceOf(alice), 100 ether);
-        assertApproxEqAbs(estate.balanceOf(alice) - estateBefore, expected, 1);
+        assertApproxEqAbs(estate.balanceOf(alice) - estateBefore, expected, 1_000);
     }
 }
