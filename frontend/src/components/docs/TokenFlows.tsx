@@ -6,26 +6,17 @@ import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { Segmented, Stage, useEnter } from "./kit";
 
 /**
- * Token flows — the three tokens as a circuit. Value moves along the wires:
+ * Token flows — the two tokens as a circuit. Value moves along the wires:
  * LP farms pay xSHARE (pending), xSHARE stakers share expansion xTOMB
- * (pending), and xBOND is a planned preview. Pick a token to light its wires.
+ * (pending). Pick a token to light its wires.
  */
 
-type Tok = "xBOND" | "xTOMB" | "xSHARE";
+type Tok = "xTOMB" | "xSHARE";
 
 const NODES: Record<Tok, { x: number; color: string; role: string; get: string; use: string; to: string; cta: string }> = {
-  xBOND: {
-    x: 70,
-    color: "#b48cff",
-    role: "Planned preview",
-    get: "Not issued yet. Issuance and redemption stay disabled until the bond contract ships.",
-    use: "No rates, caps or returns are set. Once live, the Bonds page shows the contract's own quote.",
-    to: "/bonds",
-    cta: "Bonds",
-  },
   xTOMB: {
     x: 260,
-    color: "#ff6a2b",
+    color: "rgb(var(--ember-rgb))",
     role: "The peg · $1 USDC",
     get: "Earned in Genesis, or bought on Swap — buys and wallet transfers pay 0% Fire Tax.",
     use: "Pair it with USDC for the xTOMB/USDC LP, the pool that takes 75% of Genesis emissions from Day 2.",
@@ -45,9 +36,7 @@ const NODES: Record<Tok, { x: number; color: string; role: string; get: string; 
 
 const EDGES: { id: string; d: string; label: string; lx: number; ly: number; touches: Tok[]; color: string }[] = [
   { id: "farm", d: "M 294 136 Q 355 62 416 136", label: "LP farms earn xSHARE", lx: 355, ly: 80, touches: ["xTOMB", "xSHARE"], color: "#3ee7ff" },
-  { id: "masonry", d: "M 416 164 Q 355 238 294 164", label: "stakers share expansion", lx: 355, ly: 232, touches: ["xTOMB", "xSHARE"], color: "#ff6a2b" },
-  { id: "burn", d: "M 226 136 Q 165 62 104 136", label: "bond · planned", lx: 165, ly: 80, touches: ["xTOMB", "xBOND"], color: "#b48cff" },
-  { id: "redeem", d: "M 104 164 Q 165 238 226 164", label: "redeem · planned", lx: 165, ly: 232, touches: ["xTOMB", "xBOND"], color: "#ff6a2b" },
+  { id: "masonry", d: "M 416 164 Q 355 238 294 164", label: "stakers share expansion", lx: 355, ly: 232, touches: ["xTOMB", "xSHARE"], color: "rgb(var(--ember-rgb))" },
 ];
 
 export function TokenFlows() {
@@ -83,9 +72,9 @@ export function TokenFlows() {
     <Stage>
       <div ref={root}>
         <div className="mb-3">
-          <Segmented options={(["xTOMB", "xSHARE", "xBOND"] as Tok[]).map((t) => ({ id: t, label: t }))} value={sel} onChange={setSel} />
+          <Segmented options={(["xTOMB", "xSHARE"] as Tok[]).map((t) => ({ id: t, label: t }))} value={sel} onChange={setSel} />
         </div>
-        <svg viewBox="0 52 520 200" className="w-full" role="img" aria-label="How value moves between xTOMB, xSHARE and xBOND">
+        <svg viewBox="190 52 330 200" className="w-full" role="img" aria-label="How value moves between xTOMB and xSHARE">
           <defs>
             {EDGES.map((e) => (
               <marker key={e.id} id={`tf-arrow-${e.id}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">

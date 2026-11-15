@@ -38,6 +38,10 @@
     <!-- Type (Unbounded · Inter · JetBrains Mono) is self-hosted via @fontsource-variable — see src/main.tsx -->
   </head>
   <body class="bg-void">
+    <script>
+      // Apply the saved colour theme before first paint, on every page.
+      try { if (localStorage.getItem("xtomb-theme") === "purple") document.documentElement.dataset.theme = "purple"; } catch (e) {}
+    </script>
     <noscript>
       <p style="color: #ece8df; background: #050507; padding: 24px; font-family: system-ui, sans-serif; text-align: center;">
         xTomb is an on-chain protocol with a browser interface. Enable JavaScript to use the site, or interact with the verified contracts directly.

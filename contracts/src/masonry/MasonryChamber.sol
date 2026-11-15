@@ -34,6 +34,8 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     address public immutable daoWallet;
     address public immutable arbitrage;
     uint16 public constant MAX_WITHDRAW_FEE_BPS = 600;
+    /// @notice Flat fee on every deposit, paid in LP to the DAO wallet (0.5%).
+    uint16 public constant DEPOSIT_FEE_BPS = 50;
     IMasonryFireTax public immutable fireTax;
 
     uint256 public totalSupply;
@@ -53,6 +55,7 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
     event RewardPaid(address indexed user, uint256 amount);
     event SeigniorageAllocated(uint256 amount);
     event ExitNow(address indexed user, uint256 lpToUser, uint256 lpToTreasury, uint256 rewardsToArbitrage);
+    event DepositFeePaid(address indexed user, uint256 fee, address indexed daoWallet);
     event WithdrawFeePaid(address indexed user, uint256 fee, address indexed daoWallet);
 
     error ZeroAddress();
@@ -156,6 +159,13 @@ contract MasonryChamber is IMasonrySeigniorageSink, ReentrancyGuard {
         if (amount == 0) revert InvalidAmount();
         _accrue(user);
         stakeToken.safeTransferFrom(pullFromUser ? user : msg.sender, address(this), amount);
+        // Only the amount after the deposit fee is staked and earns.
+        uint256 fee = amount * DEPOSIT_FEE_BPS / 10_000;
+        if (fee != 0) {
+            stakeToken.safeTransfer(daoWallet, fee);
+            emit DepositFeePaid(user, fee, daoWallet);
+            amount -= fee;
+        }
         stakedSince[user] = MasonryLoyalty.afterDeposit(stakedSince[user], balanceOf[user], amount, block.timestamp);
         totalSupply += amount;
         balanceOf[user] += amount;

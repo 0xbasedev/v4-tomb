@@ -58,4 +58,14 @@ contract DeployMasonryLocalVestingTest is Test {
         assertEq(d.square.balanceOf(who) - before, 1000 ether);
         assertEq(d.square.balanceOf(address(team)), 0);
     }
+
+    function test_GenesisStakingRefusesXShare() public {
+        assertTrue(d.square.refusesShares(address(d.staking)));
+        assertTrue(d.square.refusedRecipientsSealed());
+        address holder = address(0xB0B);
+        deal(address(d.square), holder, 1 ether);
+        vm.prank(holder);
+        vm.expectRevert();
+        d.square.transfer(address(d.staking), 1 ether);
+    }
 }

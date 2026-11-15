@@ -103,7 +103,7 @@ const RISKS: { title: string; likelihood: number; impact: number; what: string; 
     title: "Pending backends",
     likelihood: 5,
     impact: 2,
-    what: "MasonryTreasury, MasonryFarm, MasonryChamber and MasonryBond exist in this checkout but have no verified launch addresses yet.",
+    what: "MasonryTreasury, MasonryFarm and MasonryChamber exist in this checkout but have no verified launch addresses yet.",
     mitigation: "Those screens are labelled pending or planned and their actions are disabled with the reason.",
   },
   {

@@ -5,6 +5,7 @@ import { EmissionsTimeline, HarvestSplitter, TierMatrix } from "@/components/doc
 import { DocSection } from "@/components/docs/kit";
 import { FireTaxExplorer, Glossary, RiskMeters } from "@/components/docs/MiscVisuals";
 import { PathStepper } from "@/components/docs/PathStepper";
+import { DefenseRoutes, Flywheel } from "@/components/docs/FieldMachine";
 import { PegMachine } from "@/components/docs/PegMachine";
 import { TokenFlows } from "@/components/docs/TokenFlows";
 import { EpochWheel, RoutingSplit } from "@/components/docs/TreasuryVisuals";
@@ -28,19 +29,20 @@ import { useReveal } from "@/lib/motion/useReveal";
 
 const TOC: { id: string; label: string }[] = [
   { id: "summary", label: "In sixty seconds" },
+  { id: "machine", label: "The machine" },
   { id: "tokens", label: "The three tokens" },
   { id: "begin", label: "How to begin" },
   { id: "genesis", label: "Genesis and the passes" },
   { id: "tax", label: "Swap and the Fire Tax" },
+  { id: "defense", label: "The defense" },
   { id: "loop", label: "Claim and compound" },
   { id: "cycle", label: "Epochs, expansion, defense" },
   { id: "masonry", label: "Masonry and Farm" },
-  { id: "bonds", label: "Bonds" },
   { id: "bridge", label: "Bridge" },
   { id: "risks", label: "Risks" },
   { id: "glossary", label: "Glossary" },
 ];
-const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII"];
 const num = (id: string) => NUMERALS[TOC.findIndex((t) => t.id === id)] ?? "·";
 
 const H = (s: number) => `${s / 3600}h`;
@@ -56,7 +58,7 @@ const TERMS: { term: string; body: string; tag: string }[] = [
   { term: "Genesis floor", tag: "swap", body: `During Genesis, sells pay at least ${pct(FIRE.genesisFloorBps.xTOMB)} (xTOMB) or ${pct(FIRE.genesisFloorBps.xSHARE)} (xSHARE). The whole xTOMB sell tax burns during Genesis.` },
   { term: "Sell leg", tag: "swap", body: `The part of a route that sells xTOMB or xSHARE for ${PEG.symbol}. Only that leg pays the Fire Tax — removing liquidity to ${PEG.symbol} taxes the sold half, not the whole position.` },
   { term: "Pool fee", tag: "swap", body: "The Uniswap v4 LP fee on each leg. It's shown separately from the Fire Tax." },
-  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in USDC: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. Start at Genesis and upgrade to Pro or Ultra for only the difference; passes can't be transferred. Standard-pool deposit fee, paid in USDC to the DAO wallet: Genesis 3%, Pro 2%, Ultra 0%.` },
+  { term: "Genesis pass", tag: "genesis", body: `Soulbound, one per wallet, paid in USDC: Genesis ${PASSES.genesis.priceUsdc}, Pro ${PASSES.pro.priceUsdc}, Ultra ${PASSES.ultra.priceUsdc}. Same reward weighting for all. Start at Genesis and upgrade to Pro or Ultra for only the difference; passes can't be transferred. Standard-pool deposit fee, paid in USDC to the DAO wallet: Genesis 3%, Pro 2%, Ultra 1%.` },
   { term: "Standard pool", tag: "genesis", body: `Genesis pool 0. It takes every emission on Day 1 and 25% from Day ${LP_DAY}. Ultra can stake in it up to 24h before Genesis starts.` },
   { term: "LP pool", tag: "genesis", body: `Genesis pool 1 — ${pegPair("xTOMB")} vault shares. Opens on Day ${LP_DAY} with 75% of emissions.` },
   { term: "Liquid / vested", tag: "genesis", body: `Every reward splits ${pct(GENESIS_POLICY.liquidShare * 10_000)} liquid, the rest vested. This is separate from the 75/25 pool split.` },
@@ -167,14 +169,24 @@ export function Docs() {
           </DocSection>
 
           <DocSection
+            id="machine"
+            numeral={num("machine")}
+            title="The machine"
+            lede="Three stops, one loop. Pick a stage to see what goes in, what comes out and where it goes next."
+            facts={[]}
+            wide
+          >
+            <Flywheel />
+          </DocSection>
+
+          <DocSection
             id="tokens"
             numeral={num("tokens")}
-            title="The three tokens"
-            lede={`A $1 stable, a capped share that trades against ${PEG.symbol}, and X Bond (MasonryBond, not launched).`}
+            title="The two tokens"
+            lede={`A $1 stable, a capped share that trades against ${PEG.symbol}.`}
             facts={[
               `xTOMB — the $1 stable. Official pair: ${pegPair("xTOMB")}.`,
               `xSHARE — capped at ${SQUARE_SUPPLY.cap.toLocaleString("en-US")}. Official pair: ${pegPair("xSHARE")}.`,
-              "xBOND — MasonryBond: buy below peg (burn xTOMB), redeem above peg. Not launched.",
             ]}
           >
             <TokenFlows />
@@ -185,7 +197,7 @@ export function Docs() {
             numeral={num("begin")}
             title="How to begin"
             lede="Four ways in. Only Genesis is bound to contracts today; the others say what's missing."
-            facts={["Founders enter Genesis with a soulbound pass.", "Farmers earn xSHARE on LP via MasonryFarm (X Share/WETH LP is the first pool).", "Members stake X Share/WETH LP in MasonryChamber to receive expansion.", "Bondholders use MasonryBond once a verified address is published."]}
+            facts={["Founders enter Genesis with a soulbound pass.", "Farmers earn xSHARE on LP via MasonryFarm (xSHARE/WETH LP is the first pool).", "Members stake xSHARE/WETH LP in MasonryChamber to receive expansion."]}
           >
             <PathStepper />
           </DocSection>
@@ -230,6 +242,17 @@ export function Docs() {
               <FireTaxExplorer />
               <RoutePlayer />
             </div>
+          </DocSection>
+
+          <DocSection
+            id="defense"
+            numeral={num("defense")}
+            title="The defense"
+            lede="Sell pressure meets resistance. Each token's sell tax takes a different route, and both end up defending the peg."
+            facts={[]}
+            wide
+          >
+            <DefenseRoutes />
           </DocSection>
 
           <DocSection
@@ -283,22 +306,10 @@ export function Docs() {
                 compounds are disabled. <Link to="/farm" className="text-ember-hot underline-offset-2 hover:underline">Open the Farm →</Link>
               </PendingPanel>
               <PendingPanel title="Masonry">
-                MasonryTreasury mints expansion to MasonryChamber (X Share/WETH LP stakers) when a fresh TWAP is strictly above $1.01. Contracts exist; no verified launch address is bound yet.{" "}
+                MasonryTreasury mints expansion to MasonryChamber (xSHARE/WETH LP stakers) when a fresh TWAP is strictly above $1.01. Contracts exist; no verified launch address is bound yet.{" "}
                 <Link to="/masonry" className="text-ember-hot underline-offset-2 hover:underline">Open the Masonry →</Link>
               </PendingPanel>
             </div>
-          </DocSection>
-
-          <DocSection
-            id="bonds"
-            numeral={num("bonds")}
-            title="Bonds"
-            lede="MasonryBond buys below peg by burning xTOMB and redeems above peg 1:1. Issuance stays disabled until a verified address is published; discount and debt caps are placeholders."
-            facts={["Once live, the page will show the contract's quote, your eligibility, remaining issuance and reserve availability.", "Every blocked action will say why."]}
-          >
-            <PendingPanel title="xBOND" badge="planned">
-              Nothing here sends a transaction. <Link to="/bonds" className="text-ember-hot underline-offset-2 hover:underline">Open Bonds →</Link>
-            </PendingPanel>
           </DocSection>
 
           <DocSection

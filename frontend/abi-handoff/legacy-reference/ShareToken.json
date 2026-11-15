@@ -3,19 +3,78 @@
     "type": "constructor",
     "inputs": [
       {
-        "name": "_startTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_communityFund",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_devFund",
-        "type": "address",
-        "internalType": "address"
+        "name": "config",
+        "type": "tuple",
+        "internalType": "struct ShareToken.Config",
+        "components": [
+          {
+            "name": "name",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "maxSupply",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "initial",
+            "type": "tuple[]",
+            "internalType": "struct ShareToken.Allocation[]",
+            "components": [
+              {
+                "name": "to",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "farmingAllocation",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "communityFundAllocation",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "devFundAllocation",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "vestingStart",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "vestingDuration",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "communityFund",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "devFund",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
       },
       {
         "name": "initialTrustees",
@@ -413,6 +472,19 @@
   },
   {
     "type": "function",
+    "name": "maxSupply",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "name",
     "inputs": [],
     "outputs": [
@@ -527,6 +599,38 @@
   },
   {
     "type": "function",
+    "name": "refusedRecipientsSealed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "refusesShares",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
@@ -553,6 +657,19 @@
         "name": "newDevFund",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setRefusedRecipients",
+    "inputs": [
+      {
+        "name": "recipients",
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "outputs": [],
@@ -593,6 +710,32 @@
         "name": "",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalBurned",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalMinted",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -850,6 +993,19 @@
   },
   {
     "type": "event",
+    "name": "RecipientRefused",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "RewardPoolDistributed",
     "inputs": [
       {
@@ -933,6 +1089,11 @@
   {
     "type": "error",
     "name": "AlreadyDistributed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CapExceeded",
     "inputs": []
   },
   {
@@ -1093,6 +1254,11 @@
   },
   {
     "type": "error",
+    "name": "InvalidConfiguration",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidShortString",
     "inputs": []
   },
@@ -1127,6 +1293,16 @@
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "RecipientRefusesShares",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RefusedRecipientsSealed",
+    "inputs": []
   },
   {
     "type": "error",

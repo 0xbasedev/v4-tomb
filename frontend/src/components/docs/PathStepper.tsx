@@ -15,7 +15,7 @@ import { Segmented, Stage } from "./kit";
  * path ends at the page where you'd do it.
  */
 
-type PathId = "founder" | "farmer" | "member" | "bondholder";
+type PathId = "founder" | "farmer" | "member";
 type PathStatus = "live" | "pending" | "planned";
 
 const H = (s: number) => `${s / 3600}h`;
@@ -58,20 +58,11 @@ const PATHS: Record<PathId, { title: string; who: string; icon: TokenId; to: str
     cta: "Open the Masonry",
     status: "pending",
     steps: [
-      "Stake X Share/WETH LP in MasonryChamber",
+      "Stake xSHARE/WETH LP in MasonryChamber",
       `When a fresh TWAP sits above $${EXPANSION.gate.toFixed(2)}, an epoch may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB`,
       "A manual deposit resets a 6-hour withdraw lock; claims have a separate 6-hour cooldown",
       "Exit Now returns 50% of LP, sends 50% to Treasury, and forfeits pending xTOMB to Arbitrage",
     ],
-  },
-  bondholder: {
-    title: "Bondholder",
-    who: "Believes the peg recovers",
-    icon: "xBOND",
-    to: "/bonds",
-    cta: "Open Bonds",
-    status: "planned",
-    steps: ["Buy below peg by burning xTOMB for xBOND", "Redeem above peg for xTOMB; redeem premium defaults to 0", "Discounts, debt ratio and supply cap come from launch config", "Actions stay disabled until a verified MasonryBond address is published"],
   },
 };
 

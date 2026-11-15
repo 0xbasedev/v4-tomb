@@ -3,7 +3,6 @@
  * in greyscale and at 16px:
  *   xTOMB  — pyramid, ember          (the peg)
  *   xSHARE — faceted shard, spectre  (the claim on seigniorage)
- *   xBOND  — hex seal, amethyst      (the IOU)
  *   USDC   — ring + bar, blue        (the peg quote)
  *   ETH/WETH — diamond, neutral
  * LP tokens render as their two halves, overlapped — they're first-class
@@ -15,9 +14,8 @@ import { TOKENS, type TokenId } from "@/lib/tokens";
 export type TokenSymbol = TokenId | "LP" | string;
 
 const TONES: Record<string, { fg: string; bg: string; ring: string }> = {
-  xTOMB: { fg: "#ff8a4c", bg: "rgba(255,106,43,0.12)", ring: "rgba(255,106,43,0.45)" },
+  xTOMB: { fg: "rgb(var(--ember-soft-rgb))", bg: "rgb(var(--ember-rgb) / 0.12)", ring: "rgb(var(--ember-rgb) / 0.45)" },
   xSHARE: { fg: "#6ff0ff", bg: "rgba(62,231,255,0.10)", ring: "rgba(62,231,255,0.40)" },
-  xBOND: { fg: "#c9adff", bg: "rgba(180,140,255,0.12)", ring: "rgba(180,140,255,0.45)" },
   USDC: { fg: "#5b9dff", bg: "rgba(39,117,202,0.16)", ring: "rgba(91,157,255,0.45)" },
   ETH: { fg: "#c9ced8", bg: "rgba(201,206,216,0.08)", ring: "rgba(201,206,216,0.30)" },
   WETH: { fg: "#c9ced8", bg: "rgba(201,206,216,0.08)", ring: "rgba(201,206,216,0.30)" },
@@ -39,13 +37,6 @@ function Glyph({ symbol, color }: { symbol: string; color: string }) {
         <>
           <path d="M12 3.5 18 9.5 12 20.5 6 9.5Z" fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
           <path d="M6 9.5h12M12 3.5v17" stroke={color} strokeWidth="1.2" opacity=".6" />
-        </>
-      );
-    case "xBOND":
-      return (
-        <>
-          <path d="M12 3.8 19 7.9v8.2l-7 4.1-7-4.1V7.9Z" fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
-          <circle cx="12" cy="12" r="2.6" fill={color} />
         </>
       );
     case "USDC":

@@ -89,9 +89,11 @@ export function EmberField({ className = "" }: { className?: string }) {
         if (rising) {
           // ember → white-hot as heat climbs
           const t = (heat - 0.42) / 0.58;
-          r = 255;
-          g = Math.round(90 + t * 120);
-          b = Math.round(31 + t * 90);
+          // Purple skin: the same climb, from violet towards white.
+          const purple = document.documentElement.dataset.theme === "purple";
+          r = purple ? Math.round(150 + t * 70) : 255;
+          g = purple ? Math.round(110 + t * 90) : Math.round(90 + t * 120);
+          b = purple ? 250 : Math.round(31 + t * 90);
           a = (0.35 + t * 0.4) * flicker;
         } else {
           r = g = b = 150;

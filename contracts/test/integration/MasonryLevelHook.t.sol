@@ -350,9 +350,9 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
         staking.fund();
 
         address member = makeAddr("genesis member");
-        usdc.mint(member, 50e6);
+        usdc.mint(member, 25e6);
         vm.startPrank(member);
-        usdc.approve(address(pass), 50e6);
+        usdc.approve(address(pass), 25e6);
         pass.purchase(MasonryGenesisPass.Tier.Genesis);
         vault.approve(address(staking), type(uint256).max);
         vm.stopPrank();
@@ -765,7 +765,7 @@ contract MasonryLevelHookTest is Test, ERC721Holder, IMockLevelTwap {
             schedule.schedule(block.timestamp + 1 days);
         }
         assertEq(settlement.genesisEnd(), schedule.end());
-        usdc.approve(address(pass), 100e6);
+        usdc.approve(address(pass), 300e6);
         pass.purchase(MasonryGenesisPass.Tier.Pro);
         usdc.approve(address(staking), 100e6);
         vm.warp(schedule.start());

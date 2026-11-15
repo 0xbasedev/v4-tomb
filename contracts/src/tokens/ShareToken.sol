@@ -103,6 +103,14 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     /// @notice True after `distributeReward` has been called. One-shot.
     bool public rewardPoolDistributed;
 
+    /// @notice Contracts that can never receive this token. A transfer or mint
+    /// to one of them reverts, so the token cannot be parked there even by a
+    /// plain transfer made straight on chain.
+    mapping(address => bool) public refusesShares;
+    /// @notice True once the refusing list has been set. It is set once and never changes.
+    bool public refusedRecipientsSealed;
+
+    event RecipientRefused(address indexed recipient);
     event RewardPoolDistributed(address indexed farmingIncentiveFund);
     event CommunityFundUpdated(address indexed previous, address indexed next);
     event DevFundUpdated(address indexed previous, address indexed next);
@@ -113,6 +121,8 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     error NotDevFund();
     error CapExceeded();
     error InvalidConfiguration();
+    error RecipientRefusesShares();
+    error RefusedRecipientsSealed();
 
     constructor(
         Config memory config,
@@ -168,7 +178,27 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
             if (totalMinted > maxSupply) revert CapExceeded();
         }
         if (to == address(0)) totalBurned += value;
+        if (refusesShares[to]) revert RecipientRefusesShares();
         super._update(from, to, value);
+    }
+
+    /// @notice Name the contracts that refuse this token. One call, ever: the
+    /// list cannot be added to or undone afterwards, so it cannot be used
+    /// later to cut off a pool or a holder. Entries must be contracts, never
+    /// wallets, and must hold none of the token when listed.
+    function setRefusedRecipients(
+        address[] calldata recipients
+    ) external onlyTrustees {
+        if (refusedRecipientsSealed) revert RefusedRecipientsSealed();
+        refusedRecipientsSealed = true;
+        for (uint256 i; i < recipients.length; ++i) {
+            address recipient = recipients[i];
+            if (recipient.code.length == 0 || recipient == address(this) || balanceOf(recipient) != 0) {
+                revert InvalidConfiguration();
+            }
+            refusesShares[recipient] = true;
+            emit RecipientRefused(recipient);
+        }
     }
 
     // ---------------------------------------------------------------------

@@ -9,7 +9,7 @@ import type { TokenId } from "@/lib/tokens";
 
 /**
  * Preview — an explicit simulated chain for review and demos, enabled only
- * with `?preview=1` or the dedicated VITE_PREVIEW demo build. Missing launch
+ * with `?preview=1` when the build sets VITE_ALLOW_PREVIEW=1 (the UI tests) or in the dedicated VITE_PREVIEW demo build; otherwise the URL switch is ignored. Missing launch
  * addresses never enable it implicitly. Every value it produces is SAMPLE data and every screen says
  * so. It never asks a wallet to sign or send anything: actions mutate this
  * in-memory state and post a "Simulated" toast.
@@ -55,11 +55,16 @@ function initialPass(): PassTier | null {
 }
 
 function initialEnabled(): boolean {
+  // Preview is off everywhere unless the build opts in: VITE_ALLOW_PREVIEW=1
+  // (set by playwright.config.ts) lets `?preview=1` work, and VITE_PREVIEW=1
+  // is the dedicated demo build. A plain dev server or production build
+  // ignores the URL switch.
+  const demoBuild = import.meta.env.VITE_PREVIEW === "1";
+  if (import.meta.env.VITE_ALLOW_PREVIEW !== "1" && !demoBuild) return false;
   const p = q().get("preview");
   if (p === "0") return false;
   if (p === "1") return true;
-  if (import.meta.env.VITE_PREVIEW === "1") return true;
-  return false;
+  return demoBuild;
 }
 
 /** Sample market depth for the projected post-sale price (constant product). */
@@ -168,7 +173,6 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     "xTOMB-USDC": 44.2,
     "xSHARE-USDC": 1.8,
     ETH: 1.42,
-    xBOND: 0,
   });
   const [raised, setRaised] = useState<Record<TaxedAsset, { bps: number; at: number }>>({
     xTOMB: { bps: 100, at: 0 },
@@ -306,7 +310,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     compound: (pool, automated) => {
       const reward = settle(pool);
       const tax = sellTax({ asset: "xTOMB", twap: oracleFresh ? twap : null, projected: twap, raisedBps: raised.xTOMB.bps, raisedAt: raised.xTOMB.at, now, genesisActive: clock.active });
-      const s = compoundSplit(reward, { automated, taxBps: 0 }); // X Tomb sells are no longer taxed
+      const s = compoundSplit(reward, { automated, taxBps: 0 }); // xTOMB sells are no longer taxed
       const lpPrice = 2 * twap;
       const shares = (s.net * twap) / lpPrice;
       setPositions((p) => {
@@ -413,7 +417,6 @@ export function simPrices(p: Pick<PreviewState, "twap" | "squareRatio">): Record
     "xTOMB-USDC": 2 * p.twap,
     "xSHARE-USDC": 2 * Math.sqrt(xshare) * 1,
     ETH: 3_480,
-    xBOND: 0,
   };
 }
 

@@ -8,13 +8,27 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {BaseTest} from "../utils/BaseTest.sol";
 import {IMasonryValidatedLevelTwap} from "../../src/masonry/MasonryCriticalDefense.sol";
 import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
-import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MockFireTax} from "../utils/MockFireTax.sol";
 import {MasonryTreasury} from "../../src/masonry/MasonryTreasury.sol";
 
 contract MockLevel is ERC20Burnable {
     constructor() ERC20("X Tomb", "xTOMB") {}
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
+        _mint(to, amount);
+    }
+}
+
+contract MockEpochFeeToken is ERC20 {
+    constructor() ERC20("Global Dollar", "USDG") {}
+
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
 
     function mint(
         address to,
@@ -62,6 +76,9 @@ contract MasonryTreasuryTest is BaseTest {
     MasonryChamber internal chamber;
     MasonryTreasury internal treasury;
     uint256 internal startTime;
+    MockEpochFeeToken internal usdc = new MockEpochFeeToken();
+    address internal dao = makeAddr("dao");
+    uint256 internal constant FEE = 20e6;
 
     function setUp() public override {
         super.setUp();
@@ -81,9 +98,20 @@ contract MasonryTreasuryTest is BaseTest {
             taxOracle
         );
         treasury = new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+            IMasonryMintableLevel(address(level)),
+            chamber,
+            oracle,
+            startTime,
+            200,
+            30 minutes,
+            address(this),
+            IERC20(address(usdc)),
+            FEE,
+            dao
         );
         assertEq(address(treasury), predicted);
+        usdc.mint(address(this), 1000e6);
+        usdc.approve(address(treasury), type(uint256).max);
         level.mint(address(this), 1_000_000 ether);
         lp.mint(alice, 1000 ether);
     }
@@ -118,7 +146,8 @@ contract MasonryTreasuryTest is BaseTest {
         uint256 supply = level.totalSupply();
         treasury.allocateExpansion();
         assertEq(level.totalSupply(), supply + supply * 200 / 10_000);
-        assertEq(chamber.pending(alice), supply * 200 / 10_000);
+        // Alice is the only staker, so she is owed the whole mint, less per-share rounding dust.
+        assertApproxEqAbs(chamber.pending(alice), supply * 200 / 10_000, 1000);
     }
 
     function test_StaleOracleSkipsMintAndAdvancesEpoch() public {
@@ -131,7 +160,7 @@ contract MasonryTreasuryTest is BaseTest {
         assertEq(treasury.epoch(), 1);
     }
 
-    function test_MissedEpochsDoNotCatchUpMint() public {
+    function test_UnpaidTimeFreezesTheEpochCounter() public {
         _stakeAlice();
         vm.warp(startTime + 1);
         oracle.set(1.05e18, block.timestamp, true);
@@ -140,12 +169,55 @@ contract MasonryTreasuryTest is BaseTest {
         uint256 afterFirst = level.totalSupply();
         assertEq(afterFirst, supply + supply * 200 / 10_000);
 
-        vm.warp(startTime + 13 hours);
+        // Nobody pays for three days: no epochs, no mint.
+        vm.warp(startTime + 3 days);
+        assertEq(treasury.epoch(), 1);
+        assertEq(level.totalSupply(), afterFirst);
+
+        // The next paid call starts epoch 2, not epoch 13, and mints once.
         oracle.set(1.05e18, block.timestamp, true);
         treasury.allocateExpansion();
-        uint256 circulating = afterFirst;
-        assertEq(level.totalSupply(), circulating + circulating * 200 / 10_000);
-        assertEq(treasury.epoch(), (13 hours) / treasury.PERIOD() + 1);
+        assertEq(treasury.epoch(), 2);
+        assertEq(level.totalSupply(), afterFirst + afterFirst * 200 / 10_000);
+
+        // And the one after that waits a full period from that call.
+        assertEq(treasury.nextEpochPoint(), startTime + 3 days + treasury.PERIOD());
+        vm.expectRevert(MasonryTreasury.EpochNotElapsed.selector);
+        treasury.allocateExpansion();
+    }
+
+    function test_StartingAnEpochCostsTheFee() public {
+        vm.warp(startTime + 1);
+        oracle.set(1e18, block.timestamp, true);
+        address payer = makeAddr("payer");
+        usdc.mint(payer, FEE);
+        vm.startPrank(payer);
+        usdc.approve(address(treasury), FEE);
+        treasury.allocateExpansion();
+        vm.stopPrank();
+        assertEq(usdc.balanceOf(dao), FEE);
+        assertEq(usdc.balanceOf(payer), 0);
+        assertEq(usdc.balanceOf(address(treasury)), 0);
+        assertEq(treasury.epoch(), 1);
+    }
+
+    function test_NoPaymentNoEpoch() public {
+        vm.warp(startTime + 1);
+        oracle.set(1.05e18, block.timestamp, true);
+        vm.prank(makeAddr("broke"));
+        vm.expectRevert();
+        treasury.allocateExpansion();
+        assertEq(treasury.epoch(), 0);
+    }
+
+    function test_TooEarlyCallDoesNotCharge() public {
+        vm.warp(startTime + 1);
+        oracle.set(1e18, block.timestamp, true);
+        treasury.allocateExpansion();
+        uint256 paid = usdc.balanceOf(dao);
+        vm.expectRevert(MasonryTreasury.EpochNotElapsed.selector);
+        treasury.allocateExpansion();
+        assertEq(usdc.balanceOf(dao), paid);
     }
 
     function test_EmptyMasonryDoesNotBrickEpoch() public {
@@ -173,7 +245,16 @@ contract MasonryTreasuryTest is BaseTest {
         );
         vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
         new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), next, oracle, startTime, 201, 30 minutes, address(this)
+            IMasonryMintableLevel(address(level)),
+            next,
+            oracle,
+            startTime,
+            201,
+            30 minutes,
+            address(this),
+            IERC20(address(usdc)),
+            FEE,
+            dao
         );
     }
 
@@ -190,7 +271,16 @@ contract MasonryTreasuryTest is BaseTest {
         );
         vm.expectRevert(MasonryTreasury.InvalidConfiguration.selector);
         new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), next, oracle, startTime, 200, 30 minutes + 1, address(this)
+            IMasonryMintableLevel(address(level)),
+            next,
+            oracle,
+            startTime,
+            200,
+            30 minutes + 1,
+            address(this),
+            IERC20(address(usdc)),
+            FEE,
+            dao
         );
     }
 }

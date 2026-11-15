@@ -330,6 +330,11 @@ contract MasonryFarmTest is BaseTest {
         farm.zapIntoMasonry(0, 0, 0);
     }
 
+    function test_XShareCanNeverBeAStakeToken() public {
+        vm.expectRevert(MasonryFarm.InvalidConfiguration.selector);
+        farm.addPool(IERC20(address(share)), 1000);
+    }
+
     function test_LastCompoundAtIsPerUserPerPool() public {
         MockShareWethLp lp1 = new MockShareWethLp();
         farm.addPool(IERC20(address(lp1)), 1000);
@@ -402,7 +407,8 @@ contract MasonryFarmTest is BaseTest {
         assertEq(share.balanceOf(alice), beforeShare, "no X Share to wallet");
         // MockFarmZapper returns dust=1 when shareAmount > 10.
         assertEq(farm.pending(0, alice), 1);
-        assertEq(chamber.balanceOf(alice), pending - 1);
+        // Sending to the Masonry is a deposit, so the 0.5% deposit fee applies.
+        assertEq(chamber.balanceOf(alice), (pending - 1) - (pending - 1) * 50 / 10_000);
         assertEq(chamber.stakeUnlockAt(alice), block.timestamp + 6 hours);
         assertEq(chamber.claimUnlockAt(alice), block.timestamp + 6 hours);
         assertEq(chamber.stakeUnlockAt(bob), bobStake, "must not grief other users");

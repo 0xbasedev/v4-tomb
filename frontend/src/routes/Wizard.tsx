@@ -58,7 +58,7 @@ const POLICY_LABEL: Record<string, string> = {
   farmClaimToWallet: "Farm claim to wallet",
   farmWithdrawCooldownSeconds: "Farm withdraw cooldown",
   liquidityWithdrawFeeBps: "Legacy static withdraw fee (unused; withdrawals use the live Fire Tax rate)",
-  shareSellTaxBps: "X Share sell tax (flat; proceeds buy and burn X Tomb)",
+  shareSellTaxBps: "xSHARE sell tax (flat; proceeds buy and burn xTOMB)",
   farmEmissionDays: "Farm emissions",
   operationalVestingDays: "Operational vesting",
   maximumExpansionPerEpochBps: "Max expansion per epoch",

@@ -44,7 +44,7 @@ contract MasonryGenesisStaking is ReentrancyGuard {
     /// Pool 1 (LP vault) is not charged here; it uses the LP fee module.
     uint16 public constant GENESIS_DEPOSIT_FEE_BPS = 300;
     uint16 public constant PRO_DEPOSIT_FEE_BPS = 200;
-    uint16 public constant ULTRA_DEPOSIT_FEE_BPS = 0;
+    uint16 public constant ULTRA_DEPOSIT_FEE_BPS = 100;
     uint256 private constant BPS = 10_000;
 
     struct Pool {

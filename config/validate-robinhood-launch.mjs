@@ -82,7 +82,7 @@ export function validateRobinhoodLaunchReadiness({ launch, deployment, networks,
     fail('deployment.poolManager must be the official Robinhood PoolManager');
   }
   // Legacy WETH Treasury/Boardroom/TrustNote must not appear as Masonry launch destinations.
-  const banned = ['boardroom', 'trustNote', 'trustnote', 'pegDefenseHook', 'money', 'estate'];
+  const banned = ['boardroom', 'trustNote', 'trustnote', 'pegDefenseHook', 'money', 'estate', 'xBond', 'bond'];
   for (const key of banned) {
     if (parsed.contracts[key]) fail(`legacy bond-era key ${key} must not be wired in the Masonry launch`);
   }

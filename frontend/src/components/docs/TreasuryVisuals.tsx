@@ -35,11 +35,11 @@ function timeline() {
   });
 }
 const KIND: Record<string, { label: string; color: string; does: (e: ReturnType<typeof timeline>[number]) => string }> = {
-  expansion: { label: "Eligible", color: "#ff6a2b", does: () => `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: this epoch may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB (planned).` },
+  expansion: { label: "Eligible", color: "rgb(var(--ember-rgb))", does: () => `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: this epoch may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB (planned).` },
   band: { label: "Band", color: "#b9b5ac", does: () => "Inside the band: nothing mints, the Fire Tax sits at its baseline." },
   tax: { label: "Below peg", color: "#b48cff", does: () => "Below $1: nothing mints and sells pay a higher Fire Tax." },
   defense: { label: "Defense", color: "#ff3b5c", does: (e) => `Critical Defense: new xSHARE tax buys and burns xTOMB. Recovery ${e.defense.checkpoints}/${DEFENSE.recoveryEpochs} checkpoints above $${DEFENSE.exitAbove.toFixed(2)}.` },
-  stale: { label: "Stale", color: "#ffb547", does: () => "No fresh validated TWAP: no expansion, no catch-up later, sells rejected, defense keeps its mode." },
+  stale: { label: "Stale", color: "rgb(var(--ember-hot-rgb))", does: () => "No fresh validated TWAP: no expansion, no catch-up later, sells rejected, defense keeps its mode." },
 };
 
 export function EpochWheel() {

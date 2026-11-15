@@ -38,7 +38,7 @@ export const PHASE_META: Record<MarketPhase, { label: string; title: string; chi
     label: "Above gate",
     title: "Above the expansion price gate",
     chip: "chip-ember",
-    detail: `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: MasonryTreasury may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB to the Masonry (X Share/WETH LP stakers).`,
+    detail: `Fresh TWAP above $${EXPANSION.gate.toFixed(2)}: MasonryTreasury may mint up to ${pct(EXPANSION.maxPerEpochBps)} of circulating xTOMB to the Masonry (xSHARE/WETH LP stakers).`,
   },
   band: { label: "At peg", title: "Inside the peg band", chip: "chip", detail: `Between $1.00 and $${EXPANSION.gate.toFixed(2)}: no expansion, baseline Fire Tax.` },
   tax: { label: "Below peg", title: "Below peg — the Fire Tax rises", chip: "chip-amethyst", detail: "Sells pay a higher Fire Tax as the TWAP falls toward $0.90, where it reaches the 6% cap." },

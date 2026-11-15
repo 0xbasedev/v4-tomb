@@ -91,19 +91,19 @@ contract MasonryGenesisPassUpgradeTest is Test {
     }
 
     function testGenesisToPro() public {
-        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 50e6);
+        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 275e6);
     }
 
     function testGenesisToUltra() public {
-        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Ultra, 450e6);
+        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Ultra, 475e6);
     }
 
     function testProToUltra() public {
-        _up(MasonryGenesisPass.Tier.Pro, MasonryGenesisPass.Tier.Ultra, 400e6);
+        _up(MasonryGenesisPass.Tier.Pro, MasonryGenesisPass.Tier.Ultra, 200e6);
     }
 
     function testChainedUpgradeTotalsUltra() public {
-        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 50e6);
+        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 275e6);
         vm.prank(USER);
         pass.upgrade(MasonryGenesisPass.Tier.Ultra);
         assertEq(usdc.balanceOf(TREASURY), 500e6);
@@ -141,12 +141,12 @@ contract MasonryGenesisPassUpgradeTest is Test {
     function testInsufficientAllowanceNoStateChange() public {
         _buy(MasonryGenesisPass.Tier.Genesis);
         vm.startPrank(USER);
-        usdc.approve(address(pass), 49e6);
+        usdc.approve(address(pass), 274e6);
         vm.expectRevert();
         pass.upgrade(MasonryGenesisPass.Tier.Pro);
         vm.stopPrank();
         assertEq(uint8(pass.tierOf(USER)), uint8(MasonryGenesisPass.Tier.Genesis));
-        assertEq(usdc.balanceOf(TREASURY), 50e6);
+        assertEq(usdc.balanceOf(TREASURY), 25e6);
     }
 
     function testInsufficientBalanceNoStateChange() public {
@@ -158,11 +158,11 @@ contract MasonryGenesisPassUpgradeTest is Test {
         vm.expectRevert();
         pass.upgrade(MasonryGenesisPass.Tier.Ultra);
         assertEq(uint8(pass.tierOf(USER)), uint8(MasonryGenesisPass.Tier.Genesis));
-        assertEq(usdc.balanceOf(TREASURY), 50e6);
+        assertEq(usdc.balanceOf(TREASURY), 25e6);
     }
 
     function testStillSoulboundAfterUpgrade() public {
-        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Ultra, 450e6);
+        _up(MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Ultra, 475e6);
         vm.startPrank(USER);
         vm.expectRevert(MasonryGenesisPass.Soulbound.selector);
         pass.transferFrom(USER, address(0xB0B), 1);

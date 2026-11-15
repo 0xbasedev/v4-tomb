@@ -6,6 +6,8 @@ import { PRIMARY } from "@/lib/networks";
 const REFERENCE_SYMBOL = PRIMARY.referenceToken?.symbol ?? "USDC";
 
 import { ConnectButton } from "@/components/ConnectButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { DefenseRoutes, FieldHead, Flywheel } from "@/components/docs/FieldMachine";
 import { Wordmark } from "@/components/brand/Sigil";
 import { AnimatedNumber } from "@/components/fx/AnimatedNumber";
 import { HeatSync } from "@/components/fx/HeatSync";
@@ -21,6 +23,7 @@ import { DEFENSE, EPOCH_SECONDS, EXPANSION, FIRE, SQUARE_ROUTING, SQUARE_SUPPLY,
 import { EASE, gsap, prefersReducedMotion, useGSAP } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 import { GenesisStrip } from "@/components/GenesisStrip";
+import { HomePasses } from "@/components/genesis/HomePasses";
 
 /**
  * Landing — the pitch, with the live protocol on the right.
@@ -28,7 +31,7 @@ import { GenesisStrip } from "@/components/GenesisStrip";
  *   1. Hero: "xTOMB" rises out of the obsidian letter by letter; the live
  *      PegGauge sits beside it so the first thing you see is real state.
  *   2. Live strip: TWAP · next checkpoint · Fire Tax now · Genesis burn.
- *   3. Three tokens: what each is for, and the one action it wants from you.
+ *   3. Two tokens: what each is for, and the one action it wants from you.
  *   4. Two regimes: above peg vs below peg — what the protocol does and what
  *      you should do. This is the whole mechanism in one comparison.
  *   5. Right now: the NextMove card for the live phase.
@@ -103,6 +106,7 @@ export function Landing() {
             Open app
           </Link>
           <ChainPicker />
+          <ThemeToggle />
           <ConnectButton compact />
         </div>
       </nav>
@@ -166,6 +170,7 @@ export function Landing() {
       {/* ===== Genesis (while it runs) ===== */}
       <section className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-5 md:px-8">
         <GenesisStrip />
+        <HomePasses className="mt-5" />
       </section>
 
       {/* ===== Live strip ===== */}
@@ -188,13 +193,13 @@ export function Landing() {
         </div>
       </section>
 
-      {/* ===== Three tokens ===== */}
+      {/* ===== Two tokens ===== */}
       <section className="relative z-10 mx-auto w-full max-w-7xl px-4 py-24 md:px-8 md:py-32">
         <div className="scroll-in mb-12 max-w-2xl">
-          <div className="label mb-3">Three tokens, three jobs</div>
+          <div className="label mb-3">Two tokens, two jobs</div>
           <h2 className="text-section text-bone">Each one wants something different from you.</h2>
         </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3" style={{ perspective: 1200 }}>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2" style={{ perspective: 1200 }}>
           {[
             {
               sym: "xTOMB",
@@ -214,15 +219,6 @@ export function Landing() {
               want: "See the routing",
               to: "/dashboard",
             },
-            {
-              sym: "xBOND",
-              tone: "amethyst-text",
-              ring: "hover:border-amethyst/40",
-              role: "The defense",
-              body: "A planned bond office. Issuance and redemption stay disabled until a verified bond contract exposes both actions — no rates or returns are promised here.",
-              want: "Preview the bond office",
-              to: "/bonds",
-            },
           ].map((t) => (
             <Link
               key={t.sym}
@@ -241,6 +237,26 @@ export function Landing() {
               </span>
             </Link>
           ))}
+        </div>
+      </section>
+
+      {/* ===== The machine (from the field guide) ===== */}
+      <section id="machine" className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-24 md:px-8 md:pb-32">
+        <FieldHead kicker="01 / The compounding loop" line1="Go deeper." line2="Keep it moving.">
+          Follow the rewards through the protocol. Pick a stage to see what goes in, what comes out and where it goes next.
+        </FieldHead>
+        <div className="scroll-in">
+          <Flywheel />
+        </div>
+      </section>
+
+      {/* ===== The defense (from the field guide) ===== */}
+      <section id="defense" className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-24 md:px-8 md:pb-32">
+        <FieldHead kicker="02 / The Fire Tax" line1="Sell pressure." line2="Meet resistance.">
+          As xTOMB drops below its peg, the sell tax rises. Each token&apos;s tax takes a different route, and both end up defending the peg.
+        </FieldHead>
+        <div className="scroll-in">
+          <DefenseRoutes />
         </div>
       </section>
 

@@ -66,7 +66,7 @@ export const LEVEL_SUPPLY = {
   initial: launch.level.initial,
 };
 
-/** Fire Tax parameters: the live liquidity withdraw fee (not an X Tomb swap tax). */
+/** Fire Tax parameters: the live liquidity withdraw fee (not an xTOMB swap tax). */
 export const FIRE = {
   baselineBps: POLICY.fireTaxBaselineBps,
   capBps: POLICY.fireTaxHardCapBps,
@@ -187,13 +187,13 @@ export const PASSES: Record<PassTier, PassDef> = {
     priceUsdc: POLICY.genesisUltraNftPriceUsdc,
     keeper: true,
     earlyStandardStaking: true,
-    perks: ["Everything in Pro", "0% fee on standard-pool deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
+    perks: ["Everything in Pro", "1% fee on single-stake deposits instead of 2% · 0.5% on LP deposits", "Stake in the standard pool up to 24 hours before Genesis starts", "Same reward weighting as every pass — rewards start at the same time"],
   },
 };
 export const PASS_ORDER: PassTier[] = ["genesis", "pro", "ultra"];
 
 /** MasonryGenesisStaking pool-0 deposit fee by pass tier (contract constants), paid in USDC to the DAO wallet. */
-export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 0 };
+export const DEPOSIT_FEE_BPS: Record<PassTier, number> = { genesis: 300, pro: 200, ultra: 100 };
 export const depositFeeBps = (tier: PassTier | null | undefined): number => (tier ? DEPOSIT_FEE_BPS[tier] : DEPOSIT_FEE_BPS.genesis);
 /** Protocol-owned concentrated range defaults, tuned per official pool. */
 export const RANGE_POLICY = {

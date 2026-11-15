@@ -42,9 +42,9 @@ contract MasonryGenesisPassUpgradeTest is Test {
 
     function test_upgradePaysOnlyTheDifference() public {
         uint256 id = _buy(MasonryGenesisPass.Tier.Genesis);
-        assertEq(usdc.balanceOf(TREASURY), 50e6);
+        assertEq(usdc.balanceOf(TREASURY), 25e6);
         assertEq(_up(MasonryGenesisPass.Tier.Pro), id, "same token");
-        assertEq(usdc.balanceOf(TREASURY), 100e6);
+        assertEq(usdc.balanceOf(TREASURY), 300e6);
         assertEq(_up(MasonryGenesisPass.Tier.Ultra), id);
         assertEq(usdc.balanceOf(TREASURY), 500e6);
         assertEq(uint8(pass.tierOf(ALICE)), uint8(MasonryGenesisPass.Tier.Ultra));
@@ -62,7 +62,7 @@ contract MasonryGenesisPassUpgradeTest is Test {
     function test_upgradeEmitsAndKeepsSoulbound() public {
         uint256 id = _buy(MasonryGenesisPass.Tier.Genesis);
         vm.expectEmit(true, true, false, true);
-        emit MasonryGenesisPass.Upgraded(ALICE, id, MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 50e6);
+        emit MasonryGenesisPass.Upgraded(ALICE, id, MasonryGenesisPass.Tier.Genesis, MasonryGenesisPass.Tier.Pro, 275e6);
         _up(MasonryGenesisPass.Tier.Pro);
         vm.prank(ALICE);
         vm.expectRevert(MasonryGenesisPass.Soulbound.selector);

@@ -48,11 +48,11 @@ test('keeper cadence is a fixed launch invariant: 3h for every pass', () => {
   }
 });
 
-test('advancing the epoch costs a fixed $5 for every caller', () => {
-  for (const value of [0, 4, 6, undefined]) {
+test('advancing the epoch costs a fixed $20 for every caller', () => {
+  for (const value of [0, 5, 19, 21, undefined]) {
     const cfg = complete();
     cfg.policy.epochAdvanceFeeUsd = value;
-    assert.throws(() => validateMasonryLaunch(cfg), /policy\.epochAdvanceFeeUsd: Masonry release invariant must equal 5/);
+    assert.throws(() => validateMasonryLaunch(cfg), /policy\.epochAdvanceFeeUsd: Masonry release invariant must equal 20/);
   }
 });
 
@@ -138,11 +138,6 @@ test('out-of-bounds configurable tokenomics are rejected', () => {
     ['criticalOracleMaxAgeSeconds', 86400, /1–1800/],
     ['criticalOracleMaxAgeSeconds', 0, /1–1800/],
     ['farmShareWethLpAllocPoints', 0, /farmShareWethLpAllocPoints/],
-    ['bondMaxDiscountBps', 10001, /bondMaxDiscountBps/],
-    ['bondMaxDebtRatioBps', 0, /bondMaxDebtRatioBps/],
-    ['bondMaxDebtRatioBps', 10001, /bondMaxDebtRatioBps/],
-    ['bondMaxSupply', 0, /bondMaxSupply/],
-    ['bondRedeemPremiumBps', 10001, /bondRedeemPremiumBps/],
   ];
   for (const [key, value, pattern] of cases) {
     const cfg = complete();
@@ -157,10 +152,6 @@ test('stricter in-bound tokenomics defaults are accepted', () => {
   cfg.policy.farmEmissionDays = 180;
   cfg.policy.criticalOracleMaxAgeSeconds = 600;
   cfg.policy.farmShareWethLpAllocPoints = 500;
-  cfg.policy.bondMaxDiscountBps = 5000;
-  cfg.policy.bondMaxDebtRatioBps = 2000;
-  cfg.policy.bondMaxSupply = 500000;
-  cfg.policy.bondRedeemPremiumBps = 0;
   assert.equal(validateMasonryLaunch(cfg).squareCap, 33333);
 });
 

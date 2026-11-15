@@ -5,7 +5,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {BaseTest} from "../utils/BaseTest.sol";
 import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
-import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {DummyShareZapper} from "../utils/DummyShareZapper.sol";
@@ -18,14 +17,12 @@ import {MockFireTax} from "../utils/MockFireTax.sol";
 contract MasonryProductionInvariantsTest is BaseTest {
     uint256 internal constant FARM_BUDGET = 25_641 ether;
     uint256 internal constant FARM_DURATION = 365 days;
-    uint16 internal constant DEBT_RATIO = 3500;
 
     MockLevel internal level;
     MockLp internal lp;
     MockTwap internal oracle;
     MasonryChamber internal chamber;
     MasonryTreasury internal treasury;
-    MasonryBond internal bond;
     MockShare internal share;
     MockShareWethLp internal shareLp;
     MasonryFarm internal farm;
@@ -49,12 +46,17 @@ contract MasonryProductionInvariantsTest is BaseTest {
             taxOracle
         );
         treasury = new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+            IMasonryMintableLevel(address(level)),
+            chamber,
+            oracle,
+            startTime,
+            200,
+            30 minutes,
+            address(this),
+            IERC20(address(lp)),
+            0,
+            address(this)
         );
-        bond = new MasonryBond(
-            IERC20(address(level)), treasury, oracle, 10_000, DEBT_RATIO, 1_000_000 ether, 0, 30 minutes
-        );
-        treasury.setBond(address(bond));
         share = new MockShare();
         shareLp = new MockShareWethLp();
         farm = new MasonryFarm(
@@ -86,9 +88,6 @@ contract MasonryProductionInvariantsTest is BaseTest {
         chamber.stake(1000 ether);
         vm.prank(alice);
         shareLp.approve(address(farm), type(uint256).max);
-        level.mint(bob, 50_000 ether);
-        vm.prank(bob);
-        level.approve(address(bond), type(uint256).max);
     }
 
     function testFuzz_NoMintAtOrBelowPeg(
@@ -126,32 +125,6 @@ contract MasonryProductionInvariantsTest is BaseTest {
         vm.prank(alice);
         vm.expectRevert(MasonryFarm.ClaimToWalletDisabled.selector);
         farm.harvest(0);
-    }
-
-    function testFuzz_BondDebtRespectsCaps(
-        uint256 tombRaw,
-        uint256 priceRaw
-    ) public {
-        uint256 price = bound(priceRaw, 0.05e18, 0.999e18);
-        uint256 tombAmount = bound(tombRaw, 1 ether, 5000 ether);
-        oracle.set(price, block.timestamp, true);
-        uint256 preview = bond.previewBuy(tombAmount);
-        uint256 circulatingAfter = level.totalSupply() - tombAmount;
-        uint256 cap = circulatingAfter * DEBT_RATIO / 10_000;
-        if (preview == 0 || bond.totalSupply() + preview > cap || bond.totalSupply() + preview > bond.maxBondSupply()) {
-            vm.prank(bob);
-            vm.expectRevert();
-            bond.buy(tombAmount);
-            return;
-        }
-        vm.prank(bob);
-        bond.buy(tombAmount);
-        assertLe(bond.totalSupply(), (level.totalSupply() * DEBT_RATIO) / 10_000);
-        assertLe(bond.totalSupply(), bond.maxBondSupply());
-        uint256 fair = tombAmount * 1e18 / price;
-        uint256 maxOut = tombAmount * 2;
-        assertLe(preview, maxOut);
-        assertLe(preview, fair);
     }
 
     function testFuzz_FireTaxNeverExceedsSixPercent(

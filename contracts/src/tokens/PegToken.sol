@@ -66,7 +66,7 @@ contract PegToken is ERC20Burnable, ERC20Permit, Trustees {
 
     constructor(
         address initialTrustees
-    ) ERC20("Old Money", "MONEY") ERC20Permit("Old Money") Trustees(initialTrustees) {
+    ) ERC20("xTOMB", "xTOMB") ERC20Permit("xTOMB") Trustees(initialTrustees) {
         // Tomb-faithful: mint 1 unit to the deployer for initial pool setup / sanity check.
         _mint(initialTrustees, 1 ether);
     }

@@ -334,6 +334,9 @@ contract MasonryFarm is ReentrancyGuard {
         IERC20 stakeToken,
         uint256 allocPoints
     ) internal {
+        // X Share is the reward. It can never be a stake token: no single-stake
+        // X Share pool, not even one added by the admin straight on chain.
+        if (stakeToken == share) revert InvalidConfiguration();
         pools.push(
             Pool({
                 stakeToken: stakeToken,

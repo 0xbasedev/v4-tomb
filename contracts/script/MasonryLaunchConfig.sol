@@ -9,10 +9,6 @@ struct MasonryLaunchParams {
     uint256 farmEmissionDays;
     uint256 farmWholeTokens;
     uint256 farmShareWethLpAllocPoints;
-    uint256 bondMaxDiscountBps;
-    uint256 bondMaxDebtRatioBps;
-    uint256 bondMaxSupplyWholeTokens;
-    uint256 bondRedeemPremiumBps;
     uint256 oracleMaxAgeSeconds;
     uint256 fireTaxBaselineBps;
     uint256 fireTaxHardCapBps;
@@ -53,10 +49,6 @@ library MasonryLaunchConfig {
         p.farmEmissionDays = raw.readUint(".policy.farmEmissionDays");
         p.farmWholeTokens = raw.readUint(".square.farming");
         p.farmShareWethLpAllocPoints = raw.readUint(".policy.farmShareWethLpAllocPoints");
-        p.bondMaxDiscountBps = raw.readUint(".policy.bondMaxDiscountBps");
-        p.bondMaxDebtRatioBps = raw.readUint(".policy.bondMaxDebtRatioBps");
-        p.bondMaxSupplyWholeTokens = raw.readUint(".policy.bondMaxSupply");
-        p.bondRedeemPremiumBps = raw.readUint(".policy.bondRedeemPremiumBps");
         p.oracleMaxAgeSeconds = raw.readUint(".policy.criticalOracleMaxAgeSeconds");
         p.fireTaxBaselineBps = raw.readUint(".policy.fireTaxBaselineBps");
         p.fireTaxHardCapBps = raw.readUint(".policy.fireTaxHardCapBps");
@@ -101,12 +93,6 @@ library MasonryLaunchConfig {
             revert InvalidLaunchConfig("oracleMaxAgeSeconds");
         }
         if (p.farmShareWethLpAllocPoints == 0) revert InvalidLaunchConfig("farmShareWethLpAllocPoints");
-        if (p.bondMaxDiscountBps > 10_000) revert InvalidLaunchConfig("bondMaxDiscountBps");
-        if (p.bondMaxDebtRatioBps == 0 || p.bondMaxDebtRatioBps > 10_000) {
-            revert InvalidLaunchConfig("bondMaxDebtRatioBps");
-        }
-        if (p.bondMaxSupplyWholeTokens == 0) revert InvalidLaunchConfig("bondMaxSupply");
-        if (p.bondRedeemPremiumBps > 10_000) revert InvalidLaunchConfig("bondRedeemPremiumBps");
         if (p.daoWallet == address(0)) revert InvalidLaunchConfig("daoWallet");
         if (p.farmWithdrawCooldownSeconds < 60 || p.farmWithdrawCooldownSeconds > 1 days) {
             revert InvalidLaunchConfig("farmWithdrawCooldownSeconds");

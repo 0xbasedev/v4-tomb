@@ -105,12 +105,12 @@ export function validateMasonryLaunch(doc) {
     withdrawFeeBaselineBps: 150,
     genesisLevelSellBurnShareBps: 10000,
     genesisNftRequired: true,
-    genesisNftPriceUsdc: 50,
-    genesisProNftPriceUsdc: 100,
+    genesisNftPriceUsdc: 25,
+    genesisProNftPriceUsdc: 300,
     genesisUltraNftPriceUsdc: 500,
     genesisUltraMultiplier: 1,
     fireTaxRecoverySeconds: 25200,
-    epochAdvanceFeeUsd: 5,
+    epochAdvanceFeeUsd: 20,
     requiresFreshTwapStrictlyAbovePegBps: 10100,
     farmsCompoundCooldownSeconds: 10800,
     genesisCompoundCooldownSeconds: 10800,
@@ -151,14 +151,6 @@ export function validateMasonryLaunch(doc) {
 
   positive(policy.farmShareWethLpAllocPoints, 'policy.farmShareWethLpAllocPoints');
 
-  const discount = nonnegative(policy.bondMaxDiscountBps, 'policy.bondMaxDiscountBps');
-  if (discount > 10000) throw new Error('policy.bondMaxDiscountBps: cannot exceed 10000');
-  const debt = nonnegative(policy.bondMaxDebtRatioBps, 'policy.bondMaxDebtRatioBps');
-  if (debt < 1 || debt > 10000) throw new Error('policy.bondMaxDebtRatioBps: must be 1–10000');
-  positive(policy.bondMaxSupply, 'policy.bondMaxSupply');
-  const premium = nonnegative(policy.bondRedeemPremiumBps, 'policy.bondRedeemPremiumBps');
-  if (premium > 10000) throw new Error('policy.bondRedeemPremiumBps: cannot exceed 10000');
-
 
   validateRangeKnobs(policy.rangeLevel, 'policy.rangeLevel');
   validateRangeKnobs(policy.rangeSquare, 'policy.rangeSquare');
@@ -168,7 +160,7 @@ export function validateMasonryLaunch(doc) {
     throw new Error('policy.farmClaimToWallet: must be a boolean');
   }
   if (policy.farmClaimToWallet !== false) {
-    throw new Error('policy.farmClaimToWallet: farm-earned X Share cannot be claimed to a wallet');
+    throw new Error('policy.farmClaimToWallet: farm-earned xSHARE cannot be claimed to a wallet');
   }
   const farmWithdraw = nonnegative(policy.farmWithdrawCooldownSeconds, 'policy.farmWithdrawCooldownSeconds');
   if (farmWithdraw < 60 || farmWithdraw > 86400) {

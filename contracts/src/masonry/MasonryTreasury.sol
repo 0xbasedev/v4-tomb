@@ -6,13 +6,21 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {IMasonryValidatedLevelTwap} from "./MasonryCriticalDefense.sol";
-import {IMasonryBondSettler, IMasonryMintableLevel, IMasonrySeigniorageSink} from "./IMasonryRuntime.sol";
+import {IMasonryMintableLevel, IMasonrySeigniorageSink} from "./IMasonryRuntime.sol";
 import {MasonryRules} from "./MasonryRules.sol";
 
 /// @notice Modern Masonry expansion Treasury quoted against the peg-token TWAP
 /// (USDG on Robinhood). Gates: fresh validated TWAP strictly above 1.01 of peg,
-/// no missed-epoch catch-up, skip when the Masonry stake room is empty.
-contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
+/// skip when the Masonry stake room is empty.
+///
+/// Epochs do not start themselves. Whoever calls `allocateExpansion` pays
+/// `epochFee` of the fee token (20 USDG at launch) to `feeRecipient`, and the
+/// epoch counter moves by exactly one. The next epoch can start one `PERIOD`
+/// after the last one was started, not on a wall-clock grid: if nobody pays
+/// for three days the counter simply stands still, nothing is minted, and
+/// the first call afterwards starts the single next epoch (no catch-up, no
+/// skipped numbers).
+contract MasonryTreasury is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @notice 18-decimal peg (1 X Tomb = 1 USDG in oracle units).
@@ -31,13 +39,19 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
     uint16 public immutable requestedRateBps;
     uint256 public immutable oracleMaxAge;
     address public immutable admin;
+    /// @notice Token the epoch fee is paid in (the chain's peg token).
+    IERC20 public immutable feeToken;
+    /// @notice Flat fee the caller pays to start an epoch.
+    uint256 public immutable epochFee;
+    address public immutable feeRecipient;
 
     uint256 public epoch;
-    address public bond;
+    /// @notice When the current epoch was started (0 before the first).
+    uint256 public lastEpochAt;
 
+    event EpochStarted(uint256 indexed epochId, address indexed payer, uint256 fee);
     event Expansion(uint256 indexed epochId, uint256 minted, uint256 twapPrice);
     event ExpansionSkipped(uint256 indexed epochId, uint256 twapPrice, bool fresh, bytes32 reason);
-    event BondSet(address indexed bond);
 
     error ZeroAddress();
     error InvalidConfiguration();
@@ -55,11 +69,14 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         uint256 startTime_,
         uint16 requestedRateBps_,
         uint256 oracleMaxAge_,
-        address admin_
+        address admin_,
+        IERC20 feeToken_,
+        uint256 epochFee_,
+        address feeRecipient_
     ) {
         if (
             address(level_) == address(0) || address(masonry_) == address(0) || address(oracle_) == address(0)
-                || admin_ == address(0)
+                || admin_ == address(0) || address(feeToken_) == address(0) || feeRecipient_ == address(0)
         ) revert ZeroAddress();
         if (startTime_ == 0) revert InvalidConfiguration();
         if (requestedRateBps_ == 0 || requestedRateBps_ > MasonryRules.HARD_MAX_EXPANSION_BPS) {
@@ -73,20 +90,14 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         requestedRateBps = requestedRateBps_;
         oracleMaxAge = oracleMaxAge_;
         admin = admin_;
+        feeToken = feeToken_;
+        epochFee = epochFee_;
+        feeRecipient = feeRecipient_;
     }
 
-    function setBond(
-        address bond_
-    ) external {
-        if (msg.sender != admin) revert Unauthorized();
-        if (bond != address(0)) revert AlreadySet();
-        if (bond_ == address(0)) revert ZeroAddress();
-        bond = bond_;
-        emit BondSet(bond_);
-    }
-
+    /// @notice Earliest time the next epoch can be started.
     function nextEpochPoint() public view returns (uint256) {
-        return startTime + epoch * PERIOD;
+        return epoch == 0 ? startTime : lastEpochAt + PERIOD;
     }
 
     function previewTwap() public view returns (uint256 price, bool fresh) {
@@ -99,8 +110,11 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
     function allocateExpansion() external nonReentrant {
         if (block.timestamp < startTime) revert NotStarted();
         if (block.timestamp < nextEpochPoint()) revert EpochNotElapsed();
-        // Fast-forward to the current wall-clock epoch. Missed periods are not minted.
-        epoch = (block.timestamp - startTime) / PERIOD + 1;
+        // One paid call, one epoch. Time nobody paid for is not counted.
+        epoch += 1;
+        lastEpochAt = block.timestamp;
+        if (epochFee != 0) feeToken.safeTransferFrom(msg.sender, feeRecipient, epochFee);
+        emit EpochStarted(epoch, msg.sender, epochFee);
 
         (uint256 price, bool fresh) = previewTwap();
         if (!MasonryRules.eligibleForExpansion(price, PEG_PRICE, fresh)) {
@@ -123,20 +137,5 @@ contract MasonryTreasury is IMasonryBondSettler, ReentrancyGuard {
         IERC20(address(level)).safeIncreaseAllowance(address(masonry), minted);
         masonry.allocateSeigniorage(minted);
         emit Expansion(epoch, minted, price);
-    }
-
-    /// @notice Pays X Bond redemptions in newly minted X Tomb when the peg-token
-    /// TWAP is fresh and strictly above peg. The amount includes any configured
-    /// redeem premium applied by MasonryBond (default 0).
-    function settleBondRedemption(
-        address to,
-        uint256 tombAmount
-    ) external nonReentrant {
-        if (msg.sender != bond) revert Unauthorized();
-        if (to == address(0) || tombAmount == 0) revert InvalidConfiguration();
-        (uint256 price, bool fresh) = previewTwap();
-        if (!fresh) revert StaleOracle();
-        if (price <= PEG_PRICE) revert NotAbovePeg();
-        level.mint(to, tombAmount);
     }
 }

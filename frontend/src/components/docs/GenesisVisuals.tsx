@@ -13,7 +13,7 @@ export function EmissionsTimeline() {
   const split = (d: number) => {
     const phase = d === 1 ? "day1" : "lp";
     return [
-      { id: "LP pool", share: emissionShare(1, { phase }), color: "#ff6a2b" },
+      { id: "LP pool", share: emissionShare(1, { phase }), color: "rgb(var(--ember-rgb))" },
       { id: "Standard pool", share: emissionShare(0, { phase }), color: "#2a8cff" },
     ].filter((x) => x.share > 0);
   };

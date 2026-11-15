@@ -82,12 +82,12 @@ export function FireTaxChart({
           </text>
         ))}
         <line x1={x(FIRE.fullTaxAt)} x2={x(FIRE.fullTaxAt)} y1={PADT} y2={H - PADB} stroke="rgba(255,59,92,0.25)" strokeDasharray="3 4" />
-        <path d={`${path} L ${x(X1)} ${y(0)} L ${x(X0)} ${y(0)} Z`} fill="rgba(255,106,43,0.06)" />
-        <path className="ft-curve" d={path} fill="none" stroke="#ff6a2b" strokeWidth="2.2" />
+        <path d={`${path} L ${x(X1)} ${y(0)} L ${x(X0)} ${y(0)} Z`} fill="rgb(var(--ember-rgb) / 0.06)" />
+        <path className="ft-curve" d={path} fill="none" stroke="rgb(var(--ember-rgb))" strokeWidth="2.2" />
         {genesisActive && (
           <g>
-            <line x1={PADL} x2={W - PADR} y1={y(floor)} y2={y(floor)} stroke={asset === "xTOMB" ? "#ffb547" : "#3ee7ff"} strokeDasharray="6 5" strokeWidth="1.4" />
-            <text x={W - PADR} y={y(floor) - 5} textAnchor="end" fontSize="9.5" fill={asset === "xTOMB" ? "#ffb547" : "#3ee7ff"} fontFamily="JetBrains Mono Variable, monospace">
+            <line x1={PADL} x2={W - PADR} y1={y(floor)} y2={y(floor)} stroke={asset === "xTOMB" ? "rgb(var(--ember-hot-rgb))" : "#3ee7ff"} strokeDasharray="6 5" strokeWidth="1.4" />
+            <text x={W - PADR} y={y(floor) - 5} textAnchor="end" fontSize="9.5" fill={asset === "xTOMB" ? "rgb(var(--ember-hot-rgb))" : "#3ee7ff"} fontFamily="JetBrains Mono Variable, monospace">
               Genesis floor {pct(floor)}
             </text>
           </g>

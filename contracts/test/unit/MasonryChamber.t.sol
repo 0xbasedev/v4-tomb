@@ -35,7 +35,16 @@ contract MasonryChamberTest is BaseTest {
         chamber =
             new MasonryChamber(IERC20(address(lp)), IERC20(address(level)), predicted, daoWallet, arbitrage, fireTax);
         treasury = new MasonryTreasury(
-            IMasonryMintableLevel(address(level)), chamber, oracle, startTime, 200, 30 minutes, address(this)
+            IMasonryMintableLevel(address(level)),
+            chamber,
+            oracle,
+            startTime,
+            200,
+            30 minutes,
+            address(this),
+            IERC20(address(lp)),
+            0,
+            address(this)
         );
         assertEq(address(treasury), predicted);
         level.mint(address(this), 1_000_000 ether);
@@ -52,6 +61,15 @@ contract MasonryChamberTest is BaseTest {
         treasury.allocateExpansion();
     }
 
+    function test_DepositChargesHalfAPercentToTheDaoWallet() public {
+        // setUp staked 400 LP for alice.
+        assertEq(chamber.DEPOSIT_FEE_BPS(), 50);
+        assertEq(chamber.balanceOf(alice), 398 ether, "only the amount after the fee is staked");
+        assertEq(chamber.totalSupply(), 398 ether);
+        assertEq(lp.balanceOf(daoWallet), 2 ether);
+        assertEq(lp.balanceOf(address(chamber)), 398 ether);
+    }
+
     function test_WithdrawLockedUntilStakeCooldown() public {
         vm.prank(alice);
         vm.expectRevert(MasonryChamber.StakeLocked.selector);
@@ -62,11 +80,12 @@ contract MasonryChamberTest is BaseTest {
         chamber.withdraw(10 ether);
         vm.warp(block.timestamp + 5 hours);
         uint256 beforeLp = lp.balanceOf(alice);
+        uint256 daoBefore = lp.balanceOf(daoWallet);
         uint256 fee = 100 ether * uint256(chamber.withdrawFeeBpsFor(alice)) / 10_000;
         vm.prank(alice);
         chamber.withdraw(100 ether);
         assertEq(lp.balanceOf(alice), beforeLp + 100 ether - fee);
-        assertEq(lp.balanceOf(daoWallet), fee);
+        assertEq(lp.balanceOf(daoWallet) - daoBefore, fee);
         assertGt(chamber.pending(alice), 0);
         assertEq(level.balanceOf(alice), 0, "ordinary withdraw does not pay LEVEL");
     }
@@ -77,10 +96,11 @@ contract MasonryChamberTest is BaseTest {
         // Six hours in earns 1 bps of time-in discount: 300 * 50% * 21601s / 21 days, rounded down.
         assertEq(chamber.withdrawFeeBpsFor(alice), 299, "time-in discount after six hours");
         uint256 before = lp.balanceOf(alice);
+        uint256 daoStart = lp.balanceOf(daoWallet);
         vm.prank(alice);
         chamber.withdraw(100 ether);
         assertEq(lp.balanceOf(alice), before + 97.01 ether);
-        assertEq(lp.balanceOf(daoWallet), 2.99 ether);
+        assertEq(lp.balanceOf(daoWallet) - daoStart, 2.99 ether);
         assertEq(chamber.withdrawFeeBpsFor(alice), 300, "a withdrawal restarts the clock");
 
         fireTax.set(600);
@@ -151,6 +171,7 @@ contract MasonryChamberTest is BaseTest {
         uint256 userLevelBefore = level.balanceOf(alice);
         uint256 userLpBefore = lp.balanceOf(alice);
         uint256 staked = chamber.balanceOf(alice);
+        uint256 daoLpBefore = lp.balanceOf(daoWallet);
 
         vm.prank(alice);
         chamber.exitNow();
@@ -158,7 +179,7 @@ contract MasonryChamberTest is BaseTest {
         assertEq(chamber.balanceOf(alice), 0);
         assertEq(chamber.pending(alice), 0);
         assertEq(lp.balanceOf(alice), userLpBefore + staked / 2);
-        assertEq(lp.balanceOf(daoWallet), staked - staked / 2);
+        assertEq(lp.balanceOf(daoWallet) - daoLpBefore, staked - staked / 2);
         assertEq(level.balanceOf(arbitrage), pending);
         assertEq(level.balanceOf(alice), userLevelBefore, "no LEVEL paid to user - not a Fire Tax exit");
         assertEq(lp.balanceOf(address(chamber)), 0);

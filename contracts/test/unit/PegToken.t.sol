@@ -54,8 +54,8 @@ contract PegTokenTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(money.name(), "Old Money");
-        assertEq(money.symbol(), "MONEY");
+        assertEq(money.name(), "xTOMB");
+        assertEq(money.symbol(), "xTOMB");
         assertEq(money.decimals(), 18);
     }
 

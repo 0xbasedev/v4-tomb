@@ -25,6 +25,18 @@ export function PendingBadge({ className = "", label = "Pending backend" }: { cl
   );
 }
 
+/** Green tag: nothing is missing in the build — it is waiting on a user to deposit or pay. */
+export function DepositBadge({ className = "", label = "Pending user deposit" }: { className?: string; label?: string }) {
+  return (
+    <span
+      className={`chip ml-4 h-6 shrink-0 border-ok/40 bg-ok/10 px-2 text-[10px] uppercase tracking-wider text-ok ${className}`}
+      title="Starts when a user deposits or pays"
+    >
+      {label}
+    </span>
+  );
+}
+
 export function PlannedBadge({ className = "", label = "Planned" }: { className?: string; label?: string }) {
   return (
     <span className={`chip chip-amethyst h-6 shrink-0 px-2 text-[10px] uppercase tracking-wider ${className}`} title="Roadmap — not in the contracts yet">
@@ -40,12 +52,12 @@ export function Reason({ children, tone = "ash" }: { children: ReactNode; tone?:
 }
 
 /** A panel that says what's missing instead of showing an empty or fake control. */
-export function PendingPanel({ title, children, badge = "pending" }: { title: string; children: ReactNode; badge?: "pending" | "planned" }) {
+export function PendingPanel({ title, children, badge = "pending" }: { title: string; children: ReactNode; badge?: "pending" | "planned" | "deposit" | "none" }) {
   return (
     <div className="rounded-2xl border border-dashed border-white/12 bg-black/20 p-4">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className="text-[14px] font-semibold text-bone">{title}</span>
-        {badge === "pending" ? <PendingBadge /> : <PlannedBadge />}
+        {badge === "pending" ? <PendingBadge /> : badge === "deposit" ? <DepositBadge /> : badge === "planned" ? <PlannedBadge /> : null}
       </div>
       <div className="text-[12.5px] leading-relaxed text-bone-dim">{children}</div>
     </div>

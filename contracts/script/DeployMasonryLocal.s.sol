@@ -259,6 +259,11 @@ contract DeployMasonryLocal is Script {
         d.level.mint(d.deployer, GENESIS_REWARD_BUDGET);
         d.level.approve(address(d.staking), GENESIS_REWARD_BUDGET);
         d.staking.fund();
+        // Genesis staking never handles X Share: make the token refuse to land there
+        // at all. One call, sealed for good, before any X Share could reach it.
+        address[] memory refused = new address[](1);
+        refused[0] = address(d.staking);
+        d.square.setRefusedRecipients(refused);
     }
 
     function _squarePool(

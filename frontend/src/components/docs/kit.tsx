@@ -81,7 +81,7 @@ export function Slider({
   step,
   onChange,
   display,
-  accent = "#ff6a2b",
+  accent = "rgb(var(--ember-rgb))",
 }: {
   id: string;
   label: string;

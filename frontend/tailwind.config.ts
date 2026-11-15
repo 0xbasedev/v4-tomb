@@ -29,9 +29,9 @@ export default {
         "ash-dim": "#4a4945",
 
         // ---- Heat: xTOMB ----
-        ember: "#ff6a2b",
-        "ember-hot": "#ffb547",
-        "ember-deep": "#c2410c",
+        ember: "rgb(var(--ember-rgb) / <alpha-value>)",
+        "ember-hot": "rgb(var(--ember-hot-rgb) / <alpha-value>)",
+        "ember-deep": "rgb(var(--ember-deep-rgb) / <alpha-value>)",
         magma: "#ff3d1f",
 
         // ---- Cold: xSHARE ----
@@ -63,7 +63,7 @@ export default {
       },
       boxShadow: {
         panel: "inset 0 1px 0 0 rgba(255,255,255,0.05), 0 24px 48px -24px rgba(0,0,0,0.8)",
-        ember: "0 0 0 1px rgba(255,106,43,0.5), 0 10px 40px -10px rgba(255,106,43,0.55)",
+        ember: "0 0 0 1px rgb(var(--ember-rgb) / 0.5), 0 10px 40px -10px rgb(var(--ember-rgb) / 0.55)",
         spectre: "0 0 0 1px rgba(62,231,255,0.45), 0 10px 40px -10px rgba(62,231,255,0.45)",
         amethyst: "0 0 0 1px rgba(180,140,255,0.45), 0 10px 40px -10px rgba(180,140,255,0.45)",
       },
@@ -77,8 +77,8 @@ export default {
           "50%": { opacity: "1" },
         },
         "pool-glow": {
-          "0%, 100%": { boxShadow: "0 0 0 1px rgba(255,106,43,0.35), 0 0 32px -6px rgba(255,106,43,0.35)" },
-          "50%": { boxShadow: "0 0 0 1px rgba(255,106,43,0.7), 0 0 58px -4px rgba(255,106,43,0.6)" },
+          "0%, 100%": { boxShadow: "0 0 0 1px rgb(var(--ember-rgb) / 0.35), 0 0 32px -6px rgb(var(--ember-rgb) / 0.35)" },
+          "50%": { boxShadow: "0 0 0 1px rgb(var(--ember-rgb) / 0.7), 0 0 58px -4px rgb(var(--ember-rgb) / 0.6)" },
         },
         "spin-slow": {
           "0%": { transform: "rotate(0deg)" },

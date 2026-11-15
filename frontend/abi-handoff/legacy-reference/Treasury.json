@@ -12,6 +12,45 @@
   },
   {
     "type": "function",
+    "name": "MAX_BOND_DISCOUNT_PERCENT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_BOND_RATE_MULTIPLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ORACLE_MAX_AGE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "PERIOD",
     "inputs": [],
     "outputs": [
@@ -1276,6 +1315,11 @@
   },
   {
     "type": "error",
+    "name": "DiscountRateOutOfRange",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ExpansionPercentOutOfRange",
     "inputs": []
   },
@@ -1332,6 +1376,11 @@
   {
     "type": "error",
     "name": "PremiumPercentTooHigh",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PremiumRateOutOfRange",
     "inputs": []
   },
   {

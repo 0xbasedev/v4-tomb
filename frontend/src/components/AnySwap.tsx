@@ -14,7 +14,7 @@ import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
 import { useMagnetic } from "@/lib/motion/useMagnetic";
 import { labelPeg, usd } from "@/lib/peg";
 import { planRoute, quoteRoute, type Leg } from "@/lib/routes";
-import { SWAP_TOKENS, TOKENS, shortLabel, type TokenId } from "@/lib/tokens";
+import { TOKENS, shortLabel, type TokenId } from "@/lib/tokens";
 import { maskDecimalInput } from "@/lib/util/decimal";
 
 /**
@@ -136,7 +136,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
         </div>
       )}
 
-      <Side label="You pay" token={input} other={output} side="in" onPick={(id) => (choose("in", id), animateRoute())} onOpen={() => setPicking("in")}
+      <Side label="You pay" token={input} side="in" onOpen={() => setPicking("in")}
         right={
           <button type="button" onClick={() => bal && setAmount(String(bal))} className="font-mono text-[11px] text-ash transition-colors hover:text-ember-hot">
             Bal <span className="text-bone-dim">{fmtAmt(bal)}</span> · <span className="text-ember">MAX</span>
@@ -152,7 +152,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
           value={amount}
           onChange={(e) => setAmount(maskDecimalInput(e.target.value))}
           aria-label={`Amount of ${TOKENS[input].symbol} to pay`}
-          className="num min-w-0 flex-1 bg-transparent text-[32px] leading-none text-bone outline-none"
+          className="num min-w-0 flex-1 bg-transparent text-[40px] leading-none text-bone outline-none"
         />
       </Side>
 
@@ -162,7 +162,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
         </button>
       </div>
 
-      <Side label="You receive" token={output} other={input} side="out" onPick={(id) => (choose("out", id), animateRoute())} onOpen={() => setPicking("out")} dim
+      <Side label="You receive" token={output} side="out" onOpen={() => setPicking("out")} dim
         right={<span className="font-mono text-[11px] text-ash">after pool fees + Fire Tax</span>}
         usdLine={<div className="font-mono text-[11px] text-ash">≈ {usd(quote?.valueOutUsd)}</div>}
       >
@@ -170,7 +170,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
           value={quote?.amountOut ?? (amt > 0 ? null : 0)}
           format={(n) => (n === 0 ? "0" : fmtAmt(n))}
           duration={0.5}
-          className={`num min-w-0 flex-1 truncate text-[32px] leading-none ${quote?.amountOut ? "text-bone" : "text-ash-dim"}`}
+          className={`num min-w-0 flex-1 truncate text-[40px] leading-none ${quote?.amountOut ? "text-bone" : "text-ash-dim"}`}
         />
       </Side>
 
@@ -290,7 +290,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
         {disabledReason && amt > 0 && <Reason tone={blocked ? "warn" : "ash"}>{disabledReason}</Reason>}
       </div>
 
-      {picking && <TokenPicker side={picking} current={picking === "in" ? input : output} other={picking === "in" ? output : input} onPick={(id) => choose(picking, id)} onClose={() => setPicking(null)} />}
+      {picking && <TokenPicker side={picking} current={picking === "in" ? input : output} other={picking === "in" ? output : input} onPick={(id) => (choose(picking, id), animateRoute())} onClose={() => setPicking(null)} />}
     </div>
   );
 }
@@ -298,9 +298,7 @@ export function AnySwap({ pair, onPair, onLiquidity }: { pair: SwapPair; onPair:
 function Side({
   label,
   token,
-  other,
   side,
-  onPick,
   onOpen,
   right,
   usdLine,
@@ -309,19 +307,16 @@ function Side({
 }: {
   label: string;
   token: TokenId;
-  other: TokenId;
   side: "in" | "out";
-  onPick: (id: TokenId) => void;
   onOpen: () => void;
   right: ReactNode;
   usdLine: ReactNode;
   dim?: boolean;
   children: ReactNode;
 }) {
-  const p = useProtocol();
   return (
-    <div className={`rounded-2xl p-4 ${dim ? "bg-black/20" : "bg-black/35"}`}>
-      <div className="mb-2 flex items-center justify-between">
+    <div className={`rounded-2xl border border-white/[0.07] p-5 md:p-6 ${dim ? "bg-black/20" : "bg-black/35"}`}>
+      <div className="mb-4 flex items-center justify-between">
         <span className="label">{label}</span>
         {right}
       </div>
@@ -330,45 +325,16 @@ function Side({
         <button
           type="button"
           onClick={onOpen}
-          className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pl-1.5 pr-3 font-mono text-sm text-bone transition-colors hover:border-white/25"
+          className="flex shrink-0 items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.05] py-2 pl-2 pr-4 text-[15px] font-medium text-bone transition-colors hover:border-ember/50"
           aria-label={`Choose the token you ${side === "in" ? "pay with" : "receive"}`}
         >
-          <TokenIcon symbol={token} size={24} />
+          <TokenIcon symbol={token} size={30} />
           {shortLabel(token)}
           {TOKENS[token].pair && <span className="rounded bg-ember/15 px-1 text-[9px] text-ember-hot">LP</span>}
           <span className="text-ash">▾</span>
         </button>
       </div>
-      <div className="mt-1">{usdLine}</div>
-      <div className="mt-3 grid grid-cols-3 gap-1.5">
-        {SWAP_TOKENS.map((id) => {
-          const active = id === token;
-          const plan = side === "in" ? planRoute(id, other, p.lpAssetShare) : planRoute(other, id, p.lpAssetShare);
-          const ok = plan.ok || id === other;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onPick(id)}
-              title={ok ? TOKENS[id].name : (plan as { reason: string }).reason}
-              className={`flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1 py-1.5 font-mono text-[10px] transition-colors sm:gap-1.5 sm:px-1.5 sm:text-[10.5px] ${
-                active ? "border-ember/60 bg-ember/[0.10] text-bone" : ok ? "border-white/[0.07] bg-black/20 text-bone-dim hover:border-white/20 hover:text-bone" : "border-white/[0.04] bg-black/10 text-ash-dim opacity-60"
-              }`}
-            >
-              <TokenIcon symbol={id} size={14} />
-              {TOKENS[id].pair ? (
-                <>
-                  <span className="truncate sm:hidden">{TOKENS[id].pair![0]} LP</span>
-                  <span className="hidden truncate sm:inline">{shortLabel(id)}</span>
-                  <span className="hidden shrink-0 rounded bg-ember/15 px-1 text-[8.5px] leading-[14px] text-ember-hot sm:inline">LP</span>
-                </>
-              ) : (
-                <span className="truncate">{shortLabel(id)}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <div className="mt-3">{usdLine}</div>
     </div>
   );
 }

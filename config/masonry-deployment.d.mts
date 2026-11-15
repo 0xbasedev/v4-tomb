@@ -1,7 +1,7 @@
 export type Address = `0x${string}`;
 export type MasonryContractKey =
   | 'level' | 'square' | 'usdc' | 'poolManager' | 'treasury'
-  | 'chamber' | 'farm' | 'xBond'
+  | 'chamber' | 'farm'
   | 'schedule' | 'pass' | 'staking' | 'settlement' | 'lpBurnFee'
   | 'levelHook' | 'levelOracle' | 'buybackGuard' | 'levelVault'
   | 'squareHook' | 'squareVault' | 'levelRangeManager' | 'squareRangeManager' | 'criticalDefense' | 'miniSwapRouter';

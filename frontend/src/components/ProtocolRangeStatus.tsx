@@ -8,7 +8,7 @@ import { RANGE_POLICY, pct } from "@/lib/launch";
 /**
  * Read-only status of the protocol-owned concentrated ranges on the official
  * xTOMB/USDG and xSHARE/USDG pools. User Genesis vaults and Masonry
- * X Share/WETH staking are separate and stay on their fixed ticks.
+ * xSHARE/WETH staking are separate and stay on their fixed ticks.
  */
 export function ProtocolRangeStatus() {
   const p = useProtocol();
@@ -28,7 +28,7 @@ export function ProtocolRangeStatus() {
         A keeper (or the hook, when gas allows) calls rebalance after a TWAP check
         (max {pct(RANGE_POLICY.level.maxTwapDeviationBps)} from spot) and a{" "}
         {RANGE_POLICY.level.cooldownSeconds / 60}-minute cooldown. User Genesis LP vaults and
-        Masonry X Share/WETH staking stay on fixed ticks so wrapping and chamber
+        Masonry xSHARE/WETH staking stay on fixed ticks so wrapping and chamber
         staking stay compatible.
       </p>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

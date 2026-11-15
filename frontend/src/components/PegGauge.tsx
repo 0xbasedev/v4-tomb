@@ -43,7 +43,7 @@ function arc(r: number, from: number, to: number) {
 
 const ZONES: { from: number; to: number; stroke: string; label: string }[] = [
   { from: MIN, to: 0.895, stroke: "url(#pg-def)", label: "Critical Defense" },
-  { from: 0.905, to: 0.995, stroke: "url(#pg-bond)", label: "Fire Tax rising" },
+  { from: 0.905, to: 0.995, stroke: "url(#pg-tax)", label: "Fire Tax rising" },
   { from: 1.0, to: 1.01, stroke: "#ece8df", label: "Band" },
   { from: 1.015, to: MAX, stroke: "url(#pg-exp)", label: "Expansion gate" },
 ];
@@ -112,12 +112,12 @@ export function PegGauge({ price, phase, idleLabel = "Awaiting oracle", simulate
     <div ref={root} className={`relative mx-auto w-full max-w-[460px] [container-type:inline-size] ${className}`}>
       <svg viewBox="0 0 400 268" className="w-full overflow-visible" role="img" aria-label={`xTOMB at ${known ? `$${price.toFixed(4)}` : "unknown"}`}>
         <defs>
-          <linearGradient id="pg-bond" x1="0" x2="1">
+          <linearGradient id="pg-tax" x1="0" x2="1">
             <stop offset="0" stopColor="#7c4dff" />
             <stop offset="1" stopColor="#b48cff" />
           </linearGradient>
           <linearGradient id="pg-exp" x1="0" x2="1">
-            <stop offset="0" stopColor="#ff6a2b" />
+            <stop offset="0" stopColor="rgb(var(--ember-rgb))" />
             <stop offset="1" stopColor="#ff8a3d" />
           </linearGradient>
           <linearGradient id="pg-def" x1="0" x2="1">
@@ -185,13 +185,13 @@ export function PegGauge({ price, phase, idleLabel = "Awaiting oracle", simulate
 
         {/* marker — orbits the arc instead of sweeping across the readout */}
         <g ref={needle}>
-          {known && <circle cx={CX} cy={CY - R} r="16" fill="#ff6a2b" opacity="0.5" filter="url(#pg-glow)" />}
+          {known && <circle cx={CX} cy={CY - R} r="16" fill="rgb(var(--ember-rgb))" opacity="0.5" filter="url(#pg-glow)" />}
           <path
             d={`M ${CX} ${CY - R + 14} L ${CX - 7} ${CY - R + 27} L ${CX + 7} ${CY - R + 27} Z`}
             fill={known ? "#ece8df" : "#4a4945"}
           />
           <circle cx={CX} cy={CY - R} r="7" fill="#050507" stroke={known ? "#ece8df" : "#4a4945"} strokeWidth="2.5" />
-          <circle cx={CX} cy={CY - R} r="2.5" fill={known ? "#ff6a2b" : "#4a4945"} />
+          <circle cx={CX} cy={CY - R} r="2.5" fill={known ? "rgb(var(--ember-rgb))" : "#4a4945"} />
         </g>
       </svg>
 

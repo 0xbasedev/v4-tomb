@@ -36,7 +36,6 @@ import {
 import {MasonryCriticalDefense, IMasonryValidatedLevelTwap} from "../../src/masonry/MasonryCriticalDefense.sol";
 import {MasonryRules} from "../../src/masonry/MasonryRules.sol";
 import {IMasonryMintableLevel} from "../../src/masonry/IMasonryRuntime.sol";
-import {MasonryBond} from "../../src/masonry/MasonryBond.sol";
 import {MasonryChamber} from "../../src/masonry/MasonryChamber.sol";
 import {MasonryFarm} from "../../src/masonry/MasonryFarm.sol";
 import {DummyShareZapper} from "../utils/DummyShareZapper.sol";
@@ -372,7 +371,7 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         staking.deposit(0, 1000e6);
         vm.stopPrank();
         (uint256 shares,,) = staking.positions(0, user);
-        assertEq(shares, 1000e6);
+        assertEq(shares, 990e6); // Ultra pays the 1% pool-0 deposit fee
     }
 
     function _tinyBuy(
@@ -423,12 +422,11 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
     struct ModernRuntime {
         MasonryTreasury treasury;
         MasonryFarm farm;
-        MasonryBond bond;
         MasonryChamber chamber;
         uint256 start;
     }
 
-    /// @dev Launches MasonryTreasury / Farm / X Bond. Does not construct the
+    /// @dev Launches MasonryTreasury / Farm. Does not construct the
     /// legacy Treasury, Boardroom, TrustNote or PegDefenseHook.
     function _wireModernRuntime(
         LaunchLevel level,
@@ -439,7 +437,6 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         _stakeRuntime(runtime, user);
         _exerciseExpansion(runtime, level, twap);
         _exerciseFarm(runtime, user);
-        _exerciseBond(runtime, level, twap, user);
         _exerciseExitNow(runtime, level, user);
     }
 
@@ -450,7 +447,6 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         MasonryLaunchParams memory cfg = MasonryLaunchConfig.load(vm);
         uint8 dec = level.decimals();
         uint256 farmBudget = MasonryLaunchConfig.scaleWhole(cfg.farmWholeTokens, dec);
-        uint256 bondSupply = MasonryLaunchConfig.scaleWhole(cfg.bondMaxSupplyWholeTokens, dec);
         runtime.start = block.timestamp + 1 hours;
         LaunchShareWethLp slp = new LaunchShareWethLp();
         LaunchShare share = new LaunchShare();
@@ -466,21 +462,13 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
             runtime.start,
             uint16(cfg.expansionRateBps),
             cfg.oracleMaxAgeSeconds,
-            address(this)
+            address(this),
+            IERC20(address(slp)),
+            0,
+            cfg.daoWallet
         );
         assertEq(address(runtime.treasury), predicted);
         runtime.farm = _makeFarm(share, slp, runtime.start, farmBudget, cfg, address(runtime.chamber));
-        runtime.bond = new MasonryBond(
-            IERC20(address(level)),
-            runtime.treasury,
-            twap,
-            uint16(cfg.bondMaxDiscountBps),
-            uint16(cfg.bondMaxDebtRatioBps),
-            bondSupply,
-            uint16(cfg.bondRedeemPremiumBps),
-            cfg.oracleMaxAgeSeconds
-        );
-        runtime.treasury.setBond(address(runtime.bond));
         share.mint(address(this), farmBudget);
         share.approve(address(runtime.farm), farmBudget);
         runtime.farm.fund(farmBudget);
@@ -534,27 +522,6 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         assertLe(runtime.farm.claimed(), runtime.farm.rewardBudget());
     }
 
-    function _exerciseBond(
-        ModernRuntime memory runtime,
-        LaunchLevel level,
-        MockTwapOracle twap,
-        address user
-    ) internal {
-        level.mint(user, 1000 ether);
-        twap.setPrice(0.9e18);
-        vm.startPrank(user);
-        level.approve(address(runtime.bond), type(uint256).max);
-        runtime.bond.buy(100 ether);
-        uint256 bonds = runtime.bond.balanceOf(user);
-        vm.stopPrank();
-        assertGt(bonds, 100 ether);
-        assertLe(runtime.bond.totalSupply() * 10_000, level.totalSupply() * runtime.bond.maxDebtRatioBps());
-        twap.setPrice(1.05e18);
-        vm.prank(user);
-        runtime.bond.redeem(bonds);
-        assertEq(runtime.bond.balanceOf(user), 0);
-    }
-
     function _exerciseExitNow(
         ModernRuntime memory runtime,
         LaunchLevel level,
@@ -563,12 +530,13 @@ contract RobinhoodForkLaunchTest is Test, ERC721Holder {
         uint256 pending = runtime.chamber.pending(user);
         uint256 staked = runtime.chamber.balanceOf(user);
         uint256 userLevel = level.balanceOf(user);
+        uint256 daoLp = runtime.chamber.stakeToken().balanceOf(runtime.chamber.daoWallet());
         vm.prank(user);
         runtime.chamber.exitNow();
         assertEq(runtime.chamber.balanceOf(user), 0);
         assertEq(level.balanceOf(user), userLevel, "Exit Now is not a tax-free LEVEL exit");
         assertEq(level.balanceOf(address(0xA2B)), pending);
-        assertEq(runtime.chamber.stakeToken().balanceOf(runtime.chamber.daoWallet()), staked - staked / 2);
+        assertEq(runtime.chamber.stakeToken().balanceOf(runtime.chamber.daoWallet()) - daoLp, staked - staked / 2);
     }
 
     function _exerciseRangeManagers(

@@ -9,6 +9,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+contract RefusedTarget {}
+
 contract MockERC20 is ERC20 {
     constructor() ERC20("Mock", "MOCK") {}
 
@@ -52,6 +54,59 @@ contract ShareTokenTest is BaseTest {
     // ---------------------------------------------------------------------
     // Constructor / metadata
     // ---------------------------------------------------------------------
+
+    function _refuse(
+        address target
+    ) internal {
+        address[] memory list = new address[](1);
+        list[0] = target;
+        vm.prank(trustees);
+        estate.setRefusedRecipients(list);
+    }
+
+    function test_RefusedContractCannotReceiveSharesByAnyRoute() public {
+        address genesis = address(new RefusedTarget());
+        vm.prank(trustees);
+        estate.distributeReward(farmingFund);
+        _refuse(genesis);
+
+        vm.prank(farmingFund);
+        vm.expectRevert(ShareToken.RecipientRefusesShares.selector);
+        estate.transfer(genesis, 1 ether);
+
+        vm.prank(farmingFund);
+        estate.approve(address(this), 1 ether);
+        vm.expectRevert(ShareToken.RecipientRefusesShares.selector);
+        estate.transferFrom(farmingFund, genesis, 1 ether);
+
+        // Everyone else is unaffected.
+        vm.prank(farmingFund);
+        estate.transfer(address(0xBEEF), 1 ether);
+        assertEq(estate.balanceOf(address(0xBEEF)), 1 ether);
+    }
+
+    function test_RefusedListIsSetOnceAndOnlyByTrustees() public {
+        address genesis = address(new RefusedTarget());
+        address[] memory list = new address[](1);
+        list[0] = genesis;
+        vm.expectRevert();
+        estate.setRefusedRecipients(list);
+
+        _refuse(genesis);
+        assertTrue(estate.refusedRecipientsSealed());
+        list[0] = address(new RefusedTarget());
+        vm.prank(trustees);
+        vm.expectRevert(ShareToken.RefusedRecipientsSealed.selector);
+        estate.setRefusedRecipients(list);
+    }
+
+    function test_WalletsCanNeverBeRefused() public {
+        address[] memory list = new address[](1);
+        list[0] = address(0xA11CE);
+        vm.prank(trustees);
+        vm.expectRevert(ShareToken.InvalidConfiguration.selector);
+        estate.setRefusedRecipients(list);
+    }
 
     function test_Metadata() public view {
         assertEq(estate.name(), "Estate");

@@ -286,7 +286,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         assertEq(credited, preview, "credited stake must equal the solved quote");
         assertEq(vault.balanceOf(user), 0, "shares must be staked, not delivered");
         assertEq(usdc.balanceOf(FEE_RECIPIENT), 5e6, "route fee must be exactly 0.5%, taken once");
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6 - ZAP_IN, "out exactly the zap input (plus the Pro pass)");
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6 - ZAP_IN, "out exactly the zap input (plus the Pro pass)");
         assertZapEmpty();
     }
 
@@ -562,7 +562,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         uint256 out = zap.swap(address(level), 50e18, address(usdc), minOut, block.timestamp + 1 hours);
         assertGe(out, minOut, "measured receipt must clear the caller's floor");
         assertLt(out, grossOut, "the fire tax + LP fee come out of the gross quote");
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6 + out);
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6 + out);
         assertEq(level.balanceOf(FEE_RECIPIENT), fee);
         assertZapEmpty();
     }
@@ -585,7 +585,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         vm.prank(user);
         vm.expectRevert();
         zap.swap(address(usdc), ZAP_IN, address(level), expected + 1, block.timestamp + 1 hours);
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6, "only the pass purchase is spent");
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6, "only the pass purchase is spent");
         assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
     }
 
@@ -618,7 +618,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         vm.prank(user);
         vm.expectRevert();
         zap.zapToMasonry(ZAP_IN, 0, block.timestamp + 1 hours);
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6, "a revoked zap leaves the user whole (pass aside)");
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6, "a revoked zap leaves the user whole (pass aside)");
         assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
     }
 
@@ -635,7 +635,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         vm.prank(user);
         vm.expectRevert(MasonryGenesisStaking.PoolClosed.selector);
         zap.zapToGenesisLP(ZAP_IN, 0, block.timestamp + 1 hours);
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6, "only the pass purchase is spent");
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6, "only the pass purchase is spent");
     }
 
     function testZapUnsupportedInputsRevert() public {
@@ -688,7 +688,7 @@ contract MasonryZapTest is Test, IMockLevelTwap {
         vm.prank(user);
         vm.expectRevert(MasonryZap.Expired.selector);
         zap.zapToFarmLevel(ZAP_IN, 0, block.timestamp - 1);
-        assertEq(usdc.balanceOf(user), USER_USDC - 100e6, "only the pass purchase is spent");
+        assertEq(usdc.balanceOf(user), USER_USDC - 300e6, "only the pass purchase is spent");
         assertEq(usdc.balanceOf(FEE_RECIPIENT), 0);
     }
 

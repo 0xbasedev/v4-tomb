@@ -16,7 +16,7 @@ import { useReveal } from "@/lib/motion/useReveal";
 /**
  * Farm — after Genesis, xSHARE emissions for official LP. For first launch,
  * pending xSHARE cannot be claimed to the wallet; the only outlet is
- * Send to Masonry, which stakes X Share/WETH LP into Masonry.
+ * Send to Masonry, which stakes xSHARE/WETH LP into Masonry.
  *
  * Compound is restyled (not blocked) from each pool's on-chain lastCompoundAt.
  * The 3-hour window is policy.farmsCompoundCooldownSeconds (10800).
@@ -305,7 +305,7 @@ function WithdrawCooldownModal({
           <p className="mt-2 text-[13px] text-bone" data-testid="withdraw-fee">
             Farm withdrawal fee: {pct(liveWithdrawFeeBps)} of withdrawn liquidity, paid to the DAO wallet.
             Masonry ordinary withdrawals use the same live fee ({pct(masonryWithdrawFeeBps)}).
-            It follows the official X Tomb TWAP ({pct(WITHDRAW_BASE_BPS)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Time in without withdrawing takes up to half off over three weeks. Not a swap tax.
+            It follows the official xTOMB TWAP ({pct(WITHDRAW_BASE_BPS)} at peg, up to {pct(FIRE.capBps)} at 10% below, decaying back over 7 hours). Time in without withdrawing takes up to half off over three weeks. Not a swap tax.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">

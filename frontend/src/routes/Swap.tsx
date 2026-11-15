@@ -45,7 +45,7 @@ export function Swap() {
       <PageHeader
         eyebrow={p.sim ? "Swap · simulated" : "Swap"}
         title="Official pools only"
-        lede={`The official ${PEG.symbol} pairs on Uniswap v4. Buys are never taxed. X Tomb sells pay ${pct(SELL_BASE_BPS.xTOMB)} at peg and X Share sells ${pct(SELL_BASE_BPS.xSHARE)}, both rising to ${pct(FIRE.capBps)} when X Tomb is 10% under peg. Pool fees are itemized separately.`}
+        lede={`The official ${PEG.symbol} pairs on Uniswap v4. Buys are never taxed. xTOMB sells pay ${pct(SELL_BASE_BPS.xTOMB)} at peg and xSHARE sells ${pct(SELL_BASE_BPS.xSHARE)}, both rising to ${pct(FIRE.capBps)} when xTOMB is 10% under peg. Pool fees are itemized separately.`}
       />
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">

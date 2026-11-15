@@ -63,8 +63,8 @@ contract MasonryGenesisStakingTest is Test {
         usdc = new MockMasonryUSDC();
         vault = new MockMasonryRedeemableVault(level, usdc);
         _setupGenesis(block.timestamp + 2 days);
-        _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 50e6);
-        _buy(PRO, MasonryGenesisPass.Tier.Pro, 100e6);
+        _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 25e6);
+        _buy(PRO, MasonryGenesisPass.Tier.Pro, 300e6);
         _buy(ULTRA, MasonryGenesisPass.Tier.Ultra, 500e6);
     }
 
@@ -115,7 +115,7 @@ contract MasonryGenesisStakingTest is Test {
         schedule.schedule(start + 1 days);
 
         pass.setSaleOpen(true);
-        _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 50e6);
+        _buy(BASIC, MasonryGenesisPass.Tier.Genesis, 25e6);
         vm.warp(start - 1);
         assertFalse(schedule.active());
         vm.warp(start);
@@ -130,7 +130,7 @@ contract MasonryGenesisStakingTest is Test {
     }
 
     function testMembershipPricesAndSoulboundAccess() public {
-        assertEq(usdc.balanceOf(TREASURY), 650e6);
+        assertEq(usdc.balanceOf(TREASURY), 825e6);
         assertEq(pass.ownerOf(1), BASIC);
         assertEq(pass.ownerOf(2), PRO);
         assertEq(pass.ownerOf(3), ULTRA);
@@ -145,6 +145,16 @@ contract MasonryGenesisStakingTest is Test {
         vm.expectRevert(MasonryGenesisStaking.NotEligible.selector);
         staking.claim(0);
         vm.stopPrank();
+    }
+
+    function testDirectCallCannotReachAnyThirdPool() public {
+        // Called straight on chain, with no frontend: there are two pools and no more.
+        vm.warp(schedule.start());
+        for (uint256 pool = 2; pool < 5; ++pool) {
+            vm.prank(PRO);
+            vm.expectRevert(MasonryGenesisStaking.InvalidPool.selector);
+            staking.deposit(pool, 100e6);
+        }
     }
 
     function testGenesisAndLpBoundariesPreserveWithdrawalsAndClaims() public {
@@ -280,9 +290,9 @@ contract MasonryGenesisStakingTest is Test {
         staking.compoundToLP(0, PRO, 1, plan);
         assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 3 hours);
 
-        usdc.mint(PRO, 400e6);
+        usdc.mint(PRO, 200e6);
         vm.startPrank(PRO);
-        usdc.approve(address(pass), 400e6);
+        usdc.approve(address(pass), 200e6);
         pass.upgrade(MasonryGenesisPass.Tier.Ultra);
         vm.stopPrank();
         assertEq(staking.nextKeeperCompoundAt(0, PRO), t0 + 3 hours);
@@ -329,7 +339,7 @@ contract MasonryGenesisStakingTest is Test {
         (uint256 basicNet,,) = staking.positions(0, BASIC);
         (uint256 ultraNet,,) = staking.positions(0, ULTRA);
         assertEq(basicNet, 97e6);
-        assertEq(ultraNet, 100e6);
+        assertEq(ultraNet, 99e6);
         assertApproxEqAbs(level.balanceOf(BASIC) * ultraNet, level.balanceOf(ULTRA) * basicNet, 1e18);
         assertApproxEqAbs(level.balanceOf(BASIC) + level.balanceOf(ULTRA), 1000e18, 10);
     }
@@ -339,7 +349,7 @@ contract MasonryGenesisStakingTest is Test {
         uint256 t0 = usdc.balanceOf(TREASURY);
         uint256 collected;
         address[3] memory users = [BASIC, PRO, ULTRA];
-        uint256[3] memory net = [uint256(97e6), 98e6, 100e6];
+        uint256[3] memory net = [uint256(97e6), 98e6, 99e6];
         for (uint256 i; i < 3; ++i) {
             uint256 before = usdc.balanceOf(users[i]);
             vm.prank(users[i]);
@@ -351,26 +361,28 @@ contract MasonryGenesisStakingTest is Test {
             assertEq(usdc.balanceOf(TREASURY) - t0, collected, "treasury receives each fee in USDC");
         }
         (uint256 total,,) = staking.pools(0);
-        assertEq(total, 295e6, "only net shares earn");
-        assertEq(usdc.balanceOf(address(staking)), 295e6, "staking holds net only");
+        assertEq(total, 294e6, "only net shares earn");
+        assertEq(usdc.balanceOf(address(staking)), 294e6, "staking holds net only");
     }
 
-    function testDepositFeeEmitsAndUltraPaysNone() public {
+    function testDepositFeeEmitsAndUltraPaysOnePercent() public {
         vm.warp(schedule.start());
         vm.expectEmit(true, false, false, true);
         emit MasonryGenesisStaking.DepositFeePaid(BASIC, MasonryGenesisPass.Tier.Genesis, 3e6);
         vm.prank(BASIC);
         staking.deposit(0, 100e6);
         uint256 t0 = usdc.balanceOf(TREASURY);
+        vm.expectEmit(true, false, false, true);
+        emit MasonryGenesisStaking.DepositFeePaid(ULTRA, MasonryGenesisPass.Tier.Ultra, 1e6);
         vm.prank(ULTRA);
         staking.deposit(0, 100e6);
-        assertEq(usdc.balanceOf(TREASURY), t0, "Ultra pays 0%");
+        assertEq(usdc.balanceOf(TREASURY) - t0, 1e6, "Ultra pays 1%");
     }
 
     function testDepositFeeBpsTable() public view {
         assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Genesis), 300);
         assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Pro), 200);
-        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Ultra), 0);
+        assertEq(staking.depositFeeBps(MasonryGenesisPass.Tier.Ultra), 100);
     }
 
     function testWithdrawReturnsNetSharesOnly() public {
@@ -399,7 +411,7 @@ contract MasonryGenesisStakingTest is Test {
         vm.expectRevert(MasonryGenesisStaking.NotEligible.selector);
         staking.setKeeper(KEEPER, 1);
         vm.startPrank(BASIC);
-        usdc.approve(address(pass), 50e6);
+        usdc.approve(address(pass), 275e6);
         pass.upgrade(MasonryGenesisPass.Tier.Pro);
         staking.setKeeper(KEEPER, 1);
         vm.stopPrank();

@@ -36,6 +36,21 @@
         "name": "admin_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "feeToken_",
+        "type": "address",
+        "internalType": "contract IERC20"
+      },
+      {
+        "name": "epochFee_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "feeRecipient_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
@@ -101,7 +116,33 @@
   },
   {
     "type": "function",
-    "name": "bond",
+    "name": "epoch",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "epochFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "feeRecipient",
     "inputs": [],
     "outputs": [
       {
@@ -114,7 +155,20 @@
   },
   {
     "type": "function",
-    "name": "epoch",
+    "name": "feeToken",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastEpochAt",
     "inputs": [],
     "outputs": [
       {
@@ -223,37 +277,6 @@
   },
   {
     "type": "function",
-    "name": "setBond",
-    "inputs": [
-      {
-        "name": "bond_",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "settleBondRedemption",
-    "inputs": [
-      {
-        "name": "to",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "tombAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "startTime",
     "inputs": [],
     "outputs": [
@@ -267,13 +290,25 @@
   },
   {
     "type": "event",
-    "name": "BondSet",
+    "name": "EpochStarted",
     "inputs": [
       {
-        "name": "bond",
+        "name": "epochId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "payer",
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "fee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false

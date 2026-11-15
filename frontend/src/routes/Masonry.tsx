@@ -3,18 +3,18 @@ import { Link } from "react-router-dom";
 import { useReadContract } from "wagmi";
 import type { Address } from "viem";
 
+import { StartEpoch } from "@/components/masonry/StartEpoch";
 import { PageHeader, SectionTitle } from "@/components/PageHeader";
-import { PendingBadge, PendingPanel, Reason, SimBadge } from "@/components/Status";
+import { DepositBadge, PendingPanel, Reason } from "@/components/Status";
 import { TokenIcon } from "@/components/TokenIcon";
 import { masonryChamberAbi } from "@/lib/abis/masonry";
 import { useProtocol } from "@/lib/hooks";
 import { EXPANSION, FIRE, POLICY, SQUARE_ROUTING, pct } from "@/lib/launch";
 import { WITHDRAW_BASE_BPS, withdrawFee } from "@/lib/fireTax";
-import { PHASE_META } from "@/lib/market";
 import { useReveal } from "@/lib/motion/useReveal";
 
 /**
- * Masonry — stake X Share/WETH LP in MasonryChamber for expansion X Tomb.
+ * Masonry — stake xSHARE/WETH LP in MasonryChamber for expansion xTOMB.
  * Writes stay disabled until a verified launch address is published.
  */
 const WHY = "MasonryChamber is implemented locally, but no verified launch address is published yet.";
@@ -22,37 +22,26 @@ const ABI_FNS = masonryChamberAbi.filter((x) => x.type === "function").length;
 
 export function Masonry() {
   const root = useRef<HTMLDivElement>(null);
-  const p = useProtocol();
   useReveal(root, []);
-  const meta = PHASE_META[p.market.phase];
   return (
     <div ref={root}>
       <PageHeader
         eyebrow="Masonry · not launched"
         token="xSHARE"
         title={<span className="spectre-text">Masonry</span>}
-        lede="Stake X Share/WETH LP for expansion xTOMB. Every deposit — including Send to Masonry from the farm — resets both the 6-hour withdraw lock and the 6-hour claim cooldown for you only. Exit Now bypasses both locks by returning half your LP, sending the other half to the DAO wallet, and forfeiting pending xTOMB to Arbitrage."
-        aside={
-          <div className="panel p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="label">Right now</span>
-              {p.sim && <SimBadge />}
-            </div>
-            <div className={`chip mb-2 ${meta.chip}`}>{meta.label}</div>
-            <p className="text-[13px] leading-relaxed text-bone-dim">{meta.detail}</p>
-          </div>
-        }
+        lede="Stake xSHARE/WETH LP for expansion xTOMB. Every deposit — including Send to Masonry from the farm — resets both the 6-hour withdraw lock and the 6-hour claim cooldown for you only. Exit Now bypasses both locks by returning half your LP, sending the other half to the DAO wallet, and forfeiting pending xTOMB to Arbitrage."
       />
       <div className="mx-auto w-full max-w-7xl space-y-8 px-4 pb-10 md:px-8">
+        <StartEpoch />
         <section data-reveal className="panel p-5 md:p-6">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <TokenIcon symbol="xSHARE" size={30} />
-            <h2 className="font-display text-xl font-semibold text-bone">Stake X Share/WETH LP</h2>
-            <PendingBadge />
+            <h2 className="font-display text-xl font-semibold text-bone">Stake xSHARE/WETH LP</h2>
+            <DepositBadge label="0.5% deposit fee" />
           </div>
           <div className="grid grid-cols-2 gap-3 text-[12.5px] md:grid-cols-4">
             {[
-              ["Stake asset", "X Share/WETH LP"],
+              ["Stake asset", "xSHARE/WETH LP"],
               ["Withdraw lock", "6 hours after a manual deposit"],
               ["Claim lock", "6 hours, reset on every deposit"],
               ["Send to Masonry", "Resets your Masonry clocks only"],
@@ -76,7 +65,6 @@ export function Masonry() {
         <section data-reveal className="panel p-5 md:p-6">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <h2 className="font-display text-xl font-semibold text-bone">Exit Now</h2>
-            <PendingBadge />
           </div>
           <p className="text-[13.5px] leading-relaxed text-bone-dim">
             Instantly leave: 50% of your staked LP returns to you, 50% goes to Treasury, and 100% of pending xTOMB is forfeited to Arbitrage.
@@ -114,11 +102,11 @@ export function Masonry() {
         </section>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <PendingPanel title="Expansion to stakers">
+          <PendingPanel title="Expansion to stakers" badge="none">
             A fresh validated TWAP above ${EXPANSION.gate.toFixed(2)} lets MasonryTreasury mint up to {pct(EXPANSION.maxPerEpochBps)} of circulating
             xTOMB to MasonryChamber. Actions stay disabled until a verified address is published.
           </PendingPanel>
-          <PendingPanel title="Masonry auto-compounder">No bound auto-compounder yet. Farm Send to Masonry is a user-initiated deposit and resets only the caller&apos;s clocks.</PendingPanel>
+          <PendingPanel title="Masonry auto-compounder" badge="none">No bound auto-compounder yet. Farm Send to Masonry is a user-initiated deposit and resets only the caller&apos;s clocks.</PendingPanel>
         </section>
       </div>
     </div>

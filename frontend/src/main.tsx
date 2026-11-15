@@ -13,12 +13,12 @@ import { Layout } from "./components/Layout";
 import { Landing } from "./routes/Landing";
 import { Dashboard } from "./routes/Dashboard";
 import { Genesis } from "./routes/Genesis";
+import { Auction } from "./routes/Auction";
 import { Masonry } from "./routes/Masonry";
 import { Farm } from "./routes/Farm";
 // The xSHARE bridge page is hidden (owner ruling 2026-11-14): its code stays in routes/Bridge.tsx,
 // but nothing links to it and it has no route until the bridge is brought back.
 import { Wizard } from "./routes/Wizard";
-import { Bonds } from "./routes/Bonds";
 import { Swap } from "./routes/Swap";
 import { Admin } from "./routes/Admin";
 import { Docs } from "./routes/Docs";
@@ -58,7 +58,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   <Route path="/genesis" element={<Genesis />} />
                   <Route path="/farm" element={<Farm />} />
                   <Route path="/masonry" element={<Masonry />} />
-                  <Route path="/bonds" element={<Bonds />} />
+                  <Route path="/auction" element={<Auction />} />
                   <Route path="/swap" element={<Swap />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/wizard" element={<Wizard />} />
@@ -69,7 +69,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   <Route path="/club" element={<Navigate to="/masonry" replace />} />
                   <Route path="/forge" element={<Navigate to="/farm" replace />} />
                   <Route path="/vault" element={<Navigate to="/farm" replace />} />
-                  <Route path="/notes" element={<Navigate to="/bonds" replace />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Route>
               </Routes>

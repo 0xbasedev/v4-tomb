@@ -67,8 +67,8 @@ contract MasonryGenesisPass is ERC721, ReentrancyGuard {
     function price(
         Tier tier
     ) public pure returns (uint256) {
-        if (tier == Tier.Genesis) return 50e6;
-        if (tier == Tier.Pro) return 100e6;
+        if (tier == Tier.Genesis) return 25e6;
+        if (tier == Tier.Pro) return 300e6;
         if (tier == Tier.Ultra) return 500e6;
         revert InvalidPurchase();
     }

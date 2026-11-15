@@ -18,7 +18,7 @@
 }
 .ops-steps button span { font: .76rem var(--mono); color: var(--amber); margin-right: 10px; }
 .ops-steps button:disabled, .ops-steps button:disabled span { color: var(--muted); }
-.ops-steps button[aria-current="step"] { color: var(--bone); border-color: var(--ember); background: #ff6a2b15; }
+.ops-steps button[aria-current="step"] { color: var(--bone); border-color: var(--ember); background: rgb(var(--ember-rgb) / 0.08); }
 .ops-workspace { min-width: 0; }
 .ops-section-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ops-section-head h2 { margin-top: 7px; }

@@ -21,11 +21,3 @@ interface IMasonrySeigniorageSink {
         uint256 amount
     ) external;
 }
-
-/// @notice Treasury callback used by MasonryBond to pay redemptions.
-interface IMasonryBondSettler {
-    function settleBondRedemption(
-        address to,
-        uint256 tombAmount
-    ) external;
-}

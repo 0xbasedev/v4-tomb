@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { ChainGate, ChainPicker } from "@/components/ChainGate";
 import { ConnectButton } from "@/components/ConnectButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/brand/Sigil";
 import { EmberField } from "@/components/fx/EmberField";
 import { HeatSync } from "@/components/fx/HeatSync";
@@ -35,8 +36,8 @@ export function useNavItems(): { label: string; to: string; glyph: string }[] {
     { label: "Dashboard", to: "/dashboard", glyph: "◎" },
     { label: ended ? "Farm" : "Genesis", to: ended ? "/farm" : "/genesis", glyph: "▲" },
     { label: "Masonry", to: "/masonry", glyph: "◆" },
+    { label: "Auction", to: "/auction", glyph: "◈" },
     { label: "Swap", to: "/swap", glyph: "⇅" },
-    { label: "Bonds", to: "/bonds", glyph: "⬡" },
   ];
 }
 
@@ -154,6 +155,7 @@ function TopNav() {
           >
             Docs
           </NavLink>
+          <ThemeToggle />
           <ZapInButton />
           <PriceTicker />
           <ConnectButton compact />
@@ -196,7 +198,7 @@ function MobileTabBar() {
   const all = useNavItems();
   // Thumb bar: exactly the four core screens, fully displayed — no overflow
   // menu, no "More" dots (Jess, 2026-11-08). Docs lives in the top bar on
-  // mobile; Bonds/Bridge stay on the desktop nav and in the footer.
+  // mobile; Bridge stays on the desktop nav and in the footer.
   const navItems = [all[0], all[1], all[2], all[3]];
   return (
     <nav
