@@ -26,7 +26,7 @@ const corePlan = planCore(core, base, 0).networks[0].create3;
 test('core plan has the expected CreateX hook flags and matches the Solidity fixture', () => {
   const fixture = read('../contracts/test/fixtures/networks.json');
   assert.deepEqual(corePlan, fixture.networks[0].create3);
-  assert.equal(BigInt(corePlan.addresses.hook) & 0x3fffn, 0x1088n);
+  assert.equal(BigInt(corePlan.addresses.hook) & 0x3fffn, 0x10ccn);
   assert.equal(core.networks[0].deployment, null);
   assert.equal(new Set(Object.values(corePlan.addresses)).size, coreRoles.length);
   const create3 = create3Address(corePlan, 'estate');

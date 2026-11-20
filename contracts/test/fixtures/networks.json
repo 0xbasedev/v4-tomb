@@ -25,7 +25,7 @@
           "treasury": "0xF952c6A9F91aB63c57D4a60bfE327A5905b5F9B3",
           "boardroom": "0x90E1a59f91C2C19Bc032AC5f785277dC83F33046",
           "oracle": "0x1055d9B93892f4fB564999479da46aF56936A2cC",
-          "hook": "0x60F8203CF279B41D4bB291981a4c7Acf4A7E1088",
+          "hook": "0x540cF5edec84e99D938C07597292a0f6eAc9D0CC",
           "lpWrapper": "0x60d597433fCaaE10bbDdF8029E183fBaf36031cb",
           "genesisRewardPool": "0x8D50691De7ef9092432ce5a7816E7a5cab281feB",
           "mainRewardPool": "0x455C3d2EfFcD2528351a59D17C4e0f7269c317f3",
@@ -33,7 +33,7 @@
           "timelock": "0x953C7FefA1d61003ceEF3FA601B38a4285dfc322",
           "miniSwapRouter": "0x3aD3BF2B5Fa248C1DF90626eb5de8D5c799F6a08"
         },
-        "hookNonce": 28654
+        "hookNonce": 1452
       }
     },
     {
@@ -65,7 +65,7 @@
           "treasury": "0xF952c6A9F91aB63c57D4a60bfE327A5905b5F9B3",
           "boardroom": "0x90E1a59f91C2C19Bc032AC5f785277dC83F33046",
           "oracle": "0x1055d9B93892f4fB564999479da46aF56936A2cC",
-          "hook": "0x60F8203CF279B41D4bB291981a4c7Acf4A7E1088",
+          "hook": "0x540cF5edec84e99D938C07597292a0f6eAc9D0CC",
           "lpWrapper": "0x60d597433fCaaE10bbDdF8029E183fBaf36031cb",
           "genesisRewardPool": "0x8D50691De7ef9092432ce5a7816E7a5cab281feB",
           "mainRewardPool": "0x455C3d2EfFcD2528351a59D17C4e0f7269c317f3",
@@ -73,7 +73,7 @@
           "timelock": "0xc9B457990AA35438493494D4753997A9499Da43C",
           "miniSwapRouter": "0xED9520c67cEE3F888F454B7df277c4e37c4c14aB"
         },
-        "hookNonce": 28654
+        "hookNonce": 1452
       }
     }
   ]

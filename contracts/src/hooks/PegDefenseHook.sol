@@ -7,6 +7,7 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
@@ -57,10 +58,12 @@ interface IBurnable {
  *         intercepting transferFrom). Wallet-to-wallet MONEY transfers see no friction.
  *
  *         Hook permissions: afterInitialize (capture pool state), beforeSwap (observe +
- *         fee + tax). Low-14-bit pattern = 0x1088:
+ *         fee + tax). Low-14-bit pattern = 0x10CC:
  *           AFTER_INITIALIZE      = 0x1000
  *           BEFORE_SWAP           = 0x0080
+ *           AFTER_SWAP            = 0x0040
  *           BEFORE_SWAP_RETURN_Δ  = 0x0008
+ *           AFTER_SWAP_RETURN_Δ   = 0x0004
  *
  *         For the contract design rationale and tier-table justification, see
  *         docs/HOOK_TAX_DESIGN.md.
@@ -222,11 +225,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
             beforeRemoveLiquidity: false,
             afterRemoveLiquidity: false,
             beforeSwap: true,
-            afterSwap: false,
+            afterSwap: true, // exact-output sells are taxed here, on the real MONEY input
             beforeDonate: false,
             afterDonate: false,
-            beforeSwapReturnDelta: true, // Sprint 4b — enables tax slice via BeforeSwapDelta
-            afterSwapReturnDelta: false,
+            beforeSwapReturnDelta: true, // exact-input sells: tax slice via BeforeSwapDelta
+            afterSwapReturnDelta: true, // exact-output sells: tax added to the unspecified (MONEY) side
             afterAddLiquidityReturnDelta: false,
             afterRemoveLiquidityReturnDelta: false
         });
@@ -270,53 +273,77 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
 
         uint24 fee = _feeForTick(currentTick) | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
-        // ------------------------------------------------------------------
-        // Sprint 4b tax slice
-        // ------------------------------------------------------------------
-        // Fast paths that skip the tax entirely:
-        //   - tax not enabled
-        //   - swap is a BUY (WETH → MONEY) — never tax buys
-        //   - sender is excluded
-        if (!autoCalculateTax) {
+        // Exact-input sells are taxed here: amountSpecified is the gross MONEY input, so the
+        // tax is that amount times the rate, taken from the specified (MONEY) side.
+        // Exact-output sells (amountSpecified > 0) are taxed in afterSwap instead. There the
+        // specified amount is the OUTPUT token, which may have different decimals (USDC has 6)
+        // and a different price, so it can't be used to size a MONEY tax.
+        if (params.amountSpecified >= 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
-        bool isSell = (moneyIsCurrency0 == params.zeroForOne);
-        if (!isSell) {
-            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
-        }
-        if (excludedAddresses[sender]) {
-            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
-        }
-
-        uint256 price = _priceFromTick(currentTick);
-        uint256 rate = _taxRateForPrice(price);
+        (uint256 rate, uint256 price) = _sellTaxRate(sender, params);
         if (rate == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        // Compute tax slice from the MONEY-side amount. For exact-input swaps
-        // (amountSpecified < 0), the specified token IS MONEY (the input) and we
-        // return deltaSpecified > 0. For exact-output swaps (amountSpecified > 0),
-        // the specified token is WETH (output) and MONEY is the unspecified side;
-        // we return deltaUnspecified > 0.
-        uint256 absAmount =
-            params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-        uint256 taxAmount = absAmount * rate / 10_000;
+        uint256 taxAmount = uint256(-params.amountSpecified) * rate / 10_000;
         if (taxAmount == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        BeforeSwapDelta delta;
-        if (params.amountSpecified < 0) {
-            // Exact-input: MONEY is the specified token.
-            delta = toBeforeSwapDelta(int128(int256(taxAmount)), int128(0));
-        } else {
-            // Exact-output: MONEY is the unspecified (input) token.
-            delta = toBeforeSwapDelta(int128(0), int128(int256(taxAmount)));
-        }
+        _collectTax(key, taxAmount, price);
+        return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(taxAmount)), int128(0)), fee);
+    }
 
-        // Pull the tax MONEY into the hook's balance. The take call settles the
-        // hook's credit with the PoolManager.
+    /// @notice Taxes exact-output sells on the MONEY the seller actually paid.
+    /// @dev    The swap has run, so `delta` holds the real MONEY input in 18 decimals. The tax
+    ///         is grossed up so it is `rate` of everything the seller pays (pool input + tax),
+    ///         which matches what an exact-input sell of the same total would be charged:
+    ///         tax = input * rate / (10000 - rate). The tier comes from `lastTick`, the
+    ///         pre-swap tick that beforeSwap recorded, so both swap modes price the same.
+    function afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata /* hookData */
+    ) external override onlyPoolManager returns (bytes4, int128) {
+        if (params.amountSpecified < 0) return (IHooks.afterSwap.selector, 0);
+        (uint256 rate, uint256 price) = _sellTaxRate(sender, params);
+        if (rate == 0) return (IHooks.afterSwap.selector, 0);
+        if (rate >= 10_000) revert TaxRateTooHigh();
+
+        int128 moneyDelta = moneyIsCurrency0 ? delta.amount0() : delta.amount1();
+        if (moneyDelta >= 0) return (IHooks.afterSwap.selector, 0);
+        uint256 moneyIn = uint256(uint128(-moneyDelta));
+
+        uint256 taxAmount = moneyIn * rate / (10_000 - rate);
+        if (taxAmount == 0) return (IHooks.afterSwap.selector, 0);
+
+        _collectTax(key, taxAmount, price);
+        return (IHooks.afterSwap.selector, int128(int256(taxAmount)));
+    }
+
+    /// @dev Sell-tax rate for this swap, or 0 when it isn't taxed (tax off, a buy, or an
+    ///      excluded sender). Prices off `lastTick`, which beforeSwap set to the pre-swap tick.
+    function _sellTaxRate(
+        address sender,
+        SwapParams calldata params
+    ) internal view returns (uint256 rate, uint256 price) {
+        if (!autoCalculateTax) return (0, 0);
+        if (moneyIsCurrency0 != params.zeroForOne) return (0, 0); // buy: never taxed
+        if (excludedAddresses[sender]) return (0, 0);
+        price = _priceFromTick(lastTick);
+        rate = _taxRateForPrice(price);
+    }
+
+    /// @dev Takes `taxAmount` MONEY from the PoolManager (settling the hook's delta), then
+    ///      burns it below `burnThreshold` or routes it to `treasury` at or above it.
+    function _collectTax(
+        PoolKey calldata key,
+        uint256 taxAmount,
+        uint256 price
+    ) internal {
         Currency moneyCurrency = moneyIsCurrency0 ? key.currency0 : key.currency1;
         poolManager.take(moneyCurrency, address(this), taxAmount);
 
@@ -334,8 +361,6 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
             IBurnable(money).burn(taxAmount);
             emit TaxBurned(taxAmount, price);
         }
-
-        return (IHooks.beforeSwap.selector, delta, fee);
     }
 
     // ------------------------------------------------------------------

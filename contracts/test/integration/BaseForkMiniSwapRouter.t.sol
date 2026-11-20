@@ -88,10 +88,12 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         money = new PegToken(owner);
 
         // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
-        // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2
+        // BEFORE_SWAP_RETURNS_DELTA = 0x10CC). Use HookMiner so the resulting CREATE2
         // address has the bit pattern V4 validates against.
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = uint160(
+            Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+        );
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), address(this)));
         (address minedHookAddr, bytes32 salt) = HookMiner.find(address(this), flags, hookCreationCode);

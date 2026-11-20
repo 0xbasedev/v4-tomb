@@ -17,6 +17,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {BalanceDelta, toBalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -87,7 +88,10 @@ contract PegDefenseHookTest is BaseTest {
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
         hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
+            uint160(
+                Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                    | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+            )
         );
 
         deployCodeTo(
@@ -126,14 +130,14 @@ contract PegDefenseHookTest is BaseTest {
         assertTrue(p.beforeSwap);
         assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
         assertFalse(p.beforeInitialize);
-        assertFalse(p.afterSwap);
+        assertTrue(p.afterSwap, "exact-output sells are taxed in afterSwap");
         assertFalse(p.beforeAddLiquidity);
         assertFalse(p.afterAddLiquidity);
         assertFalse(p.beforeRemoveLiquidity);
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.afterSwapReturnDelta);
+        assertTrue(p.afterSwapReturnDelta, "afterSwap adds the tax to the MONEY input");
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);
     }
@@ -782,6 +786,164 @@ contract PegDefenseHookTest is BaseTest {
 
         assertEq(money.totalSupply(), supplyBefore, "buy never reduces supply");
         assertEq(pm.takeCallCount(), takesBefore, "buy never triggers take");
+    }
+
+    // ---------------------------------------------------------------------
+    // Exact-output sells: taxed in afterSwap on the real MONEY input
+    // ---------------------------------------------------------------------
+
+    /// @dev Exact-output MONEY sell: the seller names the OUTPUT amount (e.g. 1,000 USDC = 1_000e6).
+    function _exactOutSell(
+        uint256 outputAmount
+    ) internal view returns (SwapParams memory) {
+        return
+            SwapParams({
+                zeroForOne: hook.moneyIsCurrency0(), amountSpecified: int256(outputAmount), sqrtPriceLimitX96: 0
+            });
+    }
+
+    /// @dev Swap delta for a sell: MONEY paid in (negative), other token paid out (positive).
+    function _sellDelta(
+        uint256 moneyIn,
+        uint256 otherOut
+    ) internal view returns (BalanceDelta) {
+        int128 m = -int128(int256(moneyIn));
+        int128 o = int128(int256(otherOut));
+        return hook.moneyIsCurrency0() ? toBalanceDelta(m, o) : toBalanceDelta(o, m);
+    }
+
+    function _enableTaxAtPeg() internal {
+        _bind(0); // tick 0 -> tier 1500 bps, price below the 1.10 burn threshold
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+    }
+
+    function test_AfterSwap_OnlyPoolManager() public {
+        _enableTaxAtPeg();
+        SwapParams memory params = _exactOutSell(1000e6);
+        BalanceDelta d = _sellDelta(850 ether, 1000e6);
+        vm.prank(stranger);
+        vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
+        hook.afterSwap(address(0), poolKey, params, d, "");
+    }
+
+    /// @notice The old bypass: beforeSwap sized the tax from the USDC output (6 decimals)
+    ///         and took that many wei of MONEY. Now beforeSwap leaves exact-output alone.
+    function test_ExactOutputSell_NotTaxedInBeforeSwap() public {
+        _enableTaxAtPeg();
+        SwapParams memory params = _exactOutSell(1000e6);
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "no beforeSwap delta on exact-output");
+        assertEq(pm.takeCallCount(), 0, "no take in beforeSwap on exact-output");
+    }
+
+    /// @notice Exact-output sell for 1,000 USDC that costs 850 MONEY at the pool.
+    ///         Tax is 15% of the total paid: 850 * 1500 / 8500 = 150 MONEY, burned.
+    function test_ExactOutputSell_TaxedOnMoneyInput() public {
+        _enableTaxAtPeg();
+        uint256 moneyIn = 850 ether;
+        uint256 expectedTax = 150 ether;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+        uint256 supplyBefore = money.totalSupply();
+
+        SwapParams memory params = _exactOutSell(1000e6);
+        BalanceDelta d = _sellDelta(moneyIn, 1000e6);
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+        vm.prank(address(pm));
+        (bytes4 sel, int128 hookDelta) = hook.afterSwap(address(0), poolKey, params, d, "");
+
+        assertEq(sel, IHooks.afterSwap.selector);
+        assertEq(int256(hookDelta), int256(expectedTax), "afterSwap delta = tax on MONEY side");
+        assertEq(pm.takeCallCount(), 1, "take called once");
+        assertEq(pm.lastTakeAmount(), expectedTax, "take amount = tax in 18-dec MONEY");
+        assertEq(money.totalSupply(), supplyBefore - expectedTax, "tax burned");
+        assertEq(money.balanceOf(address(hook)), 0, "hook keeps nothing");
+    }
+
+    /// @notice Same seller, same total MONEY paid, either swap mode: same tax.
+    function test_ExactInputAndExactOutput_ChargeTheSameTax() public {
+        _enableTaxAtPeg();
+        vm.prank(owner);
+        money.mint(address(pm), 300 ether);
+
+        // Exact-input: 1,000 MONEY gross -> 150 tax, 850 reaches the pool.
+        SwapParams memory exactIn =
+            SwapParams({zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -1000 ether, sqrtPriceLimitX96: 0});
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, exactIn, "");
+        uint256 exactInTax = pm.lastTakeAmount();
+
+        // Exact-output: pool needs 850 MONEY -> 150 tax, 1,000 MONEY total.
+        SwapParams memory exactOut = _exactOutSell(1000e6);
+        BalanceDelta d = _sellDelta(850 ether, 1000e6);
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, exactOut, "");
+        vm.prank(address(pm));
+        hook.afterSwap(address(0), poolKey, exactOut, d, "");
+        uint256 exactOutTax = pm.lastTakeAmount();
+
+        assertEq(exactInTax, 150 ether);
+        assertEq(exactOutTax, exactInTax, "both modes charge the same tax");
+    }
+
+    /// @notice afterSwap must not tax an exact-input sell a second time.
+    function test_AfterSwap_IgnoresExactInput() public {
+        _enableTaxAtPeg();
+        SwapParams memory exactIn = _sellSwap();
+        BalanceDelta d = _sellDelta(85 ether, 100e6);
+        vm.prank(address(pm));
+        (, int128 hookDelta) = hook.afterSwap(address(0), poolKey, exactIn, d, "");
+        assertEq(int256(hookDelta), 0, "no afterSwap tax on exact-input");
+        assertEq(pm.takeCallCount(), 0);
+    }
+
+    function test_AfterSwap_ExactOutputBuyNotTaxed() public {
+        _enableTaxAtPeg();
+        SwapParams memory buy =
+            SwapParams({zeroForOne: !hook.moneyIsCurrency0(), amountSpecified: 100 ether, sqrtPriceLimitX96: 0});
+        int128 m = int128(int256(100 ether));
+        int128 o = -int128(int256(100e6));
+        BalanceDelta d = hook.moneyIsCurrency0() ? toBalanceDelta(m, o) : toBalanceDelta(o, m);
+        vm.prank(address(pm));
+        (, int128 hookDelta) = hook.afterSwap(address(0), poolKey, buy, d, "");
+        assertEq(int256(hookDelta), 0, "buys are never taxed");
+        assertEq(pm.takeCallCount(), 0);
+    }
+
+    function test_AfterSwap_ExcludedSenderNotTaxed() public {
+        _enableTaxAtPeg();
+        address router = makeAddr("router");
+        vm.prank(trustees);
+        hook.setExcludedAddress(router, true);
+        SwapParams memory params = _exactOutSell(1000e6);
+        BalanceDelta d = _sellDelta(850 ether, 1000e6);
+        vm.prank(address(pm));
+        (, int128 hookDelta) = hook.afterSwap(router, poolKey, params, d, "");
+        assertEq(int256(hookDelta), 0);
+        assertEq(pm.takeCallCount(), 0);
+    }
+
+    /// @notice Gross-up holds for any input: tax / (input + tax) equals the rate, rounded down.
+    function testFuzz_ExactOutputTax_IsRateOfTotalPaid(
+        uint256 moneyIn
+    ) public {
+        moneyIn = bound(moneyIn, 1e12, 1e30);
+        _enableTaxAtPeg();
+        uint256 expectedTax = moneyIn * 1500 / 8500;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        SwapParams memory params = _exactOutSell(1000e6);
+        BalanceDelta d = _sellDelta(moneyIn, 1000e6);
+        vm.prank(address(pm));
+        (, int128 hookDelta) = hook.afterSwap(address(0), poolKey, params, d, "");
+        uint256 tax = uint256(int256(hookDelta));
+        assertEq(tax, expectedTax);
+        assertApproxEqAbs(tax * 10_000 / (moneyIn + tax), 1500, 1, "tax is 15% of total paid");
     }
 
     // ---------------------------------------------------------------------

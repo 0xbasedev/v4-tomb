@@ -13,7 +13,7 @@ export const masonryRoles = [
   'masonryLevelRangeManager', 'masonrySquareRangeManager', 'masonryPooledRangeVault', 'masonryShareWethZapper', 'masonryFarm',
 ];
 export const bridgeRoles = ['xshareBridge', 'bridgedShare'];
-const hookFlags = { hook: 0x1088, masonryTaxHook: 0x35c8, masonryShareTaxHook: 0x35c8 };
+const hookFlags = { hook: 0x10cc, masonryTaxHook: 0x35c8, masonryShareTaxHook: 0x35c8 };
 const hookMask = 0x3fff;
 const searchLimit = 1_000_000;
 const roles = new Set([...coreRoles, ...masonryRoles, ...bridgeRoles]);

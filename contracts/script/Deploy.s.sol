@@ -178,8 +178,10 @@ contract Deploy is NetworkConfig, Create3Config {
             if (expected.code.length != 0 || vm.getNonce(expected) != 0) revert Create3AddressOccupied(expected);
             _expected[role] = expected;
         }
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = uint160(
+            Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+        );
         if (uint160(_expected["hook"]) & Hooks.ALL_HOOK_MASK != flags) revert InvalidCreate3Plan();
     }
 

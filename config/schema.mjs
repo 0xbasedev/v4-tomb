@@ -63,7 +63,7 @@ export function parseNetworks(document) {
       }
       const planned = projectDeploymentKeys.map((key) => create3.addresses[key].toLowerCase());
       if (new Set(planned).size !== planned.length) fail('CREATE3 addresses must be unique');
-      if ((BigInt(create3.addresses.hook) & 0x3fffn) !== 0x1088n) fail('planned hook permission bits must be 0x1088');
+      if ((BigInt(create3.addresses.hook) & 0x3fffn) !== 0x10ccn) fail('planned hook permission bits must be 0x10cc');
     }
     if (deployment === null) continue;
     if (!object(deployment)) fail('deployment must be complete or null');
@@ -85,7 +85,7 @@ export function parseNetworks(document) {
       if (deployment[key].toLowerCase() !== infrastructure[key]?.toLowerCase()) fail(`deployment.${key} disagrees with infrastructure`);
     }
     // A swapped hook permission bit yields a different address and an unusable pool.
-    if ((BigInt(deployment.hook) & 0x3fffn) !== 0x1088n) fail('hook permission bits must be 0x1088');
+    if (![0x1088n, 0x10ccn].includes(BigInt(deployment.hook) & 0x3fffn)) fail('hook permission bits must be 0x10cc (or legacy 0x1088 for a hook already deployed)');
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
   }
   return document.networks;

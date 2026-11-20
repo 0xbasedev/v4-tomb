@@ -71,7 +71,10 @@ contract MasonryXTombSellTaxCapTest is Test {
 
     function testPegDefenseHookPathIfLaunchedExceeds12Percent() public {
         address hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
+            uint160(
+                Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                    | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+            )
         );
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
