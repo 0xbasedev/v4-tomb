@@ -10,6 +10,13 @@ import {ContractGuard} from "../libs/ContractGuard.sol";
 import {IBasisAsset} from "../interfaces/IBasisAsset.sol";
 import {IBoardroom} from "../interfaces/IBoardroom.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
+/// @dev The Oracle's sorted pair, used once at initialize to learn the peg token's decimals.
+interface IOraclePair {
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+}
 import {MasonryRules} from "../masonry/MasonryRules.sol";
 
 /**
@@ -65,6 +72,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     // Peg
     uint256 public moneyPriceOne;
+    /// @notice Multiplier that turns the oracle's quote (in the peg token's own decimals)
+    ///         into the 18-decimal scale `moneyPriceOne` uses. 1 for an 18-decimal peg token
+    ///         (WETH), 1e12 for a 6-decimal one (USDC, USDG). Set once at initialize.
+    uint256 public pegPriceScale;
     uint256 public moneyPriceCeiling;
     uint256 public seigniorageSaved;
 
@@ -188,7 +199,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     function getMoneyPrice() public view returns (uint256) {
         try IOracle(oracle).consult(money, 1e18) returns (uint144 price) {
-            return uint256(price);
+            return uint256(price) * pegPriceScale;
         } catch {
             revert("Treasury: failed to consult MONEY price from the oracle");
         }
@@ -196,7 +207,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     function getMoneyUpdatedPrice() public view returns (uint256) {
         try IOracle(oracle).twap(money, 1e18) returns (uint144 price) {
-            return uint256(price);
+            return uint256(price) * pegPriceScale;
         } catch {
             revert("Treasury: failed to consult MONEY price from the oracle");
         }
@@ -281,6 +292,33 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         _initializer = initializer;
     }
 
+    /// @dev 10^(18 - pegDecimals). The oracle quotes 1 MONEY in raw peg-token units, so a
+    ///      6-decimal stablecoin at $1.00 quotes 1e6; scaled by 1e12 it matches moneyPriceOne.
+    ///      Falls back to 1 (the old behaviour) when the oracle or token can't be read.
+    function _pegPriceScale(
+        address _oracle,
+        address _money
+    ) private view returns (uint256) {
+        if (_oracle.code.length == 0) return 1;
+        address peg;
+        try IOraclePair(_oracle).token0() returns (address t0) {
+            try IOraclePair(_oracle).token1() returns (address t1) {
+                peg = t0 == _money ? t1 : t0;
+            } catch {
+                return 1;
+            }
+        } catch {
+            return 1;
+        }
+        if (peg.code.length == 0) return 1;
+        try IERC20Metadata(peg).decimals() returns (uint8 d) {
+            if (d >= 18) return 1;
+            return 10 ** (18 - uint256(d));
+        } catch {
+            return 1;
+        }
+    }
+
     function initialize(
         address _money,
         address _trustnote,
@@ -302,7 +340,8 @@ contract Treasury is ContractGuard, ReentrancyGuard {
             excludedFromTotalSupply.push(_excludedFromTotalSupply[i]);
         }
 
-        moneyPriceOne = 1e18; // 1 MONEY = 1 WETH (Base peg target)
+        moneyPriceOne = 1e18; // 1 MONEY = 1 peg token, on an 18-decimal scale
+        pegPriceScale = _pegPriceScale(_oracle, _money);
         moneyPriceCeiling = moneyPriceOne * 101 / 100;
         maxDiscountRate = moneyPriceOne * MAX_BOND_RATE_MULTIPLE;
         maxPremiumRate = moneyPriceOne * MAX_BOND_RATE_MULTIPLE;

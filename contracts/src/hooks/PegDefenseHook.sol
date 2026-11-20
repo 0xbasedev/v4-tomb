@@ -17,6 +17,8 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {IPriceSource} from "../interfaces/IPriceSource.sol";
@@ -96,7 +98,10 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     // Dynamic-fee state (Sprint 4)
     // ------------------------------------------------------------------
 
-    /// @notice The configured peg tick. Default 0 == 1:1 price ratio. Trustees-settable.
+    /// @notice The pool tick where 1 MONEY = 1 peg token. Derived from both tokens' decimals
+    ///         in afterInitialize: 0 for an 18/18 pair like MONEY/WETH, about -276,324 for
+    ///         MONEY/USDC with MONEY as currency0. Fee bands and tax tiers are measured from
+    ///         it. Trustees-settable; a value set before bind is kept.
     int24 public pegTick;
 
     /// @notice Half-width of the "near peg" band, in ticks. Outside this band, fees scale up.
@@ -115,6 +120,25 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     int56 public tickCumulative;
     uint32 public lastObservationTimestamp;
     int24 public lastTick;
+
+    // ------------------------------------------------------------------
+    // Tax-tier TWAP
+    // ------------------------------------------------------------------
+
+    /// @notice How long the tax tier averages over, in seconds. The tier reads the average
+    ///         tick from the older of two checkpoints to now, so it spans one to two windows.
+    ///         A price pushed inside one block adds nothing to it.
+    // DECISION: 1 hour by default. The alternative on the table is the 6h epoch TWAP;
+    //           trustees can set either with setTwapWindow.
+    uint32 public twapWindow = 1 hours;
+
+    /// @notice Older checkpoint: the TWAP runs from here to now.
+    int56 public twapAnchorCumulative;
+    uint32 public twapAnchorTimestamp;
+
+    /// @notice Newer checkpoint: becomes the anchor once a full window has passed.
+    int56 public twapRecentCumulative;
+    uint32 public twapRecentTimestamp;
 
     // ------------------------------------------------------------------
     // Tax state (Sprint 4b — Tomb-faithful)
@@ -164,6 +188,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     event AddressExclusionSet(address indexed account, bool excluded);
     event TaxBurned(uint256 amount, uint256 price);
     event TaxRouted(address indexed treasury, uint256 amount, uint256 price);
+    event TwapWindowSet(uint32 previous, uint32 next);
 
     // ------------------------------------------------------------------
     // Errors
@@ -180,6 +205,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     error NonMonotonicTier();
     error TaxRateTooHigh();
     error BurnThresholdZero();
+    error TwapWindowOutOfRange();
 
     // ------------------------------------------------------------------
     // Constructor
@@ -251,6 +277,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         poolId = key.toId();
         lastTick = tick;
         lastObservationTimestamp = uint32(block.timestamp);
+        twapAnchorTimestamp = uint32(block.timestamp);
+        twapRecentTimestamp = uint32(block.timestamp);
+        if (pegTick == 0) {
+            address peg = Currency.unwrap(moneyIsCurrency0 ? key.currency1 : key.currency0);
+            pegTick = _derivePegTick(peg);
+        }
         bound = true;
 
         emit Bound(poolId, moneyIsCurrency0, tick);
@@ -270,6 +302,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         // slither-disable-next-line unused-return — only the tick is needed from slot0.
         (, int24 currentTick,,) = poolManager.getSlot0(poolId);
         _accumulate(currentTick);
+        _rollTwap();
 
         uint24 fee = _feeForTick(currentTick) | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
@@ -325,7 +358,9 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     }
 
     /// @dev Sell-tax rate for this swap, or 0 when it isn't taxed (tax off, a buy, or an
-    ///      excluded sender). Prices off `lastTick`, which beforeSwap set to the pre-swap tick.
+    ///      excluded sender). Prices off the TWAP tick relative to `pegTick`. beforeSwap has
+    ///      already folded in the pre-swap tick, and afterSwap sees the same state, so both
+    ///      swap modes get the same tier.
     function _sellTaxRate(
         address sender,
         SwapParams calldata params
@@ -333,7 +368,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         if (!autoCalculateTax) return (0, 0);
         if (moneyIsCurrency0 != params.zeroForOne) return (0, 0); // buy: never taxed
         if (excludedAddresses[sender]) return (0, 0);
-        price = _priceFromTick(lastTick);
+        price = _pegPriceFromTick(_twapTick());
         rate = _taxRateForPrice(price);
     }
 
@@ -384,6 +419,15 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     ) external onlyTrustees {
         emit PegTickSet(pegTick, newPegTick);
         pegTick = newPegTick;
+    }
+
+    /// @notice Set the tax-tier TWAP window. Bounded to 5 minutes – 1 day.
+    function setTwapWindow(
+        uint32 newWindow
+    ) external onlyTrustees {
+        if (newWindow < 5 minutes || newWindow > 1 days) revert TwapWindowOutOfRange();
+        emit TwapWindowSet(twapWindow, newWindow);
+        twapWindow = newWindow;
     }
 
     function setBandTicks(
@@ -487,6 +531,18 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         return _priceFromTick(tick);
     }
 
+    /// @notice MONEY's price in peg tokens (1e18 = 1.00) at a pool tick, adjusted for decimals.
+    function pegPriceFromTick(
+        int24 tick
+    ) external view returns (uint256) {
+        return _pegPriceFromTick(tick);
+    }
+
+    /// @notice The average tick the tax tier currently reads.
+    function twapTick() external view returns (int24) {
+        return _twapTick();
+    }
+
     /// @notice Look up the tax rate (bps) that would apply at a given 1e18-scaled price.
     function taxRateForPrice(
         uint256 price
@@ -509,6 +565,62 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         lastTick = currentTick;
         lastObservationTimestamp = nowTs;
         emit Observed(tickCumulative, currentTick, nowTs);
+    }
+
+    /// @dev Moves the anchor up once the recent checkpoint is a full window old. Runs after
+    ///      _accumulate, so `tickCumulative` is current.
+    function _rollTwap() internal {
+        uint32 nowTs = uint32(block.timestamp);
+        if (nowTs - twapRecentTimestamp < twapWindow) return;
+        twapAnchorCumulative = twapRecentCumulative;
+        twapAnchorTimestamp = twapRecentTimestamp;
+        twapRecentCumulative = tickCumulative;
+        twapRecentTimestamp = nowTs;
+    }
+
+    /// @dev Average tick from the anchor to the last observation, rounded toward negative
+    ///      infinity like Uniswap's oracle. In the bind second there is no history yet, so
+    ///      it uses the last tick.
+    function _twapTick() internal view returns (int24) {
+        uint32 elapsed = lastObservationTimestamp - twapAnchorTimestamp;
+        if (elapsed == 0) return lastTick;
+        int56 delta = tickCumulative - twapAnchorCumulative;
+        int56 avg = delta / int56(uint56(elapsed));
+        if (delta < 0 && delta % int56(uint56(elapsed)) != 0) avg--;
+        return int24(avg);
+    }
+
+    /// @dev Price relative to the peg: 1e18 means 1 MONEY = 1 peg token.
+    function _pegPriceFromTick(
+        int24 tick
+    ) internal view returns (uint256) {
+        int256 rel = int256(tick) - int256(pegTick);
+        if (rel > TickMath.MAX_TICK) rel = TickMath.MAX_TICK;
+        if (rel < TickMath.MIN_TICK) rel = TickMath.MIN_TICK;
+        return _priceFromTick(int24(rel));
+    }
+
+    /// @dev Tick of a pool where 1 MONEY trades for 1 `peg` token. The pool's raw price is
+    ///      token1/token0 in base units, so the peg is 10^(pegDec - moneyDec) when MONEY is
+    ///      currency0, and the inverse when it is currency1. Returns 0 (the old 1:1
+    ///      assumption) if the peg token's decimals can't be read.
+    function _derivePegTick(
+        address peg
+    ) internal view returns (int24) {
+        if (peg.code.length == 0 || money.code.length == 0) return 0;
+        uint8 pegDecimals;
+        try IERC20Metadata(peg).decimals() returns (uint8 d) {
+            pegDecimals = d;
+        } catch {
+            return 0;
+        }
+        uint8 moneyDecimals = IERC20Metadata(money).decimals();
+        if (pegDecimals == moneyDecimals) return 0;
+        int256 k = moneyIsCurrency0
+            ? int256(uint256(pegDecimals)) - int256(uint256(moneyDecimals))
+            : int256(uint256(moneyDecimals)) - int256(uint256(pegDecimals));
+        uint256 ratioX192 = k >= 0 ? (10 ** uint256(k)) << 192 : (uint256(1) << 192) / (10 ** uint256(-k));
+        return TickMath.getTickAtSqrtPrice(uint160(Math.sqrt(ratioX192)));
     }
 
     /// @dev Map current tick to a fee tier based on signed deviation from `pegTick`.
