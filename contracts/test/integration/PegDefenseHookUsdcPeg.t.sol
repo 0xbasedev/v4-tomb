@@ -136,7 +136,9 @@ contract PegDefenseHookUsdcPegTest is Test, Deployers {
         // holds mid-swap (the hook takes before the seller settles).
         int24 crashTick = hook.pegTick() - 4000;
         hook.setAutoCalculateTax(false);
+        hook.setMaxSellImpactBps(0); // the crash is bigger than the 5% sell cap
         _sellExactIn(5_000_000 ether, TickMath.getSqrtPriceAtTick(crashTick));
+        hook.setMaxSellImpactBps(500);
         hook.setAutoCalculateTax(true);
         assertLt(hook.pegPriceFromTick(_spotTick()), 0.7e18, "spot is far below the peg");
 
@@ -151,6 +153,103 @@ contract PegDefenseHookUsdcPegTest is Test, Deployers {
         vm.warp(block.timestamp + 1 hours);
         uint256 later = _sellExactIn(100 ether, _noLimit());
         assertGt(later, 15 ether, "tier rises once the low price persists");
+    }
+
+    // ------------------------------------------------------------------
+    // Sell cap: a sell may move MONEY's price at most maxSellImpactBps (5%)
+    // ------------------------------------------------------------------
+
+    function _sellToImpact(
+        int256 ticksDown
+    ) internal returns (uint256) {
+        return _sellExactIn(5_000_000 ether, TickMath.getSqrtPriceAtTick(_spotTick() - int24(ticksDown)));
+    }
+
+    function test_SellCap_DefaultIsFivePercent() public {
+        _setUpPool(false);
+        assertEq(hook.maxSellImpactBps(), 500);
+        assertEq(hook.maxSellImpactTicks(), 512, "1.0001^-512 is the deepest drop at or under 5%");
+    }
+
+    function test_SellCap_AllowsSellUnderCap() public {
+        _setUpPool(false);
+        hook.setAutoCalculateTax(false);
+        _sellToImpact(500); // ~4.9%
+        assertLt(hook.pegPriceFromTick(_spotTick()), 0.96e18);
+    }
+
+    /// @dev Bare swap with no reads around it, so vm.expectRevert lands on the swap itself.
+    function _rawSell(
+        uint256 amount,
+        uint160 limit
+    ) internal {
+        swapRouter.swap(
+            pk,
+            SwapParams({zeroForOne: moneyIs0, amountSpecified: -int256(amount), sqrtPriceLimitX96: limit}),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+    }
+
+    function test_SellCap_RevertsSellOverCap() public {
+        _setUpPool(false);
+        hook.setAutoCalculateTax(false);
+        uint160 limit = TickMath.getSqrtPriceAtTick(_spotTick() - 600); // ~5.8%
+        vm.expectRevert(); // PoolManager wraps the hook's SellTooLarge(500)
+        _rawSell(5_000_000 ether, limit);
+    }
+
+    function test_SellCap_FollowsDepth() public {
+        _setUpPool(false);
+        hook.setAutoCalculateTax(false);
+        int24 center = (hook.pegTick() / 60) * 60;
+        // 100 MONEY moves this pool well past 5% once liquidity is thin...
+        modifyLiquidityRouter.modifyLiquidity(
+            pk,
+            ModifyLiquidityParams({
+                tickLower: center - 6000, tickUpper: center + 6000, liquidityDelta: -9.99e15, salt: 0
+            }),
+            ""
+        );
+        uint160 noLimit = _noLimit();
+        vm.expectRevert();
+        _rawSell(100 ether, noLimit);
+        // ...and fits again once the pool is deep.
+        modifyLiquidityRouter.modifyLiquidity(
+            pk,
+            ModifyLiquidityParams({tickLower: center - 6000, tickUpper: center + 6000, liquidityDelta: 1e18, salt: 0}),
+            ""
+        );
+        _sellExactIn(100 ether, _noLimit());
+    }
+
+    function test_SellCap_SkipsBuysAndExcludedSenders() public {
+        _setUpPool(false);
+        hook.setAutoCalculateTax(false);
+        // A buy that moves the price 6% up is fine.
+        swapRouter.swap(
+            pk,
+            SwapParams({
+                zeroForOne: !moneyIs0,
+                amountSpecified: -int256(5_000_000e6),
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(_spotTick() + 600)
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+        // A protocol contract (here the swap router) may sell past the cap.
+        hook.setExcludedAddress(address(swapRouter), true);
+        _sellToImpact(1200);
+    }
+
+    function test_SetMaxSellImpact_Bounded() public {
+        _setUpPool(false);
+        vm.expectRevert(PegDefenseHook.SellImpactOutOfRange.selector);
+        hook.setMaxSellImpactBps(10);
+        vm.expectRevert(PegDefenseHook.SellImpactOutOfRange.selector);
+        hook.setMaxSellImpactBps(6000);
+        hook.setMaxSellImpactBps(0);
+        assertEq(hook.maxSellImpactTicks(), 0, "0 turns the cap off");
     }
 
     function test_SetTwapWindow_Bounded() public {

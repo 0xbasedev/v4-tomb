@@ -132,6 +132,22 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     //           trustees can set either with setTwapWindow.
     uint32 public twapWindow = 1 hours;
 
+    // ------------------------------------------------------------------
+    // Sell-size cap, measured as price impact
+    // ------------------------------------------------------------------
+
+    /// @notice Largest price drop one sell may cause, in bps of MONEY's price. Measuring
+    ///         impact instead of token count makes the cap follow the pool's real depth:
+    ///         a deep pool allows a bigger sell. 0 turns the cap off. Excluded senders
+    ///         (protocol contracts) skip it.
+    // DECISION: 5% by default. Exit-plan chunks must be sized below this so every
+    //           scheduled release fits in one sell; the planner should leave headroom.
+    uint256 public maxSellImpactBps;
+
+    /// @notice `maxSellImpactBps` as a tick distance, rounded down so the cap never allows
+    ///         more than the bps figure.
+    int24 public maxSellImpactTicks;
+
     /// @notice Older checkpoint: the TWAP runs from here to now.
     int56 public twapAnchorCumulative;
     uint32 public twapAnchorTimestamp;
@@ -189,6 +205,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     event TaxBurned(uint256 amount, uint256 price);
     event TaxRouted(address indexed treasury, uint256 amount, uint256 price);
     event TwapWindowSet(uint32 previous, uint32 next);
+    event MaxSellImpactSet(uint256 bps, int24 ticks);
 
     // ------------------------------------------------------------------
     // Errors
@@ -206,6 +223,10 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     error TaxRateTooHigh();
     error BurnThresholdZero();
     error TwapWindowOutOfRange();
+    error SellImpactOutOfRange();
+    /// @notice The sell would move MONEY's price more than `maxImpactBps`. Sell less, or
+    ///         split it; the app quotes the largest sell that fits.
+    error SellTooLarge(uint256 maxImpactBps);
 
     // ------------------------------------------------------------------
     // Constructor
@@ -236,6 +257,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
             1.5e18
         ];
         taxTiersRates = [uint256(2000), 1900, 1800, 1700, 1600, 1500, 1500, 1500, 1500, 1400, 900, 400, 200, 100];
+        _setMaxSellImpact(500);
     }
 
     // ------------------------------------------------------------------
@@ -341,6 +363,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         BalanceDelta delta,
         bytes calldata /* hookData */
     ) external override onlyPoolManager returns (bytes4, int128) {
+        _checkSellImpact(sender, params);
         if (params.amountSpecified < 0) return (IHooks.afterSwap.selector, 0);
         (uint256 rate, uint256 price) = _sellTaxRate(sender, params);
         if (rate == 0) return (IHooks.afterSwap.selector, 0);
@@ -419,6 +442,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     ) external onlyTrustees {
         emit PegTickSet(pegTick, newPegTick);
         pegTick = newPegTick;
+    }
+
+    /// @notice Set the sell-size cap as a price impact in bps. 0 turns it off; otherwise
+    ///         0.5% to 50%.
+    function setMaxSellImpactBps(
+        uint256 bps
+    ) external onlyTrustees {
+        _setMaxSellImpact(bps);
     }
 
     /// @notice Set the tax-tier TWAP window. Bounded to 5 minutes – 1 day.
@@ -565,6 +596,37 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
         lastTick = currentTick;
         lastObservationTimestamp = nowTs;
         emit Observed(tickCumulative, currentTick, nowTs);
+    }
+
+    /// @dev Reverts a sell that moved MONEY's price further than the cap. Runs in afterSwap,
+    ///      so it measures the real move across every tick the swap crossed. `lastTick` is
+    ///      the pre-swap tick beforeSwap recorded.
+    function _checkSellImpact(
+        address sender,
+        SwapParams calldata params
+    ) internal view {
+        if (maxSellImpactTicks == 0) return;
+        if (moneyIsCurrency0 != params.zeroForOne) return; // buys are never capped
+        if (excludedAddresses[sender]) return;
+        (, int24 postTick,,) = poolManager.getSlot0(poolId);
+        int256 moved = moneyIsCurrency0 ? int256(lastTick) - postTick : int256(postTick) - lastTick;
+        if (moved > maxSellImpactTicks) revert SellTooLarge(maxSellImpactBps);
+    }
+
+    /// @dev Stores the cap and its tick distance: the largest t with 1.0001^-t >= 1 - bps.
+    function _setMaxSellImpact(
+        uint256 bps
+    ) internal {
+        int24 ticks;
+        if (bps != 0) {
+            if (bps < 50 || bps > 5000) revert SellImpactOutOfRange();
+            uint256 ratioX192 = ((10_000 - bps) << 192) / 10_000;
+            int24 floorTick = TickMath.getTickAtSqrtPrice(uint160(Math.sqrt(ratioX192)));
+            ticks = -floorTick - 1;
+        }
+        maxSellImpactBps = bps;
+        maxSellImpactTicks = ticks;
+        emit MaxSellImpactSet(bps, ticks);
     }
 
     /// @dev Moves the anchor up once the recent checkpoint is a full window old. Runs after
