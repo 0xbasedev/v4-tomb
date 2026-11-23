@@ -5,10 +5,22 @@ on:
       - feat/xtomb-lite-omnichain-core
     paths:
       - "lite/**"
+      - "frontend/src/lib/liteDeployment.ts"
+      - "frontend/src/routes/Lite.tsx"
+      - "frontend/src/main.tsx"
+      - "frontend/src/lib/wagmi.ts"
+      - "frontend/src/components/Layout.tsx"
+      - "frontend/vite.config.ts"
       - ".github/workflows/ci-xtomb-lite.yml"
   pull_request:
     paths:
       - "lite/**"
+      - "frontend/src/lib/liteDeployment.ts"
+      - "frontend/src/routes/Lite.tsx"
+      - "frontend/src/main.tsx"
+      - "frontend/src/lib/wagmi.ts"
+      - "frontend/src/components/Layout.tsx"
+      - "frontend/vite.config.ts"
       - ".github/workflows/ci-xtomb-lite.yml"
   workflow_dispatch:
 
@@ -43,3 +55,21 @@ jobs:
         run: cd lite && forge build
       - name: Run invariant and integration tests
         run: cd lite && forge test -vv
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.28.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: "frontend/pnpm-lock.yaml"
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Typecheck wired Lite contracts and routes
+        run: cd frontend && pnpm typecheck
+      - name: Bundle production SPA without fake deployments
+        run: cd frontend && pnpm build
