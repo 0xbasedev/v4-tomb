@@ -1,0 +1,30 @@
+name: xTomb Lite testnet contract checks
+on:
+  push:
+    branches: [feat/longyu-xtomb-lite-testnet]
+    paths:
+      - 'lite/**'
+      - '.github/workflows/ci-xtomb-lite.yml'
+  pull_request:
+    paths:
+      - 'lite/**'
+      - '.github/workflows/ci-xtomb-lite.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Format
+        run: cd lite && forge fmt --check
+      - name: Compile
+        run: cd lite && forge build
+      - name: Test
+        run: cd lite && forge test -vv
