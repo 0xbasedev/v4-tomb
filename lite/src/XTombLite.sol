@@ -164,6 +164,10 @@ contract XTombLiteMasonry {
             twap_ == address(0) || treasury_ == address(0) || arbitrage_ == address(0) ||
             governance_ == address(0) || feeAmount_ == 0 || genesisStart_ < block.timestamp
         ) revert InvalidConfig();
+        if (peg_.code.length == 0 || lp_.code.length == 0 || feeToken_.code.length == 0 ||
+            twap_.code.length == 0 ||
+            (nativeUsdOracle_ != address(0) && nativeUsdOracle_.code.length == 0)
+        ) revert InvalidConfig();
         xtomb = ILiteERC20(peg_);
         masonryLp = ILiteERC20(lp_);
         feeToken = ILiteERC20(feeToken_);
