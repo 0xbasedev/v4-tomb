@@ -17,6 +17,22 @@ test('historical upstream deployment remains available as explicit configuration
   assert.equal(parseNetworks(historical)[0].id, 84532);
 });
 
+test('legacy hook requires an explicit historical label', () => {
+  const candidate = clone(historical);
+  delete candidate.networks[0].deployment.legacyHook;
+  assert.throws(() => parseNetworks(candidate), /hook permission bits must be 0x10cc/);
+});
+
+test('current hook flags are accepted without a legacy escape hatch', () => {
+  const candidate = clone(historical);
+  const deployment = candidate.networks[0].deployment;
+  delete deployment.legacyHook;
+  deployment.hook = deployment.hook.slice(0, -4) + '10cc';
+  assert.equal(parseNetworks(candidate)[0].deployment.hook, deployment.hook);
+  deployment.legacyHook = true;
+  assert.throws(() => parseNetworks(candidate), /legacyHook requires/);
+});
+
 for (const [description, change] of [
   ['unknown schema', (d) => { d.schemaVersion = 2; }],
   ['empty networks', (d) => { d.networks = []; }],
