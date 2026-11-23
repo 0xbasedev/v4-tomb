@@ -74,6 +74,13 @@ Set distinct, explicitly reviewed `TREASURY_ADDRESS` and `ARBITRAGE_ADDRESS`. Th
 
 ## Preflight
 
+Run the **read-only** RPC and contract-code preflight before simulation. It checks the actual chain ID, V2 factory/router bytecode, testnet tBNB balance, and pilot policy invariants without signing anything:
+
+```bash
+cd lite
+node --env-file=.env scripts/preflight.mjs
+```
+
 From an internet-enabled workstation, query the network rather than trusting the registry alone:
 
 ```bash
