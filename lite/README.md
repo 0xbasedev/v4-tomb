@@ -1,113 +1,95 @@
-# xTomb Lite: LONGYU testnet pilot
+# xTomb Lite: Chain-agnostic DeFi core (review branch)
 
-**Status: NOT DEPLOYED. UNSAFE DEMONSTRATION. DO NOT ACCEPT PUBLIC FUNDS.**
+**Status: source integrated, not audited, not deployed. Build/tests must pass in CI before signing.**
 
-This is a standalone, narrowly scoped Solidity pilot, deliberately separate from the production Masonry/v4 branch. It uses LONGYU's documented Uniswap-V2-style factory to create an **xTOMB/xSHARE LP** and lets that LP stake in a tiny Masonry. The existing `merge` branch is not yet ready for a real launch, and LONGYU has **no verified Uniswap V4 PoolManager** in the project's documentation.
+This is a self-contained V2-compatible execution profile for chains without a verified Uniswap V4 PoolManager, including candidate LONGYU Testnet. Network addresses, prices, chain ID, LPs, reserve floors, DEX fees, schedules and allocations are DATA provided by `config/release.json`, never compiled in as chain IDs or router addresses.
 
-## Implemented, not implemented
+The production-oriented components have replaced the original LONGYU-only mock prototype. They are **not production-approved** until adversarial tests, real pair/factory verification, stable/USD feed provenance, contract audit, keeper ops and liquidity calibration are completed.
 
-Implemented in this testnet pilot:
+## Components and integrated mechanics
 
-- Testnet-only deployment; contract constructor rejects every chain except **668801**.
-- xTOMB and xSHARE test ERC-20s. xSHARE immutable hard cap **333,333 tokens**; any test mint amounts come from explicit environment variables. No unapproved allocation plan.
-- **LP-only** Masonry staking with independent six-hour lock on each deposit tranche; no single-sided xSHARE.
-- Six-hour epochs, no catch-up, fresh observed price **strictly > $1.01** to mint, maximum 2% xTOMB supply expansion per eligible epoch, zero bootstrap exception.
-- Permissionless advance, charging **25 mock six-decimal dollars** to the configured Treasury in the pilot. Optional BNB payment is coded but disabled without a separate validated native/USD oracle.
-- Six-hour claim cooldown; Exit Now returns half the LP to the user, sends half to Treasury, and forfeits all pending xTOMB to Arbitrage.
-- **No bonds or debt**, period.
+| Contract | Role | Release invariant |
+| --- | --- | --- |
+| `XLiteToken` | xTOMB and xSHARE ERC-20s | xSHARE cap exactly **333,333**; one-way minter handoff; optional canonical-pool tax |
+| `XTombLiteMasonry` | xTOMB/xSHARE LP staking | Six-hour independent deposit locks and claim cooldown; *no single-sided share staking* |
+| `LiteV2TwapOracle` | V2 cumulative-price window + USD feed | 30-minute warmup, fresh + bounded spot deviation, minimum reserves, no spot-only minting |
+| `LiteSellTaxController` | Sell-only dynamic Fire Tax | Quadratic rate, max **12%**, seven-hour recovery, conservative stale fallback, optional Genesis SQUARE 6% floor |
+| `LiteLiquidityAdapter` | Verified V2 LP adds | Only adapter-held liquidity escapes tax, not arbitrary swap routers |
+| `LiteLpFarm` | One pre-funded xSHARE farm per LP | One-year emissions; nonlinear withdraw fee max 3% below peg; stale fee oracle means **zero** withdrawal fee |
+| `LiteLinearVesting` | Team/Developer/Treasury/Arbitrage grants | Separately funded 180-day streams, no revocation or admin sweep |
+| `LiteChainlinkUsdSource` | Stablecoin/USD and native/USD | Heartbeat and Chainlink round validation, no manually set prices |
+| `DeployOmnichainLite.s.sol` | Integrates all components | Creates three canonical V2 pairs, two LP Farms, vesting, tax/adapters, oracles and Masonry |
 
-**Not implemented:** a real TWAP oracle (manual price simulator only), a verified stablecoin, actual $25 USDC collection, Uniswap V4 hooks, Fire Tax/recovery, launch allocations, official xTOMB/USDC and xSHARE/USDC Farms, Genesis, NFT passes, vesting, treasury defense, route guards, LP seeding, verified frontend wiring, owner permissions beyond the pilot and external audit. Do not use this code in production or deploy it as an official xTomb protocol. This is a testnet-only first-step experiment, not a release candidate.
+**Masonry:** Fresh validated xTOMB/USD TWAP must be **strictly greater than $1.01**; missing/stale observations fail closed. Epochs are six hours, max emission 2% of xTOMB supply, no catch-up, and no bootstrap below peg. Anyone can advance an eligible epoch by paying *$25 USD-equivalent* through a fresh verified stable/USD feed, or by native gas token through an optional native/USD feed. Exit Now returns half of an LP tranche, forfeits half to Treasury and all accrued pending xTOMB to Arbitrage. No bonds or debt are deployed.
 
-## Source-backed network settings
+**Pool topology:** xTOMB/xSHARE LP goes to Masonry. xTOMB/USDC and xSHARE/USDC LPs are separate Farms. The term USDC represents a deployment-verified USDC-equivalent token address; the Solidity code never embeds it.
 
-| Field | LONGYU Testnet |
-| --- | --- |
-| Chain ID | `668801` (`0xa3481`) |
-| RPC | `https://rpc-testnet.longyu.network` |
-| Explorer | `https://scan-testnet.longyu.network` |
-| Gas | tBNB, bridged from BSC testnet |
-| V2 factory | `0xfE5372cA129113bf12EC70D1EE4A7cBB14f172B0` |
-| V2 router | `0xed3Eb7fe322424C14cc356Ab182021cAb8dCf01A` |
-| Bridge | `https://testnet.longyu.network/bridge.html` |
-| V4 PoolManager | **Unverified / absent from LONGYU docs** |
-| Verified USDC / TWAP | **Not established** |
+**Tax:** Normal V2 sells directly into canonical tax pairs are taxed, including router-mediated token transfers to the pair. Deposits using the dedicated liquidity adapter are untaxed. This requires a **fee-on-transfer-aware V2 swap router method**. Arbitrary new pools can bypass V2 token transfer tax if only the canonical pair is recognized; cross-pool enforcement or gated routing remains a critical production requirement. For v4-enabled chains, use the existing `merge` branch's V4 hook family instead of assuming this V2 policy protects V4 pools.
 
-Source: [LONGYU project repository README](https://github.com/Longyu-L2/LongyuL2).
+## What is deliberately NOT represented as finished
 
-## Local checks
+- Real Uniswap V4 PoolManager or single shared multi-DEX hook.
+- Zero-bypass tax on unofficial V2 pools; independent smart-contract security audit.
+- Robust quote-market depth history through every intermediate tick/reserve state; the V2 TWAP checks endpoints and cannot prove every price move was an authenticated swap.
+- Genesis seven-day reward vaults, NFT tiers, Fast Track escrow, keeper-driven compounding, Harvest All/Compound All, Treasury POL and buyback/Arbitrage execution.
+- A circulating-supply exclusion list (current 2% upper bound is based on `xtomb.totalSupply()`, so this must be adjusted for excluded reserves if the release has them).
+- Chain-specific production deployment verification, LP initialization, safe bridge assumption, audited approved xSHARE allocation, live frontend ABI/address wiring, external audits.
 
-Foundry (Forge + Cast) is required. From the repository root:
+**Do not present this branch as a fully launched protocol or solicit public deposits.**
+
+## Canonical release flow
+
+`config/release.template.json` includes LONGYU's **reported** testnet factory/router, but keeps stablecoin, USD feed, beneficiary addresses, approved xSHARE allocation and liquidity floors NULL. The source MUST stay chain-agnostic. Copy it into a local release configuration and choose an actual chain, verified V2-compatible factory/router, non-depegged stable/quoted token, stable/USD price reference, reserve floors, token funding and an approved allocation.
+
+The allocation validator conserves exactly 333,333 whole xSHARE tokens across:
+
+- Two farm budgets, sale escrow, deployer;
+- Four upfront distributions (Team, Developer, Treasury, Arbitrage);
+- Four separately vested distributions (Team, Developer, Treasury, Arbitrage).
+
+It does **not** silently scale the old 33,333-token breakdown to 333,333. Pending explicit approval, the template remains invalid.
 
 ```bash
 cd lite
-forge fmt --check
+cp config/release.template.json config/release.json
+# Complete and approve all address, source, peg supply and xSHARE allocation fields.
+node --test config/release.test.mjs
+node config/export.mjs config/release.json --validate-only
+# Strict validation must pass before export.
+node config/export.mjs config/release.json .env.local
+
+# Review network read-only, without wallet transactions:
+node scripts/preflight.mjs config/release.json
+
+# Contract build/test, then simulated deployment:
 forge build
 forge test -vv
+set -a; source .env.local; set +a
+export RPC_URL="<verified-private-or-public-RPC>"
+forge script script/DeployOmnichainLite.s.sol:DeployOmnichainLite \
+  --rpc-url "$RPC_URL" --account "<local-encrypted-keystore>" -vvvv
+
+# Only after review and successful full dry run:
+forge script script/DeployOmnichainLite.s.sol:DeployOmnichainLite \
+  --rpc-url "$RPC_URL" --account "<local-encrypted-keystore>" --broadcast --slow
 ```
 
-Tests cover the mint gate at and below 1.01, stale source failure, 2% emission ceiling, no catch-up, LP exit penalty and loss of rewards, share supply cap, and mint authorization handoff. The test LP is an ERC-20 mock; tests do **not** certify the actual DEX or its bridge.
+Do **not** publish private RPC API keys or signers. Using an encrypted local Foundry keystore avoids embedding a plaintext private key in repository configs.
 
-## Funding & signer
+### Post-broadcast activation sequence
 
-Fund a **disposable testnet deployer** with tBNB through the LONGYU testnet bridge. Use an encrypted local Foundry keystore; never paste a private key into ChatGPT, GitHub, a committed config file or a CI log.
+The deploy script does NOT seed pool liquidity, fabricate trading volume, or manually set oracle prices. After verified successful receipts:
 
-```bash
-cast wallet import xtomb-lite --interactive
-cd lite
-cp .env.example .env
-# Edit .env with public addresses, a FUTURE UNIX genesis timestamp, and TEST-ONLY seed amounts.
-# The keystore address must match DEPLOYER_ADDRESS.
-set -a
-source .env
-set +a
-```
+1. Persist each actual deployed address and receipt in a chain-specific manifest, independently verify bytecode/ABI and tax exemptions.
+2. Add verified xTOMB/stable price-discovery liquidity through `LiteLiquidityAdapter`, then add xSHARE/stable and xTOMB/xSHARE LPs, with one-trade caps.
+3. Call the permissionless TWAP `poke` to anchor; observe genuine market activity and call again after at least 30 minutes. Ensure fresh USD feed, liquidity floors and spot-deviation guard all pass.
+4. Validate normal/failing sells, every payout and native/USDC fee conversion, withdrawal below peg, abrupt liquidity withdrawals, and inactive-market behavior.
+5. Open only after an external security review, keeper monitoring and tested emergency runbooks.
 
-Example **testnet-only** seed values (these are NOT approved tokenomics or distributions):
+## LONGYU-specific status
 
-```ini
-TEST_XTOMB_SEED_WEI=1000000000000000000000
-TEST_XSHARE_SEED_WEI=1000000000000000000000
-TEST_USD_SEED_UNITS=1000000000
-```
+LONGYU Testnet chain ID `668801` and known public V2 factory/router are in the template, not in Solidity. The public sources do **not** verify suitable canonical USDC plus a production-grade USD/USD reference feed for this release. **The configuration is intentionally blocked** until these are verified or a separately audited replacement oracle is available.
 
-Set distinct, explicitly reviewed `TREASURY_ADDRESS` and `ARBITRAGE_ADDRESS`. The code does not silently supply a default or receive privileged funds at a developer wallet.
+This is an experimental chain. There is no known independent audit or guarantee of bridge security. Zero production capital is authorized.
 
-## Preflight
-
-Run the **read-only** RPC and contract-code preflight before simulation. It checks the actual chain ID, V2 factory/router bytecode, testnet tBNB balance, and pilot policy invariants without signing anything:
-
-```bash
-cd lite
-node --env-file=.env scripts/preflight.mjs
-```
-
-From an internet-enabled workstation, query the network rather than trusting the registry alone:
-
-```bash
-curl -s https://rpc-testnet.longyu.network \
-  -H 'content-type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'
-# Require result 0xa3481
-```
-
-Confirm the factory has deployed bytecode via `eth_getCode`. Run Foundry build/tests, review seed values, and dry-run **without** `--broadcast` first. Testnet tBNB is needed for the real broadcast.
-
-```bash
-forge script script/DeployLongyuLite.s.sol:DeployXTombLiteLongyu \
-  --rpc-url https://rpc-testnet.longyu.network --account xtomb-lite -vvvv
-
-# ONLY after successful simulation and explicit local signing:
-forge script script/DeployLongyuLite.s.sol:DeployXTombLiteLongyu \
-  --rpc-url https://rpc-testnet.longyu.network --account xtomb-lite \
-  --broadcast --slow
-```
-
-The script deploys two **test tokens**, a clearly labeled MockUSD, a mock price source initialized to **zero**, creates the xTOMB/xSHARE pair through the selected factory, deploys the Lite Masonry, and permanently hands the xTOMB minter to Masonry. **It does not seed the LP**, configure a real oracle, open Genesis, or collect genuine dollars. A zero price prevents expansion by default.
-
-After a successful broadcast, record transaction receipts and the **actual** token, mockUSD, pair, oracle and Masonry addresses in a chain-specific manifest. Minted pilot tokens must be supplied to the V2 router manually to seed a test LP. A demo price may then be set deliberately on the *unsafe* manual oracle, but never present it as a genuine TWAP.
-
-## Production blockers
-
-A genuine xTomb Lite launch requires validated xTOMB/stable LP reference market and oracle, verified chain infrastructure, fully approved 333,333 xSHARE allocation mapping, Fire Tax capped at 12% with seven-hour recovery, formal deployment wiring of the two Farm LP pools and Masonry LP, real stablecoin, adversarial testing, governance approvals, and independent security review. Replacing the manually set price with a real fresh guarded oracle is non-negotiable.
-
-**Mainnet chain 668800 is intentionally rejected by this pilot even if an operator supplies its RPC.**
+Source network documentation: [LONGYU/LongyuL2](https://github.com/Longyu-L2/LongyuL2). Existing mature V4 Masonry integration remains on `merge`, whose [integration status](../docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) describes its own remaining release gates.
