@@ -93,7 +93,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions
-        // (AFTER_INITIALIZE | BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA = 0x10CC).
+        // (AFTER_INITIALIZE | BEFORE_SWAP | AFTER_SWAP | BEFORE_SWAP_RETURNS_DELTA | AFTER_SWAP_RETURNS_DELTA = 0x10CC).
         hookAddr = address(
             uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG)
         );
