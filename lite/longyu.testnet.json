@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "release": "xtomb-lite-longyu-testnet-pilot",
+  "status": "not-deployed",
+  "testnetOnly": true,
+  "sourceBranch": "feat/longyu-xtomb-lite-testnet",
+  "chain": {
+    "name": "LONGYU Testnet",
+    "id": 668801,
+    "rpc": "https://rpc-testnet.longyu.network",
+    "explorer": "https://scan-testnet.longyu.network",
+    "gasSymbol": "tBNB",
+    "evmVersion": "cancun"
+  },
+  "infrastructure": {
+    "dexType": "UniswapV2",
+    "factory": "0xfE5372cA129113bf12EC70D1EE4A7cBB14f172B0",
+    "router": "0xed3Eb7fe322424C14cc356Ab182021cAb8dCf01A",
+    "bridge": "https://testnet.longyu.network/bridge.html",
+    "faucetContract": "0x4C48f21885eE29a9682D0bf37b0c6af544dFEE51",
+    "v4PoolManager": null,
+    "verifiedUsdc": null,
+    "verifiedTwap": null,
+    "verifiedNativeUsdOracle": null
+  },
+  "pilot": {
+    "pegToken": "xTOMB",
+    "shareToken": "xSHARE",
+    "shareCapWholeTokens": "333333",
+    "masonryLp": "xTOMB/xSHARE",
+    "farmLps": [
+      "xTOMB/USDC",
+      "xSHARE/USDC"
+    ],
+    "bondToken": null,
+    "genesisStart": null,
+    "epochSeconds": 21600,
+    "expansionMaximumBps": 200,
+    "mintRequiresPriceStrictlyAboveUsdE18": "1010000000000000000",
+    "oracleMaximumAgeSeconds": 1800,
+    "advanceEpochFeeUsdc": "25",
+    "shareAllocations": "unapproved",
+    "nativeFeeRouteEnabled": false,
+    "manualTestOracleUnsafe": true,
+    "quoteCurrency": "MockUSD (TEST ONLY)",
+    "productionReady": false
+  },
+  "publishedContracts": null
+}
