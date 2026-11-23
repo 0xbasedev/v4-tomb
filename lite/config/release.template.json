@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "protocol": "xtomb-lite",
+  "note": "Incomplete release. Never deploy with null fields, false approvals, unverifiable feeds, or unknown stablecoin. This template contains no owner wallets or secrets.",
+  "network": {
+    "chainId": 668801,
+    "name": "LONGYU Testnet",
+    "rpcUrl": "https://rpc-testnet.longyu.network",
+    "explorerUrl": "https://scan-testnet.longyu.network",
+    "testnet": true,
+    "infrastructure": {
+      "v2Factory": "0xfE5372cA129113bf12EC70D1EE4A7cBB14f172B0",
+      "v2Router": "0xed3Eb7fe322424C14cc356Ab182021cAb8dCf01A",
+      "stableToken": null,
+      "stableUsdFeed": null,
+      "nativeUsdFeed": null,
+      "quoteTokenVerified": false,
+      "oracleFeedVerified": false
+    }
+  },
+  "mechanics": {
+    "maxShareSupply": "333333",
+    "masonryLp": "xtomb/xshare",
+    "farmLpPairs": "xtomb/stable,xshare/stable",
+    "bondsEnabled": false,
+    "epochSeconds": 21600,
+    "maximumEpochExpansionBps": 200,
+    "mintRequiresStrictlyAboveUsdE18": "1010000000000000000",
+    "fireTaxHardCapBps": 1200,
+    "fireTaxRecoverySeconds": 25200,
+    "shareGenesisFloorBps": 600,
+    "farmRewardSeconds": 31536000,
+    "vestingSeconds": 15552000,
+    "exitNowTreasuryLpBps": 5000,
+    "advanceEpochFeeUsd": "25",
+    "allowCatchup": false,
+    "manualPriceSourceAllowed": false
+  },
+  "launch": {
+    "genesisStart": null,
+    "farmStart": null,
+    "levelLaunchSupplyWei": null,
+    "levelSupplyApproved": false,
+    "distributionApproved": false,
+    "deployer": null,
+    "treasury": null,
+    "arbitrage": null,
+    "team": null,
+    "developer": null,
+    "saleEscrow": null,
+    "shareAllocations": {
+      "farmLevelLp": null,
+      "farmShareLp": null,
+      "saleEscrow": null,
+      "deployer": null,
+      "teamUpfront": null,
+      "devUpfront": null,
+      "treasuryUpfront": null,
+      "arbitrageUpfront": null,
+      "teamVested": null,
+      "devVested": null,
+      "treasuryVested": null,
+      "arbitrageVested": null
+    }
+  },
+  "guards": {
+    "minPegReserveWei": null,
+    "minQuoteReserveUnits": null,
+    "v2SwapFeeBps": 30
+  },
+  "testnetDeploymentApproved": false
+}
