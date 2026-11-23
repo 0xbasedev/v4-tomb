@@ -8,6 +8,7 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -56,11 +57,9 @@ interface IBurnable {
  *         (the economic intent was always sell-side — Tomb's symmetry was a side-effect of
  *         intercepting transferFrom). Wallet-to-wallet MONEY transfers see no friction.
  *
- *         Hook permissions: afterInitialize (capture pool state), beforeSwap (observe +
- *         fee + tax). Low-14-bit pattern = 0x1088:
- *           AFTER_INITIALIZE      = 0x1000
- *           BEFORE_SWAP           = 0x0080
- *           BEFORE_SWAP_RETURN_Δ  = 0x0008
+ *         Hook permissions: afterInitialize (bind pool), beforeSwap (integrate prior tick,
+ *         override fee, tax exact input), afterSwap (capture new tick, tax exact output).
+ *         Low-14-bit pattern = 0x10CC (both swap callbacks + return-delta flags).
  *
  *         For the contract design rationale and tier-table justification, see
  *         docs/HOOK_TAX_DESIGN.md.
@@ -70,6 +69,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
     using StateLibrary for IPoolManager;
     using LPFeeLibrary for uint24;
     using SafeERC20 for IERC20;
+    using BalanceDeltaLibrary for BalanceDelta;
 
     // ------------------------------------------------------------------
     // Immutables / pool binding
@@ -232,11 +232,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
             beforeRemoveLiquidity: false,
             afterRemoveLiquidity: false,
             beforeSwap: true,
-            afterSwap: false,
+            afterSwap: true,
             beforeDonate: false,
             afterDonate: false,
             beforeSwapReturnDelta: true, // Sprint 4b — enables tax slice via BeforeSwapDelta
-            afterSwapReturnDelta: false,
+            afterSwapReturnDelta: true,
             afterAddLiquidityReturnDelta: false,
             afterRemoveLiquidityReturnDelta: false
         });
@@ -303,48 +303,80 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        // Compute tax slice from the MONEY-side amount. For exact-input swaps
-        // (amountSpecified < 0), the specified token IS MONEY (the input) and we
-        // return deltaSpecified > 0. For exact-output swaps (amountSpecified > 0),
-        // the specified token is WETH (output) and MONEY is the unspecified side;
-        // we return deltaUnspecified > 0.
-        uint256 absAmount =
-            params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
-        uint256 taxAmount = absAmount * rate / 10_000;
+        // Exact-input sells specify MONEY. Withhold the fee from the specified input
+        // BEFORE pool math so the user's gross input stays constant. Exact-output sells
+        // specify the paired OUTPUT asset; their MONEY input is only known in afterSwap.
+        if (params.amountSpecified >= 0) {
+            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
+        }
+
+        uint256 taxAmount = uint256(-params.amountSpecified) * rate / 10_000;
         if (taxAmount == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        BeforeSwapDelta delta;
-        if (params.amountSpecified < 0) {
-            // Exact-input: MONEY is the specified token.
-            delta = toBeforeSwapDelta(int128(int256(taxAmount)), int128(0));
-        } else {
-            // Exact-output: MONEY is the unspecified (input) token.
-            delta = toBeforeSwapDelta(int128(0), int128(int256(taxAmount)));
+        _collectMoneyTax(key, taxAmount, price);
+        return (
+            IHooks.beforeSwap.selector,
+            toBeforeSwapDelta(int128(int256(taxAmount)), int128(0)),
+            fee
+        );
+    }
+
+    /// @notice Finalize the observation at the true post-swap tick, and tax the actual
+    ///         MONEY input of exact-output sells. Uniswap's afterSwap return delta is
+    ///         denominated in the unspecified currency, which is MONEY on these sells.
+    function afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta swapDelta,
+        bytes calldata /* hookData */
+    ) external override onlyPoolManager returns (bytes4, int128) {
+        if (!bound || PoolId.unwrap(key.toId()) != PoolId.unwrap(poolId)) revert UnknownPool();
+
+        // beforeSwap integrated the elapsed time at the PREVIOUS post-swap tick
+        // and recorded this swap's PRE-swap tick. Preserve it for tax calculation.
+        int24 preSwapTick = lastTick;
+        (, int24 postSwapTick,,) = poolManager.getSlot0(poolId);
+        lastTick = postSwapTick;
+
+        if (!autoCalculateTax || params.amountSpecified <= 0 ||
+            moneyIsCurrency0 != params.zeroForOne || excludedAddresses[sender]) {
+            return (IHooks.afterSwap.selector, 0);
         }
 
-        // Pull the tax MONEY into the hook's balance. The take call settles the
-        // hook's credit with the PoolManager.
+        // Exact-output sells have MONEY as the unspecified INPUT currency. The
+        // PoolManager's swap delta is negative for the user's MONEY obligation.
+        int128 inputDelta = moneyIsCurrency0 ? swapDelta.amount0() : swapDelta.amount1();
+        if (inputDelta >= 0) return (IHooks.afterSwap.selector, 0);
+
+        uint256 price = _priceFromTick(preSwapTick);
+        uint256 taxAmount = uint256(-int256(inputDelta)) * _taxRateForPrice(price) / 10_000;
+        if (taxAmount == 0) return (IHooks.afterSwap.selector, 0);
+
+        // The positive unspecified delta gives this MONEY to the hook, and the
+        // router must settle the same additional MONEY amount. All hook debt is
+        // balanced by take() within the PoolManager unlock transaction.
+        _collectMoneyTax(key, taxAmount, price);
+        return (IHooks.afterSwap.selector, int128(int256(taxAmount)));
+    }
+
+    function _collectMoneyTax(
+        PoolKey calldata key,
+        uint256 taxAmount,
+        uint256 price
+    ) internal {
         Currency moneyCurrency = moneyIsCurrency0 ? key.currency0 : key.currency1;
         poolManager.take(moneyCurrency, address(this), taxAmount);
 
-        // Burn below threshold, route above. Below-threshold burn is the
-        // load-bearing deflationary lever during contraction.
-        if (price < burnThreshold) {
+        if (price < burnThreshold || treasury == address(0)) {
             IBurnable(money).burn(taxAmount);
             emit TaxBurned(taxAmount, price);
-        } else if (treasury != address(0)) {
+        } else {
             IERC20(money).safeTransfer(treasury, taxAmount);
             emit TaxRouted(treasury, taxAmount, price);
-        } else {
-            // Treasury unset; fall through to burn for safety. Trustees should set
-            // a treasury before flipping autoCalculateTax on.
-            IBurnable(money).burn(taxAmount);
-            emit TaxBurned(taxAmount, price);
         }
-
-        return (IHooks.beforeSwap.selector, delta, fee);
     }
 
     // ------------------------------------------------------------------
