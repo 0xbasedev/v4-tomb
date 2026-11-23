@@ -16,7 +16,7 @@ This is a hybrid tax path that **preserves the existing MONEY-input tax denomina
 
 - Permission bits changed from `0x1088` to **`0x10CC`**: afterInitialize, beforeSwap, afterSwap, beforeSwapReturnDelta and afterSwapReturnDelta.
 - Mine a new CREATE2 salt and deploy a new hook address. Do not attempt to attach the old hook address to a pool expecting the new callback permissions.
-- Config validation requires `0x10CC` for new deployments; marked `legacyHook: true` historical records with `0x1088` stay readable.
+- Config validation accepts **only `0x10CC`**. The historical Base Sepolia example retains its original address as a nondeployable archive and intentionally fails the current deployment schema.
 - Historical pools cannot change their hook association in place: prepare a controlled liquidity migration and update oracle, deployment manifest, wrappers, Treasury references, frontends and keepers.
 - Current fork integration tests are skipped when `BASE_RPC_URL` is unset. A green local unit suite alone is **not** sufficient validation.
 
