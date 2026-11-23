@@ -161,7 +161,7 @@ export function LaunchSequence() {
     numeral: "VI",
     title: "Enable Hook Tax (optional)",
     detail: autoTaxOn
-      ? "Active · 14-tier schedule taxing MONEY sells."
+      ? "Active · 12 / 6 / 3% schedule taxing MONEY sells."
       : bootstrapDone
         ? "Disabled. Flip on via Panel II below to defend the peg."
         : "Pending bootstrap end.",

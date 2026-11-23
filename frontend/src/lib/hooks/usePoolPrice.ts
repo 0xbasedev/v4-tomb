@@ -15,7 +15,10 @@ import { useDeployment } from "./useDeployment";
  * MONEY. After trades, it reflects the most recent tick.
  *
  * Separately exposes `autoCalculateTax` so the SwapCard can show the user
- * whether tax is currently being applied to MONEY sells.
+ * whether tax is currently being applied to MONEY sells, plus the rate and
+ * price the hook itself would tax a sell at right now. The hook keys the tax
+ * to the oracle TWAP, not to spot, so the tier must be read from the contract
+ * rather than re-derived from the spot price here.
  */
 export function usePoolPrice() {
   const deployment = useDeployment();
@@ -28,6 +31,8 @@ export function usePoolPrice() {
           { address: deployment.hook, abi: hookAbi, functionName: "lastTick" },
           { address: deployment.hook, abi: hookAbi, functionName: "autoCalculateTax" },
           { address: deployment.hook, abi: hookAbi, functionName: "bound" },
+          { address: deployment.hook, abi: hookAbi, functionName: "currentTaxRate" },
+          { address: deployment.hook, abi: hookAbi, functionName: "currentTaxPrice" },
         ]
       : [],
     query: { enabled, refetchInterval: 15_000 },
@@ -36,6 +41,8 @@ export function usePoolPrice() {
   const lastTick = data?.[0]?.status === "success" ? (data[0].result as number) : 0;
   const taxOn = data?.[1]?.status === "success" ? (data[1].result as boolean) : false;
   const bound = data?.[2]?.status === "success" ? (data[2].result as boolean) : false;
+  const taxRateBps = data?.[3]?.status === "success" ? Number(data[3].result as bigint) : 0;
+  const taxPrice = data?.[4]?.status === "success" ? (data[4].result as bigint) : 0n;
 
   // Second multicall: priceFromTick(lastTick). Split so we don't double-fetch
   // before lastTick lands.
@@ -55,6 +62,8 @@ export function usePoolPrice() {
     lastTick,
     price,
     taxOn,
+    taxRateBps,
+    taxPrice,
     bound,
     isLoading: isLoading || priceCall.isLoading,
     refetch: () => {

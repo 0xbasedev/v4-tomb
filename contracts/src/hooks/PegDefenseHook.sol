@@ -22,6 +22,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {BaseV4Hook} from "./base/BaseV4Hook.sol";
 import {IPriceSource} from "../interfaces/IPriceSource.sol";
+import {IOracle} from "../interfaces/IOracle.sol";
 import {Trustees} from "../governance/Trustees.sol";
 
 /// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (OldMoney).
@@ -58,12 +59,21 @@ library PegDefenseHookPermissions {
  *              (expansion): low fee, encourages buying. Near peg: base fee. Below peg
  *              (contraction): high fee, discourages selling. Deep below peg: even higher.
  *
- *           3. **Tomb-style sell tax with burn-during-contraction** — sells of MONEY pay a
- *              MONEY-denominated tax at the tier rate for the pre-swap price. The tax is
- *              burned (price < `burnThreshold`) or sent to Treasury (price >= threshold).
- *              The 14 tier prices + rates and the default `burnThreshold = 1.10e18` match
- *              Tomb's Bomb.sol exactly. `autoCalculateTax` is off by default (Tomb
- *              pattern); Trustees flips it on post-launch.
+ *           3. **Sell tax keyed to the TWAP, with burn-during-contraction** — sells of
+ *              MONEY pay a MONEY-denominated tax. The rate steps DOWN as the peg
+ *              strengthens:
+ *
+ *                  TWAP <  1.12   → 12%
+ *                  TWAP >= 1.12   →  6%
+ *                  TWAP >= 1.20   →  3%
+ *
+ *              The price used is the Oracle's last completed epoch TWAP (`taxOracle`),
+ *              not the pool's spot price, so a trader cannot buy their way into a cheaper
+ *              tier inside the transaction that sells. Until an oracle is wired and has
+ *              completed its first epoch, the pre-swap spot price is the fallback.
+ *              The tax is burned (price < `burnThreshold`) or sent to Treasury (price >=
+ *              threshold). `autoCalculateTax` is off by default; Trustees flips it on
+ *              post-launch.
  *
  *              Both swap modes charge the same effective rate `r` on the seller's gross
  *              MONEY outlay `G`:
@@ -153,8 +163,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ///         after the protocol is stable).
     bool public autoCalculateTax;
 
-    /// @notice Price thresholds (1e18-scaled MONEY/WETH ratio) defining the 14 tax tiers.
-    ///         Walked high → low; first one a price exceeds sets the rate.
+    /// @notice Price thresholds (1e18-scaled WETH per MONEY) defining the tax tiers.
+    ///         Walked high → low; the first one the tax price reaches sets the rate.
     uint256[] public taxTiersTwaps;
 
     /// @notice Tax rate in basis points per tier. Same length as `taxTiersTwaps`.
@@ -163,6 +173,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     /// @notice Below this price (1e18-scaled), the tax slice is BURNED. At or above, it's
     ///         transferred to `treasury`. Defaults to 1.10e18 per Tomb.
     uint256 public burnThreshold = 1.1e18;
+
+    /// @notice Source of the TWAP the tax tier and burn threshold are read against.
+    ///         `consult(money, 1e18)` must return WETH per MONEY, 1e18-scaled. While unset,
+    ///         or while it reports zero (no completed epoch yet) or reverts, the pool's
+    ///         pre-swap spot price is used instead.
+    IOracle public taxOracle;
 
     /// @notice Address that receives tax when `price >= burnThreshold`. Zero address means
     ///         no destination; tax falls through to burn even above the threshold (safe
@@ -200,6 +216,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     event AutoCalculateTaxSet(bool enabled);
     event BurnThresholdSet(uint256 previous, uint256 next);
     event TreasurySet(address indexed previous, address indexed next);
+    event TaxOracleSet(address indexed previous, address indexed next);
     event TaxTierSet(uint256 indexed index, uint256 twap, uint256 rate);
     event AddressExclusionSet(address indexed account, bool excluded);
     event TaxBurned(uint256 amount, uint256 price);
@@ -245,24 +262,9 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         _transferTrustees(_initialTrustees); // reverts on zero address (ZeroTrusteesAddress)
         _transferOwnership(_initialTrustees);
 
-        // Tomb-faithful tier table (matches Bomb.sol exactly).
-        taxTiersTwaps = [
-            uint256(0),
-            0.5e18,
-            0.6e18,
-            0.7e18,
-            0.8e18,
-            0.9e18,
-            0.95e18,
-            1.0e18,
-            1.05e18,
-            1.1e18,
-            1.2e18,
-            1.3e18,
-            1.4e18,
-            1.5e18
-        ];
-        taxTiersRates = [uint256(2000), 1900, 1800, 1700, 1600, 1500, 1500, 1500, 1500, 1400, 900, 400, 200, 100];
+        // 12% below 1.12, 6% from 1.12, 3% from 1.20.
+        taxTiersTwaps = [uint256(0), 1.12e18, 1.2e18];
+        taxTiersRates = [uint256(1200), 600, 300];
     }
 
     // ------------------------------------------------------------------
@@ -333,7 +335,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        uint256 price = _priceFromTick(currentTick);
+        uint256 price = _taxPrice(currentTick);
         uint256 taxAmount = uint256(-params.amountSpecified) * _taxRateForPrice(price) / BPS;
         if (taxAmount == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
@@ -356,7 +358,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         if (!bound) revert UnknownPool();
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(poolId)) revert UnknownPool();
 
-        // beforeSwap left `lastTick` at the pre-swap tick. Keep it for the tax tier, then
+        // beforeSwap left `lastTick` at the pre-swap tick. Keep it for the tax fallback, then
         // record where the swap actually left the pool so idle time accrues at that tick.
         int24 preSwapTick = lastTick;
         // slither-disable-next-line unused-return — only the tick is needed from slot0.
@@ -371,7 +373,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             return (IHooks.afterSwap.selector, 0);
         }
 
-        uint256 price = _priceFromTick(preSwapTick);
+        uint256 price = _taxPrice(preSwapTick);
         uint256 rate = _taxRateForPrice(price);
         if (rate == 0) return (IHooks.afterSwap.selector, 0);
         // Grossing up by 1 / (1 - rate) has no finite answer at a 100% rate.
@@ -510,6 +512,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         treasury = newTreasury;
     }
 
+    /// @notice Point the tax at a TWAP source, or pass zero to fall back to spot.
+    function setTaxOracle(
+        address newTaxOracle
+    ) external onlyTrustees {
+        emit TaxOracleSet(address(taxOracle), newTaxOracle);
+        taxOracle = IOracle(newTaxOracle);
+    }
+
     /// @notice Update a single tier's price threshold. Preserves monotonicity.
     function setTaxTiersTwap(
         uint256 index,
@@ -567,9 +577,36 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         return _taxRateForPrice(price);
     }
 
+    /// @notice The price (1e18-scaled WETH per MONEY) the sell tax is assessed against right
+    ///         now: the oracle TWAP when available, otherwise the pool's resting spot price.
+    function currentTaxPrice() public view returns (uint256) {
+        return _taxPrice(lastTick);
+    }
+
+    /// @notice The sell-tax rate (bps) a MONEY sell would pay right now, ignoring the
+    ///         `autoCalculateTax` switch and sender exclusions.
+    function currentTaxRate() external view returns (uint256) {
+        return _taxRateForPrice(currentTaxPrice());
+    }
+
     // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
+
+    /// @dev TWAP from `taxOracle` when it has one; the spot price at `spotTick` otherwise.
+    ///      The fallback keeps sells working — and taxed — if the oracle is unset, has not
+    ///      finished its first epoch, or fails.
+    function _taxPrice(
+        int24 spotTick
+    ) internal view returns (uint256) {
+        IOracle oracle = taxOracle;
+        if (address(oracle) != address(0)) {
+            try oracle.consult(money, 1e18) returns (uint144 twap) {
+                if (twap > 0) return twap;
+            } catch {}
+        }
+        return _priceFromTick(spotTick);
+    }
 
     /// @dev True when a swap in direction `zeroForOne` by `sender` is a MONEY sell that the
     ///      tax applies to.
@@ -659,8 +696,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         }
     }
 
-    /// @dev Walk tier table high → low; first one `price` exceeds sets the rate. Matches
-    ///      Tomb's `_updateTaxRate` semantic exactly. Returns 0 if no tier matches
+    /// @dev Walk tier table high → low; the first threshold `price` reaches sets the rate. Returns 0 if no tier matches
     ///      (impossible with sorted array starting at 0; defensive default).
     function _taxRateForPrice(
         uint256 price

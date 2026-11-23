@@ -213,8 +213,8 @@ contract BaseForkHookTaxTest is BaseTest {
         uint256 totalBefore = money.totalSupply();
         uint256 sellAmount = 10 ether;
 
-        // At tick 0, rate = tier 7 = 1500 bps. Tax = sellAmount * 0.15.
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        // At tick 0 (below 1.12) the rate is 1200 bps. Tax = sellAmount * 0.12.
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
 
         SwapParams memory params = _sellSwapParams(int256(sellAmount));
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
@@ -239,7 +239,7 @@ contract BaseForkHookTaxTest is BaseTest {
         uint256 totalBefore = money.totalSupply();
         uint256 treasuryBefore = money.balanceOf(address(treasury));
         uint256 sellAmount = 10 ether;
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
 
         SwapParams memory params = _sellSwapParams(int256(sellAmount));
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");

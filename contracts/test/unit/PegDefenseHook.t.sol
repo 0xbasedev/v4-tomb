@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
+import {MockOracle} from "../utils/MockOracle.sol";
 
 import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {BaseV4Hook} from "../../src/hooks/base/BaseV4Hook.sol";
@@ -60,6 +61,16 @@ contract MockPoolManager {
         lastTakeAmount = amount;
         takeCallCount += 1;
         IERC20(Currency.unwrap(currency)).transfer(to, amount);
+    }
+}
+
+/// @dev An oracle whose `consult` always fails.
+contract RevertingOracle {
+    function consult(
+        address,
+        uint256
+    ) external pure returns (uint144) {
+        revert("oracle down");
     }
 }
 
@@ -364,50 +375,103 @@ contract PegDefenseHookTest is BaseTest {
         assertFalse(hook.autoCalculateTax(), "tax off at deploy (Tomb default)");
         assertEq(hook.burnThreshold(), 1.1e18, "burnThreshold default 1.10e18 (Tomb)");
         assertEq(hook.treasury(), address(0), "treasury unset at deploy");
-        assertEq(hook.getTaxTiersTwapsCount(), 14, "14 tiers (Tomb)");
-        assertEq(hook.getTaxTiersRatesCount(), 14, "14 rates (Tomb)");
+        assertEq(hook.getTaxTiersTwapsCount(), 3, "three tiers");
+        assertEq(hook.getTaxTiersRatesCount(), 3, "three rates");
+        assertEq(address(hook.taxOracle()), address(0), "tax oracle unset at deploy");
     }
 
-    function test_Tax_TierTable_MatchesTomb() public view {
-        // Exact values from Bomb.sol's taxTiersTwaps + taxTiersRates arrays.
-        uint256[14] memory expectedTwaps = [
-            uint256(0),
-            0.5e18,
-            0.6e18,
-            0.7e18,
-            0.8e18,
-            0.9e18,
-            0.95e18,
-            1.0e18,
-            1.05e18,
-            1.1e18,
-            1.2e18,
-            1.3e18,
-            1.4e18,
-            1.5e18
-        ];
-        uint256[14] memory expectedRates =
-            [uint256(2000), 1900, 1800, 1700, 1600, 1500, 1500, 1500, 1500, 1400, 900, 400, 200, 100];
-
-        for (uint256 i = 0; i < 14; ++i) {
+    function test_Tax_TierTable_Defaults() public view {
+        uint256[3] memory expectedTwaps = [uint256(0), 1.12e18, 1.2e18];
+        uint256[3] memory expectedRates = [uint256(1200), 600, 300];
+        for (uint256 i = 0; i < 3; ++i) {
             assertEq(hook.taxTiersTwaps(i), expectedTwaps[i], "twap mismatch");
             assertEq(hook.taxTiersRates(i), expectedRates[i], "rate mismatch");
         }
     }
 
     function test_Tax_RateLookup_TierBoundaries() public view {
-        // Walk every tier boundary; verify the rate returned matches Tomb's lookup semantic
-        // (first tier the price >= is the rate; walk high -> low).
-        assertEq(hook.taxRateForPrice(0), 2000, "price 0 -> tier 0 -> 2000");
-        assertEq(hook.taxRateForPrice(0.5e18 - 1), 2000, "just below 0.5 -> tier 0");
-        assertEq(hook.taxRateForPrice(0.5e18), 1900, "exactly 0.5 -> tier 1");
-        assertEq(hook.taxRateForPrice(0.99e18), 1500, "0.99 -> tier 6 (0.95)");
-        assertEq(hook.taxRateForPrice(1.0e18), 1500, "at peg -> tier 7");
-        assertEq(hook.taxRateForPrice(1.05e18), 1500, "1.05 -> tier 8");
-        assertEq(hook.taxRateForPrice(1.1e18), 1400, "at burnThreshold -> tier 9");
-        assertEq(hook.taxRateForPrice(1.1e18 - 1), 1500, "just below 1.10 -> tier 8");
-        assertEq(hook.taxRateForPrice(1.5e18), 100, "at highest tier");
-        assertEq(hook.taxRateForPrice(2.0e18), 100, "above highest -> highest rate");
+        assertEq(hook.taxRateForPrice(0), 1200, "deep depeg -> 12%");
+        assertEq(hook.taxRateForPrice(1.0e18), 1200, "at peg -> 12%");
+        assertEq(hook.taxRateForPrice(1.12e18 - 1), 1200, "just below 1.12 -> 12%");
+        assertEq(hook.taxRateForPrice(1.12e18), 600, "exactly 1.12 -> 6%");
+        assertEq(hook.taxRateForPrice(1.2e18 - 1), 600, "just below 1.20 -> 6%");
+        assertEq(hook.taxRateForPrice(1.2e18), 300, "exactly 1.20 -> 3%");
+        assertEq(hook.taxRateForPrice(5.0e18), 300, "far above -> 3%");
+    }
+
+    // ---------------------------------------------------------------------
+    // Tax price source — oracle TWAP with spot fallback
+    // ---------------------------------------------------------------------
+
+    function test_SetTaxOracle_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setTaxOracle(address(1));
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleUnset() public {
+        _bind(0);
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1, "spot at tick 0");
+        assertEq(hook.currentTaxRate(), 1200);
+    }
+
+    function test_TaxPrice_UsesOracleTwap_NotSpot() public {
+        _bind(0); // spot = 1.00 -> would be 12%
+        MockOracle oracle = new MockOracle(0);
+        oracle.setPrice(1.2e18);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+
+        assertEq(hook.currentTaxPrice(), 1.2e18, "TWAP wins over spot");
+        assertEq(hook.currentTaxRate(), 300, "3% at a 1.20 TWAP");
+
+        oracle.setPrice(1.12e18);
+        assertEq(hook.currentTaxRate(), 600, "6% at a 1.12 TWAP");
+
+        oracle.setPrice(1.119e18);
+        assertEq(hook.currentTaxRate(), 1200, "12% below 1.12");
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleReportsZero() public {
+        _bind(0);
+        MockOracle oracle = new MockOracle(0); // price 0 == no completed epoch yet
+        oracle.setPrice(0);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1);
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleReverts() public {
+        _bind(0);
+        address broken = address(new RevertingOracle());
+        vm.prank(trustees);
+        hook.setTaxOracle(broken);
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1, "a broken oracle must not block or untax sells");
+    }
+
+    function test_BeforeSwap_TaxesAtTheTwapTier_EvenWhenSpotDisagrees() public {
+        _bind(0);
+        pm.setTick(0); // spot says 12%
+        MockOracle oracle = new MockOracle(0);
+        oracle.setPrice(1.2e18); // TWAP says 3%
+        address twapTreasury = makeAddr("treasury_twap");
+        vm.startPrank(trustees);
+        hook.setTaxOracle(address(oracle));
+        hook.setAutoCalculateTax(true);
+        hook.setTreasury(twapTreasury);
+        vm.stopPrank();
+
+        uint256 expectedTax = 100 ether * 300 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+
+        assertEq(int256(BeforeSwapDeltaLibrary.getSpecifiedDelta(delta)), int256(expectedTax), "3% of 100");
+        // A 1.20 TWAP is above the 1.10 burn threshold, so the tax is routed, not burned.
+        assertEq(money.balanceOf(twapTreasury), expectedTax);
     }
 
     function test_Tax_PriceFromTick_AtParity() public {
@@ -470,33 +534,33 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTaxTiersTwap_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        hook.setTaxTiersTwap(5, 0.91e18);
+        hook.setTaxTiersTwap(1, 1.15e18);
     }
 
     function test_SetTaxTiersTwap_RejectsOutOfRange() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
-        hook.setTaxTiersTwap(14, 2e18);
+        hook.setTaxTiersTwap(3, 2e18);
     }
 
     function test_SetTaxTiersTwap_RejectsNonMonotonicDown() public {
-        // Setting tier 5 (currently 0.90) to a value <= tier 4 (0.80) breaks monotonicity.
+        // Setting tier 1 (1.12) to a value <= tier 0 (0) breaks monotonicity.
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
-        hook.setTaxTiersTwap(5, 0.8e18);
+        hook.setTaxTiersTwap(1, 0);
     }
 
     function test_SetTaxTiersTwap_RejectsNonMonotonicUp() public {
-        // Setting tier 5 to a value >= tier 6 (0.95) breaks monotonicity.
+        // Setting tier 1 to a value >= tier 2 (1.20) breaks monotonicity.
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
-        hook.setTaxTiersTwap(5, 0.95e18);
+        hook.setTaxTiersTwap(1, 1.2e18);
     }
 
     function test_SetTaxTiersTwap_Updates() public {
         vm.prank(trustees);
-        hook.setTaxTiersTwap(5, 0.91e18);
-        assertEq(hook.taxTiersTwaps(5), 0.91e18);
+        hook.setTaxTiersTwap(1, 1.15e18);
+        assertEq(hook.taxTiersTwaps(1), 1.15e18);
     }
 
     function test_SetTaxTiersRate_OnlyTrustees() public {
@@ -508,7 +572,7 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTaxTiersRate_RejectsOutOfRange() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
-        hook.setTaxTiersRate(14, 100);
+        hook.setTaxTiersRate(3, 100);
     }
 
     function test_SetTaxTiersRate_RejectsTooHigh() public {
@@ -598,9 +662,9 @@ contract PegDefenseHookTest is BaseTest {
         hook.setAutoCalculateTax(true);
 
         // Pre-fund the mock with MONEY so its take() can transfer to the hook.
-        // At tick 0, rate is tier 7 = 1500 bps. For amountSpecified = -100, tax = 15.
+        // At tick 0, the rate is 1200 bps. For amountSpecified = -100, tax = 12.
         uint256 amount = 100 ether;
-        uint256 expectedTax = amount * 1500 / 10_000;
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
         money.mint(address(pm), expectedTax);
 
@@ -635,8 +699,8 @@ contract PegDefenseHookTest is BaseTest {
         hook.setTreasury(treasuryAddr);
 
         uint256 amount = 100 ether;
-        // At tick 0 price ~= 1.0, that's tier 7 -> 1500 bps.
-        uint256 expectedTax = amount * 1500 / 10_000;
+        // At tick 0 price ~= 1.0, that's the 12% tier.
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
         money.mint(address(pm), expectedTax);
 
@@ -663,7 +727,7 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(hook.treasury(), address(0), "precondition: treasury unset");
 
         uint256 amount = 100 ether;
-        uint256 expectedTax = amount * 1500 / 10_000;
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
         money.mint(address(pm), expectedTax);
 
@@ -691,7 +755,7 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
 
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
         if (expectedTax == 0) return;
 
         vm.prank(owner);
@@ -725,7 +789,7 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setTreasury(treasuryAddr);
 
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
         if (expectedTax == 0) return;
 
         vm.prank(owner);
@@ -749,11 +813,7 @@ contract PegDefenseHookTest is BaseTest {
         uint256 price
     ) public view {
         uint256 rate = hook.taxRateForPrice(price);
-        assertTrue(
-            rate == 100 || rate == 200 || rate == 400 || rate == 900 || rate == 1400 || rate == 1500 || rate == 1600
-                || rate == 1700 || rate == 1800 || rate == 1900 || rate == 2000,
-            "rate must be one of the 14 Tomb tiers"
-        );
+        assertTrue(rate == 300 || rate == 600 || rate == 1200, "rate must be one of the three tiers");
     }
 
     function testFuzz_BuyDirection_NeverTaxed(

@@ -227,7 +227,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         router.swapExactIn(poolKey, zeroForOne, amountIn, 0, alice);
 
         uint256 supplyAfter = money.totalSupply();
-        // Tax tier at price ≈ 1.0 is 1500 bps (15%). The hook BURNS the slice
+        // Tax tier at price ≈ 1.0 is 1200 bps (12%). The hook BURNS the slice
         // because price < burnThreshold (1.10). So total supply must drop.
         assertLt(supplyAfter, supplyBefore, "MONEY supply must drop by tax burn amount");
     }

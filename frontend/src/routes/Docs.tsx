@@ -19,7 +19,7 @@ import { RuleTrio } from "@/components/RuleTrio";
  *   - The Club (ESTATE staking)
  *   - The Bond Office (Trust Notes)
  *   - The Treasury Cycle (epochs, expansion, contraction)
- *   - Peg Defense (hook + 14-tier tax)
+ *   - Peg Defense (hook + TWAP-keyed sell tax)
  *   - Risks (honest)
  *   - Glossary
  */
@@ -304,7 +304,7 @@ export function Docs() {
           c={{
             title: "Contraction",
             sub: "price < 1.00 WETH",
-            body: "Below par. No new MONEY is minted. The bond office accepts MONEY burns in exchange for TRUSTNOTE. The hook taxes MONEY sells per the 14-tier schedule. Both mechanisms work to retire supply and rebuild scarcity.",
+            body: "Below par. No new MONEY is minted. The bond office accepts MONEY burns in exchange for TRUSTNOTE. The hook taxes MONEY sells at 12%. Both mechanisms work to retire supply and rebuild scarcity.",
           }}
         />
       </Section>
@@ -330,20 +330,19 @@ export function Docs() {
           <li>
             <strong>Sell-side tax.</strong> When the operator enables{" "}
             <code className="font-ornament text-deco-gold">autoCalculateTax</code>{" "}
-            and MONEY trades below par, the hook intercepts MONEY sells and
-            takes a slice per the 14-tier schedule. Below the burn threshold
-            (1.10 WETH), the slice is destroyed outright; above, it accrues to
-            the Treasury reserve.
+            , the hook takes a slice of every MONEY sale. The rate is set by
+            the time-weighted price, so it cannot be dodged by moving the spot
+            price for a moment. Below the burn threshold (1.10 WETH), the slice
+            is destroyed outright; above, it accrues to the Treasury reserve.
           </li>
         </ol>
-        <SubHeading>The Fourteen Tiers</SubHeading>
+        <SubHeading>The Three Tiers</SubHeading>
         <P>
-          The tax schedule was ported directly from Tomb Finance's BOMB token,
-          one of the more battle-tested algorithmic-stable peg-defense
-          structures. Below par, the rate climbs steeply: 1% just under one
-          ETH, 15% at par, 22% near 0.40 ETH, 30% in the deepest contraction.
-          The schedule's full table is rendered live on /swap when MONEY-WETH is
-          selected.
+          The tax eases as the peg strengthens. While the time-weighted price
+          is below 1.12 ETH, sales pay 12%. From 1.12 they pay 6%, and from
+          1.20 they pay 3%. Purchases are never taxed. The schedule is rendered
+          live on /swap when MONEY-WETH is selected, with the tier in force
+          highlighted.
         </P>
       </Section>
 
@@ -357,7 +356,7 @@ export function Docs() {
         </P>
         <Risk
           title="Bond Death Spiral"
-          body="The classic algorithmic-stable failure mode. If MONEY trades far below par and bond buyers stop believing in eventual recovery, no one burns MONEY to mint Notes. Supply doesn't retire. Price drifts further down. Tomb hit this in mid-2022. Mitigations: the hook's burn-on-sell removes supply even without bond demand; the 14-tier tax scales steeply downward to drain exit pressure."
+          body="The classic algorithmic-stable failure mode. If MONEY trades far below par and bond buyers stop believing in eventual recovery, no one burns MONEY to mint Notes. Supply doesn't retire. Price drifts further down. Tomb hit this in mid-2022. Mitigations: the hook's burn-on-sell removes supply even without bond demand; every sell below a 1.12 TWAP pays 12%, burned while below 1.10."
         />
         <Risk
           title="Bootstrap Drift"

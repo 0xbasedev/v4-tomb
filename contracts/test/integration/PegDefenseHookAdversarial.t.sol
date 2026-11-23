@@ -25,9 +25,9 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     int256 internal constant DEEP_LIQUIDITY = 100_000 ether;
 
-    /// @dev Money tick −5940 → price ≈ 0.552 WETH per MONEY, inside the [0.50, 0.60) tier.
+    /// @dev Money tick −5940 → price ≈ 0.552 WETH per MONEY: below 1.12, so the 12% tier.
     int24 internal constant DEPEGGED_TICK = -5940;
-    uint256 internal constant DEPEGGED_RATE_BPS = 1900;
+    uint256 internal constant DEPEGGED_RATE_BPS = 1200;
 
     // ------------------------------------------------------------------
     // Sell tax — exact input
@@ -70,7 +70,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
         assertEq(weth.balanceOf(alice) - aliceWethBefore, wethOut, "seller receives exactly the specified output");
         // At ~0.55 WETH per MONEY the pool needs ~18 MONEY for 10 WETH. Taxing the WETH
-        // figure instead (the old behaviour) would have charged 1.9 MONEY, not ~4.25.
+        // figure instead (the old behaviour) would have charged 1.2 MONEY, not ~2.5.
         assertGt(poolTook, 18 ether);
         assertEq(burned, _grossUp(poolTook, DEPEGGED_RATE_BPS), "tax = net x r / (1 - r), rounded up");
         // Same effective rate as an exact-input sell: tax / gross MONEY paid == tier rate.
@@ -97,7 +97,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     function test_ExactOutSell_RevertsAtAFullTaxRate() public {
         _initWithFullRange(DEPEGGED_TICK, DEEP_LIQUIDITY);
         _enableTax();
-        hook.setTaxTiersRate(1, 10_000); // the [0.50, 0.60) tier
+        hook.setTaxTiersRate(0, 10_000); // the below-1.12 tier
 
         vm.prank(alice);
         vm.expectRevert();
@@ -105,7 +105,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     }
 
     function test_ExactOutSell_AbovePeg_RoutesToTreasury() public {
-        // Money tick 1500 → price ≈ 1.162, tier [1.10, 1.20) = 14%, above the burn threshold.
+        // Money tick 1500 → price ≈ 1.162, tier [1.12, 1.20) = 6%, above the burn threshold.
         _initWithFullRange(1500, DEEP_LIQUIDITY);
         _enableTax();
 
@@ -117,7 +117,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         uint256 paid = aliceMoneyBefore - money.balanceOf(alice);
         uint256 routed = money.balanceOf(treasuryAddr);
         assertEq(money.totalSupply(), supplyBefore, "nothing burned above the threshold");
-        assertApproxEqAbs(routed * 10_000 / paid, 1400, 1, "treasury receives the tier rate");
+        assertApproxEqAbs(routed * 10_000 / paid, 600, 1, "treasury receives the tier rate");
     }
 
     function testFuzz_ExactOutSell_EffectiveRateMatchesTier(
@@ -236,14 +236,14 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         uint256 supplyBefore = money.totalSupply();
         uint256 moneyId = uint256(uint160(address(money)));
 
-        // Price is far above peg here: 1% tier, routed to Treasury. The sell that pulls
+        // Price is far above peg here: 3% tier, routed to Treasury. The sell that pulls
         // price back toward peg must go through even though the tax cannot be paid out yet.
         _sellExactIn(alice, 100 ether);
 
         assertEq(aliceBefore - money.balanceOf(alice), 100 ether, "sell executed in full");
-        assertEq(hook.pendingTaxRoute(), 1 ether, "tax parked for the Treasury");
+        assertEq(hook.pendingTaxRoute(), 3 ether, "tax parked for the Treasury");
         assertEq(hook.pendingTaxBurn(), 0);
-        assertEq(manager.balanceOf(address(hook), moneyId), 1 ether, "backed 1:1 by PoolManager claims");
+        assertEq(manager.balanceOf(address(hook), moneyId), 3 ether, "backed 1:1 by PoolManager claims");
         assertEq(money.totalSupply(), supplyBefore, "nothing burned yet");
 
         // Alice's settled input replenished the manager, so anyone can now flush it.
@@ -252,7 +252,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
         assertEq(hook.pendingTaxRoute(), 0, "pending cleared");
         assertEq(manager.balanceOf(address(hook), moneyId), 0, "claims redeemed");
-        assertEq(money.balanceOf(treasuryAddr), 1 ether, "Treasury paid");
+        assertEq(money.balanceOf(treasuryAddr), 3 ether, "Treasury paid");
         assertEq(money.balanceOf(address(hook)), 0, "hook retains nothing");
     }
 
@@ -268,7 +268,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         uint256 paid = aliceBefore - money.balanceOf(alice);
         uint256 pending = hook.pendingTaxRoute() + hook.pendingTaxBurn();
         assertGt(pending, 0, "tax deferred");
-        assertApproxEqAbs(pending * 10_000 / paid, 100, 1, "1% tier applied to the gross MONEY paid");
+        assertApproxEqAbs(pending * 10_000 / paid, 300, 1, "3% tier applied to the gross MONEY paid");
 
         hook.settleDeferredTax();
         assertEq(hook.pendingTaxRoute() + hook.pendingTaxBurn(), 0);
@@ -335,6 +335,47 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
             assertEq(hook.lastTick(), _currentPoolTick(), "observation tracks the pool");
             skip(5 minutes);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Tax tier follows the TWAP, not the spot price
+    // ------------------------------------------------------------------
+
+    function test_TaxTier_CannotBeBoughtDownWithinTheSellTransaction() public {
+        _initWithFullRange(0, DEEP_LIQUIDITY);
+        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(money), address(weth), 6 hours, block.timestamp);
+        hook.setTaxOracle(address(oracle));
+        _enableTax();
+
+        // One full epoch resting at peg, then the oracle checkpoints a 1.00 TWAP.
+        skip(6 hours);
+        oracle.update();
+        assertEq(hook.currentTaxRate(), 1200, "TWAP at peg -> 12%");
+
+        // Pump spot far above 1.20 and sell in the same block. A spot-keyed tax would
+        // drop to 3%; the TWAP-keyed tax still charges 12%.
+        _buyExactIn(alice, 30_000 ether);
+        assertGt(hook.priceFromTick(_currentPoolTick()), 1.2e18, "spot is above the 3% threshold");
+
+        uint256 supplyBefore = money.totalSupply();
+        _sellExactIn(alice, 1000 ether);
+        assertEq(supplyBefore - money.totalSupply(), 120 ether, "12% burned: tier read from the TWAP");
+    }
+
+    function test_TaxTier_StepsDownAsTheTwapRises() public {
+        // Money tick 1200 → ≈1.127 (6% tier); money tick 1860 → ≈1.204 (3% tier).
+        _initWithFullRange(1200, DEEP_LIQUIDITY);
+        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(money), address(weth), 6 hours, block.timestamp);
+        hook.setTaxOracle(address(oracle));
+        _enableTax();
+
+        skip(6 hours);
+        oracle.update();
+        assertEq(hook.currentTaxRate(), 600, "6% at a ~1.127 TWAP");
+
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        _sellExactIn(alice, 100 ether);
+        assertEq(money.balanceOf(treasuryAddr) - treasuryBefore, 6 ether, "6% routed (above the burn threshold)");
     }
 
     // ------------------------------------------------------------------

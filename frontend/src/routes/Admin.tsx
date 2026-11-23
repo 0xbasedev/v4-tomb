@@ -513,7 +513,7 @@ function PostBootstrapPanel({
               <span className="label-deco text-deco-gold-dark">Hook Tax</span>
             </div>
             <p className="mb-4 font-body text-sm italic text-deco-ivory-soft">
-              Enable the 14-tier sell tax. Off by default at deploy; flip on
+              Enable the sell tax (12% / 6% / 3% by TWAP). Off by default at deploy; flip on
               post-bootstrap. Burns below 1.10 ETH, routes to Treasury above.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">

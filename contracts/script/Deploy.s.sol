@@ -116,6 +116,8 @@ contract Deploy is NetworkConfig {
         // setter is invoked from that role. (autoCalculateTax stays false at deploy —
         // Trustees enables post-launch.)
         hook.setTreasury(address(treasury));
+        // Assess the sell tax against the epoch TWAP rather than the pool's spot price.
+        hook.setTaxOracle(address(oracle));
 
         money.transferTrustees(address(treasury));
         estate.transferTrustees(address(treasury));

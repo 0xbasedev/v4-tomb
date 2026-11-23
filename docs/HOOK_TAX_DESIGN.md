@@ -2,7 +2,9 @@
 
 > **Revised.** The sections below are the original Sprint 4b design and are kept for history.
 > Where they disagree with [Revision 2](#revision-2--exact-output-tax-post-swap-observation-deferred-collection)
-> at the end of this document, Revision 2 is what the contract does.
+> or [Revision 3](#revision-3--three-tier-curve-keyed-to-the-twap) at the end of this
+> document, the revisions are what the contract does. In particular the 14-tier Tomb table
+> below is no longer the default.
 
 Design doc for restoring Tomb's burn-during-deep-contraction lever as a `beforeSwapReturnDelta` extension to `PegDefenseHook`. **Read this and sign off before any code lands in `src/`.**
 
@@ -371,8 +373,8 @@ by a `test_KnownLimit_*` test so a future change cannot alter it silently.
 - **LP positions are resting asks, not sells.** Single-sided MONEY liquidity above the
   current price converts to WETH only when a buyer trades through it. Adding and removing
   it extracts no WETH, so no liquidity hooks are needed.
-- **The tier is read from the pre-swap spot price** and applied to the whole trade, so one
-  large sell that crosses several tiers pays the starting tier's rate throughout.
+- **One rate per trade.** The tier is fixed before the swap and applied to the whole
+  amount (see Revision 3 for which price it is read from).
 
 ### ESTATE (the share token)
 
@@ -380,3 +382,39 @@ ESTATE has no sell tax, and none is planned. Tomb's TSHARE was untaxed too. The 
 exists to burn supply while below peg; ESTATE has no peg, so a tax on it would only be a
 fee on entering and leaving the Boardroom. If protocol revenue from ESTATE trading is ever
 wanted, the clean form is a flat LP-fee split on an ESTATE pool, not this hook's tier table.
+
+---
+
+## Revision 3 — three-tier curve keyed to the TWAP
+
+The Tomb 14-tier table is replaced by a curve that eases as the peg strengthens:
+
+| TWAP (WETH per MONEY) | Sell tax | Destination |
+|---|---|---|
+| below 1.12 | 12% | burned below 1.10, Treasury from 1.10 |
+| 1.12 up to 1.20 | 6% | Treasury |
+| 1.20 and above | 3% | Treasury |
+
+`taxTiersTwaps = [0, 1.12e18, 1.2e18]`, `taxTiersRates = [1200, 600, 300]`. Both remain
+Trustees-settable per tier; the table length is fixed at three.
+
+### Which price
+
+The tier and the burn threshold are read from `taxOracle.consult(money, 1e18)` — the
+Oracle's **last completed epoch TWAP** — not from the pool's spot price. `Deploy.s.sol`
+wires the protocol Oracle in with `setTaxOracle`.
+
+With a curve that gets cheaper as price rises, a spot-keyed tax invites the obvious trade:
+buy to push spot above 1.20, then sell at 3% in the same transaction. Keying to the epoch
+TWAP removes that; `test_TaxTier_CannotBeBoughtDownWithinTheSellTransaction` pins it.
+
+Consequences worth knowing:
+
+- The rate changes at most once per epoch (6 hours), when `Oracle.update()` runs. A sharp
+  move is reflected in the tax at the next epoch, not immediately.
+- Until the Oracle completes its first epoch it reports zero, and the hook falls back to the
+  pre-swap spot price. The same fallback applies if the oracle is unset or reverts, so a
+  broken oracle can neither block sells nor switch the tax off. Enable `autoCalculateTax`
+  only after the first `Oracle.update()` if the spot fallback is not acceptable at launch.
+- `currentTaxPrice()` and `currentTaxRate()` expose what a sell would be charged right now.
+  The frontend reads these instead of re-deriving a tier from spot.

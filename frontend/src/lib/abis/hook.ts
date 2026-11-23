@@ -27,6 +27,20 @@ export const hookAbi = [
   },
   {
     type: "function",
+    name: "currentTaxPrice",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "currentTaxRate",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "autoCalculateTax",
     stateMutability: "view",
     inputs: [],

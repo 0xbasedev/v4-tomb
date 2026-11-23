@@ -14,7 +14,7 @@ export interface OldMoneyDeployment {
   boardroom: Address;
   /** TWAP oracle. */
   oracle: Address;
-  /** PegDefenseHook — V4 hook with 14-tier tax surface. */
+  /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
   hook: Address;
   /** V4PositionWrapper — wraps the MONEY/WETH LP NFT into an ERC-20. */
   lpWrapper: Address;

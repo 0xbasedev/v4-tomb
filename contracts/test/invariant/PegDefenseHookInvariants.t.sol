@@ -113,10 +113,10 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     // Invariants on the tax-tier table
     // ---------------------------------------------------------------------
 
-    /// @notice Tier table length is fixed at 14 — set in constructor, no resizer exists.
+    /// @notice Tier table length is fixed at 3 — set in constructor, no resizer exists.
     function invariant_TierTableLengthFixed() public view {
-        assertEq(hook.getTaxTiersTwapsCount(), 14);
-        assertEq(hook.getTaxTiersRatesCount(), 14);
+        assertEq(hook.getTaxTiersTwapsCount(), 3);
+        assertEq(hook.getTaxTiersRatesCount(), 3);
     }
 
     /// @notice TWAPs are strictly monotonic — setTaxTiersTwap enforces it on every write.

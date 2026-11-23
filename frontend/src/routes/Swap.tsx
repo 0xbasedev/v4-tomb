@@ -7,7 +7,7 @@ import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 import { SwapCard } from "@/components/SwapCard";
 import { TabBar } from "@/components/TabBar";
-import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
+import { TaxScheduleTable, tierLabel } from "@/components/TaxScheduleTable";
 
 import { useDeployment, usePoolPrice, usePoolReserves, useSwap } from "@/lib/hooks";
 import { erc20Abi } from "@/lib/abis";
@@ -158,9 +158,14 @@ export function Swap() {
   // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
   // hook actually has autoCalculateTax enabled. The schedule itself still
   // renders below — it's informational regardless of the on/off state.
-  const taxActive =
-    activeId === "money-weth" && sellingBase && liveHook.taxOn && liveSpot < 1.0;
-  const tier = taxActive ? tierAt(liveSpot) : { label: "No Tax", bps: 0 };
+  // The rate comes from the hook itself: it taxes against the oracle TWAP, so
+  // re-deriving a tier from the spot price here would quote the wrong amount.
+  const taxActive = activeId === "money-weth" && sellingBase && liveHook.taxOn;
+  const tier = taxActive
+    ? { label: tierLabel(liveHook.taxRateBps), bps: liveHook.taxRateBps }
+    : { label: "No Tax", bps: 0 };
+  const taxPriceEth =
+    liveHook.taxPrice > 0n ? Number(formatUnits(liveHook.taxPrice, 18)) : liveSpot;
 
   const hookStateLabel =
     activeId !== "money-weth"
@@ -266,7 +271,8 @@ export function Swap() {
             style={{ letterSpacing: "0.04em" }}
           >
             Trade upon the Uniswap V4 venue. The Hook defends the peg with a
-            fourteen-tier tax. Above par, you pay only the base fee.
+            tax on sales that eases as the peg strengthens: 12%, then 6% from
+            1.12, then 3% from 1.20.
           </p>
         </div>
       </section>
@@ -352,7 +358,7 @@ export function Swap() {
       {activeId === "money-weth" && (
         <section className="px-6 pb-14 md:px-12 md:pb-16">
           <div className="mx-auto max-w-3xl">
-            <TaxScheduleTable activePriceEth={liveSpot} />
+            <TaxScheduleTable activePriceEth={taxPriceEth} />
           </div>
         </section>
       )}
