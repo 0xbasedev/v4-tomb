@@ -23,6 +23,7 @@ import {
 import { injected } from "wagmi/connectors";
 
 import { DEPLOYMENTS, REGISTRY } from "@/lib/launch";
+import { liteDeployment, liteChain } from "@/lib/liteDeployment";
 
 /**
  * Wallet chains = every chain in config/official-infrastructure.json (a
@@ -52,10 +53,22 @@ const KNOWN: Chain[] = [
 ];
 
 const listed = new Set(REGISTRY.chains.map((c) => c.id));
-const chains = KNOWN.filter((c) => listed.has(c.id)) as [Chain, ...Chain[]];
+const knownChains = KNOWN.filter((c) => listed.has(c.id));
+const candidateLite = liteDeployment ? liteChain(liteDeployment) : null;
+// An unverified Lite manifest NEVER activates a wallet chain or transaction UI.
+const chains = [
+  ...knownChains,
+  ...(candidateLite && !knownChains.some((c) => c.id === candidateLite.id) ? [candidateLite] : []),
+] as [Chain, ...Chain[]];
 
 const env = import.meta.env as Record<string, string | undefined>;
-const transports = Object.fromEntries(chains.map((c) => [c.id, http(env[`VITE_RPC_${c.id}`])])) as Record<number, Transport>;
+const transports = Object.fromEntries(
+  chains.map((c) => [
+    c.id,
+    http(env[`VITE_RPC_${c.id}`] ??
+      (candidateLite?.id === c.id ? candidateLite.rpcUrls.default.http[0] : undefined)),
+  ]),
+) as Record<number, Transport>;
 
 export const wagmiConfig = createConfig({
   chains,
@@ -66,4 +79,4 @@ export const wagmiConfig = createConfig({
 export const SUPPORTED_CHAIN_IDS = chains.map((c) => c.id);
 export const DEPLOYED_CHAIN_IDS = DEPLOYMENTS.map((d) => d.chainId);
 export const chainName = (id: number | undefined) =>
-  id === undefined ? "—" : (REGISTRY.chains.find((c) => c.id === id)?.name ?? bridgeNetwork(id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);
+  id === undefined ? "—" : (REGISTRY.chains.find((c) => c.id === id)?.name ?? (candidateLite?.id === id ? candidateLite.name : undefined) ?? bridgeNetwork(id)?.name ?? KNOWN.find((c) => c.id === id)?.name ?? `Chain ${id}`);
