@@ -9,6 +9,7 @@ import { PreviewDock } from "@/components/PreviewDock";
 import { NetworkNote } from "@/components/Status";
 import { useIsAdmin, useProtocol } from "@/lib/hooks";
 import { EPOCH_SECONDS } from "@/lib/launch";
+import { liteDeployment } from "@/lib/liteDeployment";
 import { PHASE_META } from "@/lib/market";
 import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
 import { usePlan } from "@/lib/plan";
@@ -35,6 +36,7 @@ export function useNavItems(): { label: string; to: string; glyph: string }[] {
     { label: "Swap", to: "/swap", glyph: "⇅" },
     { label: "Bonds", to: "/bonds", glyph: "⬡" },
     { label: "Bridge", to: "/bridge", glyph: "⟁" },
+    ...(liteDeployment ? [{ label: "Lite", to: "/lite", glyph: "◈" }] : []),
   ];
 }
 
@@ -188,7 +190,7 @@ function MobileTabBar() {
   useEffect(() => setMore(false), [location.pathname]);
   // Thumb bar: the four most-used screens; the rest live under "More".
   const navItems = [all[0], all[1], all[3], all[5]];
-  const extra = [all[2], all[4], { label: "Docs", to: "/docs", glyph: "§" }, ...(admin.isAdmin ? [{ label: "Admin", to: "/admin", glyph: "⚙" }, { label: "Wizard", to: "/wizard", glyph: "✦" }] : [])];
+  const extra = [all[2], all[4], ...(liteDeployment && all[6] ? [all[6]] : []), { label: "Docs", to: "/docs", glyph: "§" }, ...(admin.isAdmin ? [{ label: "Admin", to: "/admin", glyph: "⚙" }, { label: "Wizard", to: "/wizard", glyph: "✦" }] : [])];
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.07] bg-void/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl xl:hidden"
