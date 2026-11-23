@@ -250,10 +250,11 @@ contract XTombLiteTest {
             address(pegStable), address(peg), address(stable), address(feed),
             6, 100e18, 100e6, 30 minutes, 30 minutes, 30 minutes, 500, 10
         );
+        uint256 anchor = block.timestamp;
         oracle.poke(); // Anchor.
-        vm.warp(block.timestamp + 15 minutes);
+        vm.warp(anchor + 15 minutes);
         pegStable.setReserves(1000e18, 1040e6);
-        vm.warp(block.timestamp + 15 minutes);
+        vm.warp(anchor + 30 minutes);
         feed.set(1e8);
         oracle.poke();
         (uint256 price,) = oracle.latestPrice();
@@ -272,10 +273,11 @@ contract XTombLiteTest {
         share.approve(address(farm), 1000e18);
         farm.activate(1000e18);
         vm.warp(block.timestamp + 2);
+        // The initial 100 LP were deposited into Masonry by setUp; mint distinct LP for this farm.
+        lp.mintLp(ALICE, 100e18);
         vm.prank(ALICE);
         lp.approve(address(farm), type(uint256).max);
         vm.prank(ALICE);
-        // Alice exited earlier only in a separate test state, so has all 100 LP here.
         farm.stake(100e18);
         vm.warp(block.timestamp + 30 days);
         require(farm.pending(ALICE) > 0, "farm did not accrue");
