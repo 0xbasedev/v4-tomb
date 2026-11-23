@@ -13,6 +13,7 @@ import { Landing } from "./routes/Landing";
 import { Dashboard } from "./routes/Dashboard";
 import { Genesis } from "./routes/Genesis";
 import { Masonry } from "./routes/Masonry";
+import { Lite } from "./routes/Lite";
 import { Farm } from "./routes/Farm";
 import { Bridge } from "./routes/Bridge";
 import { Wizard } from "./routes/Wizard";
@@ -56,6 +57,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   <Route path="/genesis" element={<Genesis />} />
                   <Route path="/farm" element={<Farm />} />
                   <Route path="/masonry" element={<Masonry />} />
+                  <Route path="/lite" element={<Lite />} />
                   <Route path="/bonds" element={<Bonds />} />
                   <Route path="/bridge" element={<Bridge />} />
                   <Route path="/swap" element={<Swap />} />
