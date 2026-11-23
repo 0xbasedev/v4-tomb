@@ -1,0 +1,75 @@
+name: xTomb Lite omnichain validation
+on:
+  push:
+    branches:
+      - feat/xtomb-lite-omnichain-core
+    paths:
+      - "lite/**"
+      - "frontend/src/lib/liteDeployment.ts"
+      - "frontend/src/routes/Lite.tsx"
+      - "frontend/src/main.tsx"
+      - "frontend/src/lib/wagmi.ts"
+      - "frontend/src/components/Layout.tsx"
+      - "frontend/vite.config.ts"
+      - ".github/workflows/ci-xtomb-lite.yml"
+  pull_request:
+    paths:
+      - "lite/**"
+      - "frontend/src/lib/liteDeployment.ts"
+      - "frontend/src/routes/Lite.tsx"
+      - "frontend/src/main.tsx"
+      - "frontend/src/lib/wagmi.ts"
+      - "frontend/src/components/Layout.tsx"
+      - "frontend/vite.config.ts"
+      - ".github/workflows/ci-xtomb-lite.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate release scheme and invariant tests
+        run: cd lite && node --test config/release.test.mjs
+      - name: Confirm release template fails closed
+        run: |
+          cd lite
+          if node config/export.mjs config/release.template.json --validate-only; then
+            echo "ERROR: Incomplete release template should be rejected"
+            exit 1
+          fi
+  foundry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Compile clean self-contained Solidity
+        run: cd lite && forge build
+      - name: Run invariant and integration tests
+        run: cd lite && forge test -vv
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.28.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: "frontend/pnpm-lock.yaml"
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+      - name: Typecheck wired Lite contracts and routes
+        run: cd frontend && pnpm typecheck
+      - name: Bundle production SPA without fake deployments
+        run: cd frontend && pnpm build

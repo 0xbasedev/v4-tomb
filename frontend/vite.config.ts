@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
 const configDir = fileURLToPath(new URL("../config", import.meta.url));
+const liteDir = fileURLToPath(new URL("../lite", import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
@@ -18,6 +19,6 @@ export default defineConfig({
   server: {
     port: 5173,
     open: false,
-    fs: { allow: [".", configDir] },
+    fs: { allow: [".", configDir, liteDir] },
   },
 });
