@@ -17,6 +17,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {BalanceDelta, toBalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -87,7 +88,7 @@ contract PegDefenseHookTest is BaseTest {
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
         hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG)
         );
 
         deployCodeTo(
@@ -126,14 +127,14 @@ contract PegDefenseHookTest is BaseTest {
         assertTrue(p.beforeSwap);
         assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
         assertFalse(p.beforeInitialize);
-        assertFalse(p.afterSwap);
+        assertTrue(p.afterSwap);
         assertFalse(p.beforeAddLiquidity);
         assertFalse(p.afterAddLiquidity);
         assertFalse(p.beforeRemoveLiquidity);
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.afterSwapReturnDelta);
+        assertTrue(p.afterSwapReturnDelta);
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);
     }
@@ -221,31 +222,37 @@ contract PegDefenseHookTest is BaseTest {
     }
 
     function test_BeforeSwap_AccumulatesObservation() public {
-        _bind(0); // last tick = 0, lastObsTs = block.timestamp
+        _bind(0);
 
-        // Advance 1000 seconds at constant tick 0 — cumulative stays 0.
         vm.warp(block.timestamp + 1000);
         pm.setTick(0);
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
         assertEq(hook.tickCumulative(), 0);
 
-        // Now the pool's tick is 100 (simulating post-swap state). Advance 500 seconds.
-        vm.warp(block.timestamp + 500);
+        // The first swap moves the tick. afterSwap must checkpoint the new price.
         pm.setTick(100);
         vm.prank(address(pm));
-        hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
-        // Between the two beforeSwap calls, lastTick was still 0 (set in first call),
-        // so cumulative gained 0 * 500 = 0.
-        assertEq(hook.tickCumulative(), 0);
+        hook.afterSwap(address(0), poolKey, _emptySwap(), toBalanceDelta(0, 0), "");
         assertEq(hook.lastTick(), 100);
 
-        // Advance another 500 at tick 100 -> cumulative gains 100*500 = 50_000.
+        // No intervening transactions for 500 seconds: the full idle window
+        // must accumulate at tick 100, not the previous tick 0.
         vm.warp(block.timestamp + 500);
         pm.setTick(100);
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
         assertEq(hook.tickCumulative(), 50_000);
+
+        // Another swap moves the tick negative; an unrealized read must
+        // project the new post-swap tick even with no additional swaps.
+        pm.setTick(-50);
+        vm.prank(address(pm));
+        hook.afterSwap(address(0), poolKey, _emptySwap(), toBalanceDelta(0, 0), "");
+        vm.warp(block.timestamp + 200);
+        (int56 cumulative, uint32 timestamp) = hook.getCurrentTickCumulative();
+        assertEq(cumulative, 40_000);
+        assertEq(timestamp, uint32(block.timestamp));
     }
 
     function test_BeforeSwap_ReturnsBaseFeeNearPeg() public {
@@ -536,6 +543,86 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setExcludedAddress(account, false);
         assertFalse(hook.excludedAddresses(account));
+    }
+
+    function test_AfterSwap_ExactOutputSell_TaxesActualMoneyInput_NotQuoteOutput() public {
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        // The trader requests exactly 1 quote token out, but the core pool
+        // actually requires 100 MONEY in. Tax must use the 100 MONEY input.
+        SwapParams memory params = SwapParams({
+            zeroForOne: hook.moneyIsCurrency0(),
+            amountSpecified: 1 ether,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(address(pm));
+        (, BeforeSwapDelta beforeDelta,) = hook.beforeSwap(address(0), poolKey, params, "");
+        assertEq(BeforeSwapDelta.unwrap(beforeDelta), 0, "no guessed beforeSwap tax on exact output");
+        assertEq(pm.takeCallCount(), 0, "no early take");
+
+        uint256 expectedTax = 100 ether * 1500 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+        uint256 supplyBefore = money.totalSupply();
+
+        BalanceDelta coreDelta = hook.moneyIsCurrency0()
+            ? toBalanceDelta(-int128(100 ether), int128(1 ether))
+            : toBalanceDelta(int128(1 ether), -int128(100 ether));
+        pm.setTick(-120);
+        vm.prank(address(pm));
+        (bytes4 selector, int128 afterDelta) = hook.afterSwap(address(0), poolKey, params, coreDelta, "");
+
+        assertEq(selector, IHooks.afterSwap.selector);
+        assertEq(afterDelta, int128(int256(expectedTax)), "unspecified MONEY delta equals exact input tax");
+        assertEq(pm.takeCallCount(), 1, "collected exactly once");
+        assertEq(pm.lastTakeCurrency(), address(money), "tax collected in MONEY, not quote");
+        assertEq(pm.lastTakeAmount(), expectedTax);
+        assertEq(money.totalSupply(), supplyBefore - expectedTax, "burn equals expected tax");
+        assertEq(hook.lastTick(), -120, "post-swap tick persisted");
+    }
+
+    function test_AfterSwap_ExactInputSell_DoesNotChargeAgain() public {
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+
+        uint256 expectedTax = 100 ether * 1500 / 10_000;
+        vm.prank(owner);
+        money.mint(address(pm), expectedTax);
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+        assertEq(pm.takeCallCount(), 1);
+        pm.setTick(75);
+        vm.prank(address(pm));
+        (, int128 secondTax) = hook.afterSwap(address(0), poolKey, params, toBalanceDelta(0, 0), "");
+        assertEq(secondTax, 0);
+        assertEq(pm.takeCallCount(), 1, "exact-input fee only assessed in beforeSwap");
+        assertEq(hook.lastTick(), 75);
+    }
+
+    function test_AfterSwap_BuyUpdatesTickWithoutTax() public {
+        _bind(0);
+        pm.setTick(0);
+        vm.prank(trustees);
+        hook.setAutoCalculateTax(true);
+        SwapParams memory params = SwapParams({
+            zeroForOne: !hook.moneyIsCurrency0(),
+            amountSpecified: 1 ether,
+            sqrtPriceLimitX96: 0
+        });
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, params, "");
+        pm.setTick(145);
+        vm.prank(address(pm));
+        (, int128 extra) = hook.afterSwap(address(0), poolKey, params, toBalanceDelta(0, 0), "");
+        assertEq(extra, 0);
+        assertEq(pm.takeCallCount(), 0);
+        assertEq(hook.lastTick(), 145);
     }
 
     // ---------------------------------------------------------------------

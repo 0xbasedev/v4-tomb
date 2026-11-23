@@ -1,3 +1,5 @@
+> **Superseded design note.** The hook now requires `0x10CC` permission bits. The `0x1088` flags and their callback implementation described below are historical only and are **not supported** in active deployments. See [HOOK_ACCOUNTING_REVIEW.md](HOOK_ACCOUNTING_REVIEW.md).
+
 # Sprint 4b — PegDefenseHook tax routing design
 
 Design doc for restoring Tomb's burn-during-deep-contraction lever as a `beforeSwapReturnDelta` extension to `PegDefenseHook`. **Read this and sign off before any code lands in `src/`.**

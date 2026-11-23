@@ -110,7 +110,7 @@ contract BaseForkHookTaxTest is BaseTest {
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
         uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money), address(this)));
         (address minedAddr, bytes32 hookSalt) = HookMiner.find(address(this), flags, hookCreationCode);
@@ -251,6 +251,52 @@ contract BaseForkHookTaxTest is BaseTest {
         assertEq(money.balanceOf(address(treasury)), treasuryBefore + expectedTax, "treasury received tax");
         // Hook holds nothing.
         assertEq(money.balanceOf(address(hook)), 0, "hook MONEY balance is 0 after route");
+    }
+
+    // ---------------------------------------------------------------------
+    // Regression — exact-output sell and idle-period post-swap TWAP
+    // ---------------------------------------------------------------------
+
+    function test_ExactOutputSell_UsesActualMoneyInput_AndSettlesHookDelta() public {
+        hook.setAutoCalculateTax(true);
+
+        uint256 supplyBefore = money.totalSupply();
+        uint256 walletBefore = money.balanceOf(address(this));
+
+        // Exact 1 WETH out. The MONEY input is determined by the pool, not
+        // by the '1 ether' amountSpecified in the requested quote token.
+        SwapParams memory params = _sellSwapParams(1);
+        params.amountSpecified = 1 ether;
+        swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({
+            takeClaims: false, settleUsingBurn: false
+        }), "");
+
+        uint256 grossMoneySpent = walletBefore - money.balanceOf(address(this));
+        uint256 burned = supplyBefore - money.totalSupply();
+        assertGt(burned, 0, "expected MONEY fee");
+        assertGt(grossMoneySpent, burned, "pool must receive input after fee");
+        // beforeSwap price is tick 0, yielding 1500 bps for this legacy test.
+        uint256 netMoneyInput = grossMoneySpent - burned;
+        assertEq(burned, netMoneyInput * 1500 / 10_000, "exact-output tax uses actual MONEY input");
+        assertEq(money.balanceOf(address(hook)), 0, "hook settles all MONEY fee");
+    }
+
+    function test_PostSwapObservation_IntegratesNewTickAcrossIdlePeriod() public {
+        uint256 amount = 10 ether;
+        swapRouter.swap(poolKey, _sellSwapParams(int256(amount)), PoolSwapTest.TestSettings({
+            takeClaims: false, settleUsingBurn: false
+        }), "");
+
+        int24 priceTick = hook.lastTick();
+        assertTrue(priceTick != 0, "swap should change tick from parity");
+        (int56 cumulativeBefore,) = hook.getCurrentTickCumulative();
+        vm.warp(block.timestamp + 6 hours);
+        (int56 cumulativeAfter,) = hook.getCurrentTickCumulative();
+        assertEq(
+            cumulativeAfter - cumulativeBefore,
+            int56(priceTick) * int56(uint56(6 hours)),
+            "idle-period TWAP must integrate the post-swap tick"
+        );
     }
 
     // ---------------------------------------------------------------------

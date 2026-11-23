@@ -7,14 +7,32 @@ import { publishDeployment } from '../scripts/protocol.mjs';
 const local = JSON.parse(readFileSync(new URL('./examples/local.json', import.meta.url)));
 const historical = JSON.parse(readFileSync(new URL('./examples/upstream-base-sepolia.json', import.meta.url)));
 const clone = (value) => structuredClone(value);
+// Synthetic fixture for CURRENT deployment validations, not a real on-chain hook address.
+const currentFixture = clone(historical);
+currentFixture.networks[0].name = 'Base Sepolia (synthetic 0x10cc test fixture)';
+currentFixture.networks[0].deployment.hook =
+  currentFixture.networks[0].deployment.hook.slice(0, -4) + '10cc';
 
 test('local template is valid, unconfigured and contains no deployed addresses', () => {
   assert.equal(parseNetworks(local)[0].deployment, null);
   assert.equal(Object.values(local.networks[0].infrastructure).every((value) => value === null), true);
 });
 
-test('historical upstream deployment remains available as explicit configuration', () => {
-  assert.equal(parseNetworks(historical)[0].id, 84532);
+test('archived upstream address is not deployable under the current hook schema', () => {
+  assert.throws(() => parseNetworks(historical), /hook permission bits must be 0x10cc/);
+});
+
+test('synthetic current 0x10CC hook can be validated without any legacy flags', () => {
+  const deployment = parseNetworks(currentFixture)[0].deployment;
+  assert.equal(BigInt(deployment.hook) & 0x3fffn, 0x10ccn);
+});
+
+test('legacyHook configuration flags are rejected even with current permission bits', () => {
+  const candidate = clone(currentFixture);
+  candidate.networks[0].deployment.legacyHook = false;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
+  candidate.networks[0].deployment.legacyHook = true;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
 });
 
 for (const [description, change] of [
@@ -36,7 +54,7 @@ for (const [description, change] of [
   ['identical peg and MONEY', (d) => { d.networks[0].deployment.money = d.networks[0].deployment.weth; }],
 ]) {
   test(`rejects ${description}`, () => {
-    const value = clone(historical);
+    const value = clone(currentFixture);
     change(value);
     assert.throws(() => parseNetworks(value), /Network configuration:/);
   });
@@ -51,10 +69,10 @@ test('arbitrary chain IDs and two network profiles work without code changes', (
 
 test('explorer URLs use the originating chain and omit missing explorers', () => {
   const hash = `0x${'a'.repeat(64)}`;
-  assert.equal(transactionUrl(parseNetworks(historical), 84532, hash), `https://sepolia.basescan.org/tx/${hash}`);
-  assert.equal(transactionUrl(parseNetworks(historical), 1, hash), undefined);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 84532, hash), `https://sepolia.basescan.org/tx/${hash}`);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 1, hash), undefined);
   assert.equal(transactionUrl(parseNetworks(local), 31337, hash), undefined);
-  assert.equal(transactionUrl(parseNetworks(historical), 84532, 'invalid'), undefined);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 84532, 'invalid'), undefined);
 });
 
 test('pool reserves map correctly for both address orderings and checksum case', () => {
@@ -65,7 +83,7 @@ test('pool reserves map correctly for both address orderings and checksum case',
 });
 
 function publication() {
-  const document = clone(historical);
+  const document = clone(currentFixture);
   const deployment = document.networks[0].deployment;
   const artifact = { ...deployment, chainId: 84532 };
   const names = ['OldMoney', 'Estate', 'TrustNote', 'Treasury', 'Boardroom', 'Oracle',
