@@ -51,6 +51,7 @@ export function parseNetworks(document) {
     for (const key of infrastructureKeys.filter((key) => key !== 'create2Deployer')) {
       if (deployment[key].toLowerCase() !== infrastructure[key]?.toLowerCase()) fail(`deployment.${key} disagrees with infrastructure`);
     }
+    if (Object.prototype.hasOwnProperty.call(deployment, 'legacyHook')) fail('legacyHook is unsupported');
     // Only hooks with the current beforeSwap/afterSwap callback permissions are deployable.
     if ((BigInt(deployment.hook) & 0x3fffn) !== 0x10ccn) fail('hook permission bits must be 0x10cc');
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
