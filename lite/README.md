@@ -33,7 +33,7 @@ The production-oriented components have replaced the original LONGYU-only mock p
 - Robust quote-market depth history through every intermediate tick/reserve state; the V2 TWAP checks endpoints and cannot prove every price move was an authenticated swap.
 - Genesis seven-day reward vaults, NFT tiers, Fast Track escrow, keeper-driven compounding, Harvest All/Compound All, Treasury POL and buyback/Arbitrage execution.
 - A circulating-supply exclusion list (current 2% upper bound is based on `xtomb.totalSupply()`, so this must be adjusted for excluded reserves if the release has them).
-- Chain-specific production deployment verification, LP initialization, safe bridge assumption, audited approved xSHARE allocation, live frontend ABI/address wiring, external audits.
+- Chain-specific production deployment verification, LP initialization, safe bridge assumption, audited approved xSHARE allocation, published live deployment receipts/addresses, audited frontend transaction simulations, external audits.
 
 **Do not present this branch as a fully launched protocol or solicit public deposits.**
 
@@ -85,6 +85,14 @@ The deploy script does NOT seed pool liquidity, fabricate trading volume, or man
 3. Call the permissionless TWAP `poke` to anchor; observe genuine market activity and call again after at least 30 minutes. Ensure fresh USD feed, liquidity floors and spot-deviation guard all pass.
 4. Validate normal/failing sells, every payout and native/USDC fee conversion, withdrawal below peg, abrupt liquidity withdrawals, and inactive-market behavior.
 5. Open only after an external security review, keeper monitoring and tested emergency runbooks.
+
+## Frontend integration
+
+The existing React/Vite frontend now includes a **separate `/lite` route**, ABI bindings for the new xTOMB/xSHARE tokens, Masonry and both Farms, and wagmi registration for any network described by a **verified** Lite deployment manifest. The route exposes real LP approvals, deposits, claims, exits, Farm staking/withdrawals and permissionless stable-fee advancement. This integration does not replace existing V4 pages or their animated design.
+
+The `lite/config/deployment.json` source currently has `status: "not-deployed"` and null contract addresses. Until signed transaction receipts, actual bytecode and source verification are reviewed and the manifest is marked `verified`, the Lite route displays a deployment-pending explanation and **no wallet write controls**. No dummy addresses or fabricated balances are injected.
+
+Frontend build check: `cd frontend && pnpm install --frozen-lockfile && pnpm typecheck && pnpm build`.
 
 ## LONGYU-specific status
 
