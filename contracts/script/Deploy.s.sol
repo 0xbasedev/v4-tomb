@@ -167,7 +167,7 @@ contract Deploy is NetworkConfig {
         bytes memory creationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
         uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
         (address mined, bytes32 salt) = HookMiner.find(_infrastructure("create2Deployer"), flags, creationCode);
 
         // Call the selected factory directly so Foundry's default CREATE2 address
