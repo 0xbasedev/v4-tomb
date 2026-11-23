@@ -2,7 +2,7 @@ export const infrastructureKeys = [
   'weth', 'poolManager', 'positionManager', 'permit2', 'universalRouter', 'create2Deployer',
 ];
 export const deploymentKeys = [
-  'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'lpWrapper',
+  'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
   'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'timelock', 'miniSwapRouter',
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
 ];
@@ -54,6 +54,13 @@ export function parseNetworks(document) {
     if (Object.prototype.hasOwnProperty.call(deployment, 'legacyHook')) fail('legacyHook is unsupported');
     // Only hooks with the current beforeSwap/afterSwap callback permissions are deployable.
     if ((BigInt(deployment.hook) & 0x3fffn) !== 0x10ccn) fail('hook permission bits must be 0x10cc');
+    // The share buyback hook declares the same callbacks, so it carries the same pattern.
+    if ((BigInt(deployment.shareBuybackHook) & 0x3fffn) !== 0x10ccn) {
+      fail('shareBuybackHook permission bits must be 0x10cc');
+    }
+    if (deployment.shareBuybackHook.toLowerCase() === deployment.hook.toLowerCase()) {
+      fail('hook and shareBuybackHook must differ');
+    }
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
   }
   return document.networks;

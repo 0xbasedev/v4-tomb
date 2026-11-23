@@ -12,6 +12,7 @@ const currentFixture = clone(historical);
 currentFixture.networks[0].name = 'Base Sepolia (synthetic 0x10cc test fixture)';
 currentFixture.networks[0].deployment.hook =
   currentFixture.networks[0].deployment.hook.slice(0, -4) + '10cc';
+currentFixture.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
 
 test('local template is valid, unconfigured and contains no deployed addresses', () => {
   assert.equal(parseNetworks(local)[0].deployment, null);
@@ -19,7 +20,12 @@ test('local template is valid, unconfigured and contains no deployed addresses',
 });
 
 test('archived upstream address is not deployable under the current hook schema', () => {
-  assert.throws(() => parseNetworks(historical), /hook permission bits must be 0x10cc/);
+  // It predates the share buyback hook entirely...
+  assert.throws(() => parseNetworks(historical), /invalid deployment\.shareBuybackHook/);
+  // ...and even with one supplied, its peg hook still carries the superseded 0x1088 bits.
+  const patched = clone(historical);
+  patched.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
+  assert.throws(() => parseNetworks(patched), /hook permission bits must be 0x10cc/);
 });
 
 test('synthetic current 0x10CC hook can be validated without any legacy flags', () => {
@@ -51,6 +57,9 @@ for (const [description, change] of [
   ['negative deployment block', (d) => { d.networks[0].deployment.deployBlock = '-1'; }],
   ['inconsistent manager', (d) => { d.networks[0].deployment.poolManager = d.networks[0].deployment.weth; }],
   ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.money; }],
+  ['missing share buyback hook', (d) => { delete d.networks[0].deployment.shareBuybackHook; }],
+  ['wrong share buyback hook flags', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.money; }],
+  ['one hook listed twice', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.hook; }],
   ['identical peg and MONEY', (d) => { d.networks[0].deployment.money = d.networks[0].deployment.weth; }],
 ]) {
   test(`rejects ${description}`, () => {

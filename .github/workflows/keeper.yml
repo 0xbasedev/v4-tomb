@@ -20,8 +20,6 @@ jobs:
       RPC_URL: ${{ secrets.RPC_URL }}
       KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
       PROTOCOL_NETWORK_INDEX: ${{ vars.PROTOCOL_NETWORK_INDEX || '0' }}
-      # Optional: address of the ShareBuybackHook. Leave unset until one is deployed.
-      SHARE_BUYBACK_HOOK: ${{ vars.SHARE_BUYBACK_HOOK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

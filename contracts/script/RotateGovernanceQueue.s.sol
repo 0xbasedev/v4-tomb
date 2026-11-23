@@ -14,6 +14,7 @@ import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
 import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
 import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
+import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
 
 /**
  * @title RotateGovernanceQueue
@@ -64,6 +65,7 @@ contract RotateGovernanceQueue is NetworkConfig {
         Estate estate = Estate(_deployment("estate"));
         TrustNote trustnote = TrustNote(_deployment("trustNote"));
         PegDefenseHook hook = PegDefenseHook(_deployment("hook"));
+        ShareBuybackHook shareHook = ShareBuybackHook(_deployment("shareBuybackHook"));
         Treasury treasury = Treasury(_deployment("treasury"));
         GenesisRewardPool gp = GenesisRewardPool(_deployment("genesisRewardPool"));
         MainRewardPool mp = MainRewardPool(_deployment("mainRewardPool"));
@@ -83,12 +85,14 @@ contract RotateGovernanceQueue is NetworkConfig {
         estate.transferOwnership(address(timelock));
         trustnote.transferOwnership(address(timelock));
         hook.transferOwnership(address(timelock));
+        shareHook.transferOwnership(address(timelock));
         console2.log("transferred Ownable2Step ownership of money/estate/trustnote/hook to Timelock");
 
         // Stage 2b: PegDefenseHook trustees (one-step). After this the deployer can no
         // longer tune tax tiers — Timelock controls.
         hook.transferTrustees(address(timelock));
-        console2.log("rotated hook trustees -> Timelock");
+        shareHook.transferTrustees(address(timelock));
+        console2.log("rotated hook + share buyback hook trustees -> Timelock");
 
         // Stage 2c: single-step operator rotation on Treasury + reward pools.
         // Boardroom stays with Treasury (intentional — protocol-internal).
@@ -103,6 +107,7 @@ contract RotateGovernanceQueue is NetworkConfig {
         timelock.queueTransaction(address(estate), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(trustnote), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(hook), 0, "acceptOwnership()", bytes(""), eta);
+        timelock.queueTransaction(address(shareHook), 0, "acceptOwnership()", bytes(""), eta);
         console2.log("queued acceptOwnership for money/estate/trustnote/hook with eta", eta);
 
         vm.stopBroadcast();

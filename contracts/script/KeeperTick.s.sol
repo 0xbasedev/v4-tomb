@@ -25,8 +25,8 @@ import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
  *            much as reserves allow with `hook.settleDeferredTax()`. Settlement is partial
  *            by design and a call that can settle nothing is a no-op, so retries are safe.
  *
- *         4. **Share-tax buyback** — only when `SHARE_BUYBACK_HOOK` is set. Call
- *            `executeBuyback()` on the ShareBuybackHook when it holds tax. That call is a
+ *         4. **Share-tax buyback** — call `executeBuyback()` on the ShareBuybackHook when
+ *            it holds tax. That call is a
  *            no-op while its TWAP span is too short or the peg price is above its limit,
  *            and converts partially at the limit, so it too is safe to repeat.
  *
@@ -42,8 +42,8 @@ import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
  *         Required env vars:
  *           KEEPER_PRIVATE_KEY  — wallet that signs. Needs ETH for gas only. Should NOT
  *                                  have any admin role on protocol contracts.
- *           SHARE_BUYBACK_HOOK  — optional. Address of the ShareBuybackHook to service.
- *           Treasury and hook addresses are resolved from the selected manifest deployment.
+ *           Treasury and both hook addresses are resolved from the selected manifest
+ *           deployment.
  *
  *         Example:
  *           export KEEPER_PRIVATE_KEY=0x...
@@ -71,8 +71,7 @@ contract KeeperTick is NetworkConfig {
         _syncTaxRate(pk, hook);
         _settleDeferredTax(pk, hook);
 
-        address shareHook = vm.envOr("SHARE_BUYBACK_HOOK", address(0));
-        if (shareHook != address(0)) _executeShareBuyback(pk, ShareBuybackHook(shareHook));
+        _executeShareBuyback(pk, ShareBuybackHook(_deployment("shareBuybackHook")));
     }
 
     function _executeShareBuyback(

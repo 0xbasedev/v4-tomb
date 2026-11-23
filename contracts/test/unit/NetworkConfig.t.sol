@@ -167,6 +167,14 @@ contract NetworkConfigTest is Test {
         assertTrue(deploy.hook().bound());
         assertEq(deploy.hook().trustees(), vm.addr(1));
         assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x10CC);
+        assertTrue(deploy.shareBuybackHook().bound());
+        assertEq(uint160(address(deploy.shareBuybackHook())) & 0x3FFF, 0x10CC);
+        assertEq(deploy.shareBuybackHook().trustees(), vm.addr(1));
+        assertEq(deploy.shareBuybackHook().share(), address(deploy.estate()));
+        assertEq(deploy.shareBuybackHook().peg(), address(deploy.money()));
+        assertEq(deploy.shareBuybackHook().quote(), WETH);
+        assertEq(address(deploy.shareBuybackHook().fireTax()), address(deploy.hook()));
+        assertFalse(deploy.shareBuybackHook().taxEnabled(), "collection starts disabled");
         assertEq(deploy.money().operator(), address(deploy.treasury()));
         assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
         assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
@@ -176,6 +184,7 @@ contract NetworkConfigTest is Test {
         string memory output = vm.readFile(file);
         assertEq(vm.parseJsonUint(output, ".chainId"), block.chainid);
         assertEq(vm.parseJsonAddress(output, ".hook"), address(deploy.hook()));
+        assertEq(vm.parseJsonAddress(output, ".shareBuybackHook"), address(deploy.shareBuybackHook()));
         vm.removeFile(file);
     }
 }

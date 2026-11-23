@@ -115,6 +115,7 @@ Bootstrap guarantees 4.5% supply expansion to Boardroom regardless of price. Aft
 
 ```bash
 cast send <hook> 'setAutoCalculateTax(bool)' true --rpc-url base_sepolia --private-key $OPERATOR_PRIVATE_KEY
+cast send <shareBuybackHook> 'setTaxEnabled(bool)' true --rpc-url base_sepolia --private-key $OPERATOR_PRIVATE_KEY
 ```
 
 **Effect:** PegDefenseHook starts taking the schedule's tax on every MONEY sell. Below `burnThreshold` (1.10 ETH), the tax is burned. At or above, it routes to `hook.treasury()` — which by default is the Treasury contract.
@@ -248,7 +249,7 @@ cast call --rpc-url base_sepolia $HOOK 'trustees()(address)'       # expect Time
 | T-1h | Open Genesis pool | `OpenGenesis.s.sol` | No effect once stakers arrive |
 | T+0 → ∞ | Keeper: `oracle.update` + `allocateSeigniorage` every 6h | Cron / Defender | n/a |
 | T+24h | Main + Share start paying (auto) | — | — |
-| T+7d (epoch 28) | Enable hook tax | `cast send hook 'setAutoCalculateTax(bool)' true` | Yes — operator can flip back |
+| T+7d (epoch 28) | Enable Fire Tax on both hooks | `cast send hook 'setAutoCalculateTax(bool)' true` and `cast send shareBuybackHook 'setTaxEnabled(bool)' true` (or `PostBootstrap.s.sol`) | Yes — operator can flip back |
 | T+7d (epoch 28) | Set fund cuts | `PostBootstrap.s.sol` | Yes — operator can re-call setExtraFunds |
 | T+7d (epoch 28) | Redirect tax destination | `cast send hook 'setTreasury(address)' …` | Yes — operator can flip back |
 | Pre-mainnet | Rotate governance to Timelock | `RotateGovernance{Queue,Execute}.s.sol` | One-way (deployer loses admin) |

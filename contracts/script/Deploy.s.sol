@@ -10,6 +10,7 @@ import {Treasury} from "../src/core/Treasury.sol";
 import {Boardroom} from "../src/core/Boardroom.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
 import {PegDefenseHook, PegDefenseHookPermissions} from "../src/hooks/PegDefenseHook.sol";
+import {ShareBuybackHook, ShareBuybackHookPermissions, IFireTaxSource} from "../src/hooks/ShareBuybackHook.sol";
 import {NetworkConfig} from "./NetworkConfig.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
@@ -63,6 +64,7 @@ contract Deploy is NetworkConfig {
     Estate public estate;
     TrustNote public trustnote;
     PegDefenseHook public hook;
+    ShareBuybackHook public shareBuybackHook;
     Oracle public oracle;
     Treasury public treasury;
     Boardroom public boardroom;
@@ -74,6 +76,10 @@ contract Deploy is NetworkConfig {
     Timelock public timelock;
     address public wethAddress;
     PoolKey public poolKey;
+    PoolKey public sharePoolKey;
+
+    /// @notice Static LP fee of the ESTATE/WETH pool, in V4 pips (0.30%).
+    uint24 public constant SHARE_POOL_FEE = 3000;
 
     function run() external {
         _network();
@@ -93,6 +99,7 @@ contract Deploy is NetworkConfig {
         console2.log("WETH:", wethAddress);
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
+        _deployShareBuybackHookAndInitPool(deployer);
         _deployOracle(g);
         _deployLpWrapper();
         _deployRewardPools(g);
@@ -191,6 +198,52 @@ contract Deploy is NetworkConfig {
         pm.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
     }
 
+    /// @notice Deploy the ShareBuybackHook and initialise the ESTATE/WETH pool it taxes.
+    ///         ESTATE sells pay the Fire Tax in WETH; the hook converts that WETH to MONEY
+    ///         in the MONEY/WETH pool above and burns it. Collection starts disabled.
+    ///
+    ///         `SHARE_POOL_INITIAL_TICK` sets the opening price (WETH per ESTATE, in ticks,
+    ///         before currency ordering). It defaults to parity; an empty pool's price is
+    ///         whatever the first liquidity provider makes it, so this is only a starting
+    ///         point.
+    function _deployShareBuybackHookAndInitPool(
+        address deployer
+    ) internal {
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
+        bytes memory creationCode = abi.encodePacked(
+            type(ShareBuybackHook).creationCode,
+            abi.encode(
+                pm,
+                address(estate),
+                address(money),
+                poolKey,
+                IFireTaxSource(address(hook)),
+                IPriceSource(address(hook)),
+                deployer
+            )
+        );
+        (address mined, bytes32 salt) =
+            HookMiner.find(_infrastructure("create2Deployer"), ShareBuybackHookPermissions.FLAGS, creationCode);
+        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
+        require(success && mined.code.length > 0, "Deploy: share hook deployment failed");
+        shareBuybackHook = ShareBuybackHook(mined);
+        console2.log("ShareBuybackHook:", address(shareBuybackHook));
+
+        bool estateIsCurrency0 = address(estate) < wethAddress;
+        (Currency c0, Currency c1) = estateIsCurrency0
+            ? (Currency.wrap(address(estate)), Currency.wrap(wethAddress))
+            : (Currency.wrap(wethAddress), Currency.wrap(address(estate)));
+        sharePoolKey = PoolKey({
+            currency0: c0, currency1: c1, fee: SHARE_POOL_FEE, tickSpacing: 60, hooks: IHooks(address(shareBuybackHook))
+        });
+
+        int256 priceTick = vm.envOr("SHARE_POOL_INITIAL_TICK", int256(0));
+        require(priceTick > -887_000 && priceTick < 887_000, "Deploy: share pool tick out of range");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int24 poolTick = estateIsCurrency0 ? int24(priceTick) : -int24(priceTick);
+        pm.initialize(sharePoolKey, TickMath.getSqrtPriceAtTick(poolTick));
+    }
+
     function _deployOracle(
         Genesis memory g
     ) internal {
@@ -271,6 +324,7 @@ contract Deploy is NetworkConfig {
         vm.serializeAddress(key, "boardroom", address(boardroom));
         vm.serializeAddress(key, "oracle", address(oracle));
         vm.serializeAddress(key, "hook", address(hook));
+        vm.serializeAddress(key, "shareBuybackHook", address(shareBuybackHook));
         vm.serializeAddress(key, "lpWrapper", address(lpWrapper));
         vm.serializeAddress(key, "genesisRewardPool", address(genesisRewardPool));
         vm.serializeAddress(key, "mainRewardPool", address(mainRewardPool));
@@ -294,6 +348,14 @@ contract Deploy is NetworkConfig {
         require(trustnote.operator() == address(treasury), "Deploy: trustnote operator");
         require(boardroom.operator() == address(treasury), "Deploy: boardroom operator");
         require(hook.bound(), "Deploy: hook not bound");
+        require(shareBuybackHook.bound(), "Deploy: share hook not bound");
+        require(
+            shareBuybackHook.share() == address(estate) && shareBuybackHook.peg() == address(money)
+                && shareBuybackHook.quote() == wethAddress,
+            "Deploy: share hook tokens"
+        );
+        require(address(shareBuybackHook.fireTax()) == address(hook), "Deploy: share hook rate source");
+        require(!shareBuybackHook.taxEnabled(), "Deploy: share tax must start disabled");
         require(treasury.isInitialized(), "Deploy: treasury not initialized");
 
         require(money.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");

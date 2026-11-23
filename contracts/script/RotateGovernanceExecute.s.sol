@@ -35,6 +35,7 @@ contract RotateGovernanceExecute is NetworkConfig {
         address estate = _deployment("estate");
         address trustnote = _deployment("trustNote");
         address hook = _deployment("hook");
+        address shareHook = _deployment("shareBuybackHook");
         uint256 eta = vm.envUint("ETA");
 
         console2.log("=== RotateGovernanceExecute ===");
@@ -50,10 +51,11 @@ contract RotateGovernanceExecute is NetworkConfig {
         timelock.executeTransaction(estate, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(trustnote, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(hook, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(shareHook, 0, "acceptOwnership()", bytes(""), eta);
         vm.stopBroadcast();
 
-        console2.log("\nGovernance ceremony complete. Timelock now owns money/estate/trustnote/hook,");
-        console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of hook.");
+        console2.log("\nGovernance ceremony complete. Timelock now owns money/estate/trustnote and both hooks,");
+        console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of both hooks.");
         console2.log("Treasury still operates Boardroom (intentional). Wrapper has no admin (intentional).");
     }
 }

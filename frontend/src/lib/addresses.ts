@@ -16,6 +16,8 @@ export interface OldMoneyDeployment {
   oracle: Address;
   /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
   hook: Address;
+  /** ShareBuybackHook — taxes ESTATE sells in WETH, buys MONEY with it and burns it. */
+  shareBuybackHook: Address;
   /** V4PositionWrapper — wraps the MONEY/WETH LP NFT into an ERC-20. */
   lpWrapper: Address;
   /** Genesis reward pool (24h window, accepts outside ERC-20s). */

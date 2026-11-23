@@ -535,12 +535,19 @@ the 12% clamp, or the exact-output tax each makes it fail.
 `tax = out × r` in `afterSwap`. Exact-output: the pool is asked for `W + tax` in
 `beforeSwap` with `tax = W × r / (1 − r)`, so the seller still receives exactly `W`.
 
-**Not yet wired.** `Deploy.s.sol` does not create a SHARE/QUOTE pool or deploy this hook,
-and the deployment manifest has no entry for it. The keeper services it only when
-`SHARE_BUYBACK_HOOK` is set. Known limits: both pools must share the same QUOTE asset; an
-exact-output sell that stops at the caller's price limit is still taxed on the amount
-requested; and prices assume 18-decimal tokens only where the Fire Tax thresholds are
-concerned (this hook's own math is decimal-agnostic).
+**Deployment.** `Deploy.s.sol` mines and deploys the hook at a `0x10CC` address, wired to
+ESTATE (share), MONEY (peg), WETH (quote, taken from the MONEY/WETH pool key) and the
+PegDefenseHook (rate and price source), then initialises the ESTATE/WETH pool at a 0.30%
+static fee. `SHARE_POOL_INITIAL_TICK` sets the opening price and defaults to parity.
+Collection starts disabled; `PostBootstrap.s.sol` enables it together with the MONEY tax.
+The address is exported as `shareBuybackHook`, which the manifest now requires and
+validates. The governance rotation scripts hand its ownership and trustees to the Timelock
+alongside the peg hook, and the keeper runs its buyback every pass.
+
+Known limits: both pools must share the same QUOTE asset; an exact-output sell that stops
+at the caller's price limit is still taxed on the amount requested; and no script seeds
+ESTATE/WETH liquidity yet (`SeedLiquidity.s.sol` covers MONEY/WETH only), so the pool is
+empty after deploy.
 
 ### Still outside this repository
 
