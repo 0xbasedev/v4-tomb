@@ -20,6 +20,8 @@ jobs:
       RPC_URL: ${{ secrets.RPC_URL }}
       KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
       PROTOCOL_NETWORK_INDEX: ${{ vars.PROTOCOL_NETWORK_INDEX || '0' }}
+      # Optional: address of the ShareBuybackHook. Leave unset until one is deployed.
+      SHARE_BUYBACK_HOOK: ${{ vars.SHARE_BUYBACK_HOOK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +32,7 @@ jobs:
           version: v1.8.7
       - run: node scripts/install-contract-deps.mjs
       - run: node scripts/protocol.mjs validate
-      - name: Advance epoch, sync the tax ratchet, settle deferred tax
+      - name: Advance epoch, sync the tax ratchet, settle deferred tax, run the buyback
         working-directory: contracts
         run: |
           test -n "$RPC_URL" && test -n "$KEEPER_PRIVATE_KEY"

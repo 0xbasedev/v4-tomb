@@ -485,10 +485,69 @@ Outstanding deferred tax after a pass is printed as a GitHub Actions `::warning:
 hook's claims ever fall short of what is owed, the script reverts and the scheduled run goes
 red.
 
+---
+
+## Revision 5 — share-token sell tax: SHARE → QUOTE → PEG → burn
+
+`contracts/src/hooks/ShareBuybackHook.sol` implements the share-token policy as a second
+hook, on the SHARE/QUOTE pool. In the approved design that is SQUARE/USDC with LEVEL as the
+peg token; in this repository's own tokens it would be ESTATE/WETH with MONEY. The hook
+takes all three as constructor addresses and has no dependency on Treasury, Boardroom or
+the Oracle.
+
+| Step | What happens | Why it cannot be abused or get stuck |
+|---|---|---|
+| Collect | A SHARE sell pays the Fire Tax out of its QUOTE proceeds | Rate comes from the peg hook's ratchet and is clamped again here to 12%. No exemption list. |
+| Hold | Tax is taken as ERC-6909 QUOTE claims and counted in `pendingQuote` | No token transfer and no swap inside the user's trade, so a buyback that cannot run cannot fail a sell |
+| Convert and burn | Permissionless `executeBuyback()` swaps pending QUOTE for PEG and burns all of it | The only path value can leave by. No Treasury, POL or reserve share, no sweep, no configurable recipient |
+
+**100% to the burn.** There is no split and no mode switch: the buyback does not depend on
+any "critical defense" state.
+
+**One Fire Tax.** The hook calls `pokeTaxRate()` on the peg hook, so SHARE and PEG sells pay
+the same rate under the same immediate-up, seven-hours-down ratchet. If that call fails the
+hook charges the 12% ceiling, so a broken dependency neither blocks the sell nor waives the
+tax.
+
+**Buyback price guard.** A permissionless market buy invites a sandwich. The buyback
+carries a price limit of `maxPremiumTicks` (default 100, about 1%) above a TWAP of the peg
+pool measured over at least `twapWindow` (default 30 minutes). Spot already above the limit:
+nothing is bought and the tax stays pending. Limit reached part-way: the rest stays pending.
+The TWAP comes from the hook's own checkpoints of the peg pool's tick accumulator, not from
+the protocol Oracle, so the tax system stays separate from the peg token's mint gating.
+Trustees can tune the two guard parameters inside fixed bounds (10 minutes to 6 hours; 0 to
+500 ticks) and can switch collection on or off. That is the entire admin surface.
+
+**Accounting**, asserted after every step of random sequences in all four token-ordering
+combinations (`testFuzz_ShareTaxAccounting_ConservedAcrossAnySequence`):
+
+```
+totalQuoteAssessed == totalQuoteConverted + pendingQuote
+hook's ERC-6909 QUOTE claims == pendingQuote
+PoolManager QUOTE balance    >= pendingQuote
+hook holds no SHARE, QUOTE or PEG;  every PEG bought has left the supply
+```
+
+The suite was mutation-checked: removing the burn, the pending decrement, the price guard,
+the 12% clamp, or the exact-output tax each makes it fail.
+
+**Tax arithmetic.** Both swap modes charge rate `r` on gross QUOTE proceeds. Exact-input:
+`tax = out × r` in `afterSwap`. Exact-output: the pool is asked for `W + tax` in
+`beforeSwap` with `tax = W × r / (1 − r)`, so the seller still receives exactly `W`.
+
+**Not yet wired.** `Deploy.s.sol` does not create a SHARE/QUOTE pool or deploy this hook,
+and the deployment manifest has no entry for it. The keeper services it only when
+`SHARE_BUYBACK_HOOK` is set. Known limits: both pools must share the same QUOTE asset; an
+exact-output sell that stops at the caller's price limit is still taxed on the amount
+requested; and prices assume 18-decimal tokens only where the Fire Tax thresholds are
+concerned (this hook's own math is decimal-agnostic).
+
 ### Still outside this repository
 
-- **LEVEL / SQUARE and Masonry.** This repository contains MONEY, ESTATE and the Boardroom.
-  Nothing here implements or tests LEVEL, SQUARE or a SQUARE sell-tax policy; ESTATE being
-  untaxed here says nothing about SQUARE. Those need their own contracts and their own
-  validation against this hook.
-- **Non-18-decimal paired assets.** Prices assume both tokens use 18 decimals.
+- **LEVEL / SQUARE and Masonry.** The tokens themselves are not here. `ShareBuybackHook`
+  and `PegDefenseHook` are tested with this repository's MONEY and a plain ERC-20 standing
+  in for the share token; the eventual LEVEL / SQUARE contracts need their own validation
+  against both hooks, in particular that `LEVEL.burn(uint256)` is callable by the hooks and
+  that neither token charges a transfer tax of its own (which would double-tax).
+- **LEVEL's fresh-TWAP mint gate** is a separate system and is not touched by either hook.
+- **Non-18-decimal paired assets** for the Fire Tax price thresholds.

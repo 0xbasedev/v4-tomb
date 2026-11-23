@@ -7,6 +7,7 @@ import {console2} from "forge-std/Script.sol";
 
 import {Treasury} from "../src/core/Treasury.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
+import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
 
 /**
  * @title KeeperTick
@@ -24,6 +25,11 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  *            much as reserves allow with `hook.settleDeferredTax()`. Settlement is partial
  *            by design and a call that can settle nothing is a no-op, so retries are safe.
  *
+ *         4. **Share-tax buyback** — only when `SHARE_BUYBACK_HOOK` is set. Call
+ *            `executeBuyback()` on the ShareBuybackHook when it holds tax. That call is a
+ *            no-op while its TWAP span is too short or the peg price is above its limit,
+ *            and converts partially at the limit, so it too is safe to repeat.
+ *
  *         Monitoring, surfaced through the run log and exit status:
  *           - Outstanding deferred tax after the pass is printed as a GitHub Actions
  *             `::warning::`, split into burn and Treasury amounts.
@@ -36,6 +42,7 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  *         Required env vars:
  *           KEEPER_PRIVATE_KEY  — wallet that signs. Needs ETH for gas only. Should NOT
  *                                  have any admin role on protocol contracts.
+ *           SHARE_BUYBACK_HOOK  — optional. Address of the ShareBuybackHook to service.
  *           Treasury and hook addresses are resolved from the selected manifest deployment.
  *
  *         Example:
@@ -44,6 +51,7 @@ import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
  */
 contract KeeperTick is NetworkConfig {
     error DeferredTaxUnderCollateralized(uint256 owed, uint256 claimsHeld);
+    error ShareTaxUnderCollateralized(uint256 owed, uint256 claimsHeld);
 
     function run() external {
         _network();
@@ -62,6 +70,43 @@ contract KeeperTick is NetworkConfig {
         }
         _syncTaxRate(pk, hook);
         _settleDeferredTax(pk, hook);
+
+        address shareHook = vm.envOr("SHARE_BUYBACK_HOOK", address(0));
+        if (shareHook != address(0)) _executeShareBuyback(pk, ShareBuybackHook(shareHook));
+    }
+
+    function _executeShareBuyback(
+        uint256 pk,
+        ShareBuybackHook shareHook
+    ) internal {
+        (uint256 pending, uint256 claimsHeld, uint256 readyAt) = shareHook.buybackStatus();
+
+        console2.log("-- share-tax buyback --");
+        console2.log("pending quote:   ", pending);
+        console2.log("claims held:     ", claimsHeld);
+        console2.log("ready at:        ", readyAt);
+
+        if (claimsHeld < pending) revert ShareTaxUnderCollateralized(pending, claimsHeld);
+        if (pending == 0) {
+            console2.log("Nothing to convert.");
+            return;
+        }
+        // With no span yet (readyAt == 0) the call just takes the first checkpoint.
+        if (readyAt != 0 && block.timestamp < readyAt) {
+            console2.log("TWAP span still running; will retry.");
+            return;
+        }
+
+        vm.startBroadcast(pk);
+        (uint256 quoteSpent, uint256 pegBurned) = shareHook.executeBuyback();
+        vm.stopBroadcast();
+        console2.log("quote converted: ", quoteSpent);
+        console2.log("peg burned:      ", pegBurned);
+
+        uint256 remaining = shareHook.pendingQuote();
+        if (remaining != 0) {
+            console2.log("::warning::Share tax still pending after buyback; will retry. Outstanding:", remaining);
+        }
     }
 
     function _tickEpoch(
