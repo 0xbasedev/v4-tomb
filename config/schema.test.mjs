@@ -27,6 +27,14 @@ test('synthetic current 0x10CC hook can be validated without any legacy flags', 
   assert.equal(BigInt(deployment.hook) & 0x3fffn, 0x10ccn);
 });
 
+test('legacyHook configuration flags are rejected even with current permission bits', () => {
+  const candidate = clone(currentFixture);
+  candidate.networks[0].deployment.legacyHook = false;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
+  candidate.networks[0].deployment.legacyHook = true;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
+});
+
 for (const [description, change] of [
   ['unknown schema', (d) => { d.schemaVersion = 2; }],
   ['empty networks', (d) => { d.networks = []; }],
