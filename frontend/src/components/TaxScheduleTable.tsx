@@ -42,8 +42,10 @@ export function TaxScheduleTable({ activePriceEth }: TaxScheduleTableProps) {
       <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-6 font-body text-sm italic text-deco-ivory-soft">
         Every sale of MONEY pays a tax set by the time-weighted price, not the
-        price of the moment. The stronger the peg, the lighter the tax. Below 1.10
-        the tax is burned outright; above it, it accrues to The Treasury.
+        price of the moment. The tax never exceeds 12%. It rises the instant the
+        peg weakens, and eases only after a stronger price has held for seven
+        hours. Below 1.10 the tax is burned outright; above it, it accrues to
+        The Treasury.
       </p>
       <table className="w-full border-collapse text-left">
         <thead>

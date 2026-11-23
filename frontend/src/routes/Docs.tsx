@@ -339,8 +339,10 @@ export function Docs() {
         <SubHeading>The Three Tiers</SubHeading>
         <P>
           The tax eases as the peg strengthens. While the time-weighted price
-          is below 1.12 ETH, sales pay 12%. From 1.12 they pay 6%, and from
-          1.20 they pay 3%. Purchases are never taxed. The schedule is rendered
+          is below 1.12 ETH, sales pay 12%, which is the most the contract can
+          ever charge. From 1.12 they pay 6%, and from 1.20 they pay 3%. A
+          higher rate applies at once; a lower rate applies only after it has
+          been due for seven hours. Purchases are never taxed. The schedule is rendered
           live on /swap when MONEY-WETH is selected, with the tier in force
           highlighted.
         </P>

@@ -254,6 +254,15 @@ abstract contract HookPoolFixture is BaseTest {
         });
     }
 
+    /// @dev External so a fuzz sequence can `try` a swap the router itself would reject
+    ///      (for example one that starts at the price limit).
+    function swapExternal(
+        address who,
+        SwapParams memory params
+    ) external {
+        _swap(who, params);
+    }
+
     function _swap(
         address who,
         SwapParams memory params
@@ -302,5 +311,36 @@ abstract contract HookPoolFixture is BaseTest {
 
     function _enableTax() internal {
         hook.setAutoCalculateTax(true);
+    }
+
+    /// @dev The tax rate starts at the 12% maximum and only falls after a lower target has
+    ///      stood for the recovery period. Run one full window so `taxRate` == the target.
+    function _earnTargetRate() internal {
+        hook.pokeTaxRate();
+        skip(hook.TAX_RECOVERY_PERIOD());
+        hook.pokeTaxRate();
+    }
+
+    /// @dev The relationship every tax path must preserve, deferred or not.
+    function _assertTaxAccounting(
+        uint256 supplyAtStart,
+        uint256 treasuryAtStart
+    ) internal view {
+        uint256 pending = hook.pendingTaxBurn() + hook.pendingTaxRoute();
+        assertEq(
+            hook.totalTaxAssessed(),
+            hook.totalTaxBurned() + hook.totalTaxRouted() + pending,
+            "assessed == burned + routed + pending"
+        );
+        assertEq(
+            manager.balanceOf(address(hook), uint256(uint160(address(money)))),
+            pending,
+            "PoolManager claims back pending tax 1:1"
+        );
+        assertGe(money.balanceOf(address(manager)), pending, "pending tax is redeemable: reserves cover the claims");
+        assertEq(money.balanceOf(address(hook)), 0, "hook never retains MONEY");
+        assertEq(supplyAtStart - money.totalSupply(), hook.totalTaxBurned(), "completed burns left the supply");
+        assertEq(money.balanceOf(treasuryAddr) - treasuryAtStart, hook.totalTaxRouted(), "Treasury received its share");
+        assertLe(hook.taxRate(), hook.MAX_TAX_BPS(), "rate within the hard cap");
     }
 }

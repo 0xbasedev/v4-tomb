@@ -51,11 +51,9 @@ export function parseNetworks(document) {
     for (const key of infrastructureKeys.filter((key) => key !== 'create2Deployer')) {
       if (deployment[key].toLowerCase() !== infrastructure[key]?.toLowerCase()) fail(`deployment.${key} disagrees with infrastructure`);
     }
-    // A swapped hook permission bit yields a different address and an unusable pool.
-    // 0x10cc is the current PegDefenseHook (PegDefenseHookPermissions.FLAGS). 0x1088 is the
-    // superseded hook without afterSwap; it is accepted only so historical profiles still load.
-    const hookBits = BigInt(deployment.hook) & 0x3fffn;
-    if (hookBits !== 0x10ccn && hookBits !== 0x1088n) fail('hook permission bits must be 0x10cc');
+    if (Object.prototype.hasOwnProperty.call(deployment, 'legacyHook')) fail('legacyHook is unsupported');
+    // Only hooks with the current beforeSwap/afterSwap callback permissions are deployable.
+    if ((BigInt(deployment.hook) & 0x3fffn) !== 0x10ccn) fail('hook permission bits must be 0x10cc');
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
   }
   return document.networks;

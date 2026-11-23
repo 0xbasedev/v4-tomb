@@ -59,21 +59,23 @@ library PegDefenseHookPermissions {
  *              (expansion): low fee, encourages buying. Near peg: base fee. Below peg
  *              (contraction): high fee, discourages selling. Deep below peg: even higher.
  *
- *           3. **Sell tax keyed to the TWAP, with burn-during-contraction** — sells of
- *              MONEY pay a MONEY-denominated tax. The rate steps DOWN as the peg
- *              strengthens:
+ *           3. **Fire Tax — sell tax keyed to the TWAP, with burn-during-contraction** —
+ *              sells of MONEY pay a MONEY-denominated tax. The schedule steps DOWN as the
+ *              peg strengthens, and can never exceed `MAX_TAX_BPS` (12%):
  *
  *                  TWAP <  1.12   → 12%
  *                  TWAP >= 1.12   →  6%
  *                  TWAP >= 1.20   →  3%
  *
+ *              The schedule is a TARGET. The rate actually charged (`taxRate`) ratchets:
+ *              it rises to a higher target immediately, but only falls once a lower
+ *              target has stood for `TAX_RECOVERY_PERIOD` (7 hours). See `_nextTaxState`.
+ *
  *              The price used is the Oracle's last completed epoch TWAP (`taxOracle`),
- *              not the pool's spot price, so a trader cannot buy their way into a cheaper
- *              tier inside the transaction that sells. Until an oracle is wired and has
- *              completed its first epoch, the pre-swap spot price is the fallback.
- *              The tax is burned (price < `burnThreshold`) or sent to Treasury (price >=
- *              threshold). `autoCalculateTax` is off by default; Trustees flips it on
- *              post-launch.
+ *              not the pool's spot price. Until an oracle is wired and has completed its
+ *              first epoch, the pre-swap spot price is the fallback. The tax is burned
+ *              (price < `burnThreshold`) or sent to Treasury (price >= threshold).
+ *              `autoCalculateTax` is off by default; Trustees flips it on post-launch.
  *
  *              Both swap modes charge the same effective rate `r` on the seller's gross
  *              MONEY outlay `G`:
@@ -111,6 +113,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     uint160 public constant PERMISSION_FLAGS = PegDefenseHookPermissions.FLAGS;
 
     uint256 internal constant BPS = 10_000;
+
+    /// @notice Hard ceiling on the sell tax. No setter, tier or rate path can exceed it.
+    uint256 public constant MAX_TAX_BPS = 1200;
+
+    /// @notice How long a lower target rate must stand before `taxRate` may fall to it.
+    uint256 public constant TAX_RECOVERY_PERIOD = 7 hours;
 
     // ------------------------------------------------------------------
     // Immutables / pool binding
@@ -167,8 +175,29 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ///         Walked high → low; the first one the tax price reaches sets the rate.
     uint256[] public taxTiersTwaps;
 
-    /// @notice Tax rate in basis points per tier. Same length as `taxTiersTwaps`.
+    /// @notice Target tax rate in basis points per tier. Same length as `taxTiersTwaps`.
+    ///         Every entry is bounded by `MAX_TAX_BPS`.
     uint256[] public taxTiersRates;
+
+    /// @notice The sell-tax rate (bps) in force as of the last sync. Starts at the maximum,
+    ///         so a fresh deployment charges 12% until a lower rate has been earned.
+    uint16 public taxRate = uint16(MAX_TAX_BPS);
+
+    /// @notice The lower rate `taxRate` will fall to once the recovery period has run.
+    ///         Meaningful only while `taxRecoveryStartedAt != 0`.
+    uint16 public taxRecoveryRate;
+
+    /// @notice When the current recovery window opened. Zero when no decrease is pending.
+    uint40 public taxRecoveryStartedAt;
+
+    /// @notice Lifetime tax accounting. At all times:
+    ///           totalTaxAssessed == totalTaxBurned + totalTaxRouted
+    ///                               + pendingTaxBurn + pendingTaxRoute
+    ///         and the hook's ERC-6909 MONEY claims on the PoolManager cover the two
+    ///         pending amounts in full.
+    uint256 public totalTaxAssessed;
+    uint256 public totalTaxBurned;
+    uint256 public totalTaxRouted;
 
     /// @notice Below this price (1e18-scaled), the tax slice is BURNED. At or above, it's
     ///         transferred to `treasury`. Defaults to 1.10e18 per Tomb.
@@ -217,6 +246,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     event BurnThresholdSet(uint256 previous, uint256 next);
     event TreasurySet(address indexed previous, address indexed next);
     event TaxOracleSet(address indexed previous, address indexed next);
+    event TaxRateChanged(uint256 previous, uint256 next);
+    event TaxRecoveryStarted(uint256 fromRate, uint256 toRate, uint256 readyAt);
     event TaxTierSet(uint256 indexed index, uint256 twap, uint256 rate);
     event AddressExclusionSet(address indexed account, bool excluded);
     event TaxBurned(uint256 amount, uint256 price);
@@ -239,7 +270,6 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     error NonMonotonicTier();
     error TaxRateTooHigh();
     error BurnThresholdZero();
-    error ExactOutputSellUnavailableAtFullTax();
 
     // ------------------------------------------------------------------
     // Constructor
@@ -327,6 +357,15 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
         uint24 fee = _feeForTick(currentTick) | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
+        if (!autoCalculateTax) {
+            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
+        }
+
+        // Advance the Fire Tax ratchet on every swap — buys included — so recovery
+        // windows open and close on time even when nobody is selling.
+        uint256 price = _taxPrice(currentTick);
+        uint256 rate = _syncTaxRate(price);
+
         // ------------------------------------------------------------------
         // Sell tax — exact-input leg. Exact-output sells are assessed in afterSwap, once
         // the MONEY amount is known. `amountSpecified` is MONEY only when it is negative.
@@ -335,8 +374,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
 
-        uint256 price = _taxPrice(currentTick);
-        uint256 taxAmount = uint256(-params.amountSpecified) * _taxRateForPrice(price) / BPS;
+        uint256 taxAmount = uint256(-params.amountSpecified) * rate / BPS;
         if (taxAmount == 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         }
@@ -373,11 +411,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             return (IHooks.afterSwap.selector, 0);
         }
 
-        uint256 price = _taxPrice(preSwapTick);
-        uint256 rate = _taxRateForPrice(price);
+        // beforeSwap already synced the ratchet for this swap; `taxRate` <= MAX_TAX_BPS,
+        // so the gross-up below is always well defined.
+        uint256 rate = taxRate;
         if (rate == 0) return (IHooks.afterSwap.selector, 0);
-        // Grossing up by 1 / (1 - rate) has no finite answer at a 100% rate.
-        if (rate >= BPS) revert ExactOutputSellUnavailableAtFullTax();
+        uint256 price = _taxPrice(preSwapTick);
 
         // The pool's MONEY leg is negative from the swapper's side: they owe it.
         int128 moneyDelta = moneyIsCurrency0 ? delta.amount0() : delta.amount1();
@@ -401,11 +439,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     /// @notice Redeem tax that was parked as PoolManager claims (see `_collectTax`) and
     ///         burn / route it. Permissionless: it only ever moves value to the burn or to
     ///         the Treasury. Settles as much as the PoolManager's MONEY reserves allow,
-    ///         burn first; call again later for any remainder.
-    function settleDeferredTax() external {
-        if (pendingTaxBurn + pendingTaxRoute == 0) return;
-        // slither-disable-next-line unused-return — the callback returns no data.
-        poolManager.unlock("");
+    ///         burn first, and never reverts for lack of reserves — a call that can settle
+    ///         nothing is a no-op, so it is safe to retry on any schedule.
+    /// @return burned MONEY burned by this call.
+    /// @return routed MONEY sent to the Treasury by this call.
+    function settleDeferredTax() external returns (uint256 burned, uint256 routed) {
+        if (pendingTaxBurn + pendingTaxRoute == 0) return (0, 0);
+        if (IERC20(money).balanceOf(address(poolManager)) == 0) return (0, 0);
+        return abi.decode(poolManager.unlock(""), (uint256, uint256));
     }
 
     /// @inheritdoc IUnlockCallback
@@ -413,29 +454,61 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         bytes calldata /* data */
     ) external onlyPoolManager returns (bytes memory) {
         uint256 available = IERC20(money).balanceOf(address(poolManager));
-        uint256 toBurn = pendingTaxBurn < available ? pendingTaxBurn : available;
-        available -= toBurn;
-        uint256 toRoute = pendingTaxRoute < available ? pendingTaxRoute : available;
-        uint256 total = toBurn + toRoute;
-        if (total == 0) return "";
+        uint256 fromBurn = pendingTaxBurn < available ? pendingTaxBurn : available;
+        available -= fromBurn;
+        uint256 fromRoute = pendingTaxRoute < available ? pendingTaxRoute : available;
+        uint256 total = fromBurn + fromRoute;
+        if (total == 0) return abi.encode(uint256(0), uint256(0));
 
-        pendingTaxBurn -= toBurn;
-        pendingTaxRoute -= toRoute;
+        // A Treasury that was unset since the tax was deferred falls back to the burn.
+        address dest = treasury;
+        uint256 toBurn = dest == address(0) ? total : fromBurn;
+        uint256 toRoute = total - toBurn;
+
+        pendingTaxBurn -= fromBurn;
+        pendingTaxRoute -= fromRoute;
+        totalTaxBurned += toBurn;
+        totalTaxRouted += toRoute;
 
         Currency moneyCurrency = Currency.wrap(money);
         poolManager.burn(address(this), CurrencyLibrary.toId(moneyCurrency), total);
         poolManager.take(moneyCurrency, address(this), total);
 
-        // A Treasury that was unset since the tax was deferred falls back to the burn.
-        address dest = treasury;
-        if (dest == address(0)) {
-            toBurn = total;
-            toRoute = 0;
-        }
         if (toBurn > 0) IBurnable(money).burn(toBurn);
         if (toRoute > 0) IERC20(money).safeTransfer(dest, toRoute);
         emit DeferredTaxSettled(toBurn, toRoute);
-        return "";
+        return abi.encode(toBurn, toRoute);
+    }
+
+    /// @notice Everything a keeper or monitor needs about deferred tax in one call.
+    /// @return pendingBurn   Tax owed to the burn, not yet redeemed.
+    /// @return pendingRoute  Tax owed to the Treasury, not yet redeemed.
+    /// @return claimsHeld    ERC-6909 MONEY claims the hook holds on the PoolManager.
+    ///                       Must be >= pendingBurn + pendingRoute; less means a deficit.
+    /// @return settleableNow How much `settleDeferredTax` could redeem right now.
+    function deferredTaxStatus()
+        external
+        view
+        returns (uint256 pendingBurn, uint256 pendingRoute, uint256 claimsHeld, uint256 settleableNow)
+    {
+        pendingBurn = pendingTaxBurn;
+        pendingRoute = pendingTaxRoute;
+        claimsHeld = poolManager.balanceOf(address(this), CurrencyLibrary.toId(Currency.wrap(money)));
+        uint256 reserves = IERC20(money).balanceOf(address(poolManager));
+        uint256 owed = pendingBurn + pendingRoute;
+        settleableNow = owed < reserves ? owed : reserves;
+    }
+
+    // ------------------------------------------------------------------
+    // Fire Tax ratchet
+    // ------------------------------------------------------------------
+
+    /// @notice Advance the tax ratchet without swapping. Permissionless; keepers call it so
+    ///         a recovery window opens as soon as the TWAP allows rather than at the next
+    ///         trade. It can raise the rate, open a window, or complete one — never skip one.
+    function pokeTaxRate() external returns (uint256) {
+        if (!bound) revert UnknownPool();
+        return _syncTaxRate(_taxPrice(lastTick));
     }
 
     // ------------------------------------------------------------------
@@ -532,13 +605,13 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         emit TaxTierSet(index, newTwap, taxTiersRates[index]);
     }
 
-    /// @notice Update a single tier's rate. Bounded to 10000 (100%) to prevent rug-via-tax.
+    /// @notice Update a single tier's target rate. Bounded by the immutable `MAX_TAX_BPS`.
     function setTaxTiersRate(
         uint256 index,
         uint256 newRate
     ) external onlyTrustees {
         if (index >= taxTiersRates.length) revert TierIndexOutOfRange();
-        if (newRate > 10_000) revert TaxRateTooHigh();
+        if (newRate > MAX_TAX_BPS) revert TaxRateTooHigh();
         taxTiersRates[index] = newRate;
         emit TaxTierSet(index, taxTiersTwaps[index], newRate);
     }
@@ -584,14 +657,83 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     }
 
     /// @notice The sell-tax rate (bps) a MONEY sell would pay right now, ignoring the
-    ///         `autoCalculateTax` switch and sender exclusions.
-    function currentTaxRate() external view returns (uint256) {
+    ///         `autoCalculateTax` switch and sender exclusions. Includes any ratchet step
+    ///         the next swap would apply.
+    function currentTaxRate() external view returns (uint256 rate) {
+        (rate,,) = _nextTaxState(_taxRateForPrice(currentTaxPrice()));
+    }
+
+    /// @notice The rate the schedule points at for the current tax price, before the
+    ///         ratchet. Above `currentTaxRate` never; below it while a recovery is pending.
+    function targetTaxRate() external view returns (uint256) {
         return _taxRateForPrice(currentTaxPrice());
+    }
+
+    /// @notice The pending decrease, if any, as the next swap would see it.
+    /// @return toRate  The rate `taxRate` will fall to. Zero when none is pending.
+    /// @return readyAt Timestamp from which that decrease can take effect.
+    function pendingTaxDecrease() external view returns (uint256 toRate, uint256 readyAt) {
+        (, uint16 candidate, uint40 startedAt) = _nextTaxState(_taxRateForPrice(currentTaxPrice()));
+        if (startedAt == 0) return (0, 0);
+        return (candidate, uint256(startedAt) + TAX_RECOVERY_PERIOD);
     }
 
     // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
+
+    /// @dev Apply `_nextTaxState` for the schedule's target at `price` and persist it.
+    function _syncTaxRate(
+        uint256 price
+    ) internal returns (uint256) {
+        (uint16 rate, uint16 candidate, uint40 startedAt) = _nextTaxState(_taxRateForPrice(price));
+
+        uint16 previous = taxRate;
+        if (rate != previous) {
+            taxRate = rate;
+            emit TaxRateChanged(previous, rate);
+        }
+        if (startedAt != taxRecoveryStartedAt || candidate != taxRecoveryRate) {
+            if (startedAt != 0 && startedAt != taxRecoveryStartedAt) {
+                emit TaxRecoveryStarted(rate, candidate, uint256(startedAt) + TAX_RECOVERY_PERIOD);
+            }
+            taxRecoveryStartedAt = startedAt;
+            taxRecoveryRate = candidate;
+        }
+        return rate;
+    }
+
+    /// @dev The Fire Tax ratchet. Given the schedule's `target` rate now, returns the rate
+    ///      to charge and the recovery bookkeeping.
+    ///
+    ///        - target >= rate: charge the target at once and cancel any pending decrease.
+    ///        - target <  rate: a recovery window runs. The candidate is the HIGHEST target
+    ///          seen during the window, so a rate is only ever adopted after standing for
+    ///          the full period. When the window closes the candidate becomes the rate; if
+    ///          the target is lower still, a fresh window opens for it.
+    ///
+    ///      Targets are sampled when the hook runs (swaps and `pokeTaxRate`), so the window
+    ///      opens at the first observation of a lower target, never earlier.
+    function _nextTaxState(
+        uint256 target
+    ) internal view returns (uint16 rate, uint16 candidate, uint40 startedAt) {
+        rate = taxRate;
+        // Tier rates are capped by the setter; clamp anyway so no path can exceed the max.
+        uint16 t = uint16(target > MAX_TAX_BPS ? MAX_TAX_BPS : target);
+
+        if (t >= rate) return (t, 0, 0);
+
+        candidate = taxRecoveryRate;
+        startedAt = taxRecoveryStartedAt;
+        if (startedAt == 0) return (rate, t, uint40(block.timestamp));
+
+        if (t > candidate) candidate = t;
+        if (block.timestamp - startedAt < TAX_RECOVERY_PERIOD) return (rate, candidate, startedAt);
+
+        rate = candidate;
+        if (t < rate) return (rate, t, uint40(block.timestamp));
+        return (rate, 0, 0);
+    }
 
     /// @dev TWAP from `taxOracle` when it has one; the spot price at `spotTick` otherwise.
     ///      The fallback keeps sells working — and taxed — if the oracle is unset, has not
@@ -633,6 +775,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ) internal {
         Currency moneyCurrency = Currency.wrap(money);
         bool toBurn = price < burnThreshold || treasury == address(0);
+        totalTaxAssessed += taxAmount;
 
         if (IERC20(money).balanceOf(address(poolManager)) < taxAmount) {
             if (toBurn) pendingTaxBurn += taxAmount;
@@ -647,9 +790,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             // Below-threshold burn is the load-bearing deflationary lever during
             // contraction. An unset Treasury also burns: Trustees should set one before
             // flipping autoCalculateTax on.
+            totalTaxBurned += taxAmount;
             IBurnable(money).burn(taxAmount);
             emit TaxBurned(taxAmount, price);
         } else {
+            totalTaxRouted += taxAmount;
             IERC20(money).safeTransfer(treasury, taxAmount);
             emit TaxRouted(treasury, taxAmount, price);
         }

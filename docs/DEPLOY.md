@@ -20,7 +20,7 @@ node scripts/protocol.mjs validate
 node scripts/install-contract-deps.mjs
 ```
 
-To inspect the old deployment, copy `config/examples/upstream-base-sepolia.json` over `config/networks.json` and rebuild the frontend. That profile is historical and is not evidence that its contracts remain safe or active.
+`config/examples/upstream-base-sepolia.json` records the old Base Sepolia deployment for reference only. Its hook carries the superseded `0x1088` permission bits, so the configuration validator rejects it and the frontend will not load it. Only hooks at a `0x10CC` address are deployable.
 
 ## 2. Set operator parameters
 

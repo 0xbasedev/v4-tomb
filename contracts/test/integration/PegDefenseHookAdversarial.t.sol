@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {HookPoolFixture} from "../utils/HookPoolFixture.t.sol";
 
 import {Oracle} from "../../src/oracle/Oracle.sol";
+import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
 import {IPriceSource} from "../../src/interfaces/IPriceSource.sol";
 
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
@@ -94,20 +95,11 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         assertApproxEqRel(weth.balanceOf(alice) - wethBefore, 10 ether, 1e9, "swap mode must not change the price paid");
     }
 
-    function test_ExactOutSell_RevertsAtAFullTaxRate() public {
-        _initWithFullRange(DEPEGGED_TICK, DEEP_LIQUIDITY);
-        _enableTax();
-        hook.setTaxTiersRate(0, 10_000); // the below-1.12 tier
-
-        vm.prank(alice);
-        vm.expectRevert();
-        swapRouter.swap(poolKey, _sellParams(int256(1 ether)), PoolSwapTest.TestSettings(false, false), "");
-    }
-
     function test_ExactOutSell_AbovePeg_RoutesToTreasury() public {
         // Money tick 1500 → price ≈ 1.162, tier [1.12, 1.20) = 6%, above the burn threshold.
         _initWithFullRange(1500, DEEP_LIQUIDITY);
         _enableTax();
+        _earnTargetRate();
 
         uint256 supplyBefore = money.totalSupply();
         uint256 aliceMoneyBefore = money.balanceOf(alice);
@@ -130,8 +122,10 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
         _initWithFullRange(moneyTick, DEEP_LIQUIDITY);
         _enableTax();
+        _earnTargetRate();
 
-        uint256 rate = hook.taxRateForPrice(hook.priceFromTick(_poolTick(moneyTick)));
+        uint256 rate = hook.taxRate();
+        assertEq(rate, hook.taxRateForPrice(hook.priceFromTick(_poolTick(moneyTick))), "rate settled on the tier");
         uint256 supplyBefore = money.totalSupply();
         uint256 aliceMoneyBefore = money.balanceOf(alice);
         uint256 aliceWethBefore = weth.balanceOf(alice);
@@ -232,8 +226,10 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         assertLt(money.balanceOf(address(manager)), 1 ether, "manager drained of MONEY");
 
         _enableTax();
+        _earnTargetRate();
         uint256 aliceBefore = money.balanceOf(alice);
         uint256 supplyBefore = money.totalSupply();
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
         uint256 moneyId = uint256(uint160(address(money)));
 
         // Price is far above peg here: 3% tier, routed to Treasury. The sell that pulls
@@ -245,11 +241,20 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         assertEq(hook.pendingTaxBurn(), 0);
         assertEq(manager.balanceOf(address(hook), moneyId), 3 ether, "backed 1:1 by PoolManager claims");
         assertEq(money.totalSupply(), supplyBefore, "nothing burned yet");
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
+
+        (uint256 pb, uint256 pr, uint256 claims, uint256 settleable) = hook.deferredTaxStatus();
+        assertEq(pb + pr, 3 ether);
+        assertEq(claims, 3 ether, "monitor sees full backing");
+        assertEq(settleable, 3 ether, "the settled sell made it redeemable");
 
         // Alice's settled input replenished the manager, so anyone can now flush it.
         vm.prank(stranger);
-        hook.settleDeferredTax();
+        (uint256 burned, uint256 routed) = hook.settleDeferredTax();
 
+        assertEq(burned, 0);
+        assertEq(routed, 3 ether, "the call reports what it settled");
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
         assertEq(hook.pendingTaxRoute(), 0, "pending cleared");
         assertEq(manager.balanceOf(address(hook), moneyId), 0, "claims redeemed");
         assertEq(money.balanceOf(treasuryAddr), 3 ether, "Treasury paid");
@@ -261,6 +266,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _addLiquidity(-600, 600, 10_000 ether);
         _buyExactIn(bob, 100_000 ether);
         _enableTax();
+        _earnTargetRate();
 
         uint256 aliceBefore = money.balanceOf(alice);
         _sellExactOut(alice, 50 ether);
@@ -362,20 +368,131 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         assertEq(supplyBefore - money.totalSupply(), 120 ether, "12% burned: tier read from the TWAP");
     }
 
-    function test_TaxTier_StepsDownAsTheTwapRises() public {
-        // Money tick 1200 → ≈1.127 (6% tier); money tick 1860 → ≈1.204 (3% tier).
+    function test_FireTax_FallsOnlyAfterSevenHours_AndRisesAtOnce() public {
+        // Money tick 1200 → ≈1.127: the schedule's target is 6%.
         _initWithFullRange(1200, DEEP_LIQUIDITY);
-        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(money), address(weth), 6 hours, block.timestamp);
-        hook.setTaxOracle(address(oracle));
         _enableTax();
 
-        skip(6 hours);
-        oracle.update();
-        assertEq(hook.currentTaxRate(), 600, "6% at a ~1.127 TWAP");
-
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        uint256 supplyBefore = money.totalSupply();
         _sellExactIn(alice, 100 ether);
-        assertEq(money.balanceOf(treasuryAddr) - treasuryBefore, 6 ether, "6% routed (above the burn threshold)");
+        assertEq(hook.taxRate(), 1200, "starts at the maximum");
+        // 1.127 is above the burn threshold, so the 12% is routed, not burned.
+        assertEq(money.totalSupply(), supplyBefore);
+        assertEq(money.balanceOf(treasuryAddr), 12 ether, "12% charged while the lower rate is unearned");
+
+        (uint256 toRate, uint256 readyAt) = hook.pendingTaxDecrease();
+        assertEq(toRate, 600, "a decrease to 6% is pending");
+        assertEq(readyAt, block.timestamp + 7 hours);
+
+        skip(7 hours - 1);
+        _sellExactIn(alice, 100 ether);
+        assertEq(money.balanceOf(treasuryAddr), 24 ether, "still 12% one second before the window closes");
+
+        skip(1);
+        _sellExactIn(alice, 100 ether);
+        assertEq(hook.taxRate(), 600);
+        assertEq(money.balanceOf(treasuryAddr), 30 ether, "6% once the seven hours have run");
+
+        // Tighten the schedule: the higher rate bites on the very next swap.
+        hook.setTaxTiersRate(1, 1100);
+        _sellExactIn(alice, 100 ether);
+        assertEq(hook.taxRate(), 1100, "increases are immediate");
+        assertEq(money.balanceOf(treasuryAddr), 41 ether);
+    }
+
+    function test_FireTax_NoSetterOrPathCanExceedTwelvePercent() public {
+        for (uint256 i = 0; i < 3; ++i) {
+            vm.expectRevert(PegDefenseHook.TaxRateTooHigh.selector);
+            hook.setTaxTiersRate(i, 1201);
+        }
+        assertEq(hook.MAX_TAX_BPS(), 1200);
+        assertEq(hook.taxRate(), 1200);
+    }
+
+    // ------------------------------------------------------------------
+    // Deferred tax: partial settlement, retries, conservation
+    // ------------------------------------------------------------------
+
+    function test_DeferredTax_StaysFullyBacked_EvenIfThePoolIsDrainedAgain() public {
+        _initPool(0);
+        _addLiquidity(-600, 600, 10_000 ether);
+        _buyExactIn(bob, 100_000 ether); // pool is now ~100% WETH
+        _enableTax();
+        uint256 supplyBefore = money.totalSupply();
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+
+        // Still inside the first recovery window: 12%, routed (price is far above 1.10).
+        _sellExactIn(alice, 100 ether);
+        assertEq(hook.pendingTaxRoute(), 12 ether);
+
+        // Buyers take every MONEY the pool holds. The claim's backing is not the pool's to
+        // give: the seller's settled input covers it, so it survives the drain.
+        _buyExactIn(bob, 100_000 ether);
+        (,, uint256 claims, uint256 settleable) = hook.deferredTaxStatus();
+        assertEq(claims, 12 ether);
+        assertEq(settleable, 12 ether, "still redeemable in full");
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
+
+        (uint256 burned, uint256 routed) = hook.settleDeferredTax();
+        assertEq(burned, 0);
+        assertEq(routed, 12 ether);
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
+
+        // Retrying with nothing owed is a harmless no-op, not a revert.
+        (burned, routed) = hook.settleDeferredTax();
+        assertEq(burned + routed, 0);
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
+    }
+
+    function test_DeferredTax_TreasuryUnsetBeforeSettlement_FallsBackToBurn() public {
+        _initPool(0);
+        _addLiquidity(-600, 600, 10_000 ether);
+        _buyExactIn(bob, 100_000 ether);
+        _enableTax();
+        uint256 supplyBefore = money.totalSupply();
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+
+        _sellExactIn(alice, 100 ether);
+        assertEq(hook.pendingTaxRoute(), 12 ether);
+
+        hook.setTreasury(address(0));
+        (uint256 burned, uint256 routed) = hook.settleDeferredTax();
+        assertEq(burned, 12 ether, "no Treasury to pay: burned instead");
+        assertEq(routed, 0);
+        _assertTaxAccounting(supplyBefore, treasuryBefore);
+    }
+
+    function testFuzz_TaxAccounting_ConservedAcrossAnySequence(
+        uint256[10] memory seeds
+    ) public {
+        _initPool(0);
+        // Thin, concentrated liquidity so sequences really do run the manager dry.
+        _addLiquidity(-600, 600, 10_000 ether);
+        _enableTax();
+        uint256 supplyBefore = money.totalSupply();
+        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+
+        for (uint256 i = 0; i < seeds.length; ++i) {
+            uint256 op = seeds[i] % 7;
+            uint256 amount = bound(seeds[i] >> 8, 0.01 ether, 3000 ether);
+            // A swap the router rejects (e.g. starting at the price limit) changes nothing.
+            if (op == 0) {
+                try this.swapExternal(alice, _sellParams(-int256(amount))) {} catch {}
+            } else if (op == 1) {
+                try this.swapExternal(alice, _sellParams(int256(amount / 20))) {} catch {}
+            } else if (op == 2) {
+                try this.swapExternal(bob, _buyParams(-int256(amount * 30))) {} catch {}
+            } else if (op == 3) {
+                try this.swapExternal(bob, _buyParams(int256(amount / 20))) {} catch {}
+            } else if (op == 4) {
+                hook.settleDeferredTax();
+            } else if (op == 5) {
+                skip(4 hours);
+            } else {
+                hook.pokeTaxRate();
+            }
+            _assertTaxAccounting(supplyBefore, treasuryBefore);
+        }
     }
 
     // ------------------------------------------------------------------

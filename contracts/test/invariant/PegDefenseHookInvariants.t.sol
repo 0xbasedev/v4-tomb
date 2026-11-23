@@ -129,11 +129,11 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         }
     }
 
-    /// @notice No tax rate ever exceeds 10000 bps (100%). The setter rejects this; the
+    /// @notice No tax rate ever exceeds MAX_TAX_BPS (12%). The setter rejects this; the
     ///         invariant is the cross-check that no path mutates the array around it.
     function invariant_TaxRatesBoundedBy100Pct() public view {
         for (uint256 i = 0; i < hook.getTaxTiersRatesCount(); ++i) {
-            assertLe(hook.taxTiersRates(i), 10_000, "tax rate exceeds 100%");
+            assertLe(hook.taxTiersRates(i), hook.MAX_TAX_BPS(), "tier rate exceeds the 12% cap");
         }
     }
 

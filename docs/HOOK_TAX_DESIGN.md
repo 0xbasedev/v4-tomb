@@ -2,8 +2,9 @@
 
 > **Revised.** The sections below are the original Sprint 4b design and are kept for history.
 > Where they disagree with [Revision 2](#revision-2--exact-output-tax-post-swap-observation-deferred-collection)
-> or [Revision 3](#revision-3--three-tier-curve-keyed-to-the-twap) at the end of this
-> document, the revisions are what the contract does. In particular the 14-tier Tomb table
+> [Revision 3](#revision-3--three-tier-curve-keyed-to-the-twap) or
+> [Revision 4](#revision-4--fire-tax-ratchet-hard-cap-deferred-tax-accounting) at the end of
+> this document, the revisions are what the contract does. In particular the 14-tier Tomb table
 > below is no longer the default.
 
 Design doc for restoring Tomb's burn-during-deep-contraction lever as a `beforeSwapReturnDelta` extension to `PegDefenseHook`. **Read this and sign off before any code lands in `src/`.**
@@ -309,9 +310,7 @@ leg moved to `afterSwap`:
 | exact-output | unspecified | `afterSwap` (unspecified delta) | `tax = N × r / (1 − r)`, rounded up | `r` |
 
 `G` is the seller's gross input, `N` the MONEY the pool took. Both modes now cost the same
-for the same trade. The tier is always chosen from the **pre-swap** price. A tier set to
-100% makes the exact-output gross-up undefined; that case reverts with
-`ExactOutputSellUnavailableAtFullTax`.
+for the same trade. The tier is always chosen from the **pre-swap** price. The rate is capped at 12% (Revision 4), so the gross-up is always well defined.
 
 The tax stays MONEY-denominated in both modes because the burn is the point. Collecting
 WETH in `afterSwap` for every sell would be simpler but would turn a supply-contraction
@@ -343,14 +342,14 @@ takes ERC-6909 claims instead (no token transfer) and records the amount in
 `pendingTaxBurn` / `pendingTaxRoute`; the burn-vs-route decision is fixed at the swap's
 price. `settleDeferredTax()` is permissionless and redeems the claims once reserves allow.
 In the common case nothing changes: the tax is still burned or routed atomically.
-
-**Ops:** add `settleDeferredTax()` to the keeper loop whenever `pendingTaxBurn +
-pendingTaxRoute > 0`. Deferred burn tax is not yet reflected in `totalSupply`.
+Deferred burn tax is not reflected in `totalSupply` until it is settled; the keeper does
+that (see Revision 4).
 
 ### Permission bits
 
 `afterSwap` and `afterSwapReturnDelta` are new, so the address pattern changes
-**`0x1088` → `0x10CC`** and the hook must be redeployed at a freshly mined salt. A pool is
+**`0x1088` → `0x10CC`** and the hook must be redeployed at a freshly mined salt. There is
+no compatibility path: `config/schema.mjs` rejects any hook whose address is not `0x10CC`. A pool is
 bound to its hook address forever, so this means a new pool: existing liquidity has to
 migrate. `PegDefenseHookPermissions.FLAGS` is now the single definition that the deploy
 script, tests and `config/schema.mjs` agree on.
@@ -396,7 +395,8 @@ The Tomb 14-tier table is replaced by a curve that eases as the peg strengthens:
 | 1.20 and above | 3% | Treasury |
 
 `taxTiersTwaps = [0, 1.12e18, 1.2e18]`, `taxTiersRates = [1200, 600, 300]`. Both remain
-Trustees-settable per tier; the table length is fixed at three.
+Trustees-settable per tier, within the 12% cap; the table length is fixed at three.
+Thresholds are WETH per MONEY, which equals multiples of peg while the peg is 1:1.
 
 ### Which price
 
@@ -410,11 +410,85 @@ TWAP removes that; `test_TaxTier_CannotBeBoughtDownWithinTheSellTransaction` pin
 
 Consequences worth knowing:
 
-- The rate changes at most once per epoch (6 hours), when `Oracle.update()` runs. A sharp
-  move is reflected in the tax at the next epoch, not immediately.
+- The schedule's target changes at most once per epoch (6 hours), when `Oracle.update()`
+  runs. A sharp move reaches the tax at the next epoch, not immediately.
 - Until the Oracle completes its first epoch it reports zero, and the hook falls back to the
   pre-swap spot price. The same fallback applies if the oracle is unset or reverts, so a
   broken oracle can neither block sells nor switch the tax off. Enable `autoCalculateTax`
   only after the first `Oracle.update()` if the spot fallback is not acceptable at launch.
 - `currentTaxPrice()` and `currentTaxRate()` expose what a sell would be charged right now.
   The frontend reads these instead of re-deriving a tier from spot.
+
+---
+
+## Revision 4 — Fire Tax ratchet, hard cap, deferred-tax accounting
+
+### 12% is a hard ceiling
+
+`MAX_TAX_BPS = 1200` is a constant. `setTaxTiersRate` rejects anything above it, the
+ratchet clamps to it, and `taxRate` is stored as the rate actually charged. There is no
+owner path to a higher tax. (The previous bound was 100%.)
+
+### Increases are immediate, decreases take seven hours
+
+The tier table is now a **target**. The rate charged, `taxRate`, follows it through a
+ratchet (`_nextTaxState`):
+
+- **Target at or above the rate in force:** charged on the very next swap. Any pending
+  decrease is cancelled.
+- **Target below the rate in force:** a recovery window opens. The rate falls only once a
+  lower target has stood for `TAX_RECOVERY_PERIOD` (7 hours), and it falls to the *highest*
+  target seen during that window. A still-lower target then needs a window of its own, so
+  12% → 3% takes at least fourteen hours unless 3% was the target from the start.
+
+`taxRate` starts at 12%, so a new deployment charges the maximum until a lower rate has
+been earned.
+
+Targets are sampled when the hook runs: on every swap while the tax is enabled, and on the
+permissionless `pokeTaxRate()`. A window therefore opens at the first *observation* of a
+lower target. The keeper pokes so that this does not wait for a trade. The ratchet can only
+err toward the higher rate.
+
+Views: `currentTaxRate()` (what a sell pays now, including any step the next sync would
+apply), `targetTaxRate()`, `pendingTaxDecrease()`.
+
+### Deferred tax accounting
+
+Three lifetime counters make the relationship checkable on-chain and in tests:
+
+```
+totalTaxAssessed == totalTaxBurned + totalTaxRouted + pendingTaxBurn + pendingTaxRoute
+PoolManager ERC-6909 MONEY claims held by the hook == pendingTaxBurn + pendingTaxRoute
+PoolManager MONEY balance                          >= pendingTaxBurn + pendingTaxRoute
+supply burned by the hook == totalTaxBurned;  Treasury receipts == totalTaxRouted
+```
+
+`testFuzz_TaxAccounting_ConservedAcrossAnySequence` asserts all of it after every step of
+random sell / buy / settle / time-skip sequences against thin liquidity, in both token
+orderings.
+
+One consequence worth stating: a deferral only lasts until the swap that caused it has
+settled. The seller's own input is what backs the claim, so the claim is redeemable in full
+as soon as that transaction ends, even if buyers then take every MONEY the pool holds.
+`settleDeferredTax()` still settles partially and never reverts for lack of reserves, as a
+defence, but no reachable sequence was found that leaves a claim unbacked.
+
+### Keeper
+
+`KeeperTick.s.sol` now does three things per pass, each a clean no-op when idle:
+
+1. advance the epoch when due;
+2. `pokeTaxRate()` when a sync would raise the rate, open a window, or complete one;
+3. `settleDeferredTax()` when tax is deferred and reserves allow.
+
+Outstanding deferred tax after a pass is printed as a GitHub Actions `::warning::`. If the
+hook's claims ever fall short of what is owed, the script reverts and the scheduled run goes
+red.
+
+### Still outside this repository
+
+- **LEVEL / SQUARE and Masonry.** This repository contains MONEY, ESTATE and the Boardroom.
+  Nothing here implements or tests LEVEL, SQUARE or a SQUARE sell-tax policy; ESTATE being
+  untaxed here says nothing about SQUARE. Those need their own contracts and their own
+  validation against this hook.
+- **Non-18-decimal paired assets.** Prices assume both tokens use 18 decimals.

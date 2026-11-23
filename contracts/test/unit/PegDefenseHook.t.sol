@@ -423,13 +423,13 @@ contract PegDefenseHookTest is BaseTest {
         hook.setTaxOracle(address(oracle));
 
         assertEq(hook.currentTaxPrice(), 1.2e18, "TWAP wins over spot");
-        assertEq(hook.currentTaxRate(), 300, "3% at a 1.20 TWAP");
+        assertEq(hook.targetTaxRate(), 300, "3% at a 1.20 TWAP");
 
         oracle.setPrice(1.12e18);
-        assertEq(hook.currentTaxRate(), 600, "6% at a 1.12 TWAP");
+        assertEq(hook.targetTaxRate(), 600, "6% at a 1.12 TWAP");
 
         oracle.setPrice(1.119e18);
-        assertEq(hook.currentTaxRate(), 1200, "12% below 1.12");
+        assertEq(hook.targetTaxRate(), 1200, "12% below 1.12");
     }
 
     function test_TaxPrice_FallsBackToSpot_WhenOracleReportsZero() public {
@@ -461,6 +461,10 @@ contract PegDefenseHookTest is BaseTest {
         hook.setTreasury(twapTreasury);
         vm.stopPrank();
 
+        // Earn the 3% rate: open the recovery window, then let it run.
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 7 hours);
+
         uint256 expectedTax = 100 ether * 300 / 10_000;
         vm.prank(owner);
         money.mint(address(pm), expectedTax);
@@ -472,6 +476,128 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(int256(BeforeSwapDeltaLibrary.getSpecifiedDelta(delta)), int256(expectedTax), "3% of 100");
         // A 1.20 TWAP is above the 1.10 burn threshold, so the tax is routed, not burned.
         assertEq(money.balanceOf(twapTreasury), expectedTax);
+    }
+
+    // ---------------------------------------------------------------------
+    // Fire Tax ratchet — immediate increases, seven-hour decreases
+    // ---------------------------------------------------------------------
+
+    function _ratchetOracle(
+        uint256 price
+    ) internal returns (MockOracle oracle) {
+        _bind(0);
+        oracle = new MockOracle(price);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+    }
+
+    function test_Ratchet_StartsAtTheMaximum() public view {
+        assertEq(hook.taxRate(), 1200);
+        assertEq(hook.MAX_TAX_BPS(), 1200);
+        assertEq(hook.TAX_RECOVERY_PERIOD(), 7 hours);
+        assertEq(hook.taxRecoveryStartedAt(), 0);
+    }
+
+    function test_Ratchet_Poke_RequiresBoundPool() public {
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.pokeTaxRate();
+    }
+
+    function test_Ratchet_DecreaseWaitsTheFullSevenHours() public {
+        _ratchetOracle(1.2e18); // target 3%
+        uint256 t0 = block.timestamp;
+
+        vm.prank(stranger); // permissionless
+        assertEq(hook.pokeTaxRate(), 1200, "first sight of a lower target only opens the window");
+        assertEq(hook.taxRecoveryStartedAt(), t0);
+        assertEq(hook.taxRecoveryRate(), 300);
+
+        vm.warp(t0 + 7 hours - 1);
+        assertEq(hook.currentTaxRate(), 1200, "view agrees: not yet");
+        assertEq(hook.pokeTaxRate(), 1200);
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.currentTaxRate(), 300, "view previews the step");
+        assertEq(hook.pokeTaxRate(), 300);
+        assertEq(hook.taxRecoveryStartedAt(), 0, "window closed");
+    }
+
+    function test_Ratchet_IncreaseIsImmediate_AndCancelsAPendingDecrease() public {
+        MockOracle oracle = _ratchetOracle(1.2e18);
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 7 hours);
+        assertEq(hook.pokeTaxRate(), 300);
+
+        // A decrease toward 3% was earned. Now the TWAP falls back under 1.12.
+        oracle.setPrice(1.0e18);
+        assertEq(hook.pokeTaxRate(), 1200, "back to 12% on the very next sync");
+
+        // And a window opened part-way through is cancelled by a rise.
+        oracle.setPrice(1.2e18);
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 6 hours);
+        oracle.setPrice(1.0e18);
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryStartedAt(), 0, "pending decrease cancelled");
+        oracle.setPrice(1.2e18);
+        vm.warp(block.timestamp + 2 hours);
+        assertEq(hook.pokeTaxRate(), 1200, "the earlier six hours do not count");
+    }
+
+    function test_Ratchet_AdoptsTheHighestTargetSeenDuringTheWindow() public {
+        MockOracle oracle = _ratchetOracle(1.2e18); // target 3%
+        uint256 t0 = block.timestamp;
+        hook.pokeTaxRate();
+
+        vm.warp(t0 + 3 hours);
+        oracle.setPrice(1.15e18); // target back up to 6%, still below the 12% in force
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryRate(), 600, "candidate raised; the window keeps running");
+        assertEq(hook.taxRecoveryStartedAt(), t0);
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.pokeTaxRate(), 600, "only a rate that stood the whole window is adopted");
+    }
+
+    function test_Ratchet_ADeeperDecreaseNeedsItsOwnWindow() public {
+        MockOracle oracle = _ratchetOracle(1.15e18); // target 6%
+        uint256 t0 = block.timestamp;
+        hook.pokeTaxRate();
+
+        vm.warp(t0 + 6 hours);
+        oracle.setPrice(1.25e18); // target 3%, seen one hour before the window closes
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryRate(), 600, "the 3% target has not stood for seven hours");
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.pokeTaxRate(), 600);
+        assertEq(hook.taxRecoveryRate(), 300, "a fresh window opens for 3%");
+
+        vm.warp(t0 + 14 hours - 1);
+        assertEq(hook.pokeTaxRate(), 600);
+        vm.warp(t0 + 14 hours);
+        assertEq(hook.pokeTaxRate(), 300);
+    }
+
+    function testFuzz_Ratchet_NeverExceedsTheCap_NorFallsEarly(
+        uint256[8] memory prices,
+        uint256[8] memory gaps
+    ) public {
+        MockOracle oracle = _ratchetOracle(1e18);
+        uint256 lastRise = block.timestamp;
+        uint256 previous = hook.taxRate();
+        for (uint256 i = 0; i < prices.length; ++i) {
+            oracle.setPrice(bound(prices[i], 0.5e18, 1.5e18));
+            vm.warp(block.timestamp + bound(gaps[i], 0, 10 hours));
+            uint256 rate = hook.pokeTaxRate();
+            assertLe(rate, 1200, "hard cap");
+            if (rate > previous) {
+                lastRise = block.timestamp;
+            } else if (rate < previous) {
+                assertGe(block.timestamp - lastRise, 7 hours, "no decrease within seven hours of a rise");
+            }
+            previous = rate;
+        }
     }
 
     function test_Tax_PriceFromTick_AtParity() public {
@@ -578,7 +704,7 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTaxTiersRate_RejectsTooHigh() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TaxRateTooHigh.selector);
-        hook.setTaxTiersRate(0, 10_001);
+        hook.setTaxTiersRate(0, 1201);
     }
 
     function test_SetTaxTiersRate_Updates() public {
