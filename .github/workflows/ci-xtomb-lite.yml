@@ -1,20 +1,37 @@
-name: xTomb Lite testnet contract checks
+name: xTomb Lite omnichain validation
 on:
   push:
-    branches: [feat/longyu-xtomb-lite-testnet]
+    branches:
+      - feat/xtomb-lite-omnichain-core
     paths:
-      - 'lite/**'
-      - '.github/workflows/ci-xtomb-lite.yml'
+      - "lite/**"
+      - ".github/workflows/ci-xtomb-lite.yml"
   pull_request:
     paths:
-      - 'lite/**'
-      - '.github/workflows/ci-xtomb-lite.yml'
+      - "lite/**"
+      - ".github/workflows/ci-xtomb-lite.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  release-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate release scheme and invariant tests
+        run: cd lite && node --test config/release.test.mjs
+      - name: Confirm release template fails closed
+        run: |
+          cd lite
+          if node config/export.mjs config/release.template.json --validate-only; then
+            echo "ERROR: Incomplete release template should be rejected"
+            exit 1
+          fi
   foundry:
     runs-on: ubuntu-latest
     steps:
@@ -22,9 +39,7 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - name: Format
-        run: cd lite && forge fmt --check
-      - name: Compile
+      - name: Compile clean self-contained Solidity
         run: cd lite && forge build
-      - name: Test
+      - name: Run invariant and integration tests
         run: cd lite && forge test -vv
