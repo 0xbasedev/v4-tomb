@@ -39,8 +39,7 @@
         "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
         "universalRouter": "0x492E6456D9528771018DeB9E87ef7750EF184104",
         "miniSwapRouter": "0xD76d5400b4796A3889Df9fCC3715F4c79D56cFae",
-        "deployBlock": "41868762",
-        "legacyHook": true
+        "deployBlock": "41868762"
       }
     }
   ]
