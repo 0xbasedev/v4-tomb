@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {BaseV4Hook} from "../../src/hooks/base/BaseV4Hook.sol";
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
@@ -16,6 +16,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -84,11 +85,8 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(owner);
         money = new OldMoney();
 
-        // Compute the only address with the right permission bits we need:
-        // AFTER_INITIALIZE | BEFORE_SWAP.
-        hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
-        );
+        // The lowest address carrying exactly the hook's permission bits.
+        hookAddr = address(PegDefenseHookPermissions.FLAGS);
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
@@ -120,22 +118,25 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(hook.money(), address(money));
     }
 
-    function test_HookPermissions_AfterInitBeforeSwapAndReturnsDelta() public view {
+    function test_HookPermissions_MatchDeclaredFlags() public view {
         Hooks.Permissions memory p = hook.getHookPermissions();
         assertTrue(p.afterInitialize);
         assertTrue(p.beforeSwap);
-        assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
+        assertTrue(p.afterSwap, "afterSwap records the post-swap tick");
+        assertTrue(p.beforeSwapReturnDelta, "exact-input sell tax");
+        assertTrue(p.afterSwapReturnDelta, "exact-output sell tax");
         assertFalse(p.beforeInitialize);
-        assertFalse(p.afterSwap);
         assertFalse(p.beforeAddLiquidity);
         assertFalse(p.afterAddLiquidity);
         assertFalse(p.beforeRemoveLiquidity);
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.afterSwapReturnDelta);
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);
+
+        assertEq(hook.PERMISSION_FLAGS(), 0x10CC, "low-14-bit address pattern");
+        assertEq(uint160(address(hook)) & 0x3FFF, hook.PERMISSION_FLAGS());
     }
 
     function test_DefaultRevertingHooks_AreUncallable() public {
@@ -780,6 +781,66 @@ contract PegDefenseHookTest is BaseTest {
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // afterSwap
+    // ---------------------------------------------------------------------
+
+    function test_AfterSwap_OnlyPoolManager() public {
+        _bind(0);
+        vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
+        hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RequiresBoundPool() public {
+        vm.prank(address(pm));
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RejectsForeignPool() public {
+        _bind(0);
+        PoolKey memory other = poolKey;
+        other.tickSpacing = 10;
+        vm.prank(address(pm));
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.afterSwap(address(0), other, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RecordsPostSwapTick_SoIdleTimeAccruesAtIt() public {
+        _bind(0);
+
+        // A swap one hour in: beforeSwap sees tick 0, the swap moves the pool to tick 250.
+        vm.warp(block.timestamp + 1 hours);
+        pm.setTick(0);
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
+        pm.setTick(250);
+        vm.prank(address(pm));
+        (bytes4 sel, int128 hookDelta) = hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+
+        assertEq(sel, IHooks.afterSwap.selector);
+        assertEq(hookDelta, 0, "no tax on a zero-amount swap");
+        assertEq(hook.lastTick(), 250, "post-swap tick recorded");
+        assertEq(hook.tickCumulative(), 0, "the hour before the swap accrued at tick 0");
+
+        // No further swaps. Six idle hours must project at tick 250, not at the stale 0.
+        vm.warp(block.timestamp + 6 hours);
+        (int56 cumulative,) = hook.getCurrentTickCumulative();
+        assertEq(cumulative, int56(250) * int56(uint56(6 hours)));
+    }
+
+    function test_SettleDeferredTax_NoOpWhenNothingPending() public {
+        // The mock manager has no `unlock`; reaching it would revert.
+        hook.settleDeferredTax();
+        assertEq(hook.pendingTaxBurn(), 0);
+        assertEq(hook.pendingTaxRoute(), 0);
+    }
+
+    function test_UnlockCallback_OnlyPoolManager() public {
+        vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
+        hook.unlockCallback("");
+    }
 
     function _bind(
         int24 initialTick

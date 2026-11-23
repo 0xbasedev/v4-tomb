@@ -1,5 +1,9 @@
 # Sprint 4b — PegDefenseHook tax routing design
 
+> **Revised.** The sections below are the original Sprint 4b design and are kept for history.
+> Where they disagree with [Revision 2](#revision-2--exact-output-tax-post-swap-observation-deferred-collection)
+> at the end of this document, Revision 2 is what the contract does.
+
 Design doc for restoring Tomb's burn-during-deep-contraction lever as a `beforeSwapReturnDelta` extension to `PegDefenseHook`. **Read this and sign off before any code lands in `src/`.**
 
 ## Purpose
@@ -278,3 +282,101 @@ Three decisions:
 3. **Default initial state of `autoCalculateTax`**: `false` (operator enables post-launch) or `true` (live at deploy)? Recommended: `false`, matches Tomb.
 
 If you sign off on the three recommendations above, I'll start contract implementation in the next turn.
+
+---
+
+## Revision 2 — exact-output tax, post-swap observation, deferred collection
+
+Three defects in the Sprint 4b hook were reproduced against a real v4-core `PoolManager`
+(`contracts/test/integration/PegDefenseHookAdversarial.t.sol`) and fixed in place.
+
+### 1. Exact-output sells were taxed on the WETH figure
+
+`taxAmount = abs(amountSpecified) * rate` was used for both swap modes. On an exact-output
+sell `amountSpecified` is the WETH the seller wants out, so the MONEY tax was computed from a
+WETH number. MONEY and WETH share 18 decimals, so the error scales with the depeg instead of
+being off by orders of magnitude — which makes it worse exactly when the tax matters:
+at 0.55 WETH per MONEY the 19% tier collected an effective **9.2%**.
+
+The MONEY a pool needs for an exact-output swap is only known after the swap runs, so that
+leg moved to `afterSwap`:
+
+| Mode | MONEY is | Assessed in | Formula | Effective rate on gross MONEY paid |
+|---|---|---|---|---|
+| exact-input | specified | `beforeSwap` (specified delta) | `tax = G × r` | `r` |
+| exact-output | unspecified | `afterSwap` (unspecified delta) | `tax = N × r / (1 − r)`, rounded up | `r` |
+
+`G` is the seller's gross input, `N` the MONEY the pool took. Both modes now cost the same
+for the same trade. The tier is always chosen from the **pre-swap** price. A tier set to
+100% makes the exact-output gross-up undefined; that case reverts with
+`ExactOutputSellUnavailableAtFullTax`.
+
+The tax stays MONEY-denominated in both modes because the burn is the point. Collecting
+WETH in `afterSwap` for every sell would be simpler but would turn a supply-contraction
+lever into a revenue line.
+
+### 2. The oracle was one swap stale, and could be parked at any tick for free
+
+`beforeSwap` stored the pre-swap tick as `lastTick` and nothing recorded where the swap
+ended. Idle time after a swap was therefore integrated at the price *before* that swap.
+Worse, a same-block buy-then-sell left `lastTick` at the intra-block peak while the pool
+returned to its starting price, so six idle hours of TWAP read a price that never rested —
+at the cost of two swap fees. That feeds `Treasury.allocateSeigniorage` directly.
+
+`afterSwap` now writes the post-swap tick. Combined with `beforeSwap` folding
+`lastTick × elapsed`, the accumulator integrates the tick the pool actually rested at, and
+only the final tick of a block carries into the next interval (the same guarantee as a
+Uniswap v3 observation). Moving the TWAP now requires holding the price across blocks,
+exposed to arbitrage.
+
+### 3. Taxed sells reverted when the PoolManager held too little MONEY
+
+Hook callbacks run before the router settles the swapper's input, so `poolManager.take`
+is paid out of MONEY the manager already holds. When price sits above a concentrated
+liquidity range the pool is ~100% WETH, the `take` reverts, and the sells that would
+arbitrage price back toward peg are blocked.
+
+`_collectTax` now checks the manager's MONEY balance. If it cannot cover the tax, the hook
+takes ERC-6909 claims instead (no token transfer) and records the amount in
+`pendingTaxBurn` / `pendingTaxRoute`; the burn-vs-route decision is fixed at the swap's
+price. `settleDeferredTax()` is permissionless and redeems the claims once reserves allow.
+In the common case nothing changes: the tax is still burned or routed atomically.
+
+**Ops:** add `settleDeferredTax()` to the keeper loop whenever `pendingTaxBurn +
+pendingTaxRoute > 0`. Deferred burn tax is not yet reflected in `totalSupply`.
+
+### Permission bits
+
+`afterSwap` and `afterSwapReturnDelta` are new, so the address pattern changes
+**`0x1088` → `0x10CC`** and the hook must be redeployed at a freshly mined salt. A pool is
+bound to its hook address forever, so this means a new pool: existing liquidity has to
+migrate. `PegDefenseHookPermissions.FLAGS` is now the single definition that the deploy
+script, tests and `config/schema.mjs` agree on.
+
+### What the hook does not enforce
+
+These are deliberate limits of taxing at the pool rather than at the token. Each is pinned
+by a `test_KnownLimit_*` test so a future change cannot alter it silently.
+
+- **Other pools are untaxed.** MONEY is an unrestricted ERC-20; anyone can open a hookless
+  V4 pool (or a V2/V3 pool) and sell there tax-free. Closing that requires transfer-gating
+  the token, which breaks wallets, lending markets, bridges and aggregators. The defence is
+  economic: LP rewards (`V4PositionWrapper` checks the `PoolId`) and the oracle only
+  recognise the official pool, so shadow pools get no emissions and cannot move the TWAP.
+- **`excludedAddresses` exempts routers, not users.** V4 passes the hook the address that
+  called `PoolManager.swap`. Excluding a router exempts everyone who trades through it.
+  Treasury, Boardroom and the reward pools never call `swap`, so they never need excluding
+  (the edge-case list above is wrong on this point). Leave the mapping empty unless a
+  single-purpose protocol contract swaps for itself.
+- **LP positions are resting asks, not sells.** Single-sided MONEY liquidity above the
+  current price converts to WETH only when a buyer trades through it. Adding and removing
+  it extracts no WETH, so no liquidity hooks are needed.
+- **The tier is read from the pre-swap spot price** and applied to the whole trade, so one
+  large sell that crosses several tiers pays the starting tier's rate throughout.
+
+### ESTATE (the share token)
+
+ESTATE has no sell tax, and none is planned. Tomb's TSHARE was untaxed too. The MONEY tax
+exists to burn supply while below peg; ESTATE has no peg, so a tax on it would only be a
+fee on entering and leaving the Boardroom. If protocol revenue from ESTATE trading is ever
+wanted, the clean form is a flat LP-fee split on an ESTATE pool, not this hook's tier table.

@@ -9,7 +9,7 @@ import {TrustNote} from "../src/tokens/TrustNote.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Boardroom} from "../src/core/Boardroom.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
-import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../src/hooks/PegDefenseHook.sol";
 import {NetworkConfig} from "./NetworkConfig.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
@@ -166,8 +166,7 @@ contract Deploy is NetworkConfig {
         IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
         bytes memory creationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = PegDefenseHookPermissions.FLAGS;
         (address mined, bytes32 salt) = HookMiner.find(_infrastructure("create2Deployer"), flags, creationCode);
 
         // Call the selected factory directly so Foundry's default CREATE2 address

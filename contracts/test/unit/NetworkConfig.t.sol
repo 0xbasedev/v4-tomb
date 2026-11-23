@@ -166,7 +166,7 @@ contract NetworkConfigTest is Test {
         deploy.run();
         assertTrue(deploy.hook().bound());
         assertEq(deploy.hook().trustees(), vm.addr(1));
-        assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x1088);
+        assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x10CC);
         assertEq(deploy.money().operator(), address(deploy.treasury()));
         assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
         assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);

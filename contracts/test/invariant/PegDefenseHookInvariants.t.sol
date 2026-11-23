@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -93,10 +93,8 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions
-        // (AFTER_INITIALIZE | BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA = 0x1088).
-        hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
-        );
+        // (PegDefenseHookPermissions.FLAGS, low 14 bits = 0x10CC).
+        hookAddr = address(PegDefenseHookPermissions.FLAGS);
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",

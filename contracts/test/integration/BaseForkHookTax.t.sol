@@ -10,7 +10,7 @@ import {TrustNote} from "../../src/tokens/TrustNote.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../../src/interfaces/IPriceSource.sol";
@@ -109,8 +109,7 @@ contract BaseForkHookTaxTest is BaseTest {
         trustnote = new TrustNote();
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = PegDefenseHookPermissions.FLAGS;
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money), address(this)));
         (address minedAddr, bytes32 hookSalt) = HookMiner.find(address(this), flags, hookCreationCode);

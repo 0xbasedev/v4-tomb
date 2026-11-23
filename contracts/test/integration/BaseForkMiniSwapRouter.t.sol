@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
 import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -87,11 +87,10 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         vm.prank(owner);
         money = new OldMoney();
 
-        // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
-        // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2
+        // Mine a hook address with the required permissions (see PegDefenseHookPermissions.FLAGS,
+        // low 14 bits = 0x10CC). Use HookMiner so the resulting CREATE2
         // address has the bit pattern V4 validates against.
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = PegDefenseHookPermissions.FLAGS;
         bytes memory hookCreationCode =
             abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), address(this)));
         (address minedHookAddr, bytes32 salt) = HookMiner.find(address(this), flags, hookCreationCode);
