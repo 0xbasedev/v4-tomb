@@ -17,6 +17,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
+import {BalanceDelta, toBalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -87,7 +88,7 @@ contract PegDefenseHookTest is BaseTest {
         // Compute the only address with the right permission bits we need:
         // AFTER_INITIALIZE | BEFORE_SWAP.
         hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
+            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG)
         );
 
         deployCodeTo(
@@ -126,14 +127,14 @@ contract PegDefenseHookTest is BaseTest {
         assertTrue(p.beforeSwap);
         assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
         assertFalse(p.beforeInitialize);
-        assertFalse(p.afterSwap);
+        assertTrue(p.afterSwap);
         assertFalse(p.beforeAddLiquidity);
         assertFalse(p.afterAddLiquidity);
         assertFalse(p.beforeRemoveLiquidity);
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.afterSwapReturnDelta);
+        assertTrue(p.afterSwapReturnDelta);
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);
     }
