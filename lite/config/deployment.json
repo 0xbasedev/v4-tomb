@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "not-deployed",
+  "network": {
+    "chainId": 668801,
+    "name": "LONGYU Testnet",
+    "rpcUrl": "https://rpc-testnet.longyu.network",
+    "explorerUrl": "https://scan-testnet.longyu.network",
+    "nativeCurrency": {
+      "name": "Test BNB",
+      "symbol": "tBNB",
+      "decimals": 18
+    }
+  },
+  "verification": {
+    "receiptsReviewed": false,
+    "bytecodeVerified": false,
+    "sourceVerified": false
+  },
+  "addresses": {
+    "peg": null,
+    "share": null,
+    "stable": null,
+    "masonryLp": null,
+    "pegFarmLp": null,
+    "shareFarmLp": null,
+    "masonry": null,
+    "pegFarm": null,
+    "shareFarm": null,
+    "twap": null,
+    "stableUsd": null,
+    "pegTax": null,
+    "shareTax": null
+  }
+}
