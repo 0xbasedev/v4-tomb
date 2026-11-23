@@ -52,7 +52,12 @@ export function parseNetworks(document) {
       if (deployment[key].toLowerCase() !== infrastructure[key]?.toLowerCase()) fail(`deployment.${key} disagrees with infrastructure`);
     }
     // A swapped hook permission bit yields a different address and an unusable pool.
-    if ((BigInt(deployment.hook) & 0x3fffn) !== 0x10ccn) fail('hook permission bits must be 0x10cc');
+    // Archived v4 deployments remain inspectable only when explicitly marked legacy.
+    // Newly published deployments MUST use the beforeSwap + afterSwap 0x10CC layout.
+    const hookFlags = BigInt(deployment.hook) & 0x3fffn;
+    if (deployment.legacyHook === true) {
+      if (hookFlags !== 0x1088n) fail('legacyHook requires the historical 0x1088 hook flags');
+    } else if (hookFlags !== 0x10ccn) fail('hook permission bits must be 0x10cc');
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
   }
   return document.networks;
