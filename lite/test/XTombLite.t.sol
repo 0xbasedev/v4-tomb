@@ -218,28 +218,31 @@ contract XTombLiteTest {
     }
 
     function testMismatchedConfiguredChainRejected() public {
-        vm.prank(ALICE);
-        (bool ok,) = address(new MockAdapter()).call(
-            abi.encodeWithSelector(bytes4(keccak256("doesNotExist()")))
-        );
-        require(!ok, "fallback should revert");
-        // The constructor gate is verified in the normal deployment path.
+        try new XTombLiteMasonry(
+            block.chainid + 1, address(peg), address(share), address(lp), address(stable),
+            address(pegPrice), address(stablePrice), address(0),
+            TREASURY, ARBITRAGE, address(this), genesis
+        ) returns (XTombLiteMasonry) {
+            revert("wrong chain accepted");
+        } catch {}
     }
 
     function testTaxCapAndSevenHourRecoveryConfig() public {
-        // Simulate an approved official xTOMB/mUSD pool with 30 bps V2 swap fee.
+        // Independent token allows configuring the immutable tax policy before mint authority handoff.
+        XLiteToken taxablePeg = new XLiteToken("Tax Peg", "pTOMB", 18, type(uint256).max, address(this));
+        MockPair taxablePair = new MockPair(address(taxablePeg), address(stable));
+        taxablePair.setReserves(1000e18, 1000e6);
+        taxablePeg.mint(TREASURY, 1000e18);
         LiteSellTaxController tax = new LiteSellTaxController(
-            address(peg), address(pegStable), address(pegPrice),
+            address(taxablePeg), address(taxablePair), address(pegPrice),
             1e18, 100, 1200, 1500, 0, 0, 6, 30, true
         );
-        peg.configureTax(address(pegStable), address(tax), TREASURY, address(new MockAdapter()));
-        // The oracle is at $0.85: tax must be at maximum (12%).
+        taxablePeg.configureTax(address(taxablePair), address(tax), TREASURY, address(new MockAdapter()));
         pegPrice.set(0.85e18);
-        // Peg mint authority is already handed off to Masonry; use treasury's existing stock.
         vm.prank(TREASURY);
-        peg.transfer(address(pegStable), 100e18);
-        require(peg.balanceOf(address(pegStable)) == 88e18, "max tax breached");
-        require(peg.balanceOf(TREASURY) == 912e18, "tax bucket incorrect");
+        taxablePeg.transfer(address(taxablePair), 100e18);
+        require(taxablePeg.balanceOf(address(taxablePair)) == 88e18, "max tax breached");
+        require(taxablePeg.balanceOf(TREASURY) == 912e18, "tax bucket incorrect");
     }
 
     function testRealV2TWAPAndStaleReference() public {
