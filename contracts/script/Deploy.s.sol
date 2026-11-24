@@ -11,6 +11,7 @@ import {Boardroom} from "../src/core/Boardroom.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
 import {PegDefenseHook, PegDefenseHookPermissions} from "../src/hooks/PegDefenseHook.sol";
 import {ShareBuybackHook, ShareBuybackHookPermissions, IFireTaxSource} from "../src/hooks/ShareBuybackHook.sol";
+import {LpOnlyHook, LpOnlyHookPermissions} from "../src/hooks/LpOnlyHook.sol";
 import {NetworkConfig} from "./NetworkConfig.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
@@ -72,11 +73,14 @@ contract Deploy is NetworkConfig {
     MainRewardPool public mainRewardPool;
     ShareRewardPool public shareRewardPool;
     V4PositionWrapper public lpWrapper;
+    LpOnlyHook public pairLpHook;
+    V4PositionWrapper public pairLpWrapper;
     MiniSwapRouter public miniSwapRouter;
     Timelock public timelock;
     address public wethAddress;
     PoolKey public poolKey;
     PoolKey public sharePoolKey;
+    PoolKey public pairPoolKey;
 
     /// @notice Static LP fee of the ESTATE/WETH pool, in V4 pips (0.30%).
     uint24 public constant SHARE_POOL_FEE = 3000;
@@ -102,6 +106,7 @@ contract Deploy is NetworkConfig {
         _deployShareBuybackHookAndInitPool(deployer);
         _deployOracle(g);
         _deployLpWrapper();
+        _deployPairLpPool(deployer);
         _deployRewardPools(g);
         _deployCoreAndInit(g);
         miniSwapRouter = new MiniSwapRouter(IPoolManager(_infrastructure("poolManager")));
@@ -275,6 +280,52 @@ contract Deploy is NetworkConfig {
         console2.log("  tickUpper:", int256(tickUpper));
     }
 
+    /// @notice Deploy the untradeable MONEY/ESTATE pool and the wrapper that turns its
+    ///         full-range position into a stakeable ERC-20. The LpOnlyHook rejects every
+    ///         swap, so the pool is a staking position and never a route between the two
+    ///         tokens around the sell tax.
+    ///
+    ///         With no trading the opening ratio is permanent. `PAIR_POOL_INITIAL_TICK`
+    ///         sets it as MONEY per ESTATE in ticks and defaults to 0 (one for one). Only
+    ///         the deployer can initialise the pool. The wrapper is NOT registered with any
+    ///         reward pool here: emissions weights are an operator decision.
+    function _deployPairLpPool(
+        address deployer
+    ) internal {
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
+        bytes memory creationCode =
+            abi.encodePacked(type(LpOnlyHook).creationCode, abi.encode(pm, address(money), address(estate), deployer));
+        (address mined, bytes32 salt) =
+            HookMiner.find(_infrastructure("create2Deployer"), LpOnlyHookPermissions.FLAGS, creationCode);
+        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
+        require(success && mined.code.length > 0, "Deploy: pair LP hook deployment failed");
+        pairLpHook = LpOnlyHook(mined);
+        console2.log("LpOnlyHook (MONEY/ESTATE):", address(pairLpHook));
+
+        bool estateIsCurrency0 = address(estate) < address(money);
+        (Currency c0, Currency c1) = estateIsCurrency0
+            ? (Currency.wrap(address(estate)), Currency.wrap(address(money)))
+            : (Currency.wrap(address(money)), Currency.wrap(address(estate)));
+        pairPoolKey =
+            PoolKey({currency0: c0, currency1: c1, fee: 0, tickSpacing: 60, hooks: IHooks(address(pairLpHook))});
+
+        int256 ratioTick = vm.envOr("PAIR_POOL_INITIAL_TICK", int256(0));
+        require(ratioTick > -887_000 && ratioTick < 887_000, "Deploy: pair pool tick out of range");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int24 poolTick = estateIsCurrency0 ? int24(ratioTick) : -int24(ratioTick);
+        pm.initialize(pairPoolKey, TickMath.getSqrtPriceAtTick(poolTick));
+
+        pairLpWrapper = new V4PositionWrapper(
+            IPositionManager(_infrastructure("positionManager")),
+            pairPoolKey,
+            TickMath.minUsableTick(60),
+            TickMath.maxUsableTick(60),
+            "Old Money MONEY-ESTATE LP",
+            "om-MELP"
+        );
+        console2.log("V4PositionWrapper (MONEY/ESTATE full-range):", address(pairLpWrapper));
+    }
+
     function _deployRewardPools(
         Genesis memory g
     ) internal {
@@ -326,6 +377,8 @@ contract Deploy is NetworkConfig {
         vm.serializeAddress(key, "hook", address(hook));
         vm.serializeAddress(key, "shareBuybackHook", address(shareBuybackHook));
         vm.serializeAddress(key, "lpWrapper", address(lpWrapper));
+        vm.serializeAddress(key, "pairLpHook", address(pairLpHook));
+        vm.serializeAddress(key, "pairLpWrapper", address(pairLpWrapper));
         vm.serializeAddress(key, "genesisRewardPool", address(genesisRewardPool));
         vm.serializeAddress(key, "mainRewardPool", address(mainRewardPool));
         vm.serializeAddress(key, "shareRewardPool", address(shareRewardPool));
@@ -356,6 +409,10 @@ contract Deploy is NetworkConfig {
         );
         require(address(shareBuybackHook.fireTax()) == address(hook), "Deploy: share hook rate source");
         require(!shareBuybackHook.taxEnabled(), "Deploy: share tax must start disabled");
+        require(pairLpHook.bound(), "Deploy: pair LP pool not initialised");
+        require(
+            pairLpHook.tokenA() == address(money) && pairLpHook.tokenB() == address(estate), "Deploy: pair LP tokens"
+        );
         require(treasury.isInitialized(), "Deploy: treasury not initialized");
 
         require(money.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");

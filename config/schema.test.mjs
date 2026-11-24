@@ -13,6 +13,8 @@ currentFixture.networks[0].name = 'Base Sepolia (synthetic 0x10cc test fixture)'
 currentFixture.networks[0].deployment.hook =
   currentFixture.networks[0].deployment.hook.slice(0, -4) + '10cc';
 currentFixture.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
+currentFixture.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
+currentFixture.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
 
 test('local template is valid, unconfigured and contains no deployed addresses', () => {
   assert.equal(parseNetworks(local)[0].deployment, null);
@@ -22,9 +24,11 @@ test('local template is valid, unconfigured and contains no deployed addresses',
 test('archived upstream address is not deployable under the current hook schema', () => {
   // It predates the share buyback hook entirely...
   assert.throws(() => parseNetworks(historical), /invalid deployment\.shareBuybackHook/);
-  // ...and even with one supplied, its peg hook still carries the superseded 0x1088 bits.
+  // ...and even with the newer entries supplied, its peg hook still carries the superseded 0x1088 bits.
   const patched = clone(historical);
   patched.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
+  patched.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
+  patched.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
   assert.throws(() => parseNetworks(patched), /hook permission bits must be 0x10cc/);
 });
 
@@ -59,6 +63,9 @@ for (const [description, change] of [
   ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.money; }],
   ['missing share buyback hook', (d) => { delete d.networks[0].deployment.shareBuybackHook; }],
   ['wrong share buyback hook flags', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.money; }],
+  ['missing pair LP hook', (d) => { delete d.networks[0].deployment.pairLpHook; }],
+  ['pair LP pool behind a hook that allows swaps', (d) => { d.networks[0].deployment.pairLpHook = d.networks[0].deployment.hook; }],
+  ['one wrapper listed twice', (d) => { d.networks[0].deployment.pairLpWrapper = d.networks[0].deployment.lpWrapper; }],
   ['one hook listed twice', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.hook; }],
   ['identical peg and MONEY', (d) => { d.networks[0].deployment.money = d.networks[0].deployment.weth; }],
 ]) {

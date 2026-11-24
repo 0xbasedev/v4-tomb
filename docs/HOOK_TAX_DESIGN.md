@@ -549,6 +549,30 @@ at the caller's price limit is still taxed on the amount requested; and no scrip
 ESTATE/WETH liquidity yet (`SeedLiquidity.s.sol` covers MONEY/WETH only), so the pool is
 empty after deploy.
 
+---
+
+## Revision 6 — untradeable peg/share staking pool
+
+`contracts/src/hooks/LpOnlyHook.sol` puts a MONEY/ESTATE pool (LEVEL/SQUARE in the approved
+design) behind a hook that rejects every swap. Liquidity can still be added and removed, so
+the full-range position is a staking token, but the pool is never a route from one protocol
+token to the other around the sell tax.
+
+- **Deposits are not taxed.** The tax hooks act on swaps only; adding liquidity, wrapping
+  and staking never trigger them.
+- **Leaving still pays the tax.** The only way out to the quote asset is a sell in the
+  MONEY/WETH or ESTATE/WETH pool, each taxed once.
+- **The ratio is permanent.** With no trading the price never moves from the opening price,
+  so providers deposit at that fixed ratio and withdraw exactly what they put in: no fees,
+  no impermanent loss. Only the deployer can initialise the pool, and only one pool can
+  ever use the hook. The hook has no owner and no way to re-enable swaps.
+
+`Deploy.s.sol` deploys the hook (address pattern `0x2080`), initialises the pool at
+`PAIR_POOL_INITIAL_TICK` (MONEY per ESTATE, in ticks; default 0 = one for one) and deploys a
+`V4PositionWrapper` for its full-range position. Both addresses are required manifest
+entries (`pairLpHook`, `pairLpWrapper`). The wrapper is **not** registered with any reward
+pool: emissions weights are left to the operator.
+
 ### Still outside this repository
 
 - **LEVEL / SQUARE and Masonry.** The tokens themselves are not here. `ShareBuybackHook`

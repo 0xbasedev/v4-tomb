@@ -3,6 +3,7 @@ export const infrastructureKeys = [
 ];
 export const deploymentKeys = [
   'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
+  'pairLpHook', 'pairLpWrapper',
   'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'timelock', 'miniSwapRouter',
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
 ];
@@ -60,6 +61,11 @@ export function parseNetworks(document) {
     }
     if (deployment.shareBuybackHook.toLowerCase() === deployment.hook.toLowerCase()) {
       fail('hook and shareBuybackHook must differ');
+    }
+    // The MONEY/ESTATE staking pool must sit behind the swap-blocking hook: beforeInitialize + beforeSwap.
+    if ((BigInt(deployment.pairLpHook) & 0x3fffn) !== 0x2080n) fail('pairLpHook permission bits must be 0x2080');
+    if (deployment.pairLpWrapper.toLowerCase() === deployment.lpWrapper.toLowerCase()) {
+      fail('lpWrapper and pairLpWrapper must differ');
     }
     if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
   }

@@ -1,6 +1,6 @@
 export type Address = `0x${string}`;
 export type InfrastructureKey = 'weth' | 'poolManager' | 'positionManager' | 'permit2' | 'universalRouter' | 'create2Deployer';
-export type DeploymentKey = Exclude<InfrastructureKey, 'create2Deployer'> | 'money' | 'estate' | 'trustNote' | 'treasury' | 'boardroom' | 'oracle' | 'hook' | 'shareBuybackHook' | 'lpWrapper' | 'genesisRewardPool' | 'mainRewardPool' | 'shareRewardPool' | 'timelock' | 'miniSwapRouter';
+export type DeploymentKey = Exclude<InfrastructureKey, 'create2Deployer'> | 'money' | 'estate' | 'trustNote' | 'treasury' | 'boardroom' | 'oracle' | 'hook' | 'shareBuybackHook' | 'lpWrapper' | 'pairLpHook' | 'pairLpWrapper' | 'genesisRewardPool' | 'mainRewardPool' | 'shareRewardPool' | 'timelock' | 'miniSwapRouter';
 export type Deployment = Record<DeploymentKey, Address> & { deployBlock: string };
 export interface Network {
   id: number;

@@ -20,6 +20,10 @@ export interface OldMoneyDeployment {
   shareBuybackHook: Address;
   /** V4PositionWrapper — wraps the MONEY/WETH LP NFT into an ERC-20. */
   lpWrapper: Address;
+  /** LpOnlyHook — makes the MONEY/ESTATE pool untradeable (liquidity only). */
+  pairLpHook: Address;
+  /** V4PositionWrapper for the MONEY/ESTATE LP NFT. */
+  pairLpWrapper: Address;
   /** Genesis reward pool (24h window, accepts outside ERC-20s). */
   genesisRewardPool: Address;
   /** Main reward pool (9d, accepts lpWrapper). */

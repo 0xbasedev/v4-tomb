@@ -175,6 +175,10 @@ contract NetworkConfigTest is Test {
         assertEq(deploy.shareBuybackHook().quote(), WETH);
         assertEq(address(deploy.shareBuybackHook().fireTax()), address(deploy.hook()));
         assertFalse(deploy.shareBuybackHook().taxEnabled(), "collection starts disabled");
+        assertTrue(deploy.pairLpHook().bound(), "MONEY/ESTATE pool initialised");
+        assertEq(uint160(address(deploy.pairLpHook())) & 0x3FFF, 0x2080);
+        assertEq(deploy.pairLpHook().initializer(), vm.addr(1));
+        assertTrue(address(deploy.pairLpWrapper()) != address(deploy.lpWrapper()));
         assertEq(deploy.money().operator(), address(deploy.treasury()));
         assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
         assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
@@ -185,6 +189,8 @@ contract NetworkConfigTest is Test {
         assertEq(vm.parseJsonUint(output, ".chainId"), block.chainid);
         assertEq(vm.parseJsonAddress(output, ".hook"), address(deploy.hook()));
         assertEq(vm.parseJsonAddress(output, ".shareBuybackHook"), address(deploy.shareBuybackHook()));
+        assertEq(vm.parseJsonAddress(output, ".pairLpHook"), address(deploy.pairLpHook()));
+        assertEq(vm.parseJsonAddress(output, ".pairLpWrapper"), address(deploy.pairLpWrapper()));
         vm.removeFile(file);
     }
 }
