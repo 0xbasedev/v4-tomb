@@ -7,11 +7,13 @@ import {console2} from "forge-std/Script.sol";
 
 import {Treasury} from "../src/core/Treasury.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
+import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
 
 /**
  * @title PostBootstrap
- * @notice One-shot script for the post-bootstrap configuration sweep. Runs the levers
- *         that should NOT be on during the 28-epoch bootstrap window:
+ * @notice One-shot script for the post-launch configuration sweep. There is no
+ *         bootstrap period any more; the file keeps its name so existing runbooks still
+ *         work. Run it once the pools have liquidity. It switches on:
  *
  *           1. Enable the PegDefenseHook's automatic sell-side tax.
  *           2. Set the daoFundSharedPercent + devFundSharedPercent on Treasury.
@@ -74,15 +76,6 @@ contract PostBootstrap is NetworkConfig {
         Treasury t = Treasury(treasuryAddr);
         PegDefenseHook h = PegDefenseHook(hookAddr);
 
-        // Sanity guard — refuse to run during bootstrap window. Operators who really
-        // want to set these earlier can call the setters directly via cast.
-        uint256 currentEpoch = t.epoch();
-        uint256 bootstrapEpochs = t.bootstrapEpochs();
-        require(
-            currentEpoch >= bootstrapEpochs,
-            "PostBootstrap: still in bootstrap window. Wait until epoch >= bootstrapEpochs, or call setters directly via cast if intentional."
-        );
-
         vm.startBroadcast(pk);
 
         // Fund cuts. Treasury.setExtraFunds requires non-zero addresses even when
@@ -93,14 +86,15 @@ contract PostBootstrap is NetworkConfig {
 
         if (enableTax) {
             h.setAutoCalculateTax(true);
-            console2.log("  autoCalculateTax = true. Hook will tax MONEY sells per the 14-tier schedule.");
+            ShareBuybackHook(_deployment("shareBuybackHook")).setTaxEnabled(true);
+            console2.log("  Fire Tax enabled: PEG sells and SHARE sells are now taxed (max 12%).");
         } else {
-            console2.log("  autoCalculateTax left untouched (ENABLE_HOOK_TAX != \"1\").");
+            console2.log("  Fire Tax left untouched on both hooks (ENABLE_HOOK_TAX != \"1\").");
         }
 
         vm.stopBroadcast();
 
-        console2.log("\nPost-bootstrap configuration applied.");
-        console2.log("Reversible: call setExtraFunds / setAutoCalculateTax with new values to update.");
+        console2.log("\nPost-launch configuration applied.");
+        console2.log("Reversible: call setExtraFunds / setAutoCalculateTax / setTaxEnabled with new values to update.");
     }
 }

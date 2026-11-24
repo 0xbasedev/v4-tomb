@@ -2,8 +2,9 @@ export const infrastructureKeys = [
   'weth', 'poolManager', 'positionManager', 'permit2', 'universalRouter', 'create2Deployer',
 ];
 export const deploymentKeys = [
-  'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'lpWrapper',
-  'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'timelock', 'miniSwapRouter',
+  'peg', 'share', 'treasury', 'masonry', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
+  'pairLpHook', 'pairLpWrapper', 'shareLpWrapper',
+  'genesisRewardPool', 'pegFarm', 'shareFarm', 'timelock', 'miniSwapRouter',
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
 ];
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -51,9 +52,22 @@ export function parseNetworks(document) {
     for (const key of infrastructureKeys.filter((key) => key !== 'create2Deployer')) {
       if (deployment[key].toLowerCase() !== infrastructure[key]?.toLowerCase()) fail(`deployment.${key} disagrees with infrastructure`);
     }
-    // A swapped hook permission bit yields a different address and an unusable pool.
-    if ((BigInt(deployment.hook) & 0x3fffn) !== 0x1088n) fail('hook permission bits must be 0x1088');
-    if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
+    if (Object.prototype.hasOwnProperty.call(deployment, 'legacyHook')) fail('legacyHook is unsupported');
+    // Only hooks with the current beforeSwap/afterSwap callback permissions are deployable.
+    if ((BigInt(deployment.hook) & 0x3fffn) !== 0x10ccn) fail('hook permission bits must be 0x10cc');
+    // The share buyback hook declares the same callbacks, so it carries the same pattern.
+    if ((BigInt(deployment.shareBuybackHook) & 0x3fffn) !== 0x10ccn) {
+      fail('shareBuybackHook permission bits must be 0x10cc');
+    }
+    if (deployment.shareBuybackHook.toLowerCase() === deployment.hook.toLowerCase()) {
+      fail('hook and shareBuybackHook must differ');
+    }
+    // The PEG/SHARE staking pool must sit behind the swap-blocking hook: beforeInitialize + beforeSwap.
+    if ((BigInt(deployment.pairLpHook) & 0x3fffn) !== 0x2080n) fail('pairLpHook permission bits must be 0x2080');
+    if (deployment.pairLpWrapper.toLowerCase() === deployment.lpWrapper.toLowerCase()) {
+      fail('lpWrapper and pairLpWrapper must differ');
+    }
+    if (deployment.peg.toLowerCase() === deployment.weth.toLowerCase()) fail('PEG and WETH must differ');
   }
   return document.networks;
 }
@@ -65,8 +79,8 @@ export function transactionUrl(networks, chainId, hash) {
 }
 
 /** PoolManager orders currencies by address, independently of symbol or chain. */
-export function pegReserves(money, weth, amount0, amount1) {
-  return BigInt(weth) < BigInt(money)
-    ? { money: amount1, weth: amount0 }
-    : { money: amount0, weth: amount1 };
+export function pegReserves(peg, weth, amount0, amount1) {
+  return BigInt(weth) < BigInt(peg)
+    ? { peg: amount1, weth: amount0 }
+    : { peg: amount0, weth: amount1 };
 }

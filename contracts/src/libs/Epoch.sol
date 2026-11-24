@@ -9,7 +9,7 @@ import {Trustees} from "../governance/Trustees.sol";
  *         contract whose work is batched into fixed-length time windows.
  * @dev    Direct port of Tomb Finance's utils/Epoch.sol with one substitution: inherits
  *         [[Trustees]] instead of `Operator` so the access pattern matches the rest of Old
- *         Money. The `checkEpoch` modifier's "pre-epoch privilege" is granted to trustees
+ *         Peg. The `checkEpoch` modifier's "pre-epoch privilege" is granted to trustees
  *         (== Tomb's operator) — exact same semantics.
  *
  *         Epoch semantics (matches Tomb):

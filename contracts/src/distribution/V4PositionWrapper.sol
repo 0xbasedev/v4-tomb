@@ -16,20 +16,20 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *         the moment of wrapping.
  *
  *         Bridges the gap between V4's ERC-721 LP positions and Tomb's MasterChef-style
- *         reward pools, which expect ERC-20 LP tokens. Sprint 16 of the Old Money build.
+ *         reward pools, which expect ERC-20 LP tokens. Sprint 16 of the build.
  *
  * @dev    Each wrapper instance is bound to ONE specific `(poolId, tickLower, tickUpper)`
- *         tuple. To support multiple LP "pairs" (e.g., MONEY/WETH full-range AND
- *         ESTATE/WETH full-range) deploy multiple wrappers.
+ *         tuple. To support multiple LP "pairs" (e.g., PEG/WETH full-range AND
+ *         SHARE/WETH full-range) deploy multiple wrappers.
  *
  *         End-user flow:
- *           1. Acquire MONEY + WETH and use the standard V4 PositionManager flow (via
+ *           1. Acquire PEG + WETH and use the standard V4 PositionManager flow (via
  *              Uniswap UI or a router) to mint a position NFT at this wrapper's exact
  *              `(poolId, tickLower, tickUpper)`.
  *           2. `IERC721(positionManager).approve(wrapper, tokenId)` then
  *              `wrapper.wrap(tokenId)`. Wrapper pulls the NFT and mints ERC-20 equal to
  *              the position's V4 liquidity to the caller.
- *           3. Stake the ERC-20 in a reward pool (e.g., MainRewardPool, ShareRewardPool).
+ *           3. Stake the ERC-20 in a reward pool (e.g., PegFarm, ShareFarm).
  *              The ERC-20 is freely transferable — staking moves it; the reward pool
  *              holds it until withdrawal.
  *           4. After withdrawing the ERC-20 from the reward pool, call
@@ -57,7 +57,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *             the V4 PositionManager directly for that.
  *           - Tokenize fees separately from the NFT.
  *           - Combine multiple NFTs into a single fungible position (ALM behavior). For
- *             the Old Money v1 launch this simple NFT-wrap model is what we ship; a
+ *             the v1 launch this simple NFT-wrap model is what we ship; a
  *             future ALM upgrade can layer on top.
  */
 contract V4PositionWrapper is ERC20 {

@@ -29,10 +29,10 @@ export async function publishDeployment(document, artifact, broadcast, index, rp
     throw new Error('All broadcast transactions must have successful mined receipts');
   }
   const names = {
-    OldMoney: 'money', Estate: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
-    Boardroom: 'boardroom', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
-    GenesisRewardPool: 'genesisRewardPool', MainRewardPool: 'mainRewardPool',
-    ShareRewardPool: 'shareRewardPool', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',
+    PegToken: 'peg', ShareToken: 'share', Treasury: 'treasury',
+    Masonry: 'masonry', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
+    GenesisRewardPool: 'genesisRewardPool', PegFarm: 'pegFarm',
+    ShareFarm: 'shareFarm', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',
   };
   for (const [name, key] of Object.entries(names)) {
     const txIndex = transactions.findIndex((tx) => tx.contractName === name && tx.transactionType === 'CREATE');

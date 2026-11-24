@@ -6,7 +6,7 @@ pragma solidity 0.8.26;
  * @notice Compound-style timelock. Direct port of Tomb Finance's Timelock.sol (which is
  *         itself a direct port of Compound Governor Bravo's Timelock, BSD-3-Clause).
  *
- * @dev    Production wiring: every privileged setter on Treasury / Boardroom / token
+ * @dev    Production wiring: every privileged setter on Treasury / Masonry / token
  *         contracts is rotated so that its `owner` (or `operator`) is THIS Timelock. The
  *         Timelock's own `admin` is a multisig. To change a parameter the multisig:
  *           1. Calls `queueTransaction(target, value, signature, data, eta)` where

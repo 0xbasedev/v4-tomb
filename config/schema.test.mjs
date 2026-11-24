@@ -7,14 +7,46 @@ import { publishDeployment } from '../scripts/protocol.mjs';
 const local = JSON.parse(readFileSync(new URL('./examples/local.json', import.meta.url)));
 const historical = JSON.parse(readFileSync(new URL('./examples/upstream-base-sepolia.json', import.meta.url)));
 const clone = (value) => structuredClone(value);
+// Synthetic fixture for CURRENT deployment validations, not a real on-chain hook address.
+const currentFixture = clone(historical);
+currentFixture.networks[0].name = 'Base Sepolia (synthetic 0x10cc test fixture)';
+currentFixture.networks[0].deployment.hook =
+  currentFixture.networks[0].deployment.hook.slice(0, -4) + '10cc';
+currentFixture.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
+currentFixture.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
+currentFixture.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
+currentFixture.networks[0].deployment.shareLpWrapper = `0x${'8'.repeat(40)}`;
+// There are no bonds; the archived profile's bond address is not part of a current deployment.
+delete currentFixture.networks[0].deployment.bond;
 
 test('local template is valid, unconfigured and contains no deployed addresses', () => {
   assert.equal(parseNetworks(local)[0].deployment, null);
   assert.equal(Object.values(local.networks[0].infrastructure).every((value) => value === null), true);
 });
 
-test('historical upstream deployment remains available as explicit configuration', () => {
-  assert.equal(parseNetworks(historical)[0].id, 84532);
+test('archived upstream address is not deployable under the current hook schema', () => {
+  // It predates the share buyback hook entirely...
+  assert.throws(() => parseNetworks(historical), /invalid deployment\.shareBuybackHook/);
+  // ...and even with the newer entries supplied, its peg hook still carries the superseded 0x1088 bits.
+  const patched = clone(historical);
+  patched.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
+  patched.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
+  patched.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
+  patched.networks[0].deployment.shareLpWrapper = `0x${'8'.repeat(40)}`;
+  assert.throws(() => parseNetworks(patched), /hook permission bits must be 0x10cc/);
+});
+
+test('synthetic current 0x10CC hook can be validated without any legacy flags', () => {
+  const deployment = parseNetworks(currentFixture)[0].deployment;
+  assert.equal(BigInt(deployment.hook) & 0x3fffn, 0x10ccn);
+});
+
+test('legacyHook configuration flags are rejected even with current permission bits', () => {
+  const candidate = clone(currentFixture);
+  candidate.networks[0].deployment.legacyHook = false;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
+  candidate.networks[0].deployment.legacyHook = true;
+  assert.throws(() => parseNetworks(candidate), /legacyHook is unsupported/);
 });
 
 for (const [description, change] of [
@@ -32,11 +64,17 @@ for (const [description, change] of [
   ['numeric block precision risk', (d) => { d.networks[0].deployment.deployBlock = 42; }],
   ['negative deployment block', (d) => { d.networks[0].deployment.deployBlock = '-1'; }],
   ['inconsistent manager', (d) => { d.networks[0].deployment.poolManager = d.networks[0].deployment.weth; }],
-  ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.money; }],
-  ['identical peg and MONEY', (d) => { d.networks[0].deployment.money = d.networks[0].deployment.weth; }],
+  ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.peg; }],
+  ['missing share buyback hook', (d) => { delete d.networks[0].deployment.shareBuybackHook; }],
+  ['wrong share buyback hook flags', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.peg; }],
+  ['missing pair LP hook', (d) => { delete d.networks[0].deployment.pairLpHook; }],
+  ['pair LP pool behind a hook that allows swaps', (d) => { d.networks[0].deployment.pairLpHook = d.networks[0].deployment.hook; }],
+  ['one wrapper listed twice', (d) => { d.networks[0].deployment.pairLpWrapper = d.networks[0].deployment.lpWrapper; }],
+  ['one hook listed twice', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.hook; }],
+  ['identical peg and PEG', (d) => { d.networks[0].deployment.peg = d.networks[0].deployment.weth; }],
 ]) {
   test(`rejects ${description}`, () => {
-    const value = clone(historical);
+    const value = clone(currentFixture);
     change(value);
     assert.throws(() => parseNetworks(value), /Network configuration:/);
   });
@@ -51,27 +89,27 @@ test('arbitrary chain IDs and two network profiles work without code changes', (
 
 test('explorer URLs use the originating chain and omit missing explorers', () => {
   const hash = `0x${'a'.repeat(64)}`;
-  assert.equal(transactionUrl(parseNetworks(historical), 84532, hash), `https://sepolia.basescan.org/tx/${hash}`);
-  assert.equal(transactionUrl(parseNetworks(historical), 1, hash), undefined);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 84532, hash), `https://sepolia.basescan.org/tx/${hash}`);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 1, hash), undefined);
   assert.equal(transactionUrl(parseNetworks(local), 31337, hash), undefined);
-  assert.equal(transactionUrl(parseNetworks(historical), 84532, 'invalid'), undefined);
+  assert.equal(transactionUrl(parseNetworks(currentFixture), 84532, 'invalid'), undefined);
 });
 
 test('pool reserves map correctly for both address orderings and checksum case', () => {
   const low = `0x${'0'.repeat(36)}aAaA`;
   const high = `0x${'f'.repeat(40)}`;
-  assert.deepEqual(pegReserves(low, high, 11n, 22n), { money: 11n, weth: 22n });
-  assert.deepEqual(pegReserves(high, low, 11n, 22n), { money: 22n, weth: 11n });
+  assert.deepEqual(pegReserves(low, high, 11n, 22n), { peg: 11n, weth: 22n });
+  assert.deepEqual(pegReserves(high, low, 11n, 22n), { peg: 22n, weth: 11n });
 });
 
 function publication() {
-  const document = clone(historical);
+  const document = clone(currentFixture);
   const deployment = document.networks[0].deployment;
   const artifact = { ...deployment, chainId: 84532 };
-  const names = ['OldMoney', 'Estate', 'TrustNote', 'Treasury', 'Boardroom', 'Oracle',
-    'V4PositionWrapper', 'GenesisRewardPool', 'MainRewardPool', 'ShareRewardPool', 'MiniSwapRouter', 'Timelock'];
-  const keys = ['money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'lpWrapper',
-    'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'miniSwapRouter', 'timelock'];
+  const names = ['PegToken', 'ShareToken', 'Treasury', 'Masonry', 'Oracle',
+    'V4PositionWrapper', 'GenesisRewardPool', 'PegFarm', 'ShareFarm', 'MiniSwapRouter', 'Timelock'];
+  const keys = ['peg', 'share', 'treasury', 'masonry', 'oracle', 'lpWrapper',
+    'genesisRewardPool', 'pegFarm', 'shareFarm', 'miniSwapRouter', 'timelock'];
   const broadcast = { chain: 84532, transactions: names.map((contractName, index) => ({
     contractName, transactionType: 'CREATE', hash: `0x${(index + 1).toString(16).padStart(64, '0')}`,
   })) };
@@ -101,7 +139,7 @@ for (const [description, change, expected] of [
   ['RPC chain mismatch', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_chainId' ? '0x1' : rpc(m, a); }, /RPC chain mismatch/],
   ['reverted transaction', (p) => { const rpc = p.rpc; p.rpc = async (m, a) => m === 'eth_getTransactionReceipt' ? { ...await rpc(m, a), status: '0x0' } : rpc(m, a); }, /successful mined/],
   ['pending transaction', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_getTransactionReceipt' ? null : rpc(m, a); }, /successful mined/],
-  ['artifact from another simulation', (p) => { p.artifact.money = p.artifact.estate; }, /creation receipt/],
+  ['artifact from another simulation', (p) => { p.artifact.peg = p.artifact.share; }, /creation receipt/],
   ['missing deployed code', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_getCode' ? '0x' : rpc(m, a); }, /No deployed code/],
 ]) {
   test(`publication rejects ${description}`, async () => {

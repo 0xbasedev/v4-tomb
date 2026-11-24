@@ -3,20 +3,21 @@ pragma solidity 0.8.26;
 
 import {console2} from "forge-std/Script.sol";
 
-import {OldMoney} from "../src/tokens/OldMoney.sol";
-import {Estate} from "../src/tokens/Estate.sol";
-import {TrustNote} from "../src/tokens/TrustNote.sol";
+import {PegToken} from "../src/tokens/PegToken.sol";
+import {ShareToken} from "../src/tokens/ShareToken.sol";
 import {Treasury} from "../src/core/Treasury.sol";
-import {Boardroom} from "../src/core/Boardroom.sol";
+import {Masonry} from "../src/core/Masonry.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
-import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../src/hooks/PegDefenseHook.sol";
+import {ShareBuybackHook, ShareBuybackHookPermissions, IFireTaxSource} from "../src/hooks/ShareBuybackHook.sol";
+import {LpOnlyHook, LpOnlyHookPermissions} from "../src/hooks/LpOnlyHook.sol";
 import {NetworkConfig} from "./NetworkConfig.s.sol";
 import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
 import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
-import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
-import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
+import {PegFarm} from "../src/distribution/PegFarm.sol";
+import {ShareFarm} from "../src/distribution/ShareFarm.sol";
 import {V4PositionWrapper} from "../src/distribution/V4PositionWrapper.sol";
 
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -38,10 +39,10 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /**
  * @title Deploy
- * @notice One-shot Foundry deploy script for the Old Money protocol.
+ * @notice One-shot Foundry deploy script for the protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
- *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
+ *         PegFarm, ShareFarm) so the only remaining env-var addresses are
  *         the manifest infrastructure and human-controlled recipient/admin addresses.
  *
  *         See docs/DEPLOY.md for env-var setup and per-chain commands.
@@ -51,6 +52,15 @@ contract Deploy is NetworkConfig {
 
     struct Genesis {
         address airdropWallet;
+        address daoWallet;
+        uint256 genesisStart;
+        string pegName;
+        string pegSymbol;
+        string shareName;
+        string shareSymbol;
+        uint256 farmPegLpAlloc;
+        uint256 farmShareLpAlloc;
+        bool masonryStakesPairLp;
         address communityFund;
         address devFund;
         uint256 vestingStart;
@@ -59,21 +69,29 @@ contract Deploy is NetworkConfig {
         uint256 timelockDelay;
     }
 
-    OldMoney public money;
-    Estate public estate;
-    TrustNote public trustnote;
+    PegToken public peg;
+    ShareToken public share;
     PegDefenseHook public hook;
+    ShareBuybackHook public shareBuybackHook;
     Oracle public oracle;
     Treasury public treasury;
-    Boardroom public boardroom;
+    Masonry public masonry;
     GenesisRewardPool public genesisRewardPool;
-    MainRewardPool public mainRewardPool;
-    ShareRewardPool public shareRewardPool;
+    PegFarm public pegFarm;
+    ShareFarm public shareFarm;
     V4PositionWrapper public lpWrapper;
+    LpOnlyHook public pairLpHook;
+    V4PositionWrapper public pairLpWrapper;
+    V4PositionWrapper public shareLpWrapper;
     MiniSwapRouter public miniSwapRouter;
     Timelock public timelock;
     address public wethAddress;
     PoolKey public poolKey;
+    PoolKey public sharePoolKey;
+    PoolKey public pairPoolKey;
+
+    /// @notice Static LP fee of the SHARE/WETH pool, in V4 pips (0.30%).
+    uint24 public constant SHARE_POOL_FEE = 3000;
 
     function run() external {
         _network();
@@ -83,7 +101,7 @@ contract Deploy is NetworkConfig {
         Genesis memory g = _readGenesis();
         _preflight();
 
-        console2.log("=== Old Money deploy ===");
+        console2.log("=== Protocol deploy ===");
         console2.log("chain id:", block.chainid);
         console2.log("deployer:", deployer);
 
@@ -93,34 +111,37 @@ contract Deploy is NetworkConfig {
         console2.log("WETH:", wethAddress);
         _deployTokens(g);
         _deployHookAndInitPool(deployer);
+        _deployShareBuybackHookAndInitPool(deployer);
         _deployOracle(g);
         _deployLpWrapper();
+        _deployPairLpPool(deployer);
         _deployRewardPools(g);
         _deployCoreAndInit(g);
         miniSwapRouter = new MiniSwapRouter(IPoolManager(_infrastructure("poolManager")));
         timelock = new Timelock(g.timelockAdmin, g.timelockDelay);
 
         // Genesis distributions go directly to the freshly deployed pool contracts.
-        money.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
-        estate.distributeReward(address(shareRewardPool));
+        peg.distributeReward(address(genesisRewardPool), address(pegFarm), g.airdropWallet);
+        share.distributeReward(address(shareFarm));
 
-        // Register the LP wrapper as the stake token in the Main + Share reward pools.
-        // Deployer is still the operator on these pools — handoff to a Timelock happens
-        // via the governance ceremony. Sets a single 100-weight entry on each; future
-        // ops can call .set() to add more LP types or adjust weights.
-        mainRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
-        shareRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
+        // Register the LP wrappers as farm stake tokens. The deployer is still the operator
+        // on these pools; the governance ceremony hands them to the Timelock, which can
+        // re-weight with .set() later.
+        //   - PEG farm: the peg LP only.
+        //   - SHARE farm: split between the peg LP and the share LP (default 30 / 70).
+        pegFarm.add(100, IERC20(address(lpWrapper)), false, 0);
+        if (g.farmPegLpAlloc > 0) shareFarm.add(g.farmPegLpAlloc, IERC20(address(lpWrapper)), false, 0);
+        if (g.farmShareLpAlloc > 0) shareFarm.add(g.farmShareLpAlloc, IERC20(address(shareLpWrapper)), false, 0);
 
-        // Wire Treasury into the hook so the Sprint 4b tax can route MONEY there above
-        // the burn threshold. Hook trustees defaults to the deployer at construction; the
-        // setter is invoked from that role. (autoCalculateTax stays false at deploy —
-        // Trustees enables post-launch.)
-        hook.setTreasury(address(treasury));
+        // Sell tax collected above the burn threshold goes to the DAO wallet. Nothing is
+        // ever sent to the Treasury contract. (The tax itself stays off at deploy.)
+        hook.setFeeRecipient(g.daoWallet);
+        // Assess the sell tax against the epoch TWAP rather than the pool's spot price.
+        hook.setTaxOracle(address(oracle));
 
-        money.transferTrustees(address(treasury));
-        estate.transferTrustees(address(treasury));
-        trustnote.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        peg.transferTrustees(address(treasury));
+        share.transferTrustees(address(treasury));
+        masonry.setOperator(address(treasury));
 
         vm.stopBroadcast();
 
@@ -137,7 +158,21 @@ contract Deploy is NetworkConfig {
         g.communityFund = vm.envAddress("COMMUNITY_FUND");
         g.devFund = vm.envAddress("DEV_FUND");
         g.vestingStart = vm.envOr("VESTING_START", block.timestamp + 1 hours);
-        g.epochStart = vm.envOr("EPOCH_START", g.vestingStart);
+        // Genesis runs first and must be over before the Treasury's epoch 0.
+        g.genesisStart = vm.envOr("GENESIS_START", g.vestingStart);
+        g.epochStart = vm.envOr("EPOCH_START", g.genesisStart + 1 days);
+        // Every fee and fund the protocol collects goes to this wallet, never to the Treasury.
+        g.daoWallet = vm.envAddress("DAO_WALLET");
+        // Token names come from the environment so the contracts carry no brand.
+        g.pegName = vm.envOr("PEG_NAME", string("Peg Token"));
+        g.pegSymbol = vm.envOr("PEG_SYMBOL", string("PEG"));
+        g.shareName = vm.envOr("SHARE_NAME", string("Share Token"));
+        g.shareSymbol = vm.envOr("SHARE_SYMBOL", string("SHARE"));
+        // Split of share-token farm emissions between the two LP positions.
+        g.farmPegLpAlloc = vm.envOr("FARM_PEG_LP_ALLOC", uint256(30));
+        g.farmShareLpAlloc = vm.envOr("FARM_SHARE_LP_ALLOC", uint256(70));
+        // The Masonry stakes the untradeable peg/share LP by default; false stakes the share token.
+        g.masonryStakesPairLp = vm.envOr("MASONRY_STAKES_PAIR_LP", true);
         g.timelockAdmin = vm.envAddress("TIMELOCK_ADMIN");
         g.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
         require(
@@ -145,19 +180,20 @@ contract Deploy is NetworkConfig {
             "Deploy: zero wallet"
         );
         require(g.timelockAdmin != address(0), "Deploy: zero admin");
-        require(g.epochStart > block.timestamp && g.vestingStart > block.timestamp, "Deploy: start must be future");
+        require(g.daoWallet != address(0), "Deploy: zero DAO wallet");
+        require(g.genesisStart > block.timestamp && g.vestingStart > block.timestamp, "Deploy: start must be future");
+        require(g.epochStart >= g.genesisStart + 1 days, "Deploy: epoch 0 must follow genesis");
+        require(g.farmPegLpAlloc + g.farmShareLpAlloc > 0, "Deploy: farm split is empty");
         require(g.timelockDelay >= 1 days && g.timelockDelay <= 30 days, "Deploy: invalid timelock delay");
     }
 
     function _deployTokens(
         Genesis memory g
     ) internal {
-        money = new OldMoney();
-        estate = new Estate(g.vestingStart, g.communityFund, g.devFund);
-        trustnote = new TrustNote();
-        console2.log("$MONEY:    ", address(money));
-        console2.log("$ESTATE:   ", address(estate));
-        console2.log("$TRUSTNOTE:", address(trustnote));
+        peg = new PegToken(g.pegName, g.pegSymbol);
+        share = new ShareToken(g.shareName, g.shareSymbol, g.vestingStart, g.communityFund, g.devFund);
+        console2.log("$PEG:    ", address(peg));
+        console2.log("$SHARE:   ", address(share));
     }
 
     function _deployHookAndInitPool(
@@ -165,9 +201,8 @@ contract Deploy is NetworkConfig {
     ) internal {
         IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
         bytes memory creationCode =
-            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), deployer));
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(peg), deployer));
+        uint160 flags = PegDefenseHookPermissions.FLAGS;
         (address mined, bytes32 salt) = HookMiner.find(_infrastructure("create2Deployer"), flags, creationCode);
 
         // Call the selected factory directly so Foundry's default CREATE2 address
@@ -177,9 +212,9 @@ contract Deploy is NetworkConfig {
         hook = PegDefenseHook(mined);
         console2.log("PegDefenseHook:", address(hook));
 
-        (Currency c0, Currency c1) = address(money) < wethAddress
-            ? (Currency.wrap(address(money)), Currency.wrap(wethAddress))
-            : (Currency.wrap(wethAddress), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < wethAddress
+            ? (Currency.wrap(address(peg)), Currency.wrap(wethAddress))
+            : (Currency.wrap(wethAddress), Currency.wrap(address(peg)));
         poolKey = PoolKey({
             currency0: c0,
             currency1: c1,
@@ -190,90 +225,185 @@ contract Deploy is NetworkConfig {
         pm.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
     }
 
+    /// @notice Deploy the ShareBuybackHook and initialise the SHARE/WETH pool it taxes.
+    ///         SHARE sells pay the Fire Tax in WETH; the hook converts that WETH to PEG
+    ///         in the PEG/WETH pool above and burns it. Collection starts disabled.
+    ///
+    ///         `SHARE_POOL_INITIAL_TICK` sets the opening price (WETH per SHARE, in ticks,
+    ///         before currency ordering). It defaults to parity; an empty pool's price is
+    ///         whatever the first liquidity provider makes it, so this is only a starting
+    ///         point.
+    function _deployShareBuybackHookAndInitPool(
+        address deployer
+    ) internal {
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
+        bytes memory creationCode = abi.encodePacked(
+            type(ShareBuybackHook).creationCode,
+            abi.encode(
+                pm,
+                address(share),
+                address(peg),
+                poolKey,
+                IFireTaxSource(address(hook)),
+                IPriceSource(address(hook)),
+                deployer
+            )
+        );
+        (address mined, bytes32 salt) =
+            HookMiner.find(_infrastructure("create2Deployer"), ShareBuybackHookPermissions.FLAGS, creationCode);
+        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
+        require(success && mined.code.length > 0, "Deploy: share hook deployment failed");
+        shareBuybackHook = ShareBuybackHook(mined);
+        console2.log("ShareBuybackHook:", address(shareBuybackHook));
+
+        bool shareIsCurrency0 = address(share) < wethAddress;
+        (Currency c0, Currency c1) = shareIsCurrency0
+            ? (Currency.wrap(address(share)), Currency.wrap(wethAddress))
+            : (Currency.wrap(wethAddress), Currency.wrap(address(share)));
+        sharePoolKey = PoolKey({
+            currency0: c0, currency1: c1, fee: SHARE_POOL_FEE, tickSpacing: 60, hooks: IHooks(address(shareBuybackHook))
+        });
+
+        int256 priceTick = vm.envOr("SHARE_POOL_INITIAL_TICK", int256(0));
+        require(priceTick > -887_000 && priceTick < 887_000, "Deploy: share pool tick out of range");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int24 poolTick = shareIsCurrency0 ? int24(priceTick) : -int24(priceTick);
+        pm.initialize(sharePoolKey, TickMath.getSqrtPriceAtTick(poolTick));
+    }
+
     function _deployOracle(
         Genesis memory g
     ) internal {
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), wethAddress, 6 hours, g.epochStart);
+        oracle = new Oracle(IPriceSource(address(hook)), address(peg), wethAddress, 6 hours, g.epochStart);
         console2.log("Oracle:", address(oracle));
     }
 
     /// @notice Deploy the three reward pools. Each constructor requires
     ///         block.timestamp < _poolStartTime, so:
     ///           - GenesisRewardPool opens at epochStart (24h window).
-    ///           - MainRewardPool opens at epochStart + 1 day (genesis closes first).
-    ///           - ShareRewardPool opens at epochStart + 1 day (concurrent with main).
-    /// @notice Deploy the V4 position wrapper for the MONEY/WETH pool. Full-range LP
+    ///           - PegFarm opens at epochStart + 1 day (genesis closes first).
+    ///           - ShareFarm opens at epochStart + 1 day (concurrent with main).
+    /// @notice Deploy the V4 position wrapper for the PEG/WETH pool. Full-range LP
     ///         positions on this pool wrap into ERC-20 shares that can be staked in
-    ///         MainRewardPool + ShareRewardPool.
+    ///         PegFarm + ShareFarm.
     function _deployLpWrapper() internal {
         int24 tickLower = TickMath.minUsableTick(60);
         int24 tickUpper = TickMath.maxUsableTick(60);
         lpWrapper = new V4PositionWrapper(
-            IPositionManager(_infrastructure("positionManager")),
-            poolKey,
-            tickLower,
-            tickUpper,
-            "Old Money MONEY-WETH LP",
-            "om-MWLP"
+            IPositionManager(_infrastructure("positionManager")), poolKey, tickLower, tickUpper, "Peg LP", "PEG-LP"
         );
-        console2.log("V4PositionWrapper (MONEY/WETH full-range):", address(lpWrapper));
+        console2.log("V4PositionWrapper (PEG/WETH full-range):", address(lpWrapper));
         console2.log("  tickLower:", int256(tickLower));
         console2.log("  tickUpper:", int256(tickUpper));
+    }
+
+    /// @notice Deploy the untradeable PEG/SHARE pool and the wrapper that turns its
+    ///         full-range position into a stakeable ERC-20. The LpOnlyHook rejects every
+    ///         swap, so the pool is a staking position and never a route between the two
+    ///         tokens around the sell tax.
+    ///
+    ///         With no trading the opening ratio is permanent. `PAIR_POOL_INITIAL_TICK`
+    ///         sets it as PEG per SHARE in ticks and defaults to 0 (one for one). Only
+    ///         the deployer can initialise the pool. The wrapper is NOT registered with any
+    ///         reward pool here: emissions weights are an operator decision.
+    function _deployPairLpPool(
+        address deployer
+    ) internal {
+        IPoolManager pm = IPoolManager(_infrastructure("poolManager"));
+        bytes memory creationCode =
+            abi.encodePacked(type(LpOnlyHook).creationCode, abi.encode(pm, address(peg), address(share), deployer));
+        (address mined, bytes32 salt) =
+            HookMiner.find(_infrastructure("create2Deployer"), LpOnlyHookPermissions.FLAGS, creationCode);
+        (bool success,) = _infrastructure("create2Deployer").call(abi.encodePacked(salt, creationCode));
+        require(success && mined.code.length > 0, "Deploy: pair LP hook deployment failed");
+        pairLpHook = LpOnlyHook(mined);
+        console2.log("LpOnlyHook (PEG/SHARE):", address(pairLpHook));
+
+        bool shareIsCurrency0 = address(share) < address(peg);
+        (Currency c0, Currency c1) = shareIsCurrency0
+            ? (Currency.wrap(address(share)), Currency.wrap(address(peg)))
+            : (Currency.wrap(address(peg)), Currency.wrap(address(share)));
+        pairPoolKey =
+            PoolKey({currency0: c0, currency1: c1, fee: 0, tickSpacing: 60, hooks: IHooks(address(pairLpHook))});
+
+        int256 ratioTick = vm.envOr("PAIR_POOL_INITIAL_TICK", int256(0));
+        require(ratioTick > -887_000 && ratioTick < 887_000, "Deploy: pair pool tick out of range");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int24 poolTick = shareIsCurrency0 ? int24(ratioTick) : -int24(ratioTick);
+        pm.initialize(pairPoolKey, TickMath.getSqrtPriceAtTick(poolTick));
+
+        pairLpWrapper = new V4PositionWrapper(
+            IPositionManager(_infrastructure("positionManager")),
+            pairPoolKey,
+            TickMath.minUsableTick(60),
+            TickMath.maxUsableTick(60),
+            "Peg-Share LP",
+            "PEG-SHARE-LP"
+        );
+        console2.log("V4PositionWrapper (PEG/SHARE full-range):", address(pairLpWrapper));
+
+        // The tradeable SHARE/quote pool gets a wrapper too, so its LPs can farm.
+        shareLpWrapper = new V4PositionWrapper(
+            IPositionManager(_infrastructure("positionManager")),
+            sharePoolKey,
+            TickMath.minUsableTick(60),
+            TickMath.maxUsableTick(60),
+            "Share LP",
+            "SHARE-LP"
+        );
+        console2.log("V4PositionWrapper (SHARE/quote full-range):", address(shareLpWrapper));
     }
 
     function _deployRewardPools(
         Genesis memory g
     ) internal {
-        genesisRewardPool = new GenesisRewardPool(address(money), g.epochStart);
-        mainRewardPool = new MainRewardPool(address(money), g.epochStart + 1 days);
-        shareRewardPool = new ShareRewardPool(address(estate), g.epochStart + 1 days);
+        // Genesis opens first; the farms open with epoch 0, once genesis has closed.
+        genesisRewardPool = new GenesisRewardPool(address(peg), g.genesisStart);
+        pegFarm = new PegFarm(address(peg), g.epochStart);
+        shareFarm = new ShareFarm(address(share), g.epochStart);
         console2.log("GenesisRewardPool:", address(genesisRewardPool));
-        console2.log("MainRewardPool:   ", address(mainRewardPool));
-        console2.log("ShareRewardPool:  ", address(shareRewardPool));
+        console2.log("PegFarm:   ", address(pegFarm));
+        console2.log("ShareFarm:  ", address(shareFarm));
     }
 
     function _deployCoreAndInit(
         Genesis memory g
     ) internal {
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        // The Masonry pays expansion to whoever stakes its token. By default that is the
+        // untradeable PEG/SHARE LP position; it can be the share token itself instead.
+        IERC20 stakeToken = g.masonryStakesPairLp ? IERC20(address(pairLpWrapper)) : IERC20(address(share));
+        masonry.initialize(IERC20(address(peg)), stakeToken, ITreasury(address(treasury)));
 
-        // Pools + airdrop wallet are the addresses that hold un-emitted MONEY; they
-        // must be excluded from `getMoneyCirculatingSupply` so the contraction-headroom
-        // math doesn't count them as circulating.
-        address[] memory excluded = new address[](3);
+        // Only the two pools holding un-emitted PEG are left out of circulating supply.
+        // The airdrop allocation is real, held supply and counts.
+        address[] memory excluded = new address[](2);
         excluded[0] = address(genesisRewardPool);
-        excluded[1] = address(mainRewardPool);
-        excluded[2] = g.airdropWallet;
-        treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            g.epochStart,
-            excluded
-        );
+        excluded[1] = address(pegFarm);
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), g.epochStart, excluded);
         console2.log("Treasury: ", address(treasury));
-        console2.log("Boardroom:", address(boardroom));
+        console2.log("Masonry:", address(masonry));
     }
 
     /// @notice Simulation output only. Publish after confirming broadcast receipts.
     function _exportDeployment() internal {
         string memory key = "deployment";
         vm.serializeUint(key, "chainId", block.chainid);
-        vm.serializeAddress(key, "money", address(money));
-        vm.serializeAddress(key, "estate", address(estate));
-        vm.serializeAddress(key, "trustNote", address(trustnote));
+        vm.serializeAddress(key, "peg", address(peg));
+        vm.serializeAddress(key, "share", address(share));
+        vm.serializeAddress(key, "shareLpWrapper", address(shareLpWrapper));
         vm.serializeAddress(key, "treasury", address(treasury));
-        vm.serializeAddress(key, "boardroom", address(boardroom));
+        vm.serializeAddress(key, "masonry", address(masonry));
         vm.serializeAddress(key, "oracle", address(oracle));
         vm.serializeAddress(key, "hook", address(hook));
+        vm.serializeAddress(key, "shareBuybackHook", address(shareBuybackHook));
         vm.serializeAddress(key, "lpWrapper", address(lpWrapper));
+        vm.serializeAddress(key, "pairLpHook", address(pairLpHook));
+        vm.serializeAddress(key, "pairLpWrapper", address(pairLpWrapper));
         vm.serializeAddress(key, "genesisRewardPool", address(genesisRewardPool));
-        vm.serializeAddress(key, "mainRewardPool", address(mainRewardPool));
-        vm.serializeAddress(key, "shareRewardPool", address(shareRewardPool));
+        vm.serializeAddress(key, "pegFarm", address(pegFarm));
+        vm.serializeAddress(key, "shareFarm", address(shareFarm));
         vm.serializeAddress(key, "miniSwapRouter", address(miniSwapRouter));
         vm.serializeAddress(key, "timelock", address(timelock));
         vm.serializeAddress(key, "weth", wethAddress);
@@ -288,30 +418,41 @@ contract Deploy is NetworkConfig {
     function _postDeployChecks(
         Genesis memory g
     ) internal view {
-        require(money.operator() == address(treasury), "Deploy: money operator");
-        require(estate.operator() == address(treasury), "Deploy: estate operator");
-        require(trustnote.operator() == address(treasury), "Deploy: trustnote operator");
-        require(boardroom.operator() == address(treasury), "Deploy: boardroom operator");
+        require(peg.operator() == address(treasury), "Deploy: peg operator");
+        require(share.operator() == address(treasury), "Deploy: share operator");
+        require(masonry.operator() == address(treasury), "Deploy: masonry operator");
         require(hook.bound(), "Deploy: hook not bound");
+        require(shareBuybackHook.bound(), "Deploy: share hook not bound");
+        require(
+            shareBuybackHook.share() == address(share) && shareBuybackHook.peg() == address(peg)
+                && shareBuybackHook.quote() == wethAddress,
+            "Deploy: share hook tokens"
+        );
+        require(address(shareBuybackHook.fireTax()) == address(hook), "Deploy: share hook rate source");
+        require(!shareBuybackHook.taxEnabled(), "Deploy: share tax must start disabled");
+        require(pairLpHook.bound(), "Deploy: pair LP pool not initialised");
+        require(pairLpHook.tokenA() == address(peg) && pairLpHook.tokenB() == address(share), "Deploy: pair LP tokens");
         require(treasury.isInitialized(), "Deploy: treasury not initialized");
 
-        require(money.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");
-        require(money.balanceOf(address(mainRewardPool)) == 140_000 ether, "Deploy: main funding mismatch");
-        // Airdrop wallet may already hold MONEY (e.g., the 1-unit constructor seed if the
+        require(peg.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");
+        require(peg.balanceOf(address(pegFarm)) == 140_000 ether, "Deploy: main funding mismatch");
+        // Airdrop wallet may already hold PEG (e.g., the 1-unit constructor seed if the
         // wallet happens to equal the deployer in a dry-run). Assert at least the 9k landed.
-        require(money.balanceOf(g.airdropWallet) >= 9000 ether, "Deploy: airdrop funding mismatch");
-        require(estate.balanceOf(address(shareRewardPool)) == 59_500 ether, "Deploy: share funding mismatch");
+        require(peg.balanceOf(g.airdropWallet) >= 9000 ether, "Deploy: airdrop funding mismatch");
+        require(hook.feeRecipient() == g.daoWallet, "Deploy: tax must go to the DAO wallet");
+        require(treasury.excludedFromTotalSupply(1) == address(pegFarm), "Deploy: supply exclusions");
+        require(share.balanceOf(address(shareFarm)) == 59_500 ether, "Deploy: share funding mismatch");
 
         console2.log("\n=== POST-DEPLOY SANITY ===");
-        console2.log("GenesisRewardPool MONEY:", money.balanceOf(address(genesisRewardPool)));
-        console2.log("MainRewardPool MONEY:   ", money.balanceOf(address(mainRewardPool)));
-        console2.log("airdropWallet MONEY:    ", money.balanceOf(g.airdropWallet));
-        console2.log("ShareRewardPool ESTATE: ", estate.balanceOf(address(shareRewardPool)));
+        console2.log("GenesisRewardPool PEG:", peg.balanceOf(address(genesisRewardPool)));
+        console2.log("PegFarm PEG:   ", peg.balanceOf(address(pegFarm)));
+        console2.log("airdropWallet PEG:    ", peg.balanceOf(g.airdropWallet));
+        console2.log("ShareFarm SHARE: ", share.balanceOf(address(shareFarm)));
         console2.log("\nNext steps (post-deploy):");
         console2.log("  1. operator (deployer) calls genesisRewardPool.add(allocPoint, WETH, false, 0)");
         console2.log("     and/or .add(..., USDC, ...) to open the genesis pool for stakers.");
         console2.log("  2. Main + Share reward pools are already wired with V4PositionWrapper as the");
-        console2.log("     LP stake token (100 weight each). LPs mint a full-range MONEY/WETH V4");
+        console2.log("     LP stake token (100 weight each). LPs mint a full-range PEG/WETH V4");
         console2.log("     position, wrap it, and stake the ERC-20 shares.");
         console2.log("  3. Seed initial V4 pool liquidity (manual step before genesis opens).");
         console2.log("  4. Rotate governance to the deployed Timelock using the governance scripts.");

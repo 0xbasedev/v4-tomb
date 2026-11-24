@@ -1,394 +1,286 @@
-import { pegReserves } from "../../../config/schema.mjs";
-import { useState } from "react";
-import { formatUnits, parseUnits, type Address } from "viem";
-import { useAccount, useReadContracts } from "wagmi";
+import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { formatUnits } from "viem";
 
-import { RuleTrio } from "@/components/RuleTrio";
-import { StatTile } from "@/components/StatTile";
-import { SwapCard } from "@/components/SwapCard";
-import { TabBar } from "@/components/TabBar";
-import { TaxScheduleTable, tierAt } from "@/components/TaxScheduleTable";
+import { AmountField, parseAmount } from "@/components/AmountField";
+import { PageHeader, SectionTitle } from "@/components/PageHeader";
+import { SlippageChips } from "@/components/SlippageChips";
+import { NotDeployed, Reason, RuleBadge } from "@/components/Status";
+import { SwapFlowArt } from "@/components/SwapFlowArt";
+import { TaxLadder } from "@/components/TaxLadder";
+import { TokenIcon } from "@/components/TokenIcon";
+import { Segmented } from "@/components/docs/kit";
+import { HoldButton } from "@/components/fx/HoldButton";
+import { formatBps, formatDate, formatToken } from "@/lib/format";
+import { useActions, useProtocol } from "@/lib/hooks";
+import { EASE, gsap, prefersReducedMotion } from "@/lib/motion";
+import { useReveal } from "@/lib/motion/useReveal";
+import { NAMES, TAX } from "@/lib/protocol";
+import { SHARE_POOL_FEE, estimateExactIn } from "@/lib/swap/poolKey";
 
-import { useDeployment, usePoolPrice, usePoolReserves, useSwap } from "@/lib/hooks";
-import { erc20Abi } from "@/lib/abis";
-import { useToast } from "@/components/ToastProvider";
-import { maskDecimalInput } from "@/lib/util/decimal";
-import { formatToken, formatTokenAuto } from "@/lib/format";
-
-/** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
-const DYNAMIC_FEE_FLAG = 0x800000;
-const MONEY_WETH_TICK_SPACING = 60;
+type Market = "peg" | "share";
 
 /**
- * The Exchange — V4 swap with PegDefenseHook tax surface.
+ * Swap — exact-input swaps through MiniSwapRouter (always with a deadline).
  *
- * Two pools available (both anchored to WETH):
- *   I.  MONEY-WETH — peg pool, PegDefenseHook attached, 0.30% base fee +
- *       dynamic tax (0–30%) when MONEY trades below par
- *   II. ESTATE-WETH — share pool, no hook, plain 0.30% fee
+ *   xTOMB  / paired asset   PegDefenseHook: a sell pays the tax out of the xTOMB you send
+ *   xSHARE / paired asset   ShareBuybackHook: a sell pays the same rate out of what you receive
  *
- * Layout:
- *   1. Heading — Roman IV, "The Exchange" title
- *   2. Pool tabs — MONEY/WETH | ESTATE/WETH
- *   3. SwapCard — directional input → output with flip button + quote rows.
- *      Tax tier badge shows current schedule entry when MONEY-out (sells)
- *      below peg.
- *   4. Pool state — 4 tiles (Spot, Liquidity, 24h Volume, Hook State)
- *   5. TaxScheduleTable — visible only when MONEY-WETH selected; highlights
- *      active tier from current price
- *   6. The Mechanism — explanatory panel
+ * Buying is the plain path: gradient button, one tap. Selling into a tax is the
+ * expensive path: the exact loss is spelled out above the button, and at the
+ * 12% cap the button must be held, so nobody signs it by reflex.
  */
-
-type PoolId = "money-weth" | "estate-weth";
-
-interface PoolView {
-  id: PoolId;
-  numeral: "I" | "II";
-  base: string;
-  quote: string;
-  /** Current spot price (quote per 1 base, e.g. 1 MONEY = 0.97 WETH). */
-  spotPrice: number;
-  /** Pool liquidity in WETH-equivalent terms (placeholder). */
-  liquidity: string;
-  /** 24h volume in WETH-equivalent terms (placeholder). */
-  volume24h: string;
-  /** Hook state label. */
-  hookState: string;
-  /** Base fee bps. 30 = 0.30% — V4 LP fee, separate from hook tax. */
-  baseFeeBps: number;
-}
-
-const POOLS: Record<PoolId, PoolView> = {
-  "money-weth": {
-    id: "money-weth",
-    numeral: "I",
-    base: "MONEY",
-    quote: "WETH",
-    spotPrice: 1.0,
-    liquidity: "0",
-    volume24h: "0",
-    hookState: "Active · Above Peg",
-    baseFeeBps: 30,
-  },
-  "estate-weth": {
-    id: "estate-weth",
-    numeral: "II",
-    base: "ESTATE",
-    quote: "WETH",
-    spotPrice: 0.001,
-    liquidity: "0",
-    volume24h: "0",
-    hookState: "—",
-    baseFeeBps: 30,
-  },
-};
-
 export function Swap() {
-  const [activeId, setActiveId] = useState<PoolId>("money-weth");
-  // Direction: when true, base → quote (sell). When false, quote → base (buy).
-  const [sellingBase, setSellingBase] = useState(true);
+  const root = useRef<HTMLDivElement>(null);
+  const flip = useRef<HTMLButtonElement>(null);
+  const p = useProtocol();
+  const act = useActions();
+  const [market, setMarket] = useState<Market>("peg");
+  const [selling, setSelling] = useState(false);
+  const [raw, setRaw] = useState("");
+  const [slippageBps, setSlippageBps] = useState(100);
+  useReveal(root, [p.deployed]);
 
-  const poolMeta = POOLS[activeId];
-  const liveHook = usePoolPrice();
-  const deployment = useDeployment();
-  const { address } = useAccount();
-  const swap = useSwap();
-  const toast = useToast();
+  const d = p.net.deployment;
+  const state = p.pools[market];
+  const base = market === "peg" ? { symbol: p.symbols.peg, icon: "xTOMB" as const, address: d?.peg, balance: p.balances.peg, decimals: 18 } : { symbol: p.symbols.share, icon: "xSHARE" as const, address: d?.share, balance: p.balances.share, decimals: 18 };
+  const quote = { symbol: p.symbols.quote, icon: "QUOTE" as const, address: d?.weth, balance: p.balances.quote, decimals: p.quoteDecimals };
+  const tokenIn = selling ? base : quote;
+  const tokenOut = selling ? quote : base;
 
-  // Read MONEY + WETH balances so the SwapCard's MAX has something to fill
-  // and the disabled state can gate on actual funds.
-  const balances = useReadContracts({
-    allowFailure: false,
-    contracts:
-      deployment && address
-        ? [
-            { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [address] },
-            { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [address] },
-          ]
-        : [],
-    query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
-  });
-  const moneyBal = balances.data?.[0] ?? 0n;
-  const wethBal = balances.data?.[1] ?? 0n;
+  const amountIn = parseAmount(raw, tokenIn.decimals);
+  const initialised = !!state && state.sqrtPriceX96 > 0n && state.liquidity > 0n;
+  const zeroForOne = !!state && !!tokenIn.address && state.key.currency0.toLowerCase() === tokenIn.address.toLowerCase();
+  const feePips = market === "peg" ? p.tax.poolFeePips : SHARE_POOL_FEE;
 
-  // Pool depth — read from V4 PoolManager state via extsload. This gives
-  // OUR pool's reserves exactly, not all V4 pools on the chain.
-  // PoolKey for MONEY-WETH; computed live from deployment addresses.
-  const moneyWethPoolKey = deployment
-    ? (() => {
-        const wethIsToken0 =
-          (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
-        return {
-          currency0: wethIsToken0 ? deployment.weth : deployment.money,
-          currency1: wethIsToken0 ? deployment.money : deployment.weth,
-          fee: DYNAMIC_FEE_FLAG,
-          tickSpacing: MONEY_WETH_TICK_SPACING,
-          hooks: deployment.hook,
-        };
-      })()
-    : null;
-  const reserves = usePoolReserves(moneyWethPoolKey);
-  const orderedReserves = deployment
-    ? pegReserves(deployment.money, deployment.weth, reserves.amount0, reserves.amount1)
-    : { weth: 0n, money: 0n };
-  const poolWeth = orderedReserves.weth;
-  const poolMoney = orderedReserves.money;
+  // The rate both hooks charge. The share hook reads it from the peg hook and caps it at 12%.
+  const switchOn = market === "peg" ? p.tax.enabled : p.buyback.enabled;
+  const rateBps = p.tax.rateBps === null ? null : Math.min(p.tax.rateBps, TAX.maxBps);
+  const taxed = selling && switchOn !== false;
+  const effectiveBps = taxed ? (rateBps ?? TAX.maxBps) : 0;
 
-  // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
-  // is not bound to any of our hooks, so for now we keep its spot at the
-  // hardcoded placeholder — a future turn ships a generic V4 PoolManager
-  // getSlot0 reader for non-hooked pools.
-  const liveSpot =
-    activeId === "money-weth" && liveHook.bound && liveHook.price > 0n
-      ? Number(formatUnits(liveHook.price, 18))
-      : poolMeta.spotPrice;
-
-  const tokenIn = sellingBase ? poolMeta.base : poolMeta.quote;
-  const tokenOut = sellingBase ? poolMeta.quote : poolMeta.base;
-  const rate = sellingBase ? liveSpot : 1 / liveSpot;
-
-  // Active-direction tokenIn balance — drives the MAX button and the
-  // disabled state. Only MONEY-WETH is wired; ESTATE-WETH tokenIn is
-  // currently ESTATE which we don't read here (the panel is disabled
-  // for ESTATE-WETH anyway).
-  const tokenInBalance =
-    activeId === "money-weth" ? (sellingBase ? moneyBal : wethBal) : 0n;
-  const maxInDisplay = formatToken(tokenInBalance, 6);
-
-  // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
-  // hook actually has autoCalculateTax enabled. The schedule itself still
-  // renders below — it's informational regardless of the on/off state.
-  const taxActive =
-    activeId === "money-weth" && sellingBase && liveHook.taxOn && liveSpot < 1.0;
-  const tier = taxActive ? tierAt(liveSpot) : { label: "No Tax", bps: 0 };
-
-  const hookStateLabel =
-    activeId !== "money-weth"
-      ? "—"
-      : !liveHook.bound
-        ? "Awaiting Pool Init"
-        : liveHook.taxOn
-          ? `Tax Active · ${tier.label}`
-          : "Tax Disabled";
-
-  // Compose the V4 swap pipeline. MONEY-WETH only — ESTATE-WETH isn't a deployed pool yet.
-  function handleSwapSubmit(amountStr: string, slippageBps: number) {
-    if (activeId !== "money-weth") {
-      toast.push({
-        variant: "info",
-        title: "Pool not yet live",
-        message: "ESTATE-WETH is not deployed. Trade MONEY-WETH on the I tab instead.",
-        durationMs: 6_000,
-      });
-      return;
+  // xTOMB sell: tax comes off the input, exactly. xSHARE sell: tax comes off the output.
+  let taxAmount: bigint | null = null;
+  let out: bigint | null = null;
+  if (amountIn !== null && initialised) {
+    if (market === "peg") {
+      taxAmount = taxed ? (amountIn * BigInt(effectiveBps)) / 10_000n : 0n;
+      out = estimateExactIn(state!, zeroForOne, amountIn - taxAmount, feePips);
+    } else {
+      const gross = estimateExactIn(state!, zeroForOne, amountIn, feePips);
+      taxAmount = taxed ? (gross * BigInt(effectiveBps)) / 10_000n : 0n;
+      out = gross - taxAmount;
     }
-    if (!deployment) {
-      toast.push({
-        variant: "error",
-        title: "Wallet not connected",
-        message: "Connect on a configured network to swap.",
-      });
-      return;
-    }
+  }
+  const minOut = out !== null ? (out * BigInt(10_000 - slippageBps)) / 10_000n : null;
+  const taxSymbol = market === "peg" ? base.symbol : quote.symbol;
+  const taxDecimals = market === "peg" ? 18 : quote.decimals;
+  const atCap = taxed && effectiveBps >= TAX.maxBps;
+  const cheaper = taxed && p.tax.pendingDecrease && p.tax.pendingDecrease.toBps < effectiveBps ? p.tax.pendingDecrease : null;
 
-    const clean = maskDecimalInput(amountStr);
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(clean || "0", 18);
-    } catch {
-      return;
-    }
-    if (amountIn <= 0n) return;
+  const reason =
+    act.blocked ??
+    (!state || state.sqrtPriceX96 === 0n
+      ? "This pool has not been initialised yet."
+      : state.liquidity === 0n
+        ? "This pool has no liquidity yet."
+        : taxed && rateBps === null
+          ? "Reading the current tax rate…"
+          : amountIn === null
+            ? "Enter an amount."
+            : tokenIn.balance !== null && amountIn > tokenIn.balance
+              ? `You only hold ${formatToken(tokenIn.balance, tokenIn.decimals)} ${tokenIn.symbol}.`
+              : out === null || out === 0n
+                ? "This amount is too small to return anything."
+                : null);
 
-    // V4 sorts currencies by address on every chain.
-    const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
-    const currency0: Address = wethIsToken0 ? deployment.weth : deployment.money;
-    const currency1: Address = wethIsToken0 ? deployment.money : deployment.weth;
-
-    // zeroForOne: are we swapping currency0 → currency1?
-    // sellingBase = true → selling MONEY → we want MONEY -> WETH.
-    //   If MONEY is currency1, then currency1 -> currency0, so zeroForOne = false.
-    const sellingMoney = sellingBase;
-    const zeroForOne = wethIsToken0 ? !sellingMoney : sellingMoney;
-
-    const tokenIn: Address = zeroForOne ? currency0 : currency1;
-
-    // Compute amountOutMinimum from live spot, hook fee, current tax tier, and
-    // user's slippage tolerance. All three deductions are in bps.
-    //
-    //   netRate = rate * (10000 - hookFee - taxBps) / 10000
-    //   expectedOut_wei = amountIn * netRate (using bigint math to preserve precision)
-    //   amountOutMinimum = expectedOut * (10000 - slippageBps) / 10000
-    //
-    // We do the rate multiplication via the ETH-scaled price to stay in bigint
-    // throughout (no float drift on large amountIn values).
-    const rateBps = BigInt(Math.floor(rate * 1e6)); // micro-units for precision
-    const grossOut = (amountIn * rateBps) / 1_000_000n;
-    const netOut = (grossOut * BigInt(10_000 - poolMeta.baseFeeBps - tier.bps)) / 10_000n;
-    const amountOutMinimum = (netOut * BigInt(10_000 - slippageBps)) / 10_000n;
-
-    swap.submit({
-      poolKey: {
-        currency0,
-        currency1,
-        fee: DYNAMIC_FEE_FLAG,
-        tickSpacing: MONEY_WETH_TICK_SPACING,
-        hooks: deployment.hook,
-      },
-      zeroForOne,
-      tokenIn: tokenIn as Address,
-      amountIn,
-      amountOutMinimum,
-      onSuccess: () => {
-        liveHook.refetch();
-      },
-    });
+  async function submit() {
+    if (reason || amountIn === null || minOut === null || !state || !tokenIn.address) return;
+    const okay = await act.swap({ key: state.key, zeroForOne, tokenIn: tokenIn.address, amountIn, minOut });
+    if (okay) setRaw("");
   }
 
+  function turn() {
+    setSelling((s) => !s);
+    setRaw("");
+    if (flip.current && !prefersReducedMotion()) gsap.fromTo(flip.current, { rotate: 0 }, { rotate: 180, duration: 0.45, ease: EASE.snap });
+  }
+
+  const price = amountIn && out ? Number(formatUnits(out, tokenOut.decimals)) / Number(formatUnits(amountIn, tokenIn.decimals)) : null;
+
   return (
-    <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            A Pavilion of The Trust · The Trading Floor
+    <div ref={root}>
+      <PageHeader
+        eyebrow="Swap"
+        title="Swap"
+        lede={`Trade ${NAMES.peg} and ${NAMES.share} against the paired asset. Buys are never taxed. Before you sell, this page shows the exact amount the tax takes.`}
+        aside={<SwapFlowArt />}
+      />
+
+      <div className="mx-auto mb-5 w-full max-w-7xl px-4 md:px-8">
+        {!p.deployed && (
+          <div className="mb-6">
+            <NotDeployed what="Swapping" />
           </div>
-          <div
-            className="font-ornament mb-4 text-3xl font-bold text-deco-gold"
-            style={{ letterSpacing: "0.2em" }}
-          >
-            IV
-          </div>
-          <h1 className="gold-text font-display italic text-section">The Exchange</h1>
-          <RuleTrio className="mb-6 mt-8" />
-          <p
-            className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
-            style={{ letterSpacing: "0.04em" }}
-          >
-            Trade upon the Uniswap V4 venue. The Hook defends the peg with a
-            fourteen-tier tax. Above par, you pay only the base fee.
-          </p>
+        )}
+        <div data-reveal>
+          <Segmented
+            options={[
+              { id: "peg", label: `${NAMES.peg} market` },
+              { id: "share", label: `${NAMES.share} market` },
+            ]}
+            value={market}
+            onChange={(v) => {
+              setMarket(v);
+              setRaw("");
+            }}
+          />
         </div>
-      </section>
+      </div>
 
-      {/* ===== Pool Tabs ===== */}
-      <section className="px-6 pb-10 md:px-12 md:pb-10">
-        <TabBar
-          active={activeId}
-          onChange={(id) => setActiveId(id as PoolId)}
-          items={[
-            { id: "money-weth", numeral: "I", label: "MONEY · WETH", sublabel: "Peg Pool" },
-            {
-              id: "estate-weth",
-              numeral: "II",
-              label: "ESTATE · WETH",
-              sublabel: "Share Pool",
-            },
-          ]}
-        />
-      </section>
-
-      {/* ===== Swap Card ===== */}
-      <section className="px-6 pb-14 md:px-12 md:pb-16">
-        <SwapCard
-          tokenIn={tokenIn}
-          tokenOut={tokenOut}
-          maxIn={maxInDisplay}
-          rate={rate}
-          hookFeeBps={poolMeta.baseFeeBps}
-          taxBps={tier.bps}
-          tierLabel={tier.label}
-          onFlip={() => setSellingBase((b) => !b)}
-          onSubmit={handleSwapSubmit}
-          disabled={
-            swap.isInFlight ||
-            activeId !== "money-weth" ||
-            (activeId === "money-weth" && tokenInBalance === 0n)
-          }
-          disabledReason={
-            activeId !== "money-weth"
-              ? "ESTATE-WETH pool is not yet deployed."
-              : swap.isInFlight
-                ? "Swap in flight…"
-                : tokenInBalance === 0n
-                  ? `No ${tokenIn} in your wallet.`
-                  : undefined
-          }
-        />
-      </section>
-
-      {/* ===== Pool State ===== */}
-      <section className="px-6 pb-14 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The State of The Pool
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile
-              label="Spot Quotation"
-              value={liveSpot.toFixed(4)}
-              hint={`WETH per 1 ${poolMeta.base}`}
-            />
-            <StatTile
-              label="Pool · MONEY"
-              value={activeId === "money-weth" ? formatTokenAuto(poolMoney) : "—"}
-              hint="$MONEY held by V4 PoolManager"
-            />
-            <StatTile
-              label="Pool · WETH"
-              value={activeId === "money-weth" ? formatTokenAuto(poolWeth) : "—"}
-              hint="$WETH held by V4 PoolManager"
-            />
-            <StatTile
-              label="Hook State"
-              value={hookStateLabel}
-              hint={activeId === "money-weth" ? "PegDefenseHook" : "No Hook Attached"}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ===== Tax Schedule (MONEY-WETH only) ===== */}
-      {activeId === "money-weth" && (
-        <section className="px-6 pb-14 md:px-12 md:pb-16">
-          <div className="mx-auto max-w-3xl">
-            <TaxScheduleTable activePriceEth={liveSpot} />
-          </div>
-        </section>
-      )}
-
-      {/* ===== The Mechanism ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="deco-panel">
-            <div className="label-deco mb-3 text-deco-gold-dark">The Mechanism</div>
-            <h2
-              className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
-              style={{ letterSpacing: "0.06em" }}
-            >
-              The Hook and The Fee
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-12 md:px-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+        {/* ---- Ticket ---- */}
+        <section data-reveal className="panel panel-raised p-5 md:p-6" aria-label="Swap ticket">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-bone">
+              {selling ? "Sell" : "Buy"} {base.symbol}
             </h2>
-            <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
-            <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Base Fee</div>
-                <p className="font-body text-sm italic text-deco-ivory-soft">
-                  Three-tenths of one per cent on every swap. Paid to providers of
-                  liquidity. The standard rate of the Uniswap venue.
-                </p>
-              </div>
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Peg Defense</div>
-                <p className="font-body text-sm italic text-deco-ivory-soft">
-                  When MONEY trades below par, the Hook intercepts each outgoing sale
-                  and levies the schedule's tax. During contraction, the proceeds are
-                  burned outright; otherwise they accrue to The Treasury.
-                </p>
+            <span className={`chip ${selling ? (taxed ? "chip-bad" : "") : "chip-ok"}`} data-testid="swap-tax-chip">
+              {selling ? (taxed ? `Sell tax ${formatBps(effectiveBps)}` : "Sell tax off") : "No tax on buys"}
+            </span>
+          </div>
+
+          <AmountField label="You pay" value={raw} onChange={setRaw} symbol={tokenIn.symbol} icon={<TokenIcon symbol={tokenIn.icon} size={20} />} decimals={tokenIn.decimals} balance={p.account ? tokenIn.balance : undefined} disabled={act.busy || !p.deployed} />
+
+          <div className="my-3 flex justify-center">
+            <button ref={flip} type="button" onClick={turn} aria-label={selling ? `Switch to buying ${base.symbol}` : `Switch to selling ${base.symbol}`} className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-basalt-3 text-bone-dim transition-colors hover:border-iris/50 hover:text-bone">
+              ⇅
+            </button>
+          </div>
+
+          <AmountField label="You receive (estimate)" value={out !== null ? formatToken(out, tokenOut.decimals, 6) : ""} onChange={() => {}} symbol={tokenOut.symbol} icon={<TokenIcon symbol={tokenOut.icon} size={20} />} decimals={tokenOut.decimals} balance={p.account ? tokenOut.balance : undefined} readOnly disabled={!p.deployed} />
+
+          {/* ---- The cost of selling, before the button ---- */}
+          {taxed && (
+            <div role="alert" data-testid="tax-warning" className={`mt-5 rounded-2xl border p-4 ${atCap ? "border-bad/45 bg-bad/[0.07]" : "border-warn/35 bg-warn/[0.05]"}`}>
+              <div className="flex items-start gap-3">
+                <span aria-hidden className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[12px] ${atCap ? "border-bad/60 text-bad" : "border-warn/60 text-warn"}`}>
+                  !
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[14px] font-semibold text-bone">
+                    {taxAmount !== null ? (
+                      <>
+                        This sale loses{" "}
+                        <span className={`num ${atCap ? "text-bad" : "text-warn"}`}>
+                          {market === "share" && "≈ "}
+                          {formatToken(taxAmount, taxDecimals, 6)} {taxSymbol}
+                        </span>{" "}
+                        to the {formatBps(effectiveBps)} sell tax.
+                      </>
+                    ) : (
+                      <>Selling {base.symbol} pays a {formatBps(effectiveBps)} tax right now.</>
+                    )}
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-bone-dim">
+                    {market === "peg"
+                      ? `It is taken from the ${base.symbol} you send, before the swap, and is burned or sent to the fee recipient. You do not get it back.`
+                      : `It is taken from the ${quote.symbol} you would receive and later used to buy and burn ${NAMES.peg}. You do not get it back.`}
+                    {atCap && " This is the maximum rate."}
+                  </p>
+                  {cheaper && (
+                    <p className="mt-2 text-[12.5px] font-medium text-ok">
+                      Waiting helps: the rate is due to fall to {formatBps(cheaper.toBps)} from {formatDate(cheaper.readyAt)}
+                      {taxAmount !== null && market === "peg" ? `, saving you ${formatToken((amountIn! * BigInt(effectiveBps - cheaper.toBps)) / 10_000n, 18, 6)} ${base.symbol}` : ""}.
+                    </p>
+                  )}
+                  {!cheaper && atCap && (
+                    <p className="mt-2 text-[12.5px] text-bone-dim">
+                      It eases to 6% only after the TWAP holds at 1.12 or above for 7 hours. <button type="button" onClick={turn} className="font-semibold text-iris-hot underline underline-offset-4">Buy instead — untaxed</button>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
+          )}
+
+          <dl className="mt-5 space-y-2 border-t border-white/[0.06] pt-4 font-mono text-[12.5px]">
+            <Line k="Rate" v={price !== null ? `1 ${tokenIn.symbol} ≈ ${price.toPrecision(6)} ${tokenOut.symbol}` : "—"} />
+            <Line k="LP fee" v={p.deployed ? `${feePips / 10_000}%${market === "peg" ? " (set by the hook)" : ""}` : "—"} />
+            <Line k="Sell tax" v={!selling ? "0% — buys are untaxed" : taxed ? `${formatBps(effectiveBps)}${taxAmount !== null ? ` · ${formatToken(taxAmount, taxDecimals, 6)} ${taxSymbol}` : ""}` : "off"} tone={taxed ? (atCap ? "text-bad" : "text-warn") : "text-ok"} />
+            <Line k="Minimum received" v={minOut !== null ? `${formatToken(minOut, tokenOut.decimals, 6)} ${tokenOut.symbol}` : "—"} strong />
+            <Line k="Deadline" v="10 minutes" />
+          </dl>
+
+          <div className="mt-4">
+            <div className="label mb-2">Slippage tolerance</div>
+            <SlippageChips valueBps={slippageBps} onChange={setSlippageBps} />
           </div>
+
+          <div className="mt-5">
+            {atCap ? (
+              <HoldButton onConfirm={submit} disabled={!!reason || act.busy} hold={1.5}>
+                Sell anyway{taxAmount !== null ? ` — lose ${formatToken(taxAmount, taxDecimals, 4)} ${taxSymbol} to tax` : ""}
+              </HoldButton>
+            ) : (
+              <button type="button" onClick={submit} disabled={!!reason || act.busy} className={`btn w-full ${selling ? (taxed ? "btn-danger" : "") : "btn-primary"}`}>
+                {act.busy ? "Working…" : selling ? `Sell ${base.symbol}` : `Buy ${base.symbol}`}
+              </button>
+            )}
+            {reason ? <Reason>{reason}</Reason> : <Reason>The output is an estimate from the pool's current price. The transaction reverts if you would receive less than the minimum, or if it is not mined within 10 minutes.</Reason>}
+          </div>
+        </section>
+
+        {/* ---- Context ---- */}
+        <div className="space-y-5">
+          <section data-reveal className="panel p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="label">Sell tax by TWAP</span>
+              <RuleBadge />
+            </div>
+            <TaxLadder price={p.tax.price} rateBps={p.tax.rateBps} enabled={p.tax.enabled} />
+          </section>
+          <section data-reveal className="panel p-5">
+            <div className="label mb-3">This market</div>
+            <dl className="space-y-2 font-mono text-[12.5px]">
+              <Line k="Pool" v={`${base.symbol} / ${quote.symbol}`} />
+              <Line k="State" v={!state ? "—" : state.sqrtPriceX96 === 0n ? "not initialised" : "initialised"} />
+              <Line k="In-range liquidity" v={state ? formatToken(state.liquidity) : "—"} />
+              <Line k={market === "peg" ? "Sell tax switch" : "Buyback tax switch"} v={switchOn === null ? "—" : switchOn ? "on" : "off"} />
+              {market === "peg" && <Line k="TWAP · spot" v={`${p.market.twap?.toFixed(4) ?? "—"} · ${p.market.spot?.toFixed(4) ?? "—"}`} />}
+            </dl>
+            <p className="mt-3 text-[12.5px] leading-relaxed text-ash">
+              {NAMES.peg} and {NAMES.share} cannot be swapped for each other: their shared pool is liquidity only. <Link to="/masonry" className="text-iris-hot underline-offset-4 hover:underline">It is what {NAMES.room} stakes</Link>.
+            </p>
+          </section>
         </div>
-      </section>
+      </div>
+
+      <div className="mx-auto w-full max-w-7xl px-4 pb-12 md:px-8">
+        <SectionTitle kicker="Rules" title="What selling costs, and why" right={<RuleBadge />} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          {[
+            ["Three tiers", "12% while the TWAP is under 1.12, 6% from 1.12, 3% from 1.20. Never more than 12%."],
+            ["Up fast, down slow", "The rate rises the moment the TWAP drops a tier. It falls only after the lower rate has stood for 7 hours."],
+            ["Buys are free of it", "Only sells are taxed. The LP fee applies both ways and goes to liquidity providers."],
+            [`${NAMES.share} follows`, `When its switch is on, ${NAMES.share} sells pay the same rate from the proceeds, which then buy ${NAMES.peg} and burn it.`],
+          ].map(([k, v]) => (
+            <div key={k} data-reveal className="panel p-4">
+              <div className="label mb-1">{k}</div>
+              <p className="text-[12.5px] leading-relaxed text-bone-dim">{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Line({ k, v, tone = "text-bone-dim", strong }: { k: string; v: string; tone?: string; strong?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-ash">{k}</dt>
+      <dd className={`min-w-0 break-words text-right ${strong ? "text-bone" : tone}`}>{v}</dd>
     </div>
   );
 }

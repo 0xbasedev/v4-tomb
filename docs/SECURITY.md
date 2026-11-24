@@ -1,6 +1,11 @@
 # Security Triage
 
-This document tracks the Slither static-analysis triage for Old Money. Each finding category from `slither contracts/ --filter-paths "lib/|test/|script/"` is listed with either a code fix, an inline justification, or a written-acceptance rationale.
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
+
+This document tracks the Slither static-analysis triage for xTOMB. Each finding category from `slither contracts/ --filter-paths "lib/|test/|script/"` is listed with either a code fix, an inline justification, or a written-acceptance rationale.
 
 Per `feedback_pre_deploy_gates.md`: **HIGH and MEDIUM severity findings must be fixed or explicitly justified inline. LOW / INFO findings get a written triage here.**
 
@@ -38,11 +43,11 @@ All 11 original Medium findings have been resolved.
 
 | Original count | Detector | Resolution |
 |---|---|---|
-| 4 | `uninitialized-local` | Added explicit `= 0` initializers in Treasury (`daoShare`, `devShare`, `excluded`, `savedForBond`, `savedForBoardroom`). |
-| 3 | `unused-return` on `IBasisAsset.mint()` | Wrapped all three callsites (`buyBonds`, `_sendToBoardroom`, `allocateSeigniorage`) in `require(...)`. Tomb-faithful: `mint` returns true for any nonzero amount, and we always pass nonzero — `require` is defensive and removes the warning. |
+| 4 | `uninitialized-local` | Added explicit `= 0` initializers in Treasury (`daoShare`, `devShare`, `excluded`, `savedForBond`, `savedForMasonry`). |
+| 3 | `unused-return` on `IBasisAsset.mint()` | Wrapped all three callsites (`buyBonds`, `_sendToMasonry`, `allocateSeigniorage`) in `require(...)`. Tomb-faithful: `mint` returns true for any nonzero amount, and we always pass nonzero — `require` is defensive and removes the warning. |
 | 1 | `unused-return` on `getSlot0` destructuring | `// slither-disable-next-line unused-return` immediately above the destructuring assignment. We legitimately only need the tick. |
-| 1 | `divide-before-multiply` in `allocateSeigniorage` | Rewrote the boardroom share to do multiplications first: `savedForBoardroom = supply * percentage * floorPercent / moneyPriceOne / 10_000`. Algebraically equivalent to Tomb's two-step at sub-wei precision (meaningless at our 1e23+ wei scales) but linear. |
-| 1 | `reentrancy-no-eth` in `buyBonds` | Added `nonReentrant` modifier; moved `epochSupplyContractionLeft -= moneyAmount` BEFORE the external burn/mint calls (CEI). |
+| 1 | `divide-before-multiply` in `allocateSeigniorage` | Rewrote the masonry share to do multiplications first: `savedForMasonry = supply * percentage * floorPercent / pegPriceOne / 10_000`. Algebraically equivalent to Tomb's two-step at sub-wei precision (meaningless at our 1e23+ wei scales) but linear. |
+| 1 | `reentrancy-no-eth` in `buyBonds` | Added `nonReentrant` modifier; moved `epochSupplyContractionLeft -= pegAmount` BEFORE the external burn/mint calls (CEI). |
 | 1 | `reentrancy-no-eth` in `allocateSeigniorage` | Added `nonReentrant` modifier; moved `seigniorageSaved += savedForBond` BEFORE the mint. The remaining cross-call ordering is governed by `nonReentrant` (Slither does not model OZ ReentrancyGuard's protection, so we suppress with an inline `// slither-disable-next-line reentrancy-no-eth` directive above the function). |
 
 `ReentrancyGuard` and `nonReentrant` are pure additive defenses — they don't change Tomb's behavior under non-attack flows.
@@ -55,9 +60,9 @@ All 44 LOW findings are accepted with rationale. They fall into 8 categories.
 
 ### `events-maths` (13 findings)
 
-State variables modified inside computations without dedicated events. E.g., `epochSupplyContractionLeft -= moneyAmount` in `buyBonds`.
+State variables modified inside computations without dedicated events. E.g., `epochSupplyContractionLeft -= pegAmount` in `buyBonds`.
 
-**Accepted.** Tomb-faithful: high-level events (`BoughtBonds`, `RedeemedBonds`, `BoardroomFunded`, etc.) cover the meaningful state transitions. Indexers reconstruct the math-derived state from those rather than emitting an event on every individual math step. Adding per-update events would bloat bytecode and indexer overhead without informing any new offchain decision.
+**Accepted.** Tomb-faithful: high-level events (`BoughtBonds`, `RedeemedBonds`, `MasonryFunded`, etc.) cover the meaningful state transitions. Indexers reconstruct the math-derived state from those rather than emitting an event on every individual math step. Adding per-update events would bloat bytecode and indexer overhead without informing any new offchain decision.
 
 ### `missing-zero-check` (13 findings)
 
@@ -65,7 +70,7 @@ Setters that accept `address` without `if (addr == address(0)) revert ZeroAddres
 
 **Accepted.** Three reasons:
 
-1. Most accept-an-address setters live on Treasury/Boardroom and the caller is the Timelock (`admin`); the Timelock's two-step queue → execute flow gives the admin multisig 1 day minimum to catch a mistyped zero address before it lands.
+1. Most accept-an-address setters live on Treasury/Masonry and the caller is the Timelock (`admin`); the Timelock's two-step queue → execute flow gives the admin multisig 1 day minimum to catch a mistyped zero address before it lands.
 2. A few are intentional — e.g., `setOperator(address)` could be used to rotate operator to zero as a last-resort renounce (no future privileged calls succeed). Adding a hard zero-check forecloses that escape hatch.
 3. Where Tomb specifically check-zeros (e.g., `setExtraFunds.daoFund`, `setExtraFunds.devFund`, `oracle != address(0)` in `_getOldmPrice`), we match Tomb.
 
@@ -77,7 +82,7 @@ Setters that accept `address` without `if (addr == address(0)) revert ZeroAddres
 
 ### `calls-loop` (5 findings)
 
-External calls inside `for` loops (e.g., `getMoneyCirculatingSupply` iterates `excludedFromTotalSupply`).
+External calls inside `for` loops (e.g., `getPegCirculatingSupply` iterates `excludedFromTotalSupply`).
 
 **Accepted.** All such loops are bounded:
 - `supplyTiers[]` and `maxExpansionTiers[]` are fixed at 9 entries.
@@ -90,7 +95,7 @@ DoS via runaway loop is impossible — the loop bound is set at deploy or under 
 
 Access-control state changes that don't emit. E.g., `setOperator` on Treasury doesn't emit `OperatorTransferred`.
 
-**Accepted with TODO.** Tomb's Treasury also doesn't emit; we're matching. Polish pass before mainnet should add `OperatorTransferred(prev, next)` events on `Treasury.setOperator` and `Boardroom.setOperator`. Tracked separately; not load-bearing for security.
+**Accepted with TODO.** Tomb's Treasury also doesn't emit; we're matching. Polish pass before mainnet should add `OperatorTransferred(prev, next)` events on `Treasury.setOperator` and `Masonry.setOperator`. Tracked separately; not load-bearing for security.
 
 ### `shadowing-local` (2 findings)
 
@@ -116,13 +121,13 @@ An event emit happens after an external call. Reentry could observe inconsistent
 
 ### `naming-convention` (41 findings)
 
-Function parameters use `_camelCase` (e.g., `_money`, `_trustnote`, `_devFund`). Slither expects bare `camelCase`.
+Function parameters use `_camelCase` (e.g., `_peg`, `_bond`, `_devFund`). Slither expects bare `camelCase`.
 
 **Rejected as false positive.** The `_param` convention is standard Solidity style for differentiating constructor / setter parameters from same-named storage variables. Used by OpenZeppelin, Compound, Uniswap, and Tomb itself. Deliberate.
 
 ### `missing-inheritance` (3 findings)
 
-`Distributor`, `OldMoney`, and `TrustNote` should declare `is IDistributor` / `is IBasisAsset`.
+`Distributor`, `PegToken`, and `BondToken` should declare `is IDistributor` / `is IBasisAsset`.
 
 **Accepted with TODO.** Cosmetic — adding the explicit `is IBasisAsset` annotation is good practice and helps offchain tooling resolve the interface. Will add in a polish pass. The contracts DO implement the interfaces in practice; the declarations are just missing.
 
@@ -144,7 +149,7 @@ Function parameters use `_camelCase` (e.g., `_money`, `_trustnote`, `_devFund`).
 
 ### `immutable-states` (5 findings)
 
-`Epoch._startTime`, `Estate.startTime`, `Estate.endTime`, `Estate.communityFundRewardRate`, `Estate.devFundRewardRate` could be `immutable`.
+`Epoch._startTime`, `ShareToken.startTime`, `ShareToken.endTime`, `ShareToken.communityFundRewardRate`, `ShareToken.devFundRewardRate` could be `immutable`.
 
 **Deferred to Sprint 10 (gas optimization).** All five are set once in the constructor and never written again. Adding `immutable` is a free gas win (~2100 gas per read). Will do in the gas-optimization sweep along with other low-hanging optimizations like `cache-array-length`.
 
@@ -152,15 +157,15 @@ Function parameters use `_camelCase` (e.g., `_money`, `_trustnote`, `_devFund`).
 
 `for (uint256 i = 0; i < array.length; ...)` — caching `array.length` saves SLOADs.
 
-**Already fixed in this sprint.** Added `uint256 len = excludedFromTotalSupply.length;` in `getMoneyCirculatingSupply`.
+**Already fixed in this sprint.** Added `uint256 len = excludedFromTotalSupply.length;` in `getPegCirculatingSupply`.
 
 ---
 
 ## Outstanding TODOs (polish-pass items)
 
-1. Emit `OperatorTransferred(prev, next)` on `Treasury.setOperator` and `Boardroom.setOperator`.
-2. Add explicit `is IBasisAsset` / `is IDistributor` annotations to `OldMoney`, `TrustNote`, `Distributor`.
-3. Mark `Epoch._startTime`, `Estate.startTime` / `endTime` / `communityFundRewardRate` / `devFundRewardRate` as `immutable`.
+1. Emit `OperatorTransferred(prev, next)` on `Treasury.setOperator` and `Masonry.setOperator`.
+2. Add explicit `is IBasisAsset` / `is IDistributor` annotations to `PegToken`, `BondToken`, `Distributor`.
+3. Mark `Epoch._startTime`, `ShareToken.startTime` / `endTime` / `communityFundRewardRate` / `devFundRewardRate` as `immutable`.
 4. Resolve two `shadowing-local` cases by renaming the inner variable.
 
 None of these are security-load-bearing; all are quality-of-life polish before audit handoff.

@@ -1,23 +1,37 @@
-import { http, createConfig } from "wagmi";
 import { defineChain, type Chain } from "viem";
-import { injected } from "wagmi/connectors/injected";
+import { http, createConfig, type Transport } from "wagmi";
+import { injected } from "wagmi/connectors";
+
 import { networks } from "./networks";
 
-const toChain = (network: (typeof networks)[number]) => defineChain({
-  id: network.id,
-  name: network.name,
-  nativeCurrency: network.nativeCurrency,
-  rpcUrls: { default: { http: [network.rpcUrl] } },
-  blockExplorers: network.explorerUrl
-    ? { default: { name: "Explorer", url: network.explorerUrl } }
-    : undefined,
-  testnet: network.testnet,
-});
-const chains: [Chain, ...Chain[]] = [toChain(networks[0]), ...networks.slice(1).map(toChain)];
+const env = import.meta.env as unknown as Record<string, string | undefined>;
+const rpcFor = (network: (typeof networks)[number]) => env[`VITE_RPC_${network.id}`] ?? network.rpcUrl;
 
+const toChain = (network: (typeof networks)[number]) =>
+  defineChain({
+    id: network.id,
+    name: network.name,
+    nativeCurrency: network.nativeCurrency,
+    rpcUrls: { default: { http: [rpcFor(network)] } },
+    blockExplorers: network.explorerUrl ? { default: { name: "Explorer", url: network.explorerUrl } } : undefined,
+    testnet: network.testnet,
+  });
+
+const chains = networks.map(toChain) as unknown as [Chain, ...Chain[]];
+
+/**
+ * Wallet chains are exactly the manifest's networks. Multicall3 is not assumed
+ * to exist on an arbitrary chain, so batched reads fall back to plain calls.
+ */
 export const wagmiConfig = createConfig({
   chains,
-  // Do not assume a Multicall3 deployment exists on an arbitrary EVM chain.
-  transports: Object.fromEntries(networks.map((network) => [network.id, http(network.rpcUrl)])),
+  transports: Object.fromEntries(networks.map((network) => [network.id, http(rpcFor(network))])) as Record<number, Transport>,
   connectors: [injected()],
+  multiInjectedProviderDiscovery: true,
 });
+
+declare module "wagmi" {
+  interface Register {
+    config: typeof wagmiConfig;
+  }
+}

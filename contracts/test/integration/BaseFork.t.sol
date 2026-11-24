@@ -4,18 +4,17 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {TrustNote} from "../../src/tokens/TrustNote.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title BaseForkTest
- * @notice Forks Base mainnet at runtime and validates that the Old Money stack deploys
+ * @notice Forks Base mainnet at runtime and validates that the stack deploys
  *         cleanly against the live WETH token and Uniswap V4 PoolManager. The full V4
  *         hook integration (real pool initialization, swap-driven observation feed)
  *         lives in BaseForkHook.t.sol.
@@ -30,11 +29,10 @@ contract BaseForkTest is BaseTest {
     /// @notice Uniswap V4 PoolManager on Base mainnet.
     address internal constant V4_POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
 
-    OldMoney internal money;
-    Estate internal estate;
-    TrustNote internal trustnote;
+    PegToken internal peg;
+    ShareToken internal share;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     MockOracle internal oracle;
 
     address internal genesisPool = makeAddr("genesisPool");
@@ -64,50 +62,36 @@ contract BaseForkTest is BaseTest {
 
         // Standard deploy sequence — same dance as EpochCycle.t.sol setUp.
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", startTime, communityFund, devFund);
         vm.stopPrank();
 
         oracle = new MockOracle(1e18);
 
         vm.startPrank(owner);
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
-        treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            startTime,
-            excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), startTime, excluded);
 
-        money.distributeReward(genesisPool, mainPool, airdropWallet);
-        estate.distributeReward(farmingPool);
+        peg.distributeReward(genesisPool, mainPool, airdropWallet);
+        share.distributeReward(farmingPool);
 
-        // Override bootstrap to 0 so tests can exercise post-bootstrap recovery
-        // mechanics directly. Bootstrap behavior tested separately.
-        treasury.setBootstrap(0, 100);
+        peg.transferTrustees(address(treasury));
+        share.transferTrustees(address(treasury));
+        masonry.setOperator(address(treasury));
 
-        money.transferTrustees(address(treasury));
-        estate.transferTrustees(address(treasury));
-        trustnote.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
-
-        // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
-        // owner holds 1 ESTATE from Estate's constructor mint. Stake a tiny
-        // amount so allocateSeigniorage's bootstrap branch can credit Boardroom
+        // Launch ceremony Masonry seed (see docs/GAP_AUDIT.md gap #16):
+        // owner holds 1 SHARE from ShareToken's constructor mint. Stake a tiny
+        // amount so allocateSeigniorage's bootstrap branch can credit Masonry
         // without reverting CannotAllocateWhenTotalSupplyZero.
-        estate.approve(address(boardroom), 1);
-        boardroom.stake(1);
+        share.approve(address(masonry), 1);
+        masonry.stake(1);
 
         vm.stopPrank();
 
@@ -124,7 +108,7 @@ contract BaseForkTest is BaseTest {
         (bool ok, bytes memory data) = WETH.staticcall(abi.encodeWithSignature("decimals()"));
         assertTrue(ok, "WETH.decimals() should succeed");
         uint8 decimals = abi.decode(data, (uint8));
-        assertEq(decimals, 18, "WETH should have 18 decimals (matches our $MONEY)");
+        assertEq(decimals, 18, "WETH should have 18 decimals (matches our $PEG)");
 
         (bool ok2, bytes memory data2) = WETH.staticcall(abi.encodeWithSignature("symbol()"));
         assertTrue(ok2, "WETH.symbol() should succeed");
@@ -142,42 +126,40 @@ contract BaseForkTest is BaseTest {
 
     function test_FullStackInitializesAgainstFork() public view {
         // Treasury references all five protocol addresses post-init.
-        assertEq(treasury.money(), address(money));
-        assertEq(treasury.trustnote(), address(trustnote));
-        assertEq(treasury.estate(), address(estate));
+        assertEq(treasury.peg(), address(peg));
+        assertEq(treasury.share(), address(share));
         assertEq(treasury.oracle(), address(oracle));
-        assertEq(treasury.boardroom(), address(boardroom));
+        assertEq(treasury.masonry(), address(masonry));
 
         // Operator handoff complete on every protocol contract.
-        assertEq(money.operator(), address(treasury));
-        assertEq(estate.operator(), address(treasury));
-        assertEq(trustnote.operator(), address(treasury));
-        assertEq(boardroom.operator(), address(treasury));
+        assertEq(peg.operator(), address(treasury));
+        assertEq(share.operator(), address(treasury));
+        assertEq(masonry.operator(), address(treasury));
 
         // Genesis distributions landed.
-        assertEq(money.balanceOf(genesisPool), 11_000 ether);
-        assertEq(money.balanceOf(mainPool), 140_000 ether);
-        assertEq(money.balanceOf(airdropWallet), 9000 ether);
-        assertEq(estate.balanceOf(farmingPool), 59_500 ether);
+        assertEq(peg.balanceOf(genesisPool), 11_000 ether);
+        assertEq(peg.balanceOf(mainPool), 140_000 ether);
+        assertEq(peg.balanceOf(airdropWallet), 9000 ether);
+        assertEq(share.balanceOf(farmingPool), 59_500 ether);
     }
 
     function test_EpochCycleRunsAgainstFork() public {
-        // Seed circulation: alice + bob get OLDM from the main reward pool.
+        // Seed circulation: alice + bob get OLDM from the peg farm.
         vm.startPrank(mainPool);
-        money.transfer(alice, 10_000 ether);
-        money.transfer(bob, 10_000 ether);
+        peg.transfer(alice, 10_000 ether);
+        peg.transfer(bob, 10_000 ether);
         vm.stopPrank();
 
-        // Seed ESTATE from farming pool to alice.
+        // Seed SHARE from farming pool to alice.
         vm.prank(farmingPool);
-        estate.transfer(alice, 1000 ether);
+        share.transfer(alice, 1000 ether);
 
         // Alice stakes.
         vm.prank(alice);
-        estate.approve(address(boardroom), 1000 ether);
+        share.approve(address(masonry), 1000 ether);
         vm.roll(block.number + 1);
         vm.prank(alice);
-        boardroom.stake(1000 ether);
+        masonry.stake(1000 ether);
 
         // Drive the oracle and allocate one expansion epoch.
         oracle.setPrice(1.05e18);
@@ -187,52 +169,35 @@ contract BaseForkTest is BaseTest {
         assertEq(treasury.epoch(), 1);
 
         // Alice accrued reward.
-        assertGt(boardroom.earned(alice), 0);
+        assertGt(masonry.earned(alice), 0);
     }
 
-    function test_TreasuryHoldsMoneyAfterContractionRecovery() public {
-        // Quick contraction → recovery to make sure the bond reserve path works on fork.
+    function test_TreasuryHoldsNothingAcrossExpansionAndContraction() public {
         vm.startPrank(mainPool);
-        money.transfer(alice, 5000 ether);
+        peg.transfer(alice, 5000 ether);
         vm.stopPrank();
         vm.prank(farmingPool);
-        estate.transfer(alice, 1000 ether);
+        share.transfer(alice, 1000 ether);
         vm.prank(alice);
-        estate.approve(address(boardroom), 1000 ether);
+        share.approve(address(masonry), 1000 ether);
         vm.roll(block.number + 1);
         vm.prank(alice);
-        boardroom.stake(1000 ether);
+        masonry.stake(1000 ether);
 
-        // Expansion (need a tick at all).
-        oracle.setPrice(1.05e18);
-        vm.warp(treasury.nextEpochPoint() + 1);
-        vm.roll(block.number + 1);
-        treasury.allocateSeigniorage();
-
-        // Contraction tick.
-        oracle.setPrice(0.9e18);
-        vm.warp(treasury.nextEpochPoint() + 1);
-        vm.roll(block.number + 1);
-        treasury.allocateSeigniorage();
-
-        // Alice buys some bonds.
-        vm.prank(alice);
-        money.approve(address(treasury), 100 ether);
-        uint256 contractionPrice = treasury.getMoneyPrice();
-        vm.roll(block.number + 1);
-        vm.prank(alice);
-        treasury.buyBonds(100 ether, contractionPrice);
-        assertEq(trustnote.balanceOf(alice), 100 ether);
-
-        // Three recovery expansions at 1.15 to build reserves.
-        oracle.setPrice(1.15e18);
-        for (uint256 i = 0; i < 3; ++i) {
+        // Expansion, contraction, then expansion again: no debt to repay in between.
+        uint256[4] memory prices = [uint256(1.05e18), 0.9e18, 1.15e18, 1.15e18];
+        for (uint256 i = 0; i < prices.length; ++i) {
+            oracle.setPrice(prices[i]);
+            uint256 supplyBefore = peg.totalSupply();
             vm.warp(treasury.nextEpochPoint() + 1);
             vm.roll(block.number + 1);
             treasury.allocateSeigniorage();
+            if (prices[i] <= treasury.pegPriceCeiling()) {
+                assertEq(peg.totalSupply(), supplyBefore, "nothing minted at or below the ceiling");
+            } else {
+                assertGt(peg.totalSupply(), supplyBefore, "expansion mints straight away");
+            }
+            assertEq(peg.balanceOf(address(treasury)), 0, "the Treasury never holds a balance");
         }
-
-        // Treasury now holds MONEY for bond redemption.
-        assertGt(money.balanceOf(address(treasury)), 0);
     }
 }

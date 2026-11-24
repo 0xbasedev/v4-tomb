@@ -14,7 +14,7 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 /**
  * @title MiniSwapRouter
- * @notice A purpose-built V4 swap router for Old Money. Exposes a single
+ * @notice A purpose-built V4 swap router for the protocol. Exposes a single
  *         exact-input swap entry, plain ERC-20 approve flow (no Permit2),
  *         and the canonical V4 unlock+callback pattern wrapped behind a
  *         simple external API.
@@ -48,6 +48,7 @@ contract MiniSwapRouter is IUnlockCallback {
     error NotPoolManager();
     error ZeroAmount();
     error TooLittleReceived(uint256 amountOutMin, uint256 actualOut);
+    error DeadlinePassed(uint256 deadline, uint256 timestamp);
     error InvalidDelta();
 
     /// @notice Internal payload passed through unlock -> callback.
@@ -85,6 +86,31 @@ contract MiniSwapRouter is IUnlockCallback {
         uint256 amountOutMin,
         address recipient
     ) external returns (uint256 amountOut) {
+        return _swapExactIn(poolKey, zeroForOne, amountIn, amountOutMin, recipient);
+    }
+
+    /// @notice As `swapExactIn`, but reverts if mined after `deadline`. Use this from a UI:
+    ///         without a deadline a stuck transaction can execute much later, at any price
+    ///         that still clears `amountOutMin`.
+    function swapExactIn(
+        PoolKey calldata poolKey,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address recipient,
+        uint256 deadline
+    ) external returns (uint256 amountOut) {
+        if (block.timestamp > deadline) revert DeadlinePassed(deadline, block.timestamp);
+        return _swapExactIn(poolKey, zeroForOne, amountIn, amountOutMin, recipient);
+    }
+
+    function _swapExactIn(
+        PoolKey calldata poolKey,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address recipient
+    ) internal returns (uint256 amountOut) {
         if (amountIn == 0) revert ZeroAmount();
         bytes memory result = poolManager.unlock(
             abi.encode(

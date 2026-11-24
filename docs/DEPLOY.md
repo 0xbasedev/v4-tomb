@@ -20,7 +20,7 @@ node scripts/protocol.mjs validate
 node scripts/install-contract-deps.mjs
 ```
 
-To inspect the old deployment, copy `config/examples/upstream-base-sepolia.json` over `config/networks.json` and rebuild the frontend. That profile is historical and is not evidence that its contracts remain safe or active.
+`config/examples/upstream-base-sepolia.json` records the old Base Sepolia deployment for reference only. Its hook carries the superseded `0x1088` permission bits, so the configuration validator rejects it and the frontend will not load it. Only hooks at a `0x10CC` address are deployable.
 
 ## 2. Set operator parameters
 
@@ -36,7 +36,7 @@ set +a
 
 `PROTOCOL_NETWORK_INDEX` is the zero-based manifest index (default 0). `PROTOCOL_CONFIG` defaults to `../config/networks.json`; custom files must be under the allowed public config directory. The frontend selects the same `PROTOCOL_CONFIG` path (relative to `frontend/`); by default it uses `../config/networks.json`. Set that variable when building or starting the UI. The CLI also honors it, or accepts an explicit manifest path. Browser tests always use the isolated local example profile.
 
-The main deploy creates tokens, hook/pool, oracle, wrapper, three funded reward pools, Treasury, Boardroom, MiniSwapRouter, and Timelock. It wires Treasury token authority and the Main/Share wrapper pools. It leaves Genesis token registration, seed liquidity, Boardroom seeding, tax enablement/fund cuts, and governance rotation to the launch ceremony.
+The main deploy creates tokens, the PegDefenseHook and its LEVEL/WETH pool, the ShareBuybackHook and its SQUARE/WETH pool, oracle, wrapper, three funded reward pools, Treasury, Masonry, MiniSwapRouter, and Timelock. Set `SHARE_POOL_INITIAL_TICK` to choose the SQUARE/WETH opening price (WETH per SQUARE, in ticks; default 0 = parity). The deploy also creates an untradeable LEVEL/SQUARE staking pool and its wrapper; `PAIR_POOL_INITIAL_TICK` fixes that pool's ratio permanently (LEVEL per SQUARE, in ticks; default 0 = one for one), so set it deliberately. It wires Treasury token authority and the Main/Share wrapper pools. It leaves Genesis token registration, seed liquidity, Masonry seeding, tax enablement/fund cuts, and governance rotation to the launch ceremony.
 
 ## 3. Simulate, review, broadcast
 
@@ -65,7 +65,7 @@ The publisher checks RPC chain ID, successful mined receipts, deployed contract 
 
 ## 5. Finish the existing launch ceremony
 
-All operational scripts now read protocol addresses from the manifest, not legacy `MONEY`, `TREASURY`, `HOOK`, or `TIMELOCK` environment variables. Amounts, weights, signers, fund policy, ETA and other operation-specific inputs remain explicit environment variables as documented in each script. Set the correct `PROTOCOL_NETWORK_INDEX` and RPC each time.
+All operational scripts now read protocol addresses from the manifest, not legacy `LEVEL`, `TREASURY`, `HOOK`, or `TIMELOCK` environment variables. Amounts, weights, signers, fund policy, ETA and other operation-specific inputs remain explicit environment variables as documented in each script. Set the correct `PROTOCOL_NETWORK_INDEX` and RPC each time.
 
 Use `OpenGenesis.s.sol` for allowed stake tokens and weights; `SeedLiquidity.s.sol` for funded seed LP; `PostBootstrap.s.sol` for the existing tax/fund transition; and `RotateGovernanceQueue.s.sol` / `RotateGovernanceExecute.s.sol` for delayed ownership rotation. Standalone router/Timelock deploy scripts remain available for deliberate replacements; they are unnecessary for a fresh main deploy, and replacement addresses must be reviewed in the manifest. Consult the preserved launch/governance runbooks for the complete existing ceremony.
 

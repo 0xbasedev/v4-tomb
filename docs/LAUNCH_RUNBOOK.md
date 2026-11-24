@@ -1,4 +1,9 @@
-# Old Money — Launch Runbook
+# xTOMB — Launch Runbook
+
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
 
 The runbook for taking a fresh `Deploy.s.sol` deployment from "contracts exist on chain" to "Trust is operational." Documents every post-deploy action required, when it must run, what role can run it, and the script that wraps it.
 
@@ -6,10 +11,10 @@ The runbook for taking a fresh `Deploy.s.sol` deployment from "contracts exist o
 
 **Current state at end of `Deploy.s.sol`:**
 - All protocol contracts deployed and initialized.
-- $MONEY: 11k to GenesisRewardPool, 140k to MainRewardPool, 9k to airdrop wallet (per `OldMoney.distributeReward` allocations).
-- $ESTATE: 59.5k to ShareRewardPool. The 5.5k community-fund vesting + 5k dev-fund vesting begin at the `vestingStart` parameter (default `block.timestamp + 1 hour`).
-- Treasury initialized; `bootstrapEpochs=28`, `daoFundSharedPercent=0`, `devFundSharedPercent=0`, no Boardroom seigniorage yet (epoch 0).
-- PegDefenseHook bound to the MONEY-WETH V4 pool; `autoCalculateTax=false`, `treasury` slot points at the Treasury contract.
+- $LEVEL: 11k to GenesisRewardPool, 140k to PegFarm, 9k to airdrop wallet (per `PegToken.distributeReward` allocations).
+- $SQUARE: 59.5k to ShareFarm. The 5.5k community-fund vesting + 5k dev-fund vesting begin at the `vestingStart` parameter (default `block.timestamp + 1 hour`).
+- Treasury initialized; `bootstrapEpochs=28`, `daoFundSharedPercent=0`, `devFundSharedPercent=0`, no Masonry seigniorage yet (epoch 0).
+- PegDefenseHook bound to the LEVEL-WETH V4 pool; `autoCalculateTax=false`, `treasury` slot points at the Treasury contract.
 - Main + Share reward pools have V4PositionWrapper registered as PID 0 (weight 100).
 - GenesisRewardPool has **no PIDs registered** — the pool is closed until the operator calls `add()`.
 - All admin roles still on the deployer EOA. No Timelock rotation yet.
@@ -23,14 +28,14 @@ The runbook for taking a fresh `Deploy.s.sol` deployment from "contracts exist o
 If `SeedLiquidity.s.sol` hasn't run yet (one-time per fresh pool):
 
 ```bash
-export MONEY=<deployed-money-address>
+export LEVEL=<deployed-peg-address>
 export HOOK=<deployed-hook-address>
-export MONEY_AMOUNT=100000000000000000   # 0.1 MONEY (wei)
-export WETH_AMOUNT=100000000000000000    # 0.1 WETH (wei) — must equal MONEY_AMOUNT to land at peg
+export PEG_AMOUNT=100000000000000000   # 0.1 LEVEL (wei)
+export WETH_AMOUNT=100000000000000000    # 0.1 WETH (wei) — must equal PEG_AMOUNT to land at peg
 forge script script/SeedLiquidity.s.sol --rpc-url base_sepolia --broadcast --slow
 ```
 
-The pool initialized at tick 0 (1 MONEY = 1 WETH). Equal amounts keep the seed at peg.
+The pool initialized at tick 0 (1 LEVEL = 1 WETH). Equal amounts keep the seed at peg.
 
 **Why now:** Without seed liquidity the first swap reverts, oracle never observes a price, and the Treasury can never tick past epoch 0.
 
@@ -54,7 +59,7 @@ Env vars consumed:
 
 ## 2 · Genesis Window (24 hours, epochs 0–4)
 
-No operator actions required. Stakers deposit outside ERC-20s; rewards accrue. The frontend's `/vault` Genesis tab is fully functional.
+No operator actions required. Stakers deposit outside ERC-20s; rewards accrue. The frontend's `/farms` Genesis tab is fully functional.
 
 Operational chores (do once at launch, then automate):
 
@@ -89,7 +94,7 @@ export TREASURY=0x928B72a3E734d6D07606d9655c55289D3a224c20
 forge script script/KeeperTick.s.sol --rpc-url base_sepolia --broadcast --slow
 ```
 
-**Why this matters:** Without the keeper, `allocateSeigniorage` never fires; the Treasury's epoch counter stalls at whatever value it had when the keeper was last on. No seigniorage flows, the Boardroom never pays out, bonds can't redeem during expansion. The keeper is the heartbeat of the protocol.
+**Why this matters:** Without the keeper, `allocateSeigniorage` never fires; the Treasury's epoch counter stalls at whatever value it had when the keeper was last on. No seigniorage flows, the Masonry never pays out, bonds can't redeem during expansion. The keeper is the heartbeat of the protocol.
 
 ---
 
@@ -99,25 +104,26 @@ No operator actions required. `poolStartTime` is set in `Deploy.s.sol` to the sa
 
 ### 3.1 (User-facing) The wrap flow
 
-1. User mints a MONEY-WETH V4 position via PositionManager (full range, tick spacing 60).
+1. User mints a LEVEL-WETH V4 position via PositionManager (full range, tick spacing 60).
 2. User calls `V4PositionWrapper.wrap(tokenId)` — wrapper takes the NFT, mints ERC-20 shares.
-3. User stakes shares in `MainRewardPool.deposit(0, amount)` or `ShareRewardPool.deposit(0, amount)`.
+3. User stakes shares in `PegFarm.deposit(0, amount)` or `ShareFarm.deposit(0, amount)`.
 
-The frontend's `/vault` Main + Share tabs show this flow. The wrap UI itself isn't shipped yet — Sprint C polish item.
+The frontend's `/farms` Peg + Share tabs show this flow. The wrap UI itself isn't shipped yet — Sprint C polish item.
 
 ---
 
 ## 4 · Post-Bootstrap (after epoch 28, ~T+7 days)
 
-Bootstrap guarantees 4.5% supply expansion to Boardroom regardless of price. After epoch 28 the Treasury switches to oracle-driven expansion/contraction. This is the moment to enable the rest of the monetization rails.
+Bootstrap guarantees 4.5% supply expansion to Masonry regardless of price. After epoch 28 the Treasury switches to oracle-driven expansion/contraction. This is the moment to enable the rest of the monetization rails.
 
 ### 4.1 Enable hook tax (optional, recommended)
 
 ```bash
 cast send <hook> 'setAutoCalculateTax(bool)' true --rpc-url base_sepolia --private-key $OPERATOR_PRIVATE_KEY
+cast send <shareBuybackHook> 'setTaxEnabled(bool)' true --rpc-url base_sepolia --private-key $OPERATOR_PRIVATE_KEY
 ```
 
-**Effect:** PegDefenseHook starts taking the schedule's tax on every MONEY sell. Below `burnThreshold` (1.10 ETH), the tax is burned. At or above, it routes to `hook.treasury()` — which by default is the Treasury contract.
+**Effect:** PegDefenseHook starts taking the schedule's tax on every LEVEL sell. Below `burnThreshold` (1.10 ETH), the tax is burned. At or above, it routes to `hook.treasury()` — which by default is the Treasury contract.
 
 **Why this lever exists:** Tomb-faithful peg defense. The first 28 epochs run without the tax so the protocol stabilizes; turning it on early can spook stakers.
 
@@ -154,10 +160,10 @@ Before mainnet, rotate every admin-bearing contract from the deployer EOA to the
 
 | Target | Mechanism | Reversible? |
 |---|---|---|
-| `$MONEY` / `$ESTATE` / `$TRUSTNOTE` / `PegDefenseHook` ownership | Ownable2Step (transferOwnership + acceptOwnership) | Two-step; queue can be cancelled |
+| `$LEVEL` / `$SQUARE` / `$BOND` / `PegDefenseHook` ownership | Ownable2Step (transferOwnership + acceptOwnership) | Two-step; queue can be cancelled |
 | `PegDefenseHook` trustees | one-step `transferTrustees` | One-way once queue executes |
 | Treasury operator + Genesis/Main/Share reward pool operators | one-step `setOperator` | One-way |
-| Boardroom operator | **stays as Treasury** (intentional — protocol-internal) | — |
+| Masonry operator | **stays as Treasury** (intentional — protocol-internal) | — |
 | V4PositionWrapper | no admin role (intentional) | — |
 
 The `/admin` Rotation Status panel reads on-chain state and surfaces which phase you're in, plus the exact env-var-prefilled command to run.
@@ -172,24 +178,24 @@ set -a && source .env && set +a
 
 # Base Sepolia values (mirror frontend/src/lib/addresses.ts)
 export TIMELOCK=0x216452DeD9bB3eDc618A40E6BCf84c33167F03d1
-export MONEY=0xb650e095c528fAc0f7DBC57121c60176323d8177
-export ESTATE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
-export TRUSTNOTE=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
+export LEVEL=0xb650e095c528fAc0f7DBC57121c60176323d8177
+export SQUARE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
+export BOND=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
 export HOOK=0x8FF87C2B51eE70cA39B3ECD72B60db13ad86D088
 export TREASURY=0x928B72a3E734d6D07606d9655c55289D3a224c20
 export GENESIS_REWARD_POOL=0xBf511845D6252E622734681f2713131EF39a6487
-export MAIN_REWARD_POOL=0x3190962F3f0F50f3D486B3fa81D61088a06FAb2D
-export SHARE_REWARD_POOL=0x5193Ce115BA7df3d25c7f5dA4c29DA2CD7c890bC
+export PEG_FARM=0x3190962F3f0F50f3D486B3fa81D61088a06FAb2D
+export SHARE_FARM=0x5193Ce115BA7df3d25c7f5dA4c29DA2CD7c890bC
 
 forge script script/RotateGovernanceQueue.s.sol \
   --rpc-url base_sepolia --broadcast --slow
 ```
 
 **What it does:**
-1. `transferOwnership(Timelock)` on MONEY/ESTATE/TRUSTNOTE/HOOK (Ownable2Step → sets pendingOwner)
+1. `transferOwnership(Timelock)` on LEVEL/SQUARE/BOND/HOOK (Ownable2Step → sets pendingOwner)
 2. `transferTrustees(Timelock)` on HOOK (one-step)
 3. `setOperator(Timelock)` on Treasury + Genesis/Main/Share pools (one-step)
-4. `queueTransaction(acceptOwnership)` on Timelock for MONEY/ESTATE/TRUSTNOTE/HOOK
+4. `queueTransaction(acceptOwnership)` on Timelock for LEVEL/SQUARE/BOND/HOOK
 
 13 broadcasts total. **The script logs the ETA** — save it for Execute. If you didn't override, it's `(queue_block.timestamp + Timelock.delay() + 60)`.
 
@@ -206,9 +212,9 @@ cd contracts
 set -a && source .env && set +a
 
 export TIMELOCK=0x216452DeD9bB3eDc618A40E6BCf84c33167F03d1
-export MONEY=0xb650e095c528fAc0f7DBC57121c60176323d8177
-export ESTATE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
-export TRUSTNOTE=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
+export LEVEL=0xb650e095c528fAc0f7DBC57121c60176323d8177
+export SQUARE=0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD
+export BOND=0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588
 export HOOK=0x8FF87C2B51eE70cA39B3ECD72B60db13ad86D088
 export ETA=<unix-timestamp-from-queue-log>
 
@@ -218,7 +224,7 @@ forge script script/RotateGovernanceExecute.s.sol \
 
 **What it does:** 4 `executeTransaction(acceptOwnership)` calls — one per token + hook. The Timelock pulls the queued txs and runs them against each target, finalizing the Ownable2Step transfer.
 
-After this script: Timelock owns MONEY/ESTATE/TRUSTNOTE/HOOK + is the operator/trustees of every privileged surface. The deployer EOA is no longer privileged. Every admin action now goes through the Timelock's queue/execute pattern (24h delay between proposing and acting).
+After this script: Timelock owns LEVEL/SQUARE/BOND/HOOK + is the operator/trustees of every privileged surface. The deployer EOA is no longer privileged. Every admin action now goes through the Timelock's queue/execute pattern (24h delay between proposing and acting).
 
 ### 5.4 Verifying
 
@@ -228,7 +234,7 @@ Sanity check via cast:
 
 ```bash
 cast call --rpc-url base_sepolia $TREASURY 'operator()(address)'   # expect Timelock
-cast call --rpc-url base_sepolia $MONEY 'owner()(address)'         # expect Timelock
+cast call --rpc-url base_sepolia $LEVEL 'owner()(address)'         # expect Timelock
 cast call --rpc-url base_sepolia $HOOK 'trustees()(address)'       # expect Timelock
 ```
 
@@ -248,7 +254,7 @@ cast call --rpc-url base_sepolia $HOOK 'trustees()(address)'       # expect Time
 | T-1h | Open Genesis pool | `OpenGenesis.s.sol` | No effect once stakers arrive |
 | T+0 → ∞ | Keeper: `oracle.update` + `allocateSeigniorage` every 6h | Cron / Defender | n/a |
 | T+24h | Main + Share start paying (auto) | — | — |
-| T+7d (epoch 28) | Enable hook tax | `cast send hook 'setAutoCalculateTax(bool)' true` | Yes — operator can flip back |
+| T+7d (epoch 28) | Enable Fire Tax on both hooks | `cast send hook 'setAutoCalculateTax(bool)' true` and `cast send shareBuybackHook 'setTaxEnabled(bool)' true` (or `PostBootstrap.s.sol`) | Yes — operator can flip back |
 | T+7d (epoch 28) | Set fund cuts | `PostBootstrap.s.sol` | Yes — operator can re-call setExtraFunds |
 | T+7d (epoch 28) | Redirect tax destination | `cast send hook 'setTreasury(address)' …` | Yes — operator can flip back |
 | Pre-mainnet | Rotate governance to Timelock | `RotateGovernance{Queue,Execute}.s.sol` | One-way (deployer loses admin) |
@@ -257,31 +263,31 @@ cast call --rpc-url base_sepolia $HOOK 'trustees()(address)'       # expect Time
 
 These are self-service or permissionless:
 
-- $MONEY / $ESTATE / $TRUSTNOTE token transfers — anyone with a balance
-- Boardroom stake / withdraw / claimReward — anyone with $ESTATE
+- $LEVEL / $SQUARE / $BOND token transfers — anyone with a balance
+- Masonry stake / withdraw / claimReward — anyone with $SQUARE
 - Reward pool deposit / withdraw / emergencyWithdraw — anyone with the stake token
-- Treasury buyBonds / redeemBonds — anyone with $MONEY (below peg) or $TRUSTNOTE (above ceiling)
-- V4 swap on MONEY-WETH — anyone (hook handles tax automatically once enabled)
-- LP wrap / unwrap via V4PositionWrapper — anyone with a MONEY-WETH V4 NFT
+- Treasury buyBonds / redeemBonds — anyone with $LEVEL (below peg) or $BOND (above ceiling)
+- V4 swap on LEVEL-WETH — anyone (hook handles tax automatically once enabled)
+- LP wrap / unwrap via V4PositionWrapper — anyone with a LEVEL-WETH V4 NFT
 - Oracle update + Treasury allocateSeigniorage — anyone post-epoch (Trustees pre-epoch only)
-- ESTATE vesting claim — anyone calls `Estate.claimRewards(target)` for community/dev fund (the target is fixed by the contract, not chosen by caller)
+- SQUARE vesting claim — anyone calls `ShareToken.claimRewards(target)` for community/dev fund (the target is fixed by the contract, not chosen by caller)
 
 ## 8 · Things to monitor
 
 - `treasury.epoch()` — should advance every 6h. If stalled, the keeper isn't running `allocateSeigniorage()`.
 - `oracle.initialized()` — should flip to `true` after the first `oracle.update()` that observes time elapsed. If still `false` after 12h, the keeper isn't running.
-- `treasury.getMoneyPrice()` — once initialized, returns the 1e18-scaled TWAP. Sanity-check against the spot price.
+- `treasury.getPegPrice()` — once initialized, returns the 1e18-scaled TWAP. Sanity-check against the spot price.
 - Hook tax events: `TaxBurned(amount, price)` and `TaxRouted(treasury, amount, price)` — only fire when `autoCalculateTax=true`.
 - `treasury.seigniorageSaved()` — accumulates during expansion (less daoFund + devFund shares). Depleted on `redeemBonds`.
-- `treasury.getBondsOutstanding()` (via `TRUSTNOTE.totalSupply()` ÷ `MONEY.totalSupply()` for debt ratio) — never exceeds `maxDebtRatioPercent` (3500 = 35%).
+- `treasury.getBondsOutstanding()` (via `BOND.totalSupply()` ÷ `LEVEL.totalSupply()` for debt ratio) — never exceeds `maxDebtRatioPercent` (3500 = 35%).
 
 ## 9 · Known launch hazards
 
-- **`getMoneyPrice()` reverts before first `oracle.update()` with time elapsed.** The Treasury's `allocateSeigniorage()` will revert with a string error from that surface. Mitigation: ensure oracle.update() runs at least once before the keeper hits allocateSeigniorage.
+- **`getPegPrice()` reverts before first `oracle.update()` with time elapsed.** The Treasury's `allocateSeigniorage()` will revert with a string error from that surface. Mitigation: ensure oracle.update() runs at least once before the keeper hits allocateSeigniorage.
 - **Genesis pool stake tokens must be added before `poolStartTime`.** The rewards-per-second emission ticks from `poolStartTime` regardless; if no PIDs are registered, the emission is lost to early epochs.
 - **The `targetPrice` slippage check in `buyBonds`/`redeemBonds` is strict.** Frontend reads price at click time, but if oracle.update() runs in the same block as the bond call, the price changes and the call reverts with `PriceMoved`. Mitigation (T10): widen frontend slippage tolerance.
 - **`autoCalculateTax=true` requires the hook to have been funded with the `treasury` slot set.** Default at deploy is the Treasury contract, so this is fine; only an issue if you manually called `hook.setTreasury(address(0))` for some reason.
-- **Bootstrap supply expansion is unconditional.** Even if MONEY trades below peg in epochs 1–28, the protocol still mints 4.5% to Boardroom. This is Tomb-faithful behavior — it incentivizes early staking. Don't be surprised if the price chart looks weird during this window.
+- **Bootstrap supply expansion is unconditional.** Even if LEVEL trades below peg in epochs 1–28, the protocol still mints 4.5% to Masonry. This is Tomb-faithful behavior — it incentivizes early staking. Don't be surprised if the price chart looks weird during this window.
 
 ---
 

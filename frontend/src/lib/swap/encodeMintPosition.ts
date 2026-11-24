@@ -1,6 +1,6 @@
 import { encodeAbiParameters, parseAbiParameters, type Address, type Hex } from "viem";
 
-import type { PoolKey } from "./encodeV4Swap";
+import type { PoolKey } from "./poolKey";
 
 /**
  * Encode the V4 PositionManager.modifyLiquidities calldata for a full-range

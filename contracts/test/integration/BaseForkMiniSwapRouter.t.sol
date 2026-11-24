@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {MiniSwapRouter} from "../../src/swap/MiniSwapRouter.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -48,7 +48,7 @@ interface IWeth9 {
  *           4. zero amountIn reverts cleanly with ZeroAmount
  *           5. Non-PoolManager caller into unlockCallback reverts with NotPoolManager
  *
- *         Uses the live Base mainnet V4 PoolManager via fork, deploys a fresh MONEY
+ *         Uses the live Base mainnet V4 PoolManager via fork, deploys a fresh PEG
  *         token + hook + pool, seeds liquidity, then exercises the router.
  *
  *         Gated on BASE_RPC_URL — skipped if unset (matches the other BaseFork tests).
@@ -58,7 +58,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
     using StateLibrary for IPoolManager;
 
     IPoolManager internal pm;
-    OldMoney internal money;
+    PegToken internal peg;
     PegDefenseHook internal hook;
     MiniSwapRouter internal router;
     PoolModifyLiquidityTest internal liquidityRouter;
@@ -83,25 +83,24 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         pm = IPoolManager(Addresses.poolManager());
         weth = Addresses.weth();
 
-        // Deploy MONEY (test contract holds trustees role; no Treasury needed for swap tests).
+        // Deploy PEG (test contract holds trustees role; no Treasury needed for swap tests).
         vm.prank(owner);
-        money = new OldMoney();
+        peg = new PegToken("Peg Token", "PEG");
 
-        // Mine a hook address with the required permissions (AFTER_INITIALIZE | BEFORE_SWAP |
-        // BEFORE_SWAP_RETURNS_DELTA = 0x1088). Use HookMiner so the resulting CREATE2
+        // Mine a hook address with the required permissions (see PegDefenseHookPermissions.FLAGS,
+        // low 14 bits = 0x10CC). Use HookMiner so the resulting CREATE2
         // address has the bit pattern V4 validates against.
-        uint160 flags =
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
+        uint160 flags = PegDefenseHookPermissions.FLAGS;
         bytes memory hookCreationCode =
-            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(money), address(this)));
+            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(pm, address(peg), address(this)));
         (address minedHookAddr, bytes32 salt) = HookMiner.find(address(this), flags, hookCreationCode);
         hook = PegDefenseHook(payable(_deployWithSalt(hookCreationCode, salt)));
         assertEq(address(hook), minedHookAddr, "hook addr mined");
 
         // Sort tokens for the pool key.
-        (Currency c0, Currency c1) = address(money) < weth
-            ? (Currency.wrap(address(money)), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < weth
+            ? (Currency.wrap(address(peg)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(peg)));
 
         poolKey = PoolKey({
             currency0: c0,
@@ -117,13 +116,13 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         router = new MiniSwapRouter(pm);
         liquidityRouter = new PoolModifyLiquidityTest(pm);
 
-        // Seed liquidity: full range, 10 MONEY + 10 WETH at tick 0.
+        // Seed liquidity: full range, 10 PEG + 10 WETH at tick 0.
         vm.deal(address(this), 100 ether);
         IWeth9(weth).deposit{value: 50 ether}();
         vm.prank(owner);
-        money.mint(address(this), 100 ether);
+        peg.mint(address(this), 100 ether);
 
-        IERC20(address(money)).approve(address(liquidityRouter), type(uint256).max);
+        IERC20(address(peg)).approve(address(liquidityRouter), type(uint256).max);
         IWeth9(weth).approve(address(liquidityRouter), type(uint256).max);
 
         int24 tickLower = (TickMath.MIN_TICK / 60) * 60;
@@ -144,9 +143,9 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
             bytes("")
         );
 
-        // Fund alice with MONEY + WETH for swap tests.
+        // Fund alice with PEG + WETH for swap tests.
         vm.prank(owner);
-        money.mint(alice, 5 ether);
+        peg.mint(alice, 5 ether);
         IWeth9(weth).transfer(alice, 5 ether);
     }
 
@@ -164,17 +163,17 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
     // Tests
     // ---------------------------------------------------------------------
 
-    function test_SwapExactIn_MoneyForWeth_DeliversOutput() public {
+    function test_SwapExactIn_PegForWeth_DeliversOutput() public {
         if (!forked) return;
         uint256 amountIn = 0.1 ether;
 
         vm.prank(alice);
-        IERC20(address(money)).approve(address(router), amountIn);
+        IERC20(address(peg)).approve(address(router), amountIn);
 
         uint256 wethBefore = IWeth9(weth).balanceOf(alice);
 
-        // MONEY is currency1 (since WETH < MONEY); selling MONEY = currency1 -> currency0 = zeroForOne = false
-        bool zeroForOne = address(weth) < address(money) ? false : true;
+        // PEG is currency1 (since WETH < PEG); selling PEG = currency1 -> currency0 = zeroForOne = false
+        bool zeroForOne = address(weth) < address(peg) ? false : true;
         vm.prank(alice);
         uint256 amountOut = router.swapExactIn(poolKey, zeroForOne, amountIn, 0, alice);
 
@@ -193,13 +192,13 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
     function test_SwapExactIn_RevertsOnSlippage() public {
         if (!forked) return;
         uint256 amountIn = 0.1 ether;
-        // Ask for 100 WETH out — clearly impossible from 0.1 MONEY input.
+        // Ask for 100 WETH out — clearly impossible from 0.1 PEG input.
         uint256 absurdMin = 100 ether;
 
         vm.prank(alice);
-        IERC20(address(money)).approve(address(router), amountIn);
+        IERC20(address(peg)).approve(address(router), amountIn);
 
-        bool zeroForOne = address(weth) < address(money) ? false : true;
+        bool zeroForOne = address(weth) < address(peg) ? false : true;
         vm.prank(alice);
         vm.expectRevert(); // TooLittleReceived(min, actual) — exact match not required, just that it reverts cleanly
         router.swapExactIn(poolKey, zeroForOne, amountIn, absurdMin, alice);
@@ -217,23 +216,23 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         // Enable the hook tax (the test contract is trustees).
         hook.setAutoCalculateTax(true);
 
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         uint256 amountIn = 0.05 ether;
 
         vm.prank(alice);
-        IERC20(address(money)).approve(address(router), amountIn);
+        IERC20(address(peg)).approve(address(router), amountIn);
 
-        bool zeroForOne = address(weth) < address(money) ? false : true;
+        bool zeroForOne = address(weth) < address(peg) ? false : true;
         vm.prank(alice);
         router.swapExactIn(poolKey, zeroForOne, amountIn, 0, alice);
 
-        uint256 supplyAfter = money.totalSupply();
-        // Tax tier at price ≈ 1.0 is 1500 bps (15%). The hook BURNS the slice
+        uint256 supplyAfter = peg.totalSupply();
+        // Tax tier at price ≈ 1.0 is 1200 bps (12%). The hook BURNS the slice
         // because price < burnThreshold (1.10). So total supply must drop.
-        assertLt(supplyAfter, supplyBefore, "MONEY supply must drop by tax burn amount");
+        assertLt(supplyAfter, supplyBefore, "PEG supply must drop by tax burn amount");
     }
 
-    function test_SwapExactIn_WethForMoney_NoTax() public {
+    function test_SwapExactIn_WethForPeg_NoTax() public {
         if (!forked) return;
         // Even with autoTax on, buys are exempt — only sells are taxed.
         hook.setAutoCalculateTax(true);
@@ -243,15 +242,15 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
         vm.prank(alice);
         IWeth9(weth).approve(address(router), amountIn);
 
-        // Buying MONEY (sell WETH): currency0 -> currency1 = zeroForOne = true
-        bool zeroForOne = address(weth) < address(money) ? true : false;
-        uint256 supplyBefore = money.totalSupply();
+        // Buying PEG (sell WETH): currency0 -> currency1 = zeroForOne = true
+        bool zeroForOne = address(weth) < address(peg) ? true : false;
+        uint256 supplyBefore = peg.totalSupply();
 
         vm.prank(alice);
         uint256 amountOut = router.swapExactIn(poolKey, zeroForOne, amountIn, 0, alice);
 
-        uint256 supplyAfter = money.totalSupply();
-        assertGt(amountOut, 0, "MONEY delivered to alice");
+        uint256 supplyAfter = peg.totalSupply();
+        assertGt(amountOut, 0, "PEG delivered to alice");
         assertEq(supplyBefore, supplyAfter, "no burn on a buy");
     }
 }

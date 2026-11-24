@@ -30,7 +30,7 @@ jobs:
           version: v1.8.7
       - run: node scripts/install-contract-deps.mjs
       - run: node scripts/protocol.mjs validate
-      - name: Advance epoch if due
+      - name: Advance epoch, sync the tax ratchet, settle deferred tax, run the buyback
         working-directory: contracts
         run: |
           test -n "$RPC_URL" && test -n "$KEEPER_PRIVATE_KEY"

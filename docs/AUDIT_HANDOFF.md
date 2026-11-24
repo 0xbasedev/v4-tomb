@@ -1,35 +1,40 @@
-# Old Money — Audit Handoff
+# xTOMB — Audit Handoff
+
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
 
 Package for an external security auditor. Compiled 2026-05-23 against commit `02b6975` (and successor commits on the same branch).
 
 ## 1 · Protocol summary
 
-Old Money is a Tomb-Finance-style algorithmic stablecoin on Base, deployed against Uniswap V4. The economic mechanics are a direct port of Tomb (`bombmoney/bomb-contracts`); the *only* deliberate architectural deviation is replacing Tomb's TaxOfficeV2 / transferFrom-tax mechanism with a Uniswap V4 hook (`PegDefenseHook`). All other contracts are minimal-modification ports.
+xTOMB is a Tomb-Finance-style algorithmic stablecoin on Base, deployed against Uniswap V4. The economic mechanics are a direct port of Tomb (`bombmoney/bomb-contracts`); the *only* deliberate architectural deviation is replacing Tomb's TaxOfficeV2 / transferFrom-tax mechanism with a Uniswap V4 hook (`PegDefenseHook`). All other contracts are minimal-modification ports.
 
 Three tokens:
 
 | Token | Role | Tomb analog |
 |---|---|---|
-| `$MONEY` (`OldMoney.sol`) | Stable token, pegged 1:1 to WETH | `$TOMB` |
-| `$ESTATE` (`Estate.sol`) | Share / governance token, hard-capped 70k | `$TSHARE` |
-| `$TRUSTNOTE` (`TrustNote.sol`) | Bond token, issued at contraction, redeemed at premium | `$TBOND` |
+| `$LEVEL` (`PegToken.sol`) | Stable token, pegged 1:1 to WETH | `$TOMB` |
+| `$SQUARE` (`ShareToken.sol`) | Share / governance token, hard-capped 70k | `$TSHARE` |
+| `$BOND` (`BondToken.sol`) | Bond token, issued at contraction, redeemed at premium | `$TBOND` |
 
-Peg = 1 MONEY ≡ 1 WETH (1e18-scaled). This is one of two changes from Tomb's `moneyPriceOne=1e14`; the other is the V4 hook. Every other parameter is Tomb-faithful by reference to `docs/tomb-skill/`.
+Peg = 1 LEVEL ≡ 1 WETH (1e18-scaled). This is one of two changes from Tomb's `pegPriceOne=1e14`; the other is the V4 hook. Every other parameter is Tomb-faithful by reference to `docs/tomb-skill/`.
 
 ## 2 · In-scope contracts
 
 ```
 src/
 ├── core/
-│   ├── Boardroom.sol          ESTATE stakers earn MONEY each expansion epoch
-│   ├── Distributor.sol        Genesis distributor (initial MONEY mint to reward pools)
+│   ├── Masonry.sol          SQUARE stakers earn LEVEL each expansion epoch
+│   ├── Distributor.sol        Genesis distributor (initial LEVEL mint to reward pools)
 │   └── Treasury.sol           Seigniorage engine. Epoch tick, bond office,
 │                              expansion/contraction logic. The protocol's brain.
 │
 ├── distribution/
-│   ├── GenesisRewardPool.sol  24h window, accepts outside ERC-20s, distributes 11k MONEY
-│   ├── MainRewardPool.sol     9d, accepts LP wrapper shares, distributes 140k MONEY
-│   ├── ShareRewardPool.sol    370d, accepts LP wrapper shares, distributes 59.5k ESTATE
+│   ├── GenesisRewardPool.sol  24h window, accepts outside ERC-20s, distributes 11k LEVEL
+│   ├── PegFarm.sol     9d, accepts LP wrapper shares, distributes 140k LEVEL
+│   ├── ShareFarm.sol    370d, accepts LP wrapper shares, distributes 59.5k SQUARE
 │   └── V4PositionWrapper.sol  ERC-721 → ERC-20 wrapper for V4 LP positions
 │
 ├── governance/
@@ -60,9 +65,9 @@ src/
 │                              pair's price0CumulativeLast. Math equivalent.
 │
 └── tokens/
-    ├── OldMoney.sol           $MONEY — ERC-20 + Trustees-mint + public burn
-    ├── Estate.sol             $ESTATE — ERC-20 + 5.5k+5k linear vesting to community/dev
-    └── TrustNote.sol          $TRUSTNOTE — ERC-20 + Trustees-mint + Trustees-burnFrom
+    ├── PegToken.sol           $LEVEL — ERC-20 + Trustees-mint + public burn
+    ├── ShareToken.sol             $SQUARE — ERC-20 + 5.5k+5k linear vesting to community/dev
+    └── BondToken.sol          $BOND — ERC-20 + Trustees-mint + Trustees-burnFrom
 ```
 
 Out of scope (third-party, audited elsewhere):
@@ -85,9 +90,9 @@ Out of scope (third-party, audited elsewhere):
 **Total: 350 tests passing as of commit `02b6975`.**
 
 Invariant suites cover:
-- `OldMoneyInvariants` — MONEY token supply integrity
-- `EstateInvariants` — ESTATE cap + fund allocation
-- `BoardroomInvariants` — Masonry stake/withdraw conservation
+- `PegTokenInvariants` — LEVEL token supply integrity
+- `ShareTokenInvariants` — SQUARE cap + fund allocation
+- `MasonryInvariants` — Masonry stake/withdraw conservation
 - `EpochInvariants` — Epoch counter monotonicity, period bounds, immutability
 - `OracleInvariants` — TWAP timestamp monotonicity, sticky-init, error paths
 - `PegDefenseHookInvariants` — Tax tier table monotonicity, rate caps, immutables
@@ -109,9 +114,9 @@ Each `slither-disable-next-line` annotation has a one-line rationale comment.
 
 **Tomb behaviour:** every `transferFrom` of TOMB triggers a 14-tier price-based tax. Implemented as an override of OZ's `_transfer` plus a `taxCollectorAddress` settable by `TaxOffice`.
 
-**Old Money behaviour:** sells through the MONEY/WETH V4 pool trigger the same 14-tier tax. Wallet-to-wallet MONEY transfers are free. Implemented as a `beforeSwap` hook that:
+**xTOMB behaviour:** sells through the LEVEL/WETH V4 pool trigger the same 14-tier tax. Wallet-to-wallet LEVEL transfers are free. Implemented as a `beforeSwap` hook that:
 1. Reads the current tick from the pool.
-2. Computes the 1e18-scaled MONEY/WETH price via `TickMath.getSqrtPriceAtTick`.
+2. Computes the 1e18-scaled LEVEL/WETH price via `TickMath.getSqrtPriceAtTick`.
 3. Looks up the tax rate from the same 14-tier table Tomb uses.
 4. Takes the tax slice from the input side via `BeforeSwapDelta`, then either burns (below `burnThreshold=1.10e18`) or routes to `treasury` (above).
 
@@ -123,7 +128,7 @@ See `docs/HOOK_TAX_DESIGN.md` for the full design rationale and tier table justi
 
 **Tomb behaviour:** `tombPriceOne = 1e14`, against BTC at $10k. Cents-level scale.
 
-**Old Money behaviour:** `moneyPriceOne = 1e18`, against WETH. 1 MONEY = 1 WETH. Same algebra at a different scale; all `1e14` literals in Tomb's math replaced with `moneyPriceOne`.
+**xTOMB behaviour:** `pegPriceOne = 1e18`, against WETH. 1 LEVEL = 1 WETH. Same algebra at a different scale; all `1e14` literals in Tomb's math replaced with `pegPriceOne`.
 
 **Rationale:** WETH is the deepest-liquidity asset on Base. Canonical pre-deploy at the OP-stack slot `0x4200…0006`, no mock needed on testnets, no Coinbase-only restriction (which cbETH had). USDC was considered but introduces an additional oracle (USDC depeg risk) and a centralization vector.
 
@@ -131,7 +136,7 @@ See `docs/HOOK_TAX_DESIGN.md` for the full design rationale and tier table justi
 
 **Tomb behaviour:** Main/Share reward pools accept LP tokens from PancakeSwap/SpookySwap directly (those are V2 pairs, which are ERC-20).
 
-**Old Money behaviour:** V4 LPs are NFTs, not fungible. The `V4PositionWrapper` accepts a full-range MONEY/WETH V4 LP NFT, validates the pool + exact tick range, and mints ERC-20 shares 1:1 with the position's liquidity. Unwrap is gated to the original wrapper of each tokenId. Reward pools stake the ERC-20 shares.
+**xTOMB behaviour:** V4 LPs are NFTs, not fungible. The `V4PositionWrapper` accepts a full-range LEVEL/WETH V4 LP NFT, validates the pool + exact tick range, and mints ERC-20 shares 1:1 with the position's liquidity. Unwrap is gated to the original wrapper of each tokenId. Reward pools stake the ERC-20 shares.
 
 **Rationale:** preserves the MasterChef stake-fungible-tokens model without rewriting the reward pools. The exact-range requirement means all stakers commit identical full-range positions, eliminating the "what tick range does the operator accept" governance question.
 
@@ -156,7 +161,7 @@ What we'd ask the auditor to focus on:
 
 1. **`PegDefenseHook.beforeSwap` tax delta math.** This is the only contract that uses `BeforeSwapDelta` to extract value mid-swap. Sign conventions on `deltaSpecified` vs `deltaUnspecified` for exact-in vs exact-out swaps are subtle. The unit + integration tests cover both paths, but a careful eye on the sign handling at L319-325 is warranted.
 
-2. **`Treasury.allocateSeigniorage` boundaries.** The bootstrap/expansion/contraction branching is faithful to Tomb but is doing arithmetic on percentages, supplies, and a TWAP that may revert. We rely on `_updateMoneyPrice`'s try/catch to absorb a pre-init oracle. Confirm: no path mints MONEY beyond `maxSupplyExpansionPercent`; no path under-funds the Boardroom; no path advances the epoch without invoking the modifier's update loop.
+2. **`Treasury.allocateSeigniorage` boundaries.** The bootstrap/expansion/contraction branching is faithful to Tomb but is doing arithmetic on percentages, supplies, and a TWAP that may revert. We rely on `_updatePegPrice`'s try/catch to absorb a pre-init oracle. Confirm: no path mints LEVEL beyond `maxSupplyExpansionPercent`; no path under-funds the Masonry; no path advances the epoch without invoking the modifier's update loop.
 
 3. **`V4PositionWrapper` unwrap gating.** `unwrap` is gated to `wrappedBy[tokenId] == msg.sender`. The mapping is set in `wrap()` before the NFT pull (CEI). Confirm no path lets a non-wrapper redeem.
 
@@ -168,10 +173,10 @@ What we'd ask the auditor to focus on:
 
 Documented in `docs/LAUNCH_RUNBOOK.md` §9. Summary:
 
-- `getMoneyPrice()` reverts before the first `oracle.update()` with non-zero time elapsed. `_updateMoneyPrice` swallows this in `allocateSeigniorage`.
+- `getPegPrice()` reverts before the first `oracle.update()` with non-zero time elapsed. `_updatePegPrice` swallows this in `allocateSeigniorage`.
 - Genesis pool stake tokens must be registered before `poolStartTime`. Unregistered emission is lost.
 - `buyBonds` / `redeemBonds` use strict price equality. Race window between user read and broadcast inclusion can revert.
-- Bootstrap supply expansion is unconditional — even at sub-peg, the protocol mints 4.5% to Boardroom for the first 28 epochs.
+- Bootstrap supply expansion is unconditional — even at sub-peg, the protocol mints 4.5% to Masonry for the first 28 epochs.
 
 ## 8 · Communication
 

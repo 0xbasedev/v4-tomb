@@ -3,8 +3,8 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -81,7 +81,7 @@ contract PegDefenseHookHandler is Test {
 contract PegDefenseHookInvariants is StdInvariant, Test {
     PegDefenseHook public hook;
     PegDefenseHookHandler public handler;
-    OldMoney public money;
+    PegToken public peg;
     StubPM public pm;
 
     address internal hookAddr;
@@ -89,18 +89,16 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     function setUp() public {
         vm.warp(1_700_000_000);
 
-        money = new OldMoney();
+        peg = new PegToken("Peg Token", "PEG");
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions
-        // (AFTER_INITIALIZE | BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA = 0x1088).
-        hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
-        );
+        // (PegDefenseHookPermissions.FLAGS, low 14 bits = 0x10CC).
+        hookAddr = address(PegDefenseHookPermissions.FLAGS);
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
-            abi.encode(IPoolManager(address(pm)), address(money), address(this)),
+            abi.encode(IPoolManager(address(pm)), address(peg), address(this)),
             hookAddr
         );
         hook = PegDefenseHook(hookAddr);
@@ -115,10 +113,10 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     // Invariants on the tax-tier table
     // ---------------------------------------------------------------------
 
-    /// @notice Tier table length is fixed at 14 — set in constructor, no resizer exists.
+    /// @notice Tier table length is fixed at 3 — set in constructor, no resizer exists.
     function invariant_TierTableLengthFixed() public view {
-        assertEq(hook.getTaxTiersTwapsCount(), 14);
-        assertEq(hook.getTaxTiersRatesCount(), 14);
+        assertEq(hook.getTaxTiersTwapsCount(), 3);
+        assertEq(hook.getTaxTiersRatesCount(), 3);
     }
 
     /// @notice TWAPs are strictly monotonic — setTaxTiersTwap enforces it on every write.
@@ -131,11 +129,11 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         }
     }
 
-    /// @notice No tax rate ever exceeds 10000 bps (100%). The setter rejects this; the
+    /// @notice No tax rate ever exceeds MAX_TAX_BPS (12%). The setter rejects this; the
     ///         invariant is the cross-check that no path mutates the array around it.
     function invariant_TaxRatesBoundedBy100Pct() public view {
         for (uint256 i = 0; i < hook.getTaxTiersRatesCount(); ++i) {
-            assertLe(hook.taxTiersRates(i), 10_000, "tax rate exceeds 100%");
+            assertLe(hook.taxTiersRates(i), hook.MAX_TAX_BPS(), "tier rate exceeds the 12% cap");
         }
     }
 
@@ -144,9 +142,9 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         assertGt(hook.burnThreshold(), 0);
     }
 
-    /// @notice money / poolManager immutables can never change post-construction.
+    /// @notice peg / poolManager immutables can never change post-construction.
     function invariant_ImmutablesStable() public view {
-        assertEq(hook.money(), address(money));
+        assertEq(hook.peg(), address(peg));
         assertEq(address(hook.poolManager()), address(pm));
     }
 

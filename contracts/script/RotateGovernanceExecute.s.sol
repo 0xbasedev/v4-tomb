@@ -16,9 +16,8 @@ import {Timelock} from "../src/governance/Timelock.sol";
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY — must be the Timelock's admin (signer of the queue script).
  *           TIMELOCK address is resolved from the selected manifest deployment.
- *           MONEY address is resolved from the selected manifest deployment.
- *           ESTATE address is resolved from the selected manifest deployment.
- *           TRUSTNOTE address is resolved from the selected manifest deployment.
+ *           PEG address is resolved from the selected manifest deployment.
+ *           SHARE address is resolved from the selected manifest deployment.
  *           HOOK address is resolved from the selected manifest deployment.
  *           ETA — Unix timestamp that was used in `RotateGovernanceQueue.s.sol`. Same value!
  *
@@ -31,10 +30,11 @@ contract RotateGovernanceExecute is NetworkConfig {
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
         Timelock timelock = Timelock(payable(_deployment("timelock")));
-        address money = _deployment("money");
-        address estate = _deployment("estate");
-        address trustnote = _deployment("trustNote");
+        address peg = _deployment("peg");
+        address share = _deployment("share");
         address hook = _deployment("hook");
+        address shareHook = _deployment("shareBuybackHook");
+        address oracle = _deployment("oracle");
         uint256 eta = vm.envUint("ETA");
 
         console2.log("=== RotateGovernanceExecute ===");
@@ -46,14 +46,14 @@ contract RotateGovernanceExecute is NetworkConfig {
         require(block.timestamp <= eta + timelock.GRACE_PERIOD(), "RotateGovExec: past grace period");
 
         vm.startBroadcast(pk);
-        timelock.executeTransaction(money, 0, "acceptOwnership()", bytes(""), eta);
-        timelock.executeTransaction(estate, 0, "acceptOwnership()", bytes(""), eta);
-        timelock.executeTransaction(trustnote, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(peg, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(share, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(hook, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(shareHook, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(oracle, 0, "acceptOwnership()", bytes(""), eta);
         vm.stopBroadcast();
 
-        console2.log("\nGovernance ceremony complete. Timelock now owns money/estate/trustnote/hook,");
-        console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of hook.");
-        console2.log("Treasury still operates Boardroom (intentional). Wrapper has no admin (intentional).");
+        console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of both hooks.");
+        console2.log("Treasury still operates Masonry (intentional). Wrapper has no admin (intentional).");
     }
 }

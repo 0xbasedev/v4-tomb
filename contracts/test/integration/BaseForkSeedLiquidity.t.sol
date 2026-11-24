@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
 
@@ -34,7 +34,7 @@ interface IWeth9 {
  *         the script uses against the live Base V4 PositionManager + Permit2.
  *
  *         Closes gap #2 in `docs/GAP_AUDIT.md`. Confirms:
- *           1. The operator can seed an empty MONEY/WETH pool with full-range liquidity.
+ *           1. The operator can seed an empty PEG/WETH pool with full-range liquidity.
  *           2. The minted NFT is wrappable via `V4PositionWrapper` (same tick range).
  *           3. The wrapper's ERC-20 shares = the V4 position's liquidity (1:1).
  *
@@ -44,7 +44,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
+    PegToken internal peg;
     V4PositionWrapper internal wrapper;
     PoolKey internal poolKey;
 
@@ -55,7 +55,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
 
     int24 internal constant TICK_LOWER_RANGE = -887_220; // full range with tickSpacing 60
     int24 internal constant TICK_UPPER_RANGE = 887_220;
-    uint256 internal constant MONEY_BAL = 10_000 ether;
+    uint256 internal constant PEG_BAL = 10_000 ether;
     uint256 internal constant WETH_BAL = 10_000 ether;
 
     bool internal forked;
@@ -76,9 +76,9 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         permit2 = IAllowanceTransfer(Addresses.permit2());
         weth = Addresses.weth();
 
-        // Deploy MONEY (we mint for tests).
-        money = new OldMoney();
-        money.mint(address(this), MONEY_BAL);
+        // Deploy PEG (we mint for tests).
+        peg = new PegToken("Peg Token", "PEG");
+        peg.mint(address(this), PEG_BAL);
 
         // Acquire WETH from real ETH via OP-stack predeploy deposit.
         vm.deal(address(this), WETH_BAL);
@@ -87,24 +87,24 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         // Build pool key — no hook, static fee, tickSpacing 60. Same shape as Deploy.s.sol
         // would produce, just without the PegDefenseHook (to keep the test focused on
         // seed-liquidity mechanics rather than hook behavior).
-        (Currency c0, Currency c1) = address(money) < weth
-            ? (Currency.wrap(address(money)), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < weth
+            ? (Currency.wrap(address(peg)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(peg)));
         poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: IHooks(address(0))});
 
         // Initialize pool at parity (tick 0).
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
-        // Deploy wrapper bound to full-range MONEY/WETH.
+        // Deploy wrapper bound to full-range PEG/WETH.
         wrapper = new V4PositionWrapper(
-            positionManager, poolKey, TICK_LOWER_RANGE, TICK_UPPER_RANGE, "Old Money MONEY-WETH LP", "om-MWLP"
+            positionManager, poolKey, TICK_LOWER_RANGE, TICK_UPPER_RANGE, "PEG-WETH LP", "om-MWLP"
         );
 
         // Permit2 dance — production script does this itself, test does it in setUp so
         // we can assert per-test behaviors cleanly.
-        IERC20(address(money)).approve(address(permit2), type(uint256).max);
+        IERC20(address(peg)).approve(address(permit2), type(uint256).max);
         IERC20(weth).approve(address(permit2), type(uint256).max);
-        permit2.approve(address(money), address(positionManager), type(uint160).max, type(uint48).max);
+        permit2.approve(address(peg), address(positionManager), type(uint160).max, type(uint48).max);
         permit2.approve(weth, address(positionManager), type(uint160).max, type(uint48).max);
     }
 
@@ -115,12 +115,12 @@ contract BaseForkSeedLiquidityTest is BaseTest {
     function test_SeedsLiquidity_EmptyPool() public {
         if (!forked) return;
 
-        uint256 moneyAmount = 1000 ether;
+        uint256 pegAmount = 1000 ether;
         uint256 wethAmount = 1000 ether;
-        uint256 moneyBefore = money.balanceOf(address(this));
+        uint256 pegBefore = peg.balanceOf(address(this));
         uint256 wethBefore = IERC20(weth).balanceOf(address(this));
 
-        uint256 tokenId = _seed(moneyAmount, wethAmount);
+        uint256 tokenId = _seed(pegAmount, wethAmount);
 
         // Position landed in our wallet.
         assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(this), "NFT in operator wallet");
@@ -129,8 +129,8 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         uint128 liq = positionManager.getPositionLiquidity(tokenId);
         assertGt(liq, 0, "position has liquidity");
 
-        // Some MONEY + WETH actually got consumed.
-        assertLt(money.balanceOf(address(this)), moneyBefore, "money decreased");
+        // Some PEG + WETH actually got consumed.
+        assertLt(peg.balanceOf(address(this)), pegBefore, "peg decreased");
         assertLt(IERC20(weth).balanceOf(address(this)), wethBefore, "weth decreased");
     }
 
@@ -179,12 +179,12 @@ contract BaseForkSeedLiquidityTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function _seed(
-        uint256 moneyAmount,
+        uint256 pegAmount,
         uint256 wethAmount
     ) internal returns (uint256 tokenId) {
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
         (uint256 amount0Max, uint256 amount1Max) =
-            address(money) < weth ? (moneyAmount, wethAmount) : (wethAmount, moneyAmount);
+            address(peg) < weth ? (pegAmount, wethAmount) : (wethAmount, pegAmount);
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,

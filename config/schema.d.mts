@@ -1,6 +1,6 @@
 export type Address = `0x${string}`;
 export type InfrastructureKey = 'weth' | 'poolManager' | 'positionManager' | 'permit2' | 'universalRouter' | 'create2Deployer';
-export type DeploymentKey = Exclude<InfrastructureKey, 'create2Deployer'> | 'money' | 'estate' | 'trustNote' | 'treasury' | 'boardroom' | 'oracle' | 'hook' | 'lpWrapper' | 'genesisRewardPool' | 'mainRewardPool' | 'shareRewardPool' | 'timelock' | 'miniSwapRouter';
+export type DeploymentKey = Exclude<InfrastructureKey, 'create2Deployer'> | 'peg' | 'share' | 'treasury' | 'masonry' | 'oracle' | 'hook' | 'shareBuybackHook' | 'lpWrapper' | 'pairLpHook' | 'pairLpWrapper' | 'shareLpWrapper' | 'genesisRewardPool' | 'pegFarm' | 'shareFarm' | 'timelock' | 'miniSwapRouter';
 export type Deployment = Record<DeploymentKey, Address> & { deployBlock: string };
 export interface Network {
   id: number;
@@ -16,4 +16,4 @@ export const infrastructureKeys: InfrastructureKey[];
 export const deploymentKeys: DeploymentKey[];
 export function parseNetworks(document: unknown): Network[];
 export function transactionUrl(networks: Network[], chainId: number, hash?: string): string | undefined;
-export function pegReserves(money: Address, weth: Address, amount0: bigint, amount1: bigint): { money: bigint; weth: bigint };
+export function pegReserves(peg: Address, weth: Address, amount0: bigint, amount1: bigint): { peg: bigint; weth: bigint };

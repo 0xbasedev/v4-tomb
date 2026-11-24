@@ -3,35 +3,35 @@ pragma solidity 0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {ContractGuard} from "../libs/ContractGuard.sol";
 import {IBasisAsset} from "../interfaces/IBasisAsset.sol";
-import {IBoardroom} from "../interfaces/IBoardroom.sol";
+import {IMasonry} from "../interfaces/IMasonry.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 
 /**
  * @title Treasury
- * @notice The seigniorage engine. Ticks every 6 hours: reads the MONEY/WETH TWAP, decides
- *         expansion or contraction, mints $MONEY to TheClub (Boardroom) during expansion,
- *         opens a discounted $TRUSTNOTE bond window during contraction, and redeems bonds
- *         from the treasury reserve during expansion.
- * @dev    Direct port of Tomb Finance's Treasury.sol (bombmoney/bomb-contracts).
+ * @notice The emissions engine. Once per 6-hour epoch it reads the peg token's TWAP and,
+ *         when the price is above the ceiling, mints an expansion and pays it out: a
+ *         configured cut to the DAO and dev funds, the rest to the Masonry.
  *
- *         Branded as "Trustees" in Old Money docs/UI; the on-chain class name is `Treasury`
- *         to match Tomb's source one-for-one for auditor familiarity.
+ *         It does nothing else. In particular:
+ *           - There are no bonds. No debt is ever issued, so none is ever repaid and no
+ *             premium stands between the protocol and its next expansion. Below the
+ *             ceiling the Treasury simply mints nothing.
+ *           - There is no bootstrap. Genesis runs before epoch 0 and every expansion from
+ *             epoch 0 onward is earned by price.
+ *           - It holds no protocol funds. What it mints leaves in the same transaction,
+ *             and sell-tax proceeds go to the DAO wallet, never here.
  *
- *         Modernizations applied (no logic changes):
- *         - 0.6.12 → 0.8.26; SafeMath dropped (built-in overflow).
- *         - OZ v4 SafeERC20.safeApprove → OZ v5 SafeERC20.forceApprove (v5 removed
- *           safeApprove; forceApprove handles the reset-then-set race condition internally).
- *         - `require` strings → custom errors.
- *         - `excludedFromTotalSupply` accepted as an init argument rather than hardcoded
- *           addresses (deploy ergonomics; semantically equivalent — still a one-shot set).
- *         - Peg target: `moneyPriceOne = 1e18` (1 MONEY = 1 WETH on Base). Tomb used 1e14
- *           (10,000 BOMB = 1 BTC). All `1e14` literals in Tomb's math are replaced with
- *           `moneyPriceOne` here — same algebra, different scale.
+ * @dev    Derived from Tomb Finance's Treasury. Kept from Tomb: the epoch clock, the
+ *         expansion formula (`min(price - 1, tier cap)` of circulating supply), the nine
+ *         supply tiers, the DAO / dev fund cuts and the Masonry proxies. Removed: bonds,
+ *         the seigniorage reserve, contraction budgeting, debt ratio and bootstrap.
+ *
+ *         If the Masonry has no stakers when an expansion is due, the mint is skipped
+ *         rather than reverted, so an empty Masonry can never stall the epoch clock.
  */
 contract Treasury is ContractGuard, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -47,41 +47,24 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     uint256 public startTime;
     uint256 public epoch;
-    uint256 public epochSupplyContractionLeft;
 
     address[] public excludedFromTotalSupply;
 
     // Core protocol tokens + dependencies.
-    address public money;
-    address public trustnote;
-    address public estate;
-    address public boardroom;
+    address public peg;
+    address public share;
+    address public masonry;
     address public oracle;
 
     // Peg
-    uint256 public moneyPriceOne;
-    uint256 public moneyPriceCeiling;
-    uint256 public seigniorageSaved;
+    uint256 public pegPriceOne;
+    uint256 public pegPriceCeiling;
 
     uint256[] public supplyTiers;
     uint256[] public maxExpansionTiers;
 
     uint256 public maxSupplyExpansionPercent;
-    uint256 public bondDepletionFloorPercent;
-    uint256 public seigniorageExpansionFloorPercent;
-    uint256 public maxSupplyContractionPercent;
-    uint256 public maxDebtRatioPercent;
-
-    uint256 public bootstrapEpochs;
-    uint256 public bootstrapSupplyExpansionPercent;
-
-    uint256 public previousEpochMoneyPrice;
-    uint256 public maxDiscountRate;
-    uint256 public maxPremiumRate;
-    uint256 public discountPercent;
-    uint256 public premiumThreshold;
-    uint256 public premiumPercent;
-    uint256 public mintingFactorForPayingDebt;
+    uint256 public previousEpochPegPrice;
 
     address public daoFund;
     uint256 public daoFundSharedPercent;
@@ -91,13 +74,11 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     /* =================== EVENTS =================== */
 
     event Initialized(address indexed executor, uint256 at);
-    event BurnedBonds(address indexed from, uint256 bondAmount);
-    event RedeemedBonds(address indexed from, uint256 moneyAmount, uint256 bondAmount);
-    event BoughtBonds(address indexed from, uint256 moneyAmount, uint256 bondAmount);
-    event TreasuryFunded(uint256 timestamp, uint256 seigniorage);
-    event BoardroomFunded(uint256 timestamp, uint256 seigniorage);
+    event MasonryFunded(uint256 timestamp, uint256 seigniorage);
     event DaoFundFunded(uint256 timestamp, uint256 seigniorage);
     event DevFundFunded(uint256 timestamp, uint256 seigniorage);
+    /// @notice An expansion was due but the Masonry had no stakers, so nothing was minted.
+    event ExpansionSkipped(uint256 timestamp, uint256 seigniorage);
 
     /* =================== ERRORS =================== */
 
@@ -107,31 +88,12 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     error NotEpochYet();
     error InsufficientPermissions();
 
-    error CannotPurchaseWithZero();
-    error PriceMoved();
-    error PriceNotEligible();
-    error NotEnoughBondLeft();
-    error InvalidBondRate();
-    error OverMaxDebtRatio();
-    error InsufficientTreasuryBudget();
-    error CannotRedeemZero();
-
     error CeilingOutOfRange();
     error ExpansionPercentOutOfRange();
     error TierIndexOutOfRange();
     error TierValueNotMonotonic();
-    error BondDepletionFloorOutOfRange();
-    error SupplyContractionOutOfRange();
-    error DebtRatioOutOfRange();
-    error BootstrapEpochsOutOfRange();
-    error BootstrapPercentOutOfRange();
     error FundShareOutOfRange();
     error ZeroAddress();
-    error DiscountPercentTooHigh();
-    error PremiumThresholdOutOfRange();
-    error PremiumPercentTooHigh();
-    error MintingFactorOutOfRange();
-    error ProtectedToken();
 
     /* =================== MODIFIERS =================== */
 
@@ -149,15 +111,12 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         if (block.timestamp < nextEpochPoint()) revert NotEpochYet();
         _;
         epoch += 1;
-        epochSupplyContractionLeft = (getMoneyPrice() > moneyPriceCeiling)
-            ? 0
-            : getMoneyCirculatingSupply() * maxSupplyContractionPercent / 10_000;
     }
 
     modifier checkOperator() {
         if (
-            IBasisAsset(money).operator() != address(this) || IBasisAsset(trustnote).operator() != address(this)
-                || IBasisAsset(estate).operator() != address(this) || IBoardroom(boardroom).operator() != address(this)
+            IBasisAsset(peg).operator() != address(this) || IBasisAsset(share).operator() != address(this)
+                || IMasonry(masonry).operator() != address(this)
         ) revert InsufficientPermissions();
         _;
     }
@@ -177,114 +136,67 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         return startTime + epoch * PERIOD;
     }
 
-    function getMoneyPrice() public view returns (uint256) {
-        try IOracle(oracle).consult(money, 1e18) returns (uint144 price) {
+    function getPegPrice() public view returns (uint256) {
+        try IOracle(oracle).consult(peg, 1e18) returns (uint144 price) {
             return uint256(price);
         } catch {
-            revert("Treasury: failed to consult MONEY price from the oracle");
+            revert("Treasury: failed to consult PEG price from the oracle");
         }
     }
 
-    function getMoneyUpdatedPrice() public view returns (uint256) {
-        try IOracle(oracle).twap(money, 1e18) returns (uint144 price) {
+    function getPegUpdatedPrice() public view returns (uint256) {
+        try IOracle(oracle).twap(peg, 1e18) returns (uint144 price) {
             return uint256(price);
         } catch {
-            revert("Treasury: failed to consult MONEY price from the oracle");
+            revert("Treasury: failed to consult PEG price from the oracle");
         }
     }
 
-    function getReserve() public view returns (uint256) {
-        return seigniorageSaved;
-    }
-
-    function getBurnableMoneyLeft() public view returns (uint256 burnableLeft) {
-        uint256 price = getMoneyPrice();
-        if (price <= moneyPriceOne) {
-            uint256 moneySupply = getMoneyCirculatingSupply();
-            uint256 bondMaxSupply = moneySupply * maxDebtRatioPercent / 10_000;
-            uint256 bondSupply = IERC20(trustnote).totalSupply();
-            if (bondMaxSupply > bondSupply) {
-                uint256 maxMintableBond = bondMaxSupply - bondSupply;
-                uint256 maxBurnableMoney = maxMintableBond * price / moneyPriceOne;
-                burnableLeft = Math.min(epochSupplyContractionLeft, maxBurnableMoney);
-            }
-        }
-    }
-
-    function getRedeemableBonds() public view returns (uint256 redeemable) {
-        uint256 price = getMoneyPrice();
-        if (price > moneyPriceCeiling) {
-            uint256 totalMoney = IERC20(money).balanceOf(address(this));
-            uint256 rate = getBondPremiumRate();
-            if (rate > 0) {
-                redeemable = totalMoney * moneyPriceOne / rate;
-            }
-        }
-    }
-
-    function getBondDiscountRate() public view returns (uint256 rate) {
-        uint256 price = getMoneyPrice();
-        if (price <= moneyPriceOne) {
-            if (discountPercent == 0) {
-                rate = moneyPriceOne;
-            } else {
-                uint256 bondAmount = moneyPriceOne * 1e18 / price;
-                uint256 discountAmount = (bondAmount - moneyPriceOne) * discountPercent / 10_000;
-                rate = moneyPriceOne + discountAmount;
-                if (maxDiscountRate > 0 && rate > maxDiscountRate) rate = maxDiscountRate;
-            }
-        }
-    }
-
-    function getBondPremiumRate() public view returns (uint256 rate) {
-        uint256 price = getMoneyPrice();
-        if (price > moneyPriceCeiling) {
-            uint256 premiumThresholdAbs = moneyPriceOne * premiumThreshold / 100;
-            if (price >= premiumThresholdAbs) {
-                uint256 premiumAmount = (price - moneyPriceOne) * premiumPercent / 10_000;
-                rate = moneyPriceOne + premiumAmount;
-                if (maxPremiumRate > 0 && rate > maxPremiumRate) rate = maxPremiumRate;
-            } else {
-                rate = moneyPriceOne;
-            }
-        }
-    }
-
-    function getMoneyCirculatingSupply() public view returns (uint256) {
-        IERC20 moneyErc20 = IERC20(money);
-        uint256 ts = moneyErc20.totalSupply();
+    function getPegCirculatingSupply() public view returns (uint256) {
+        IERC20 pegErc20 = IERC20(peg);
+        uint256 ts = pegErc20.totalSupply();
         uint256 excluded = 0;
         uint256 len = excludedFromTotalSupply.length;
         for (uint256 i = 0; i < len; ++i) {
-            excluded += moneyErc20.balanceOf(excludedFromTotalSupply[i]);
+            excluded += pegErc20.balanceOf(excludedFromTotalSupply[i]);
         }
         return ts - excluded;
+    }
+
+    /// @notice What `allocateSeigniorage` would mint if it ran now at the last recorded TWAP.
+    ///         Zero at or below the ceiling.
+    function getExpansionAmount() public view returns (uint256) {
+        uint256 price = getPegPrice();
+        if (price <= pegPriceCeiling) return 0;
+        uint256 supply = getPegCirculatingSupply();
+        uint256 percentage = price - pegPriceOne;
+        uint256 cap = _expansionCapFor(supply) * pegPriceOne / 10_000;
+        if (percentage > cap) percentage = cap;
+        return supply * percentage / pegPriceOne;
     }
 
     /* =================== GOVERNANCE =================== */
 
     function initialize(
-        address _money,
-        address _trustnote,
-        address _estate,
+        address _peg,
+        address _share,
         address _oracle,
-        address _boardroom,
+        address _masonry,
         uint256 _startTime,
         address[] memory _excludedFromTotalSupply
     ) public notInitialized {
-        money = _money;
-        trustnote = _trustnote;
-        estate = _estate;
+        peg = _peg;
+        share = _share;
         oracle = _oracle;
-        boardroom = _boardroom;
+        masonry = _masonry;
         startTime = _startTime;
 
         for (uint256 i = 0; i < _excludedFromTotalSupply.length; ++i) {
             excludedFromTotalSupply.push(_excludedFromTotalSupply[i]);
         }
 
-        moneyPriceOne = 1e18; // 1 MONEY = 1 WETH (Base peg target)
-        moneyPriceCeiling = moneyPriceOne * 101 / 100;
+        pegPriceOne = 1e18; // 1 PEG = 1 unit of the paired asset
+        pegPriceCeiling = pegPriceOne * 101 / 100;
 
         supplyTiers = [
             uint256(0),
@@ -300,33 +212,6 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         maxExpansionTiers = [uint256(450), 400, 350, 300, 250, 200, 150, 125, 100];
 
         maxSupplyExpansionPercent = 400;
-        bondDepletionFloorPercent = 10_000;
-        seigniorageExpansionFloorPercent = 3500;
-        maxSupplyContractionPercent = 300;
-        // Tomb-faithful per docs/tomb-skill/SKILL.md + HOW_IT_WORKED.md: 3500 (35%).
-        // Previously 4500 (45%) — fixed per TOMB_AUDIT BUG #2 (2026-05-22).
-        maxDebtRatioPercent = 3500;
-
-        premiumThreshold = 110;
-        premiumPercent = 7000;
-
-        // Tomb-faithful per docs/tomb-skill/references/HOW_IT_WORKED.md: 28 epochs (7 days
-        // at 6h epochs) of guaranteed expansion to Boardroom regardless of price.
-        // Previously 0 — fixed per TOMB_AUDIT BUG #1 (2026-05-22). The bootstrap phase
-        // is load-bearing: it incentivizes early ESTATE staking, which is what
-        // prevents the Boardroom-empty bricking condition (gap #16) from triggering
-        // when the protocol enters its first expansion epoch.
-        bootstrapEpochs = 28;
-        bootstrapSupplyExpansionPercent = 450;
-
-        // POL bondTreasury mechanism (Tomb's _sendToBondTreasury, 5% supply/epoch to a
-        // separate POL bond contract) is intentionally OMITTED from Old Money v1. See
-        // docs/TOMB_AUDIT.md BUG #3 and docs/GAP_AUDIT.md. Rationale: the core peg-defense
-        // mechanism (seigniorage + contraction bonds) functions identically without it;
-        // POL is a long-term durability layer that can be added in a future Treasury
-        // upgrade. Documenting here so auditors do not flag the missing step as a bug.
-
-        seigniorageSaved = IERC20(money).balanceOf(address(this));
 
         initialized = true;
         operator = msg.sender;
@@ -339,10 +224,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         operator = _operator;
     }
 
-    function setBoardroom(
-        address _boardroom
+    function setMasonry(
+        address _masonry
     ) external onlyOperator {
-        boardroom = _boardroom;
+        masonry = _masonry;
     }
 
     function setOracle(
@@ -351,13 +236,13 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         oracle = _oracle;
     }
 
-    function setMoneyPriceCeiling(
-        uint256 _moneyPriceCeiling
+    function setPegPriceCeiling(
+        uint256 _pegPriceCeiling
     ) external onlyOperator {
-        if (_moneyPriceCeiling < moneyPriceOne || _moneyPriceCeiling > moneyPriceOne * 120 / 100) {
+        if (_pegPriceCeiling < pegPriceOne || _pegPriceCeiling > pegPriceOne * 120 / 100) {
             revert CeilingOutOfRange();
         }
-        moneyPriceCeiling = _moneyPriceCeiling;
+        pegPriceCeiling = _pegPriceCeiling;
     }
 
     function setMaxSupplyExpansionPercents(
@@ -388,43 +273,6 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         return true;
     }
 
-    function setBondDepletionFloorPercent(
-        uint256 _bondDepletionFloorPercent
-    ) external onlyOperator {
-        if (_bondDepletionFloorPercent < 500 || _bondDepletionFloorPercent > 10_000) {
-            revert BondDepletionFloorOutOfRange();
-        }
-        bondDepletionFloorPercent = _bondDepletionFloorPercent;
-    }
-
-    function setMaxSupplyContractionPercent(
-        uint256 _maxSupplyContractionPercent
-    ) external onlyOperator {
-        if (_maxSupplyContractionPercent < 100 || _maxSupplyContractionPercent > 1500) {
-            revert SupplyContractionOutOfRange();
-        }
-        maxSupplyContractionPercent = _maxSupplyContractionPercent;
-    }
-
-    function setMaxDebtRatioPercent(
-        uint256 _maxDebtRatioPercent
-    ) external onlyOperator {
-        if (_maxDebtRatioPercent < 1000 || _maxDebtRatioPercent > 10_000) revert DebtRatioOutOfRange();
-        maxDebtRatioPercent = _maxDebtRatioPercent;
-    }
-
-    function setBootstrap(
-        uint256 _bootstrapEpochs,
-        uint256 _bootstrapSupplyExpansionPercent
-    ) external onlyOperator {
-        if (_bootstrapEpochs > 120) revert BootstrapEpochsOutOfRange();
-        if (_bootstrapSupplyExpansionPercent < 100 || _bootstrapSupplyExpansionPercent > 1000) {
-            revert BootstrapPercentOutOfRange();
-        }
-        bootstrapEpochs = _bootstrapEpochs;
-        bootstrapSupplyExpansionPercent = _bootstrapSupplyExpansionPercent;
-    }
-
     function setExtraFunds(
         address _daoFund,
         uint256 _daoFundSharedPercent,
@@ -441,146 +289,45 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         devFundSharedPercent = _devFundSharedPercent;
     }
 
-    function setMaxDiscountRate(
-        uint256 _maxDiscountRate
-    ) external onlyOperator {
-        maxDiscountRate = _maxDiscountRate;
-    }
-
-    function setMaxPremiumRate(
-        uint256 _maxPremiumRate
-    ) external onlyOperator {
-        maxPremiumRate = _maxPremiumRate;
-    }
-
-    function setDiscountPercent(
-        uint256 _discountPercent
-    ) external onlyOperator {
-        if (_discountPercent > 20_000) revert DiscountPercentTooHigh();
-        discountPercent = _discountPercent;
-    }
-
-    function setPremiumThreshold(
-        uint256 _premiumThreshold
-    ) external onlyOperator {
-        if (_premiumThreshold < moneyPriceCeiling) revert PremiumThresholdOutOfRange();
-        if (_premiumThreshold > 150) revert PremiumThresholdOutOfRange();
-        premiumThreshold = _premiumThreshold;
-    }
-
-    function setPremiumPercent(
-        uint256 _premiumPercent
-    ) external onlyOperator {
-        if (_premiumPercent > 20_000) revert PremiumPercentTooHigh();
-        premiumPercent = _premiumPercent;
-    }
-
-    function setMintingFactorForPayingDebt(
-        uint256 _mintingFactorForPayingDebt
-    ) external onlyOperator {
-        if (_mintingFactorForPayingDebt < 10_000 || _mintingFactorForPayingDebt > 20_000) {
-            revert MintingFactorOutOfRange();
-        }
-        mintingFactorForPayingDebt = _mintingFactorForPayingDebt;
-    }
-
     /* =================== MUTATIVE =================== */
 
-    function _updateMoneyPrice() internal {
+    function _updatePegPrice() internal {
         try IOracle(oracle).update() {} catch {}
     }
 
-    function buyBonds(
-        uint256 moneyAmount,
-        uint256 targetPrice
-    ) external nonReentrant onlyOneBlock checkCondition checkOperator {
-        if (moneyAmount == 0) revert CannotPurchaseWithZero();
-
-        uint256 price = getMoneyPrice();
-        if (price != targetPrice) revert PriceMoved();
-        if (price >= moneyPriceOne) revert PriceNotEligible();
-        if (moneyAmount > epochSupplyContractionLeft) revert NotEnoughBondLeft();
-
-        uint256 rate = getBondDiscountRate();
-        if (rate == 0) revert InvalidBondRate();
-
-        uint256 bondAmount = moneyAmount * rate / moneyPriceOne;
-        uint256 supply = getMoneyCirculatingSupply();
-        uint256 newBondSupply = IERC20(trustnote).totalSupply() + bondAmount;
-        if (newBondSupply > supply * maxDebtRatioPercent / 10_000) revert OverMaxDebtRatio();
-
-        // Effects before interactions (CEI). The state write moves before the external
-        // burnFrom/mint calls. Combined with `nonReentrant`, this is belt-and-suspenders.
-        epochSupplyContractionLeft -= moneyAmount;
-
-        IBasisAsset(money).burnFrom(msg.sender, moneyAmount);
-        require(IBasisAsset(trustnote).mint(msg.sender, bondAmount), "Treasury: trustnote mint failed");
-
-        _updateMoneyPrice();
-
-        emit BoughtBonds(msg.sender, moneyAmount, bondAmount);
-    }
-
-    function redeemBonds(
-        uint256 bondAmount,
-        uint256 targetPrice
-    ) external nonReentrant onlyOneBlock checkCondition checkOperator {
-        if (bondAmount == 0) revert CannotRedeemZero();
-
-        uint256 price = getMoneyPrice();
-        if (price != targetPrice) revert PriceMoved();
-        if (price <= moneyPriceCeiling) revert PriceNotEligible();
-
-        uint256 rate = getBondPremiumRate();
-        if (rate == 0) revert InvalidBondRate();
-
-        uint256 moneyAmount = bondAmount * rate / moneyPriceOne;
-        if (IERC20(money).balanceOf(address(this)) < moneyAmount) revert InsufficientTreasuryBudget();
-
-        seigniorageSaved -= Math.min(seigniorageSaved, moneyAmount);
-
-        IBasisAsset(trustnote).burnFrom(msg.sender, bondAmount);
-        IERC20(money).safeTransfer(msg.sender, moneyAmount);
-
-        _updateMoneyPrice();
-
-        emit RedeemedBonds(msg.sender, moneyAmount, bondAmount);
-    }
-
-    function _sendToBoardroom(
+    /// @dev Mint `amount`, pay the fund cuts, hand the remainder to the Masonry. Nothing is
+    ///      left in this contract afterwards.
+    function _sendToMasonry(
         uint256 amount
     ) internal {
-        require(IBasisAsset(money).mint(address(this), amount), "Treasury: money mint failed");
+        require(IBasisAsset(peg).mint(address(this), amount), "Treasury: peg mint failed");
 
         uint256 daoShare = 0;
         if (daoFundSharedPercent > 0) {
             daoShare = amount * daoFundSharedPercent / 10_000;
-            IERC20(money).safeTransfer(daoFund, daoShare);
+            IERC20(peg).safeTransfer(daoFund, daoShare);
             emit DaoFundFunded(block.timestamp, daoShare);
         }
 
         uint256 devShare = 0;
         if (devFundSharedPercent > 0) {
             devShare = amount * devFundSharedPercent / 10_000;
-            IERC20(money).safeTransfer(devFund, devShare);
+            IERC20(peg).safeTransfer(devFund, devShare);
             emit DevFundFunded(block.timestamp, devShare);
         }
 
         uint256 remaining = amount - daoShare - devShare;
-        IERC20(money).forceApprove(boardroom, remaining);
-        IBoardroom(boardroom).allocateSeigniorage(remaining);
-        emit BoardroomFunded(block.timestamp, remaining);
+        IERC20(peg).forceApprove(masonry, remaining);
+        IMasonry(masonry).allocateSeigniorage(remaining);
+        emit MasonryFunded(block.timestamp, remaining);
     }
 
-    function _calculateMaxSupplyExpansionPercent(
+    /// @dev Walk tiers high to low; the first one `supply` reaches sets the cap (bps).
+    function _expansionCapFor(
         uint256 supply
-    ) internal returns (uint256) {
-        // Walk tiers high → low; first one we exceed sets the cap.
+    ) internal view returns (uint256) {
         for (uint256 tierId = 8;; --tierId) {
-            if (supply >= supplyTiers[tierId]) {
-                maxSupplyExpansionPercent = maxExpansionTiers[tierId];
-                break;
-            }
+            if (supply >= supplyTiers[tierId]) return maxExpansionTiers[tierId];
             if (tierId == 0) break;
         }
         return maxSupplyExpansionPercent;
@@ -588,83 +335,64 @@ contract Treasury is ContractGuard, ReentrancyGuard {
 
     // slither-disable-next-line reentrancy-no-eth
     function allocateSeigniorage() external nonReentrant onlyOneBlock checkCondition checkEpoch checkOperator {
-        _updateMoneyPrice();
-        previousEpochMoneyPrice = getMoneyPrice();
-        uint256 supply = getMoneyCirculatingSupply() - seigniorageSaved;
+        _updatePegPrice();
+        previousEpochPegPrice = getPegPrice();
+        if (previousEpochPegPrice <= pegPriceCeiling) return;
 
-        if (epoch < bootstrapEpochs) {
-            _sendToBoardroom(supply * bootstrapSupplyExpansionPercent / 10_000);
-        } else if (previousEpochMoneyPrice > moneyPriceCeiling) {
-            // Expansion.
-            uint256 bondSupply = IERC20(trustnote).totalSupply();
-            uint256 percentage = previousEpochMoneyPrice - moneyPriceOne;
-            uint256 savedForBond = 0;
-            uint256 savedForBoardroom = 0;
-            uint256 mse = _calculateMaxSupplyExpansionPercent(supply) * moneyPriceOne / 10_000;
+        uint256 supply = getPegCirculatingSupply();
+        maxSupplyExpansionPercent = _expansionCapFor(supply);
+        uint256 percentage = previousEpochPegPrice - pegPriceOne;
+        uint256 cap = maxSupplyExpansionPercent * pegPriceOne / 10_000;
+        if (percentage > cap) percentage = cap;
 
-            if (percentage > mse) percentage = mse;
+        uint256 amount = supply * percentage / pegPriceOne;
+        if (amount == 0) return;
 
-            if (seigniorageSaved >= bondSupply * bondDepletionFloorPercent / 10_000) {
-                savedForBoardroom = supply * percentage / moneyPriceOne;
-            } else {
-                // Compute boardroom share with mul-before-div to avoid the
-                // divide-before-multiply pattern (Slither). Algebraically equivalent to
-                // Tomb's two-step (supply*pct/priceOne then *floorPct/10000) at sub-wei
-                // precision, which is meaningless at our 1e23+ wei scale.
-                savedForBoardroom = supply * percentage * seigniorageExpansionFloorPercent / moneyPriceOne / 10_000;
-                uint256 totalSeigniorage = supply * percentage / moneyPriceOne;
-                savedForBond = totalSeigniorage - savedForBoardroom;
-                if (mintingFactorForPayingDebt > 0) {
-                    savedForBond = savedForBond * mintingFactorForPayingDebt / 10_000;
-                }
-            }
-            if (savedForBoardroom > 0) _sendToBoardroom(savedForBoardroom);
-            if (savedForBond > 0) {
-                // Effects-before-interactions: bump seigniorageSaved first, then mint.
-                seigniorageSaved += savedForBond;
-                require(IBasisAsset(money).mint(address(this), savedForBond), "Treasury: money mint failed");
-                emit TreasuryFunded(block.timestamp, savedForBond);
-            }
+        // Nobody to pay: mint nothing rather than revert, so the clock keeps ticking.
+        if (IERC20(masonry).totalSupply() == 0) {
+            emit ExpansionSkipped(block.timestamp, amount);
+            return;
         }
+        _sendToMasonry(amount);
     }
 
-    /* =================== RESCUES + BOARDROOM PROXIES =================== */
+    /* =================== RESCUES + MASONRY PROXIES =================== */
 
+    /// @notice Sweep any token that was sent here by mistake. The Treasury is not meant to
+    ///         hold a balance of anything, the protocol's own tokens included.
     function governanceRecoverUnsupported(
         IERC20 token,
         uint256 amount,
         address to
     ) external onlyOperator {
-        if (address(token) == money) revert ProtectedToken();
-        if (address(token) == trustnote) revert ProtectedToken();
-        if (address(token) == estate) revert ProtectedToken();
+        if (to == address(0)) revert ZeroAddress();
         token.safeTransfer(to, amount);
     }
 
-    function boardroomSetOperator(
+    function masonrySetOperator(
         address _operator
     ) external onlyOperator {
-        IBoardroom(boardroom).setOperator(_operator);
+        IMasonry(masonry).setOperator(_operator);
     }
 
-    function boardroomSetLockUp(
+    function masonrySetLockUp(
         uint256 withdrawLockupEpochs,
         uint256 rewardLockupEpochs
     ) external onlyOperator {
-        IBoardroom(boardroom).setLockUp(withdrawLockupEpochs, rewardLockupEpochs);
+        IMasonry(masonry).setLockUp(withdrawLockupEpochs, rewardLockupEpochs);
     }
 
-    function boardroomAllocateSeigniorage(
+    function masonryAllocateSeigniorage(
         uint256 amount
     ) external onlyOperator {
-        IBoardroom(boardroom).allocateSeigniorage(amount);
+        IMasonry(masonry).allocateSeigniorage(amount);
     }
 
-    function boardroomGovernanceRecoverUnsupported(
+    function masonryGovernanceRecoverUnsupported(
         address token,
         uint256 amount,
         address to
     ) external onlyOperator {
-        IBoardroom(boardroom).governanceRecoverUnsupported(token, amount, to);
+        IMasonry(masonry).governanceRecoverUnsupported(token, amount, to);
     }
 }

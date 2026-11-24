@@ -6,9 +6,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 /**
  * @title GenesisRewardPool
- * @notice 24-hour MasterChef-style farm. The Treasury sends 11,000 MONEY here as part of
- *         the genesis `distributeReward(...)` call. LPs stake their (WETH/MONEY,
- *         USDC/WETH, etc.) LP tokens here and earn MONEY pro-rata over the 24-hour
+ * @notice 24-hour MasterChef-style farm. The Treasury sends 11,000 PEG here as part of
+ *         the genesis `distributeReward(...)` call. LPs stake their (WETH/PEG,
+ *         USDC/WETH, etc.) LP tokens here and earn PEG pro-rata over the 24-hour
  *         window. After the window closes, withdrawals continue and stakes can leave.
  *
  * @dev    Direct port of Tomb Finance's BombGenesisRewardPool (bombmoney/bomb-contracts).
@@ -16,7 +16,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  *         Modernizations applied (no logic changes):
  *           - 0.6.12 → 0.8.26; SafeMath dropped (built-in overflow checks).
  *           - `require` strings → custom errors.
- *           - Variable renames: bomb → money, accBombPerShare → accMoneyPerShare, etc.
+ *           - Variable renames: bomb → peg, accBombPerShare → accPegPerShare, etc.
  *
  *         Intentional deviation from Tomb (justified):
  *           - The BSC-specific `cake` field (a PancakeSwap LP token that incurred a 1%
@@ -24,42 +24,42 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  *             fee-on-transfer LP needs special handling later, it can be added per-pool.
  *
  *         Mechanism:
- *           - Pre-fund with 11,000 MONEY via `MONEY.distributeReward(genesisPool, ...)`.
+ *           - Pre-fund with 11,000 PEG via `PEG.distributeReward(genesisPool, ...)`.
  *           - Operator calls `add(allocPoint, lpToken, ...)` for each LP token to support.
- *           - LPs `deposit(pid, amount)` their LP tokens, earn MONEY pro-rata.
- *           - Rewards accrue at `MONEY_PER_SECOND` for `RUNNING_TIME` seconds (24h).
+ *           - LPs `deposit(pid, amount)` their LP tokens, earn PEG pro-rata.
+ *           - Rewards accrue at `PEG_PER_SECOND` for `RUNNING_TIME` seconds (24h).
  *           - LPs can `withdraw(pid, amount)` or `emergencyWithdraw(pid)` anytime.
  *           - After `poolEndTime + 90 days`, operator can rescue any stuck tokens including
- *             unclaimed MONEY (rounding dust).
+ *             unclaimed PEG (rounding dust).
  */
 contract GenesisRewardPool {
     using SafeERC20 for IERC20;
 
     struct UserInfo {
         uint256 amount; // LP tokens staked.
-        uint256 rewardDebt; // MasterChef accounting term — see `pendingMoney`.
+        uint256 rewardDebt; // MasterChef accounting term — see `pendingPeg`.
     }
 
     struct PoolInfo {
         IERC20 token; // The LP token contract for this pool entry.
-        uint256 allocPoint; // Pool's share of `MONEY_PER_SECOND`, weighted by `totalAllocPoint`.
-        uint256 lastRewardTime; // Last timestamp where rewards were folded into `accMoneyPerShare`.
-        uint256 accMoneyPerShare; // 1e18-scaled accumulator.
+        uint256 allocPoint; // Pool's share of `PEG_PER_SECOND`, weighted by `totalAllocPoint`.
+        uint256 lastRewardTime; // Last timestamp where rewards were folded into `accPegPerShare`.
+        uint256 accPegPerShare; // 1e18-scaled accumulator.
         bool isStarted; // Pool's allocPoint has been added to `totalAllocPoint`.
     }
 
-    /// @notice Total MONEY to distribute over the 24-hour window. The Treasury pre-funds
-    ///         this contract with exactly `TOTAL_REWARDS` MONEY via `distributeReward`.
+    /// @notice Total PEG to distribute over the 24-hour window. The Treasury pre-funds
+    ///         this contract with exactly `TOTAL_REWARDS` PEG via `distributeReward`.
     uint256 public constant TOTAL_REWARDS = 11_000 ether;
 
     /// @notice Duration of the genesis distribution.
     uint256 public constant RUNNING_TIME = 1 days;
 
-    /// @notice MONEY emitted per second across all pools (split by allocPoints).
+    /// @notice PEG emitted per second across all pools (split by allocPoints).
     ///         = TOTAL_REWARDS / RUNNING_TIME = 11000e18 / 86400 ≈ 0.1273e18.
-    uint256 public constant MONEY_PER_SECOND = TOTAL_REWARDS / RUNNING_TIME;
+    uint256 public constant PEG_PER_SECOND = TOTAL_REWARDS / RUNNING_TIME;
 
-    IERC20 public immutable money;
+    IERC20 public immutable peg;
     address public operator;
 
     PoolInfo[] public poolInfo;
@@ -90,11 +90,11 @@ contract GenesisRewardPool {
     }
 
     constructor(
-        address _money,
+        address _peg,
         uint256 _poolStartTime
     ) {
         if (block.timestamp >= _poolStartTime) revert StartTimeInPast();
-        money = IERC20(_money);
+        peg = IERC20(_peg);
         poolStartTime = _poolStartTime;
         poolEndTime = _poolStartTime + RUNNING_TIME;
         operator = msg.sender;
@@ -138,7 +138,7 @@ contract GenesisRewardPool {
                 token: _token,
                 allocPoint: _allocPoint,
                 lastRewardTime: _lastRewardTime,
-                accMoneyPerShare: 0,
+                accPegPerShare: 0,
                 isStarted: _isStarted
             })
         );
@@ -172,7 +172,7 @@ contract GenesisRewardPool {
     // Reward accounting
     // ------------------------------------------------------------------
 
-    /// @notice Cumulative MONEY emitted over [_fromTime, _toTime], capped at the
+    /// @notice Cumulative PEG emitted over [_fromTime, _toTime], capped at the
     ///         start/end of the 24-hour window.
     function getGeneratedReward(
         uint256 _fromTime,
@@ -182,32 +182,32 @@ contract GenesisRewardPool {
         if (_toTime >= poolEndTime) {
             if (_fromTime >= poolEndTime) return 0;
             if (_fromTime <= poolStartTime) {
-                return (poolEndTime - poolStartTime) * MONEY_PER_SECOND;
+                return (poolEndTime - poolStartTime) * PEG_PER_SECOND;
             }
-            return (poolEndTime - _fromTime) * MONEY_PER_SECOND;
+            return (poolEndTime - _fromTime) * PEG_PER_SECOND;
         }
         if (_toTime <= poolStartTime) return 0;
         if (_fromTime <= poolStartTime) {
-            return (_toTime - poolStartTime) * MONEY_PER_SECOND;
+            return (_toTime - poolStartTime) * PEG_PER_SECOND;
         }
-        return (_toTime - _fromTime) * MONEY_PER_SECOND;
+        return (_toTime - _fromTime) * PEG_PER_SECOND;
     }
 
-    function pendingMoney(
+    function pendingPeg(
         uint256 _pid,
         address _user
     ) external view returns (uint256) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
-        uint256 accMoneyPerShare = pool.accMoneyPerShare;
+        uint256 accPegPerShare = pool.accPegPerShare;
         uint256 tokenSupply = pool.token.balanceOf(address(this));
         if (block.timestamp > pool.lastRewardTime && tokenSupply != 0 && totalAllocPoint > 0) {
             uint256 generated = getGeneratedReward(pool.lastRewardTime, block.timestamp);
-            uint256 moneyReward = generated * pool.allocPoint / totalAllocPoint;
+            uint256 pegReward = generated * pool.allocPoint / totalAllocPoint;
             // slither-disable-next-line divide-before-multiply
-            accMoneyPerShare += moneyReward * 1e18 / tokenSupply;
+            accPegPerShare += pegReward * 1e18 / tokenSupply;
         }
-        return user.amount * accMoneyPerShare / 1e18 - user.rewardDebt;
+        return user.amount * accPegPerShare / 1e18 - user.rewardDebt;
     }
 
     function massUpdatePools() public {
@@ -234,9 +234,9 @@ contract GenesisRewardPool {
         }
         if (totalAllocPoint > 0) {
             uint256 generated = getGeneratedReward(pool.lastRewardTime, block.timestamp);
-            uint256 moneyReward = generated * pool.allocPoint / totalAllocPoint;
+            uint256 pegReward = generated * pool.allocPoint / totalAllocPoint;
             // slither-disable-next-line divide-before-multiply
-            pool.accMoneyPerShare += moneyReward * 1e18 / tokenSupply;
+            pool.accPegPerShare += pegReward * 1e18 / tokenSupply;
         }
         pool.lastRewardTime = block.timestamp;
     }
@@ -253,9 +253,9 @@ contract GenesisRewardPool {
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
         if (user.amount > 0) {
-            uint256 pending = user.amount * pool.accMoneyPerShare / 1e18 - user.rewardDebt;
+            uint256 pending = user.amount * pool.accPegPerShare / 1e18 - user.rewardDebt;
             if (pending > 0) {
-                _safeMoneyTransfer(msg.sender, pending);
+                _safePegTransfer(msg.sender, pending);
                 emit RewardPaid(msg.sender, pending);
             }
         }
@@ -263,7 +263,7 @@ contract GenesisRewardPool {
             pool.token.safeTransferFrom(msg.sender, address(this), _amount);
             user.amount += _amount;
         }
-        user.rewardDebt = user.amount * pool.accMoneyPerShare / 1e18;
+        user.rewardDebt = user.amount * pool.accPegPerShare / 1e18;
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -275,16 +275,16 @@ contract GenesisRewardPool {
         UserInfo storage user = userInfo[_pid][msg.sender];
         if (user.amount < _amount) revert WithdrawAmountTooHigh();
         updatePool(_pid);
-        uint256 pending = user.amount * pool.accMoneyPerShare / 1e18 - user.rewardDebt;
+        uint256 pending = user.amount * pool.accPegPerShare / 1e18 - user.rewardDebt;
         if (pending > 0) {
-            _safeMoneyTransfer(msg.sender, pending);
+            _safePegTransfer(msg.sender, pending);
             emit RewardPaid(msg.sender, pending);
         }
         if (_amount > 0) {
             user.amount -= _amount;
             pool.token.safeTransfer(msg.sender, _amount);
         }
-        user.rewardDebt = user.amount * pool.accMoneyPerShare / 1e18;
+        user.rewardDebt = user.amount * pool.accPegPerShare / 1e18;
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
@@ -311,8 +311,8 @@ contract GenesisRewardPool {
         address to
     ) external onlyOperator {
         if (block.timestamp < poolEndTime + 90 days) {
-            // Within 90 days of pool end: protect MONEY + every staked LP token.
-            if (_token == money) revert ProtectedToken();
+            // Within 90 days of pool end: protect PEG + every staked LP token.
+            if (_token == peg) revert ProtectedToken();
             uint256 len = poolInfo.length;
             for (uint256 pid = 0; pid < len; ++pid) {
                 if (poolInfo[pid].token == _token) revert ProtectedToken();
@@ -326,13 +326,13 @@ contract GenesisRewardPool {
     // ------------------------------------------------------------------
 
     /// @dev Defensive transfer — if rounding causes a slight over-request, send what we have.
-    function _safeMoneyTransfer(
+    function _safePegTransfer(
         address to,
         uint256 amount
     ) internal {
-        uint256 bal = money.balanceOf(address(this));
+        uint256 bal = peg.balanceOf(address(this));
         // slither-disable-next-line incorrect-equality — sentinel: nothing to send
         if (bal == 0) return;
-        money.safeTransfer(to, amount > bal ? bal : amount);
+        peg.safeTransfer(to, amount > bal ? bal : amount);
     }
 }

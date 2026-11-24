@@ -2,10 +2,11 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
+import {MockOracle} from "../utils/MockOracle.sol";
 
-import {PegDefenseHook} from "../../src/hooks/PegDefenseHook.sol";
+import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {BaseV4Hook} from "../../src/hooks/base/BaseV4Hook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
@@ -16,6 +17,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -28,7 +30,7 @@ contract MockPoolManager {
 
     // Sprint 4b — when the hook calls poolManager.take(currency, to, amount) in beforeSwap
     // to pull a tax slice into its balance, we simulate it by transferring from the mock's
-    // own balance. Tests must pre-fund the mock with MONEY before exercising tax paths.
+    // own balance. Tests must pre-fund the mock with PEG before exercising tax paths.
     address public lastTakeRecipient;
     uint256 public lastTakeAmount;
     address public lastTakeCurrency;
@@ -62,12 +64,22 @@ contract MockPoolManager {
     }
 }
 
+/// @dev An oracle whose `consult` always fails.
+contract RevertingOracle {
+    function consult(
+        address,
+        uint256
+    ) external pure returns (uint144) {
+        revert("oracle down");
+    }
+}
+
 contract PegDefenseHookTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
     PegDefenseHook internal hook;
     MockPoolManager internal pm;
-    OldMoney internal money;
+    PegToken internal peg;
     address internal weth = makeAddr("weth");
     PoolKey internal poolKey;
 
@@ -82,25 +94,22 @@ contract PegDefenseHookTest is BaseTest {
         pm = new MockPoolManager();
 
         vm.prank(owner);
-        money = new OldMoney();
+        peg = new PegToken("Peg Token", "PEG");
 
-        // Compute the only address with the right permission bits we need:
-        // AFTER_INITIALIZE | BEFORE_SWAP.
-        hookAddr = address(
-            uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG)
-        );
+        // The lowest address carrying exactly the hook's permission bits.
+        hookAddr = address(PegDefenseHookPermissions.FLAGS);
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
-            abi.encode(IPoolManager(address(pm)), address(money), address(this)),
+            abi.encode(IPoolManager(address(pm)), address(peg), address(this)),
             hookAddr
         );
         hook = PegDefenseHook(hookAddr);
 
         // Sort the two tokens into V4 currency order.
-        (Currency c0, Currency c1) = address(money) < weth
-            ? (Currency.wrap(address(money)), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < weth
+            ? (Currency.wrap(address(peg)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(peg)));
 
         poolKey = PoolKey({
             currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(hookAddr)
@@ -117,25 +126,28 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_Constructor_StoresImmutables() public view {
         assertEq(address(hook.poolManager()), address(pm));
-        assertEq(hook.money(), address(money));
+        assertEq(hook.peg(), address(peg));
     }
 
-    function test_HookPermissions_AfterInitBeforeSwapAndReturnsDelta() public view {
+    function test_HookPermissions_MatchDeclaredFlags() public view {
         Hooks.Permissions memory p = hook.getHookPermissions();
         assertTrue(p.afterInitialize);
         assertTrue(p.beforeSwap);
-        assertTrue(p.beforeSwapReturnDelta, "Sprint 4b: returnDelta required for tax slice");
+        assertTrue(p.afterSwap, "afterSwap records the post-swap tick");
+        assertTrue(p.beforeSwapReturnDelta, "exact-input sell tax");
+        assertTrue(p.afterSwapReturnDelta, "exact-output sell tax");
         assertFalse(p.beforeInitialize);
-        assertFalse(p.afterSwap);
         assertFalse(p.beforeAddLiquidity);
         assertFalse(p.afterAddLiquidity);
         assertFalse(p.beforeRemoveLiquidity);
         assertFalse(p.afterRemoveLiquidity);
         assertFalse(p.beforeDonate);
         assertFalse(p.afterDonate);
-        assertFalse(p.afterSwapReturnDelta);
         assertFalse(p.afterAddLiquidityReturnDelta);
         assertFalse(p.afterRemoveLiquidityReturnDelta);
+
+        assertEq(hook.PERMISSION_FLAGS(), 0x10CC, "low-14-bit address pattern");
+        assertEq(uint160(address(hook)) & 0x3FFF, hook.PERMISSION_FLAGS());
     }
 
     function test_DefaultRevertingHooks_AreUncallable() public {
@@ -170,12 +182,12 @@ contract PegDefenseHookTest is BaseTest {
         assertEq(PoolId.unwrap(hook.poolId()), expectedId);
     }
 
-    function test_AfterInitialize_DetectsMoneyOrientation() public {
+    function test_AfterInitialize_DetectsPegOrientation() public {
         vm.prank(address(pm));
         hook.afterInitialize(address(0), poolKey, 0, 0);
-        // MONEY is currency0 iff its address is the lower of the two.
-        bool expectedIsCurrency0 = address(money) < weth;
-        assertEq(hook.moneyIsCurrency0(), expectedIsCurrency0);
+        // PEG is currency0 iff its address is the lower of the two.
+        bool expectedIsCurrency0 = address(peg) < weth;
+        assertEq(hook.pegIsCurrency0(), expectedIsCurrency0);
     }
 
     function test_AfterInitialize_OneShot() public {
@@ -187,7 +199,7 @@ contract PegDefenseHookTest is BaseTest {
         hook.afterInitialize(address(0), poolKey, 0, 0);
     }
 
-    function test_AfterInitialize_RejectsPoolMissingMoney() public {
+    function test_AfterInitialize_RejectsPoolMissingPeg() public {
         address otherA = makeAddr("otherA");
         address otherB = makeAddr("otherB");
         (Currency c0, Currency c1) = otherA < otherB
@@ -198,7 +210,7 @@ contract PegDefenseHookTest is BaseTest {
         });
 
         vm.prank(address(pm));
-        vm.expectRevert(PegDefenseHook.PoolMissingMoney.selector);
+        vm.expectRevert(PegDefenseHook.PoolMissingPeg.selector);
         hook.afterInitialize(address(0), badKey, 0, 0);
     }
 
@@ -260,10 +272,10 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsExpansionFeeAbovePeg() public {
         _bind(0);
-        // 200 ticks above peg, MONEY is whichever side is currency0/1.
-        // If money is currency0, currentTick > pegTick == "MONEY appreciating" -> expansion.
-        // If money is currency1, we need currentTick LESS than peg to be expansion. Flip sign.
-        int24 t = hook.moneyIsCurrency0() ? int24(200) : int24(-200);
+        // 200 ticks above peg, PEG is whichever side is currency0/1.
+        // If peg is currency0, currentTick > pegTick == "PEG appreciating" -> expansion.
+        // If peg is currency1, we need currentTick LESS than peg to be expansion. Flip sign.
+        int24 t = hook.pegIsCurrency0() ? int24(200) : int24(-200);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();
@@ -272,7 +284,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsContractionFeeBelowPeg() public {
         _bind(0);
-        int24 t = hook.moneyIsCurrency0() ? int24(-150) : int24(150);
+        int24 t = hook.pegIsCurrency0() ? int24(-150) : int24(150);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();
@@ -281,7 +293,7 @@ contract PegDefenseHookTest is BaseTest {
 
     function test_BeforeSwap_ReturnsDeepContractionFeeFarBelowPeg() public {
         _bind(0);
-        int24 t = hook.moneyIsCurrency0() ? int24(-500) : int24(500);
+        int24 t = hook.pegIsCurrency0() ? int24(-500) : int24(500);
         pm.setTick(t);
 
         (,, uint24 feeOverride) = _beforeSwapCall();
@@ -362,51 +374,230 @@ contract PegDefenseHookTest is BaseTest {
     function test_Tax_Defaults() public view {
         assertFalse(hook.autoCalculateTax(), "tax off at deploy (Tomb default)");
         assertEq(hook.burnThreshold(), 1.1e18, "burnThreshold default 1.10e18 (Tomb)");
-        assertEq(hook.treasury(), address(0), "treasury unset at deploy");
-        assertEq(hook.getTaxTiersTwapsCount(), 14, "14 tiers (Tomb)");
-        assertEq(hook.getTaxTiersRatesCount(), 14, "14 rates (Tomb)");
+        assertEq(hook.feeRecipient(), address(0), "treasury unset at deploy");
+        assertEq(hook.getTaxTiersTwapsCount(), 3, "three tiers");
+        assertEq(hook.getTaxTiersRatesCount(), 3, "three rates");
+        assertEq(address(hook.taxOracle()), address(0), "tax oracle unset at deploy");
     }
 
-    function test_Tax_TierTable_MatchesTomb() public view {
-        // Exact values from Bomb.sol's taxTiersTwaps + taxTiersRates arrays.
-        uint256[14] memory expectedTwaps = [
-            uint256(0),
-            0.5e18,
-            0.6e18,
-            0.7e18,
-            0.8e18,
-            0.9e18,
-            0.95e18,
-            1.0e18,
-            1.05e18,
-            1.1e18,
-            1.2e18,
-            1.3e18,
-            1.4e18,
-            1.5e18
-        ];
-        uint256[14] memory expectedRates =
-            [uint256(2000), 1900, 1800, 1700, 1600, 1500, 1500, 1500, 1500, 1400, 900, 400, 200, 100];
-
-        for (uint256 i = 0; i < 14; ++i) {
+    function test_Tax_TierTable_Defaults() public view {
+        uint256[3] memory expectedTwaps = [uint256(0), 1.12e18, 1.2e18];
+        uint256[3] memory expectedRates = [uint256(1200), 600, 300];
+        for (uint256 i = 0; i < 3; ++i) {
             assertEq(hook.taxTiersTwaps(i), expectedTwaps[i], "twap mismatch");
             assertEq(hook.taxTiersRates(i), expectedRates[i], "rate mismatch");
         }
     }
 
     function test_Tax_RateLookup_TierBoundaries() public view {
-        // Walk every tier boundary; verify the rate returned matches Tomb's lookup semantic
-        // (first tier the price >= is the rate; walk high -> low).
-        assertEq(hook.taxRateForPrice(0), 2000, "price 0 -> tier 0 -> 2000");
-        assertEq(hook.taxRateForPrice(0.5e18 - 1), 2000, "just below 0.5 -> tier 0");
-        assertEq(hook.taxRateForPrice(0.5e18), 1900, "exactly 0.5 -> tier 1");
-        assertEq(hook.taxRateForPrice(0.99e18), 1500, "0.99 -> tier 6 (0.95)");
-        assertEq(hook.taxRateForPrice(1.0e18), 1500, "at peg -> tier 7");
-        assertEq(hook.taxRateForPrice(1.05e18), 1500, "1.05 -> tier 8");
-        assertEq(hook.taxRateForPrice(1.1e18), 1400, "at burnThreshold -> tier 9");
-        assertEq(hook.taxRateForPrice(1.1e18 - 1), 1500, "just below 1.10 -> tier 8");
-        assertEq(hook.taxRateForPrice(1.5e18), 100, "at highest tier");
-        assertEq(hook.taxRateForPrice(2.0e18), 100, "above highest -> highest rate");
+        assertEq(hook.taxRateForPrice(0), 1200, "deep depeg -> 12%");
+        assertEq(hook.taxRateForPrice(1.0e18), 1200, "at peg -> 12%");
+        assertEq(hook.taxRateForPrice(1.12e18 - 1), 1200, "just below 1.12 -> 12%");
+        assertEq(hook.taxRateForPrice(1.12e18), 600, "exactly 1.12 -> 6%");
+        assertEq(hook.taxRateForPrice(1.2e18 - 1), 600, "just below 1.20 -> 6%");
+        assertEq(hook.taxRateForPrice(1.2e18), 300, "exactly 1.20 -> 3%");
+        assertEq(hook.taxRateForPrice(5.0e18), 300, "far above -> 3%");
+    }
+
+    // ---------------------------------------------------------------------
+    // Tax price source — oracle TWAP with spot fallback
+    // ---------------------------------------------------------------------
+
+    function test_SetTaxOracle_OnlyTrustees() public {
+        vm.prank(stranger);
+        vm.expectRevert(Trustees.NotTrustees.selector);
+        hook.setTaxOracle(address(1));
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleUnset() public {
+        _bind(0);
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1, "spot at tick 0");
+        assertEq(hook.currentTaxRate(), 1200);
+    }
+
+    function test_TaxPrice_UsesOracleTwap_NotSpot() public {
+        _bind(0); // spot = 1.00 -> would be 12%
+        MockOracle oracle = new MockOracle(0);
+        oracle.setPrice(1.2e18);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+
+        assertEq(hook.currentTaxPrice(), 1.2e18, "TWAP wins over spot");
+        assertEq(hook.targetTaxRate(), 300, "3% at a 1.20 TWAP");
+
+        oracle.setPrice(1.12e18);
+        assertEq(hook.targetTaxRate(), 600, "6% at a 1.12 TWAP");
+
+        oracle.setPrice(1.119e18);
+        assertEq(hook.targetTaxRate(), 1200, "12% below 1.12");
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleReportsZero() public {
+        _bind(0);
+        MockOracle oracle = new MockOracle(0); // price 0 == no completed epoch yet
+        oracle.setPrice(0);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1);
+    }
+
+    function test_TaxPrice_FallsBackToSpot_WhenOracleReverts() public {
+        _bind(0);
+        address broken = address(new RevertingOracle());
+        vm.prank(trustees);
+        hook.setTaxOracle(broken);
+        assertApproxEqAbs(hook.currentTaxPrice(), 1e18, 1, "a broken oracle must not block or untax sells");
+    }
+
+    function test_BeforeSwap_TaxesAtTheTwapTier_EvenWhenSpotDisagrees() public {
+        _bind(0);
+        pm.setTick(0); // spot says 12%
+        MockOracle oracle = new MockOracle(0);
+        oracle.setPrice(1.2e18); // TWAP says 3%
+        address twapTreasury = makeAddr("treasury_twap");
+        vm.startPrank(trustees);
+        hook.setTaxOracle(address(oracle));
+        hook.setAutoCalculateTax(true);
+        hook.setFeeRecipient(twapTreasury);
+        vm.stopPrank();
+
+        // Earn the 3% rate: open the recovery window, then let it run.
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 7 hours);
+
+        uint256 expectedTax = 100 ether * 300 / 10_000;
+        vm.prank(owner);
+        peg.mint(address(pm), expectedTax);
+
+        SwapParams memory params = _sellSwap();
+        vm.prank(address(pm));
+        (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
+
+        assertEq(int256(BeforeSwapDeltaLibrary.getSpecifiedDelta(delta)), int256(expectedTax), "3% of 100");
+        // A 1.20 TWAP is above the 1.10 burn threshold, so the tax is routed, not burned.
+        assertEq(peg.balanceOf(twapTreasury), expectedTax);
+    }
+
+    // ---------------------------------------------------------------------
+    // Fire Tax ratchet — immediate increases, seven-hour decreases
+    // ---------------------------------------------------------------------
+
+    function _ratchetOracle(
+        uint256 price
+    ) internal returns (MockOracle oracle) {
+        _bind(0);
+        oracle = new MockOracle(price);
+        vm.prank(trustees);
+        hook.setTaxOracle(address(oracle));
+    }
+
+    function test_Ratchet_StartsAtTheMaximum() public view {
+        assertEq(hook.taxRate(), 1200);
+        assertEq(hook.MAX_TAX_BPS(), 1200);
+        assertEq(hook.TAX_RECOVERY_PERIOD(), 7 hours);
+        assertEq(hook.taxRecoveryStartedAt(), 0);
+    }
+
+    function test_Ratchet_Poke_RequiresBoundPool() public {
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.pokeTaxRate();
+    }
+
+    function test_Ratchet_DecreaseWaitsTheFullSevenHours() public {
+        _ratchetOracle(1.2e18); // target 3%
+        uint256 t0 = block.timestamp;
+
+        vm.prank(stranger); // permissionless
+        assertEq(hook.pokeTaxRate(), 1200, "first sight of a lower target only opens the window");
+        assertEq(hook.taxRecoveryStartedAt(), t0);
+        assertEq(hook.taxRecoveryRate(), 300);
+
+        vm.warp(t0 + 7 hours - 1);
+        assertEq(hook.currentTaxRate(), 1200, "view agrees: not yet");
+        assertEq(hook.pokeTaxRate(), 1200);
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.currentTaxRate(), 300, "view previews the step");
+        assertEq(hook.pokeTaxRate(), 300);
+        assertEq(hook.taxRecoveryStartedAt(), 0, "window closed");
+    }
+
+    function test_Ratchet_IncreaseIsImmediate_AndCancelsAPendingDecrease() public {
+        MockOracle oracle = _ratchetOracle(1.2e18);
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 7 hours);
+        assertEq(hook.pokeTaxRate(), 300);
+
+        // A decrease toward 3% was earned. Now the TWAP falls back under 1.12.
+        oracle.setPrice(1.0e18);
+        assertEq(hook.pokeTaxRate(), 1200, "back to 12% on the very next sync");
+
+        // And a window opened part-way through is cancelled by a rise.
+        oracle.setPrice(1.2e18);
+        hook.pokeTaxRate();
+        vm.warp(block.timestamp + 6 hours);
+        oracle.setPrice(1.0e18);
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryStartedAt(), 0, "pending decrease cancelled");
+        oracle.setPrice(1.2e18);
+        vm.warp(block.timestamp + 2 hours);
+        assertEq(hook.pokeTaxRate(), 1200, "the earlier six hours do not count");
+    }
+
+    function test_Ratchet_AdoptsTheHighestTargetSeenDuringTheWindow() public {
+        MockOracle oracle = _ratchetOracle(1.2e18); // target 3%
+        uint256 t0 = block.timestamp;
+        hook.pokeTaxRate();
+
+        vm.warp(t0 + 3 hours);
+        oracle.setPrice(1.15e18); // target back up to 6%, still below the 12% in force
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryRate(), 600, "candidate raised; the window keeps running");
+        assertEq(hook.taxRecoveryStartedAt(), t0);
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.pokeTaxRate(), 600, "only a rate that stood the whole window is adopted");
+    }
+
+    function test_Ratchet_ADeeperDecreaseNeedsItsOwnWindow() public {
+        MockOracle oracle = _ratchetOracle(1.15e18); // target 6%
+        uint256 t0 = block.timestamp;
+        hook.pokeTaxRate();
+
+        vm.warp(t0 + 6 hours);
+        oracle.setPrice(1.25e18); // target 3%, seen one hour before the window closes
+        hook.pokeTaxRate();
+        assertEq(hook.taxRecoveryRate(), 600, "the 3% target has not stood for seven hours");
+
+        vm.warp(t0 + 7 hours);
+        assertEq(hook.pokeTaxRate(), 600);
+        assertEq(hook.taxRecoveryRate(), 300, "a fresh window opens for 3%");
+
+        vm.warp(t0 + 14 hours - 1);
+        assertEq(hook.pokeTaxRate(), 600);
+        vm.warp(t0 + 14 hours);
+        assertEq(hook.pokeTaxRate(), 300);
+    }
+
+    function testFuzz_Ratchet_NeverExceedsTheCap_NorFallsEarly(
+        uint256[8] memory prices,
+        uint256[8] memory gaps
+    ) public {
+        MockOracle oracle = _ratchetOracle(1e18);
+        uint256 lastRise = block.timestamp;
+        uint256 previous = hook.taxRate();
+        for (uint256 i = 0; i < prices.length; ++i) {
+            oracle.setPrice(bound(prices[i], 0.5e18, 1.5e18));
+            vm.warp(block.timestamp + bound(gaps[i], 0, 10 hours));
+            uint256 rate = hook.pokeTaxRate();
+            assertLe(rate, 1200, "hard cap");
+            if (rate > previous) {
+                lastRise = block.timestamp;
+            } else if (rate < previous) {
+                assertGe(block.timestamp - lastRise, 7 hours, "no decrease within seven hours of a rise");
+            }
+            previous = rate;
+        }
     }
 
     function test_Tax_PriceFromTick_AtParity() public {
@@ -456,46 +647,46 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTreasury_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        hook.setTreasury(makeAddr("t"));
+        hook.setFeeRecipient(makeAddr("t"));
     }
 
     function test_SetTreasury_Updates() public {
         address t = makeAddr("treasury");
         vm.prank(trustees);
-        hook.setTreasury(t);
-        assertEq(hook.treasury(), t);
+        hook.setFeeRecipient(t);
+        assertEq(hook.feeRecipient(), t);
     }
 
     function test_SetTaxTiersTwap_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        hook.setTaxTiersTwap(5, 0.91e18);
+        hook.setTaxTiersTwap(1, 1.15e18);
     }
 
     function test_SetTaxTiersTwap_RejectsOutOfRange() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
-        hook.setTaxTiersTwap(14, 2e18);
+        hook.setTaxTiersTwap(3, 2e18);
     }
 
     function test_SetTaxTiersTwap_RejectsNonMonotonicDown() public {
-        // Setting tier 5 (currently 0.90) to a value <= tier 4 (0.80) breaks monotonicity.
+        // Setting tier 1 (1.12) to a value <= tier 0 (0) breaks monotonicity.
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
-        hook.setTaxTiersTwap(5, 0.8e18);
+        hook.setTaxTiersTwap(1, 0);
     }
 
     function test_SetTaxTiersTwap_RejectsNonMonotonicUp() public {
-        // Setting tier 5 to a value >= tier 6 (0.95) breaks monotonicity.
+        // Setting tier 1 to a value >= tier 2 (1.20) breaks monotonicity.
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.NonMonotonicTier.selector);
-        hook.setTaxTiersTwap(5, 0.95e18);
+        hook.setTaxTiersTwap(1, 1.2e18);
     }
 
     function test_SetTaxTiersTwap_Updates() public {
         vm.prank(trustees);
-        hook.setTaxTiersTwap(5, 0.91e18);
-        assertEq(hook.taxTiersTwaps(5), 0.91e18);
+        hook.setTaxTiersTwap(1, 1.15e18);
+        assertEq(hook.taxTiersTwaps(1), 1.15e18);
     }
 
     function test_SetTaxTiersRate_OnlyTrustees() public {
@@ -507,13 +698,13 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTaxTiersRate_RejectsOutOfRange() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TierIndexOutOfRange.selector);
-        hook.setTaxTiersRate(14, 100);
+        hook.setTaxTiersRate(3, 100);
     }
 
     function test_SetTaxTiersRate_RejectsTooHigh() public {
         vm.prank(trustees);
         vm.expectRevert(PegDefenseHook.TaxRateTooHigh.selector);
-        hook.setTaxTiersRate(0, 10_001);
+        hook.setTaxTiersRate(0, 1201);
     }
 
     function test_SetTaxTiersRate_Updates() public {
@@ -559,9 +750,9 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
 
-        // BUY: zeroForOne != moneyIsCurrency0 (the opposite-direction swap).
+        // BUY: zeroForOne != pegIsCurrency0 (the opposite-direction swap).
         SwapParams memory params =
-            SwapParams({zeroForOne: !hook.moneyIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
+            SwapParams({zeroForOne: !hook.pegIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
         vm.prank(address(pm));
         (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
         assertEq(BeforeSwapDelta.unwrap(delta), 0, "no tax on buy direction");
@@ -596,25 +787,25 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
 
-        // Pre-fund the mock with MONEY so its take() can transfer to the hook.
-        // At tick 0, rate is tier 7 = 1500 bps. For amountSpecified = -100, tax = 15.
+        // Pre-fund the mock with PEG so its take() can transfer to the hook.
+        // At tick 0, the rate is 1200 bps. For amountSpecified = -100, tax = 12.
         uint256 amount = 100 ether;
-        uint256 expectedTax = amount * 1500 / 10_000;
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
-        money.mint(address(pm), expectedTax);
+        peg.mint(address(pm), expectedTax);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
 
         SwapParams memory params = _sellSwap();
         vm.prank(address(pm));
         (, BeforeSwapDelta delta,) = hook.beforeSwap(address(0), poolKey, params, "");
 
-        // take was called once for expectedTax MONEY -> hook -> burned.
+        // take was called once for expectedTax PEG -> hook -> burned.
         assertEq(pm.takeCallCount(), 1, "take called once");
         assertEq(pm.lastTakeAmount(), expectedTax, "take amount = tax");
         assertEq(pm.lastTakeRecipient(), address(hook), "take recipient = hook");
-        assertEq(money.totalSupply(), totalBefore - expectedTax, "totalSupply decreased by tax");
-        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
+        assertEq(peg.totalSupply(), totalBefore - expectedTax, "totalSupply decreased by tax");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
         // Delta encodes the tax in the specified slot (exact-input).
         int128 deltaSpecified = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
         assertEq(int256(deltaSpecified), int256(expectedTax), "deltaSpecified = +taxAmount");
@@ -631,24 +822,24 @@ contract PegDefenseHookTest is BaseTest {
 
         address treasuryAddr = makeAddr("treasury");
         vm.prank(trustees);
-        hook.setTreasury(treasuryAddr);
+        hook.setFeeRecipient(treasuryAddr);
 
         uint256 amount = 100 ether;
-        // At tick 0 price ~= 1.0, that's tier 7 -> 1500 bps.
-        uint256 expectedTax = amount * 1500 / 10_000;
+        // At tick 0 price ~= 1.0, that's the 12% tier.
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
-        money.mint(address(pm), expectedTax);
+        peg.mint(address(pm), expectedTax);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
 
         SwapParams memory params = _sellSwap();
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, params, "");
 
         // Total supply unchanged (no burn); treasury holds the tax.
-        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged when routed");
-        assertEq(money.balanceOf(treasuryAddr), expectedTax, "treasury received tax");
-        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after transfer");
+        assertEq(peg.totalSupply(), totalBefore, "totalSupply unchanged when routed");
+        assertEq(peg.balanceOf(treasuryAddr), expectedTax, "treasury received tax");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook balance is 0 after transfer");
     }
 
     function test_BeforeSwap_FallsBackToBurn_WhenTreasuryUnset() public {
@@ -659,22 +850,22 @@ contract PegDefenseHookTest is BaseTest {
         hook.setBurnThreshold(0.5e18);
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
-        assertEq(hook.treasury(), address(0), "precondition: treasury unset");
+        assertEq(hook.feeRecipient(), address(0), "precondition: treasury unset");
 
         uint256 amount = 100 ether;
-        uint256 expectedTax = amount * 1500 / 10_000;
+        uint256 expectedTax = amount * 1200 / 10_000;
         vm.prank(owner);
-        money.mint(address(pm), expectedTax);
+        peg.mint(address(pm), expectedTax);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
 
         SwapParams memory params = _sellSwap();
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, params, "");
 
         // Treasury is zero, fall through to burn even above threshold.
-        assertEq(money.totalSupply(), totalBefore - expectedTax, "burn fallback fires");
-        assertEq(money.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
+        assertEq(peg.totalSupply(), totalBefore - expectedTax, "burn fallback fires");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook balance is 0 after burn");
     }
 
     // ---------------------------------------------------------------------
@@ -690,22 +881,21 @@ contract PegDefenseHookTest is BaseTest {
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
 
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
         if (expectedTax == 0) return;
 
         vm.prank(owner);
-        money.mint(address(pm), expectedTax);
+        peg.mint(address(pm), expectedTax);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
 
-        SwapParams memory params = SwapParams({
-            zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0
-        });
+        SwapParams memory params =
+            SwapParams({zeroForOne: hook.pegIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0});
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, params, "");
 
-        assertEq(money.totalSupply(), totalBefore - expectedTax, "supply decrease == expected tax");
-        assertEq(money.balanceOf(address(hook)), 0, "hook never holds MONEY post-beforeSwap");
+        assertEq(peg.totalSupply(), totalBefore - expectedTax, "supply decrease == expected tax");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook never holds PEG post-beforeSwap");
     }
 
     function testFuzz_TaxConservation_RoutePath(
@@ -722,37 +912,32 @@ contract PegDefenseHookTest is BaseTest {
 
         address treasuryAddr = makeAddr("treasury_fuzz");
         vm.prank(trustees);
-        hook.setTreasury(treasuryAddr);
+        hook.setFeeRecipient(treasuryAddr);
 
-        uint256 expectedTax = sellAmount * 1500 / 10_000;
+        uint256 expectedTax = sellAmount * 1200 / 10_000;
         if (expectedTax == 0) return;
 
         vm.prank(owner);
-        money.mint(address(pm), expectedTax);
+        peg.mint(address(pm), expectedTax);
 
-        uint256 totalBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        uint256 totalBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(treasuryAddr);
 
-        SwapParams memory params = SwapParams({
-            zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0
-        });
+        SwapParams memory params =
+            SwapParams({zeroForOne: hook.pegIsCurrency0(), amountSpecified: -int256(sellAmount), sqrtPriceLimitX96: 0});
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, params, "");
 
-        assertEq(money.totalSupply(), totalBefore, "supply unchanged on route");
-        assertEq(money.balanceOf(treasuryAddr), treasuryBefore + expectedTax, "treasury += expected tax");
-        assertEq(money.balanceOf(address(hook)), 0, "hook never holds MONEY post-beforeSwap");
+        assertEq(peg.totalSupply(), totalBefore, "supply unchanged on route");
+        assertEq(peg.balanceOf(treasuryAddr), treasuryBefore + expectedTax, "treasury += expected tax");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook never holds PEG post-beforeSwap");
     }
 
     function testFuzz_TierLookup_AlwaysReturnsValidRate(
         uint256 price
     ) public view {
         uint256 rate = hook.taxRateForPrice(price);
-        assertTrue(
-            rate == 100 || rate == 200 || rate == 400 || rate == 900 || rate == 1400 || rate == 1500 || rate == 1600
-                || rate == 1700 || rate == 1800 || rate == 1900 || rate == 2000,
-            "rate must be one of the 14 Tomb tiers"
-        );
+        assertTrue(rate == 300 || rate == 600 || rate == 1200, "rate must be one of the three tiers");
     }
 
     function testFuzz_BuyDirection_NeverTaxed(
@@ -765,21 +950,81 @@ contract PegDefenseHookTest is BaseTest {
         hook.setAutoCalculateTax(true);
 
         SwapParams memory params =
-            SwapParams({zeroForOne: !hook.moneyIsCurrency0(), amountSpecified: -int256(amount), sqrtPriceLimitX96: 0});
+            SwapParams({zeroForOne: !hook.pegIsCurrency0(), amountSpecified: -int256(amount), sqrtPriceLimitX96: 0});
 
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         uint256 takesBefore = pm.takeCallCount();
 
         vm.prank(address(pm));
         hook.beforeSwap(address(0), poolKey, params, "");
 
-        assertEq(money.totalSupply(), supplyBefore, "buy never reduces supply");
+        assertEq(peg.totalSupply(), supplyBefore, "buy never reduces supply");
         assertEq(pm.takeCallCount(), takesBefore, "buy never triggers take");
     }
 
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // afterSwap
+    // ---------------------------------------------------------------------
+
+    function test_AfterSwap_OnlyPoolManager() public {
+        _bind(0);
+        vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
+        hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RequiresBoundPool() public {
+        vm.prank(address(pm));
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RejectsForeignPool() public {
+        _bind(0);
+        PoolKey memory other = poolKey;
+        other.tickSpacing = 10;
+        vm.prank(address(pm));
+        vm.expectRevert(PegDefenseHook.UnknownPool.selector);
+        hook.afterSwap(address(0), other, _emptySwap(), BalanceDelta.wrap(0), "");
+    }
+
+    function test_AfterSwap_RecordsPostSwapTick_SoIdleTimeAccruesAtIt() public {
+        _bind(0);
+
+        // A swap one hour in: beforeSwap sees tick 0, the swap moves the pool to tick 250.
+        vm.warp(block.timestamp + 1 hours);
+        pm.setTick(0);
+        vm.prank(address(pm));
+        hook.beforeSwap(address(0), poolKey, _emptySwap(), "");
+        pm.setTick(250);
+        vm.prank(address(pm));
+        (bytes4 sel, int128 hookDelta) = hook.afterSwap(address(0), poolKey, _emptySwap(), BalanceDelta.wrap(0), "");
+
+        assertEq(sel, IHooks.afterSwap.selector);
+        assertEq(hookDelta, 0, "no tax on a zero-amount swap");
+        assertEq(hook.lastTick(), 250, "post-swap tick recorded");
+        assertEq(hook.tickCumulative(), 0, "the hour before the swap accrued at tick 0");
+
+        // No further swaps. Six idle hours must project at tick 250, not at the stale 0.
+        vm.warp(block.timestamp + 6 hours);
+        (int56 cumulative,) = hook.getCurrentTickCumulative();
+        assertEq(cumulative, int56(250) * int56(uint56(6 hours)));
+    }
+
+    function test_SettleDeferredTax_NoOpWhenNothingPending() public {
+        // The mock manager has no `unlock`; reaching it would revert.
+        hook.settleDeferredTax();
+        assertEq(hook.pendingTaxBurn(), 0);
+        assertEq(hook.pendingTaxRoute(), 0);
+    }
+
+    function test_UnlockCallback_OnlyPoolManager() public {
+        vm.expectRevert(BaseV4Hook.NotPoolManager.selector);
+        hook.unlockCallback("");
+    }
 
     function _bind(
         int24 initialTick
@@ -792,10 +1037,10 @@ contract PegDefenseHookTest is BaseTest {
         return SwapParams({zeroForOne: true, amountSpecified: 0, sqrtPriceLimitX96: 0});
     }
 
-    /// @dev Exact-input MONEY sell. zeroForOne == moneyIsCurrency0 means MONEY -> other.
-    ///      amountSpecified < 0 = exact-input. 100e18 MONEY in.
+    /// @dev Exact-input PEG sell. zeroForOne == pegIsCurrency0 means PEG -> other.
+    ///      amountSpecified < 0 = exact-input. 100e18 PEG in.
     function _sellSwap() internal view returns (SwapParams memory) {
-        return SwapParams({zeroForOne: hook.moneyIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
+        return SwapParams({zeroForOne: hook.pegIsCurrency0(), amountSpecified: -100 ether, sqrtPriceLimitX96: 0});
     }
 
     function _beforeSwapCall() internal returns (bytes4 sel, BeforeSwapDelta delta, uint24 fee) {

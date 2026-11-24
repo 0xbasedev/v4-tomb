@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.26;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Treasury} from "../../src/core/Treasury.sol";
 import {Test} from "forge-std/Test.sol";
 import {NetworkConfig} from "../../script/NetworkConfig.s.sol";
 import {Deploy} from "../../script/Deploy.s.sol";
@@ -161,21 +163,74 @@ contract NetworkConfigTest is Test {
         vm.setEnv("COMMUNITY_FUND", vm.toString(address(0xCAFE)));
         vm.setEnv("DEV_FUND", vm.toString(address(0xF00D)));
         vm.setEnv("TIMELOCK_ADMIN", vm.toString(address(0xABCD)));
+        vm.setEnv("DAO_WALLET", vm.toString(address(0xDA0)));
+        vm.setEnv("PEG_NAME", "xTOMB");
+        vm.setEnv("PEG_SYMBOL", "xTOMB");
+        vm.setEnv("SHARE_NAME", "xSHARE");
+        vm.setEnv("SHARE_SYMBOL", "xSHARE");
         vm.deal(vm.addr(1), 100 ether);
         Deploy deploy = new ConfigDeployHarness(block.chainid == 777 ? 0 : 1, realManager);
         deploy.run();
         assertTrue(deploy.hook().bound());
         assertEq(deploy.hook().trustees(), vm.addr(1));
-        assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x1088);
-        assertEq(deploy.money().operator(), address(deploy.treasury()));
-        assertEq(deploy.money().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
-        assertEq(deploy.estate().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
+        assertEq(uint160(address(deploy.hook())) & 0x3FFF, 0x10CC);
+        assertTrue(deploy.shareBuybackHook().bound());
+        assertEq(uint160(address(deploy.shareBuybackHook())) & 0x3FFF, 0x10CC);
+        assertEq(deploy.shareBuybackHook().trustees(), vm.addr(1));
+        assertEq(deploy.shareBuybackHook().share(), address(deploy.share()));
+        assertEq(deploy.shareBuybackHook().peg(), address(deploy.peg()));
+        assertEq(deploy.shareBuybackHook().quote(), WETH);
+        assertEq(address(deploy.shareBuybackHook().fireTax()), address(deploy.hook()));
+        assertFalse(deploy.shareBuybackHook().taxEnabled(), "collection starts disabled");
+        assertTrue(deploy.pairLpHook().bound(), "PEG/SHARE pool initialised");
+        assertEq(uint160(address(deploy.pairLpHook())) & 0x3FFF, 0x2080);
+        assertEq(deploy.pairLpHook().initializer(), vm.addr(1));
+        assertTrue(address(deploy.pairLpWrapper()) != address(deploy.lpWrapper()));
+
+        // Token names come from the environment; the contracts hardcode none.
+        assertEq(deploy.peg().symbol(), "xTOMB");
+        assertEq(deploy.share().name(), "xSHARE");
+
+        // Sell tax goes to the DAO wallet, never to the Treasury contract.
+        assertEq(deploy.hook().feeRecipient(), address(0xDA0));
+
+        // The Masonry stakes the untradeable peg/share LP.
+        assertEq(address(deploy.masonry().share()), address(deploy.pairLpWrapper()));
+
+        // Share-token farm emissions: 30% to the peg LP, 70% to the share LP.
+        (IERC20 farmToken0, uint256 alloc0,,,) = deploy.shareFarm().poolInfo(0);
+        (IERC20 farmToken1, uint256 alloc1,,,) = deploy.shareFarm().poolInfo(1);
+        assertEq(address(farmToken0), address(deploy.lpWrapper()));
+        assertEq(address(farmToken1), address(deploy.shareLpWrapper()));
+        assertEq(alloc0, 30);
+        assertEq(alloc1, 70);
+        assertEq(deploy.shareFarm().totalAllocPoint(), 100);
+
+        // Genesis runs first; the Treasury's epoch 0 and the farms open when it ends.
+        uint256 genesisStart = deploy.genesisRewardPool().poolStartTime();
+        assertEq(deploy.treasury().startTime(), genesisStart + 1 days, "epoch 0 follows genesis");
+        assertEq(deploy.pegFarm().poolStartTime(), deploy.treasury().startTime());
+        assertEq(deploy.shareFarm().poolStartTime(), deploy.treasury().startTime());
+
+        // The airdrop allocation is not excluded from circulating supply.
+        assertEq(deploy.treasury().excludedFromTotalSupply(0), address(deploy.genesisRewardPool()));
+        assertEq(deploy.treasury().excludedFromTotalSupply(1), address(deploy.pegFarm()));
+        Treasury deployedTreasury = deploy.treasury();
+        vm.expectRevert();
+        deployedTreasury.excludedFromTotalSupply(2);
+        assertEq(deploy.peg().operator(), address(deploy.treasury()));
+        assertEq(deploy.peg().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
+        assertEq(deploy.share().balanceOf(address(deploy.shareFarm())), 59_500 ether);
         assertEq(deploy.timelock().admin(), address(0xABCD));
         assertEq(address(deploy.miniSwapRouter().poolManager()), realManager);
         string memory file = string.concat("./deployment-output/", vm.toString(block.chainid), ".json");
         string memory output = vm.readFile(file);
         assertEq(vm.parseJsonUint(output, ".chainId"), block.chainid);
         assertEq(vm.parseJsonAddress(output, ".hook"), address(deploy.hook()));
+        assertEq(vm.parseJsonAddress(output, ".shareBuybackHook"), address(deploy.shareBuybackHook()));
+        assertEq(vm.parseJsonAddress(output, ".pairLpHook"), address(deploy.pairLpHook()));
+        assertEq(vm.parseJsonAddress(output, ".pairLpWrapper"), address(deploy.pairLpWrapper()));
+        assertEq(vm.parseJsonAddress(output, ".shareLpWrapper"), address(deploy.shareLpWrapper()));
         vm.removeFile(file);
     }
 }

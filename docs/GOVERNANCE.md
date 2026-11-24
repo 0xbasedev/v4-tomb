@@ -1,21 +1,26 @@
 # Governance
 
-How Old Money's admin roles are organized and how the deployer EOA hands them off to a Timelock after launch.
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
+
+How xTOMB's admin roles are organized and how the deployer EOA hands them off to a Timelock after launch.
 
 ## The role hierarchy
 
 The protocol has two kinds of admin role:
 
 **Ownable2Step `owner`** — rotates the `trustees` role and (post-rotation) can be transferred via two-step `transferOwnership` + `acceptOwnership`. Held by:
-- `OldMoney` (the $MONEY token)
-- `Estate` (the $ESTATE token)
-- `TrustNote` (the $TRUSTNOTE bond)
+- `PegToken` (the $LEVEL token)
+- `ShareToken` (the $SQUARE token)
+- `BondToken` (the $BOND bond)
 - `PegDefenseHook`
 
 **Single-step `operator`** — has direct mutate-the-config rights; rotation via `setOperator(newOperator)` from the current operator (irreversible from the prior holder). Held by:
 - `Treasury` — main protocol parameters
-- `Boardroom` — calls `allocateSeigniorage` from Treasury (operator stays as `Treasury` forever)
-- `GenesisRewardPool`, `MainRewardPool`, `ShareRewardPool` — manages pool entries
+- `Masonry` — calls `allocateSeigniorage` from Treasury (operator stays as `Treasury` forever)
+- `GenesisRewardPool`, `PegFarm`, `ShareFarm` — manages pool entries
 - `Timelock` — has its own `admin` field (same model)
 
 The intentional split: `owner` controls who can mutate config (slow-moving, queueable); `operator`/`trustees` are the active mutators (fast-moving, but bounded by who `owner` allows).
@@ -24,16 +29,16 @@ The intentional split: `owner` controls who can mutate config (slow-moving, queu
 
 | Contract | owner | trustees / operator |
 |---|---|---|
-| `OldMoney` | deployer EOA | `Treasury` |
-| `Estate` | deployer EOA | `Treasury` |
-| `TrustNote` | deployer EOA | `Treasury` |
+| `PegToken` | deployer EOA | `Treasury` |
+| `ShareToken` | deployer EOA | `Treasury` |
+| `BondToken` | deployer EOA | `Treasury` |
 | `PegDefenseHook` | deployer EOA | deployer EOA |
 | `Treasury` | n/a | deployer EOA (operator) |
-| `Boardroom` | n/a | `Treasury` (operator) |
+| `Masonry` | n/a | `Treasury` (operator) |
 | `Oracle` | n/a | n/a (no admin) |
 | `GenesisRewardPool` | n/a | deployer EOA (operator) |
-| `MainRewardPool` | n/a | deployer EOA (operator) |
-| `ShareRewardPool` | n/a | deployer EOA (operator) |
+| `PegFarm` | n/a | deployer EOA (operator) |
+| `ShareFarm` | n/a | deployer EOA (operator) |
 | `V4PositionWrapper` | n/a | n/a (no admin) |
 
 The deployer holds significant power at this point. Sprint 14 closes that.
@@ -61,17 +66,17 @@ Output: a deployed `Timelock` address. Save it for the next stage.
 
 ```bash
 TIMELOCK=<addr_from_stage_1> \
-MONEY=<addr> ESTATE=<addr> TRUSTNOTE=<addr> HOOK=<addr> \
-TREASURY=<addr> GENESIS_REWARD_POOL=<addr> MAIN_REWARD_POOL=<addr> SHARE_REWARD_POOL=<addr> \
+LEVEL=<addr> SQUARE=<addr> BOND=<addr> HOOK=<addr> \
+TREASURY=<addr> GENESIS_REWARD_POOL=<addr> PEG_FARM=<addr> SHARE_FARM=<addr> \
 DEPLOYER_PRIVATE_KEY=<deployer_pk> \
 forge script script/RotateGovernanceQueue.s.sol --rpc-url base --broadcast
 ```
 
 The script does, in one transaction sequence:
 
-1. `transferOwnership(timelock)` on **OldMoney, Estate, TrustNote, PegDefenseHook** (Ownable2Step → sets `pendingOwner = timelock`, NOT yet final).
+1. `transferOwnership(timelock)` on **PegToken, ShareToken, BondToken, PegDefenseHook** (Ownable2Step → sets `pendingOwner = timelock`, NOT yet final).
 2. `transferTrustees(timelock)` on `PegDefenseHook` (one-step — irreversible from deployer's side after this).
-3. `setOperator(timelock)` on `Treasury`, `GenesisRewardPool`, `MainRewardPool`, `ShareRewardPool` (one-step — irreversible).
+3. `setOperator(timelock)` on `Treasury`, `GenesisRewardPool`, `PegFarm`, `ShareFarm` (one-step — irreversible).
 4. `timelock.queueTransaction(target, 0, "acceptOwnership()", "", eta)` four times — once per Ownable2Step contract. `eta` defaults to `now + timelock.delay() + 60 seconds`. The script logs the exact `eta` value for use in stage 3.
 
 After this script completes:
@@ -90,7 +95,7 @@ Real wall-clock time. For mainnet at 24h delay, this is one day. Operations team
 ### Stage 3 — Execute the queued transfers
 
 ```bash
-TIMELOCK=<same> MONEY=<same> ESTATE=<same> TRUSTNOTE=<same> HOOK=<same> \
+TIMELOCK=<same> LEVEL=<same> SQUARE=<same> BOND=<same> HOOK=<same> \
 ETA=<value_from_stage_2_log> \
 DEPLOYER_PRIVATE_KEY=<deployer_pk> \
 forge script script/RotateGovernanceExecute.s.sol --rpc-url base --broadcast
@@ -102,22 +107,22 @@ Reverts if `block.timestamp < eta` (too early) or `block.timestamp > eta + 14 da
 
 | Contract | owner / trustees / operator |
 |---|---|
-| `OldMoney` | owner = **Timelock**; trustees = Treasury |
-| `Estate` | owner = **Timelock**; trustees = Treasury |
-| `TrustNote` | owner = **Timelock**; trustees = Treasury |
+| `PegToken` | owner = **Timelock**; trustees = Treasury |
+| `ShareToken` | owner = **Timelock**; trustees = Treasury |
+| `BondToken` | owner = **Timelock**; trustees = Treasury |
 | `PegDefenseHook` | owner = **Timelock**; trustees = **Timelock** |
 | `Treasury` | operator = **Timelock** |
-| `Boardroom` | operator = Treasury (unchanged — protocol-internal) |
+| `Masonry` | operator = Treasury (unchanged — protocol-internal) |
 | `GenesisRewardPool` | operator = **Timelock** |
-| `MainRewardPool` | operator = **Timelock** |
-| `ShareRewardPool` | operator = **Timelock** |
+| `PegFarm` | operator = **Timelock** |
+| `ShareFarm` | operator = **Timelock** |
 | `Oracle` | no admin (unchanged) |
 | `V4PositionWrapper` | no admin (unchanged) |
 | `Timelock` | admin = whatever you set in stage 1 |
 
 What changed: the deployer EOA can no longer mutate any protocol parameter. Every config change now requires queueing in the Timelock + waiting the delay + executing.
 
-What stayed: Treasury still operates Boardroom (it has to — `allocateSeigniorage` is called by Treasury). Treasury is still trustees on all tokens (it has to — Treasury mints/burns during expansion/contraction).
+What stayed: Treasury still operates Masonry (it has to — `allocateSeigniorage` is called by Treasury). Treasury is still trustees on all tokens (it has to — Treasury mints/burns during expansion/contraction).
 
 ## What the Timelock can do
 
@@ -156,8 +161,8 @@ The Timelock's `setDelay` is itself queueable — an admin who wants to shorten 
 
 ## Invariants this design preserves
 
-1. **Treasury is the sole minter of MONEY / TRUSTNOTE / ESTATE** — Treasury holds `trustees` on all three. Even the Timelock can't directly mint; it would have to first call `transferTrustees(newMinter)` (queued) → then the new minter could mint. That's still a one-day delay before any unscheduled mint can happen.
-2. **Boardroom can't be bypassed** — Boardroom's operator stays as Treasury forever. Routing `allocateSeigniorage` through the Timelock would require queueing each epoch, which is impractical.
+1. **Treasury is the sole minter of LEVEL / BOND / SQUARE** — Treasury holds `trustees` on all three. Even the Timelock can't directly mint; it would have to first call `transferTrustees(newMinter)` (queued) → then the new minter could mint. That's still a one-day delay before any unscheduled mint can happen.
+2. **Masonry can't be bypassed** — Masonry's operator stays as Treasury forever. Routing `allocateSeigniorage` through the Timelock would require queueing each epoch, which is impractical.
 3. **The wrapper is permissionless** — V4PositionWrapper has no admin to rotate; users always control their own NFTs / shares.
 
 ## Rollback
