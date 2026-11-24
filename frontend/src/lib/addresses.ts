@@ -1,64 +1,61 @@
 import type { Address } from "viem";
 import { networks } from "./networks";
 
-export interface PegTokenDeployment {
-  /** $xTOMB token (peg target: 1 xTOMB = 1 WETH). */
+/** One network's deployment, exactly as published in config/networks.json. */
+export interface ProtocolDeployment {
+  /** Chain this deployment lives on. Every read and write is pinned to it. */
+  chainId: number;
+  /** PegToken — on screen "xTOMB". Targets 1 unit of the paired asset. */
   peg: Address;
-  /** $xSHARE share token. */
+  /** ShareToken — on screen "xSHARE". */
   share: Address;
-  /** Treasury — seigniorage engine, bond office. */
+  /** Treasury — emissions only: mints expansion to the Masonry above the 1.01 ceiling. */
   treasury: Address;
-  /** Masonry — xSHARE staking, xTOMB rewards. */
+  /** Masonry — on screen "xROOM". Stake a token, earn the peg token each expansion. */
   masonry: Address;
-  /** TWAP oracle. */
+  /** TWAP oracle read by the Treasury and the hooks. */
   oracle: Address;
-  /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
+  /** PegDefenseHook — the peg pool's hook, with the TWAP-keyed sell tax. */
   hook: Address;
-  /** ShareBuybackHook — taxes xSHARE sells in WETH, buys xTOMB with it and burns it. */
+  /** ShareBuybackHook — taxes share-token sells in the paired asset, buys the peg token and burns it. */
   shareBuybackHook: Address;
-  /** V4PositionWrapper — wraps the xTOMB/WETH LP NFT into an ERC-20. */
+  /** V4PositionWrapper for the peg / paired-asset pool. */
   lpWrapper: Address;
-  /** LpOnlyHook — makes the xTOMB/xSHARE pool untradeable (liquidity only). */
+  /** LpOnlyHook — makes the peg/share pool untradeable (liquidity only). */
   pairLpHook: Address;
-  /** V4PositionWrapper for the xTOMB/xSHARE LP NFT. */
+  /** V4PositionWrapper for the peg/share pool. The Masonry's default stake token. */
   pairLpWrapper: Address;
-  /** V4PositionWrapper for the share-token LP NFT. */
+  /** V4PositionWrapper for the share / paired-asset pool. */
   shareLpWrapper: Address;
-  /** Genesis reward pool (24h window, accepts outside ERC-20s). */
+  /** GenesisRewardPool — 24 hours, runs before epoch 0, pays the peg token. */
   genesisRewardPool: Address;
-  /** Main reward pool (9d, accepts lpWrapper). */
+  /** PegFarm — pays the peg token to the peg LP wrapper. */
   pegFarm: Address;
-  /** Share reward pool (370d, accepts lpWrapper). */
+  /** ShareFarm — pays the share token (pool 0 peg LP, pool 1 share LP). */
   shareFarm: Address;
-  /** Compound-style Timelock for governance rotations. */
+  /** Timelock that governance roles rotate to. */
   timelock: Address;
-  /** Canonical WETH on this chain. */
+  /** The paired asset (the manifest key is `weth`; it is whatever wrapped asset the chain uses). */
   weth: Address;
-  /** V4 PoolManager on this chain. */
   poolManager: Address;
-  /** V4 PositionManager on this chain. */
   positionManager: Address;
-  /** Permit2 configured for this deployment. */
   permit2: Address;
-  /** UniversalRouter v2 (V4-capable variant) on this chain. */
   universalRouter: Address;
-  /**
-   * In-house V4 swap router. Bypasses UniversalRouter's calldata version drift
-   * by exposing a single exact-input swap entry that wraps the V4 unlock+callback
-   * pattern. See src/swap/MiniSwapRouter.sol for the design rationale.
-   */
+  /** MiniSwapRouter — single exact-input swap entry with a deadline. */
   miniSwapRouter: Address;
-  /** First block of the deploy. Used to bound event-log scans. */
+  /** First block of the deployment. */
   deployBlock: bigint;
 }
 
 // Stable objects prevent polling effects from restarting on every render.
-const deployments = new Map<number, PegTokenDeployment | null>(networks.map((network) => [
-  network.id,
-  network.deployment ? { ...network.deployment, deployBlock: BigInt(network.deployment.deployBlock) } : null,
-]));
+const deployments = new Map<number, ProtocolDeployment | null>(
+  networks.map((network) => [
+    network.id,
+    network.deployment ? { ...network.deployment, chainId: network.id, deployBlock: BigInt(network.deployment.deployBlock) } : null,
+  ]),
+);
 
-/** A missing deployment disables all protocol interactions. */
-export function getDeployment(chainId: number): PegTokenDeployment | null {
-  return deployments.get(chainId) ?? null;
+/** A missing deployment disables every protocol read and write. */
+export function getDeployment(chainId: number | undefined): ProtocolDeployment | null {
+  return chainId === undefined ? null : (deployments.get(chainId) ?? null);
 }

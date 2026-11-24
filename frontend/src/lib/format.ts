@@ -1,94 +1,69 @@
 import { formatUnits } from "viem";
 
 /**
- * Format helpers for bigint → display-string conversions used across the UI.
- * Centralised so the Art Deco formatting voice stays consistent (commas,
- * trailing-zero suppression, fixed precision).
+ * Display helpers. Every on-chain amount stays a bigint until it is drawn, and
+ * an unknown value is always "—" — never a zero that could be read as live data.
  */
 
-/**
- * Format a wei-style bigint (18 decimals) as a token amount.
- *
- * @param value      raw bigint or undefined (loading → "—")
- * @param decimals   how many decimals to display (default 2)
- * @param withCommas insert thousands separators (default true)
- */
-export function formatToken(
-  value: bigint | undefined | null,
-  decimals: number = 2,
-  withCommas: boolean = true,
-): string {
-  if (value === undefined || value === null) return "—";
-  const raw = formatUnits(value, 18);
-  const num = parseFloat(raw);
-  if (!isFinite(num)) return "—";
-  const fixed = num.toFixed(decimals);
-  if (!withCommas) return fixed;
-  const [intPart, fracPart] = fixed.split(".");
-  const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return fracPart ? `${withSep}.${fracPart}` : withSep;
+type Amount = bigint | null | undefined;
+
+function group(fixed: string): string {
+  const [int, frac] = fixed.split(".");
+  const sep = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return frac ? `${sep}.${frac}` : sep;
 }
 
-/**
- * Auto-precision formatter: picks decimals based on magnitude so values
- * never display as "0" when they're actually non-zero, and never bloat with
- * trailing zeros for large round numbers.
- *
- *   >= 1000   →  0 decimals  ("11,000")
- *   >= 1      →  2 decimals  ("1.50", "999.99")
- *   >= 0.01   →  4 decimals  ("0.5400", "0.1092")
- *   < 0.01    →  6 decimals  ("0.000123")
- *   == 0      →  "0"
- *   undefined →  "—"
- */
-export function formatTokenAuto(value: bigint | undefined | null): string {
+/** Token amount with magnitude-aware precision ("11,000", "1.50", "0.5400", "0.000123"). */
+export function formatToken(value: Amount, decimals = 18, dp?: number): string {
   if (value === undefined || value === null) return "—";
   if (value === 0n) return "0";
-  const raw = formatUnits(value, 18);
-  const num = parseFloat(raw);
-  if (!isFinite(num)) return "—";
-
-  let decimals: number;
-  if (num >= 1000) decimals = 0;
-  else if (num >= 1) decimals = 2;
-  else if (num >= 0.01) decimals = 4;
-  else decimals = 6;
-
-  const fixed = num.toFixed(decimals);
-  const [intPart, fracPart] = fixed.split(".");
-  const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return fracPart ? `${withSep}.${fracPart}` : withSep;
+  const num = Number(formatUnits(value, decimals));
+  if (!Number.isFinite(num)) return "—";
+  const places = dp ?? (num >= 1000 ? 0 : num >= 1 ? 2 : num >= 0.01 ? 4 : 6);
+  const fixed = num.toFixed(places);
+  // A non-zero amount must never render as "0.00".
+  if (Number(fixed) === 0) return `<${(10 ** -places).toFixed(places)}`;
+  return group(fixed);
 }
 
-/** Format a 1e18-scaled price as a 4-decimal price string. */
-export function formatPrice(value: bigint | undefined | null): string {
+/** bigint → number for charts and gauges only (never for transaction amounts). */
+export function toNumber(value: Amount, decimals = 18): number | null {
+  if (value === undefined || value === null) return null;
+  const n = Number(formatUnits(value, decimals));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A 1e18-scaled price as a 4-decimal string; 0 means "not observable yet". */
+export function formatPrice(value: Amount): string {
   if (value === undefined || value === null || value === 0n) return "—";
-  const raw = formatUnits(value, 18);
-  const num = parseFloat(raw);
-  if (!isFinite(num)) return "—";
-  return num.toFixed(4);
+  return Number(formatUnits(value, 18)).toFixed(4);
 }
 
-/** Format a bigint epoch count as a plain integer string. */
-export function formatEpoch(value: bigint | undefined | null): string {
-  if (value === undefined || value === null) return "—";
-  return value.toString();
+/** Basis points as a percent ("12%", "0.3%"). */
+export function formatBps(bps: number | bigint | null | undefined): string {
+  if (bps === undefined || bps === null) return "—";
+  return `${+(Number(bps) / 100).toFixed(2)}%`;
 }
 
-/** Format a basis-point integer (e.g. 3500) as a percent string ("35.00%"). */
-export function formatBps(value: bigint | undefined | null): string {
-  if (value === undefined || value === null) return "—";
-  const pct = Number(value) / 100;
-  return `${pct.toFixed(2)}%`;
+export function formatNumber(n: number | null | undefined, dp = 2): string {
+  if (n === undefined || n === null || !Number.isFinite(n)) return "—";
+  return group(n.toFixed(dp));
 }
 
-/** Format a seconds-remaining integer as a compact Art Deco "Dd · Hh · Mm" string. */
-export function formatCountdown(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return "Open Now";
-  const d = Math.floor(seconds / 86_400);
-  const h = Math.floor((seconds % 86_400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d · ${h}h · ${m}m`;
-  if (h > 0) return `${h}h · ${m}m`;
-  return `${m}m`;
+/** Seconds as "2d 4h", "5h 12m", "3m 09s". */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
+
+export function formatDate(unixSeconds: number | null | undefined): string {
+  if (!unixSeconds) return "—";
+  return new Date(unixSeconds * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+export const shortAddress = (a: string | null | undefined) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");

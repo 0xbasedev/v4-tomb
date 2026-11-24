@@ -1,5 +1,5 @@
 /**
- * Decimal input masking. Used by all three forms (ActionPanel, BondForm, SwapCard)
+ * Decimal input masking. Used by every amount form (AmountField, SlippageChips)
  * to reject characters that would corrupt the parseUnits call downstream.
  *
  * Allowed: digits 0-9, at most one '.'. Empty string passes through.

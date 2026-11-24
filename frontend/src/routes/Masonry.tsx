@@ -1,315 +1,240 @@
-import { parseUnits } from "viem";
+import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
-import { ActionPanel } from "@/components/ActionPanel";
-import { LockupClock } from "@/components/LockupClock";
-import { RuleTrio } from "@/components/RuleTrio";
+import { AmountField, parseAmount } from "@/components/AmountField";
+import { Countdown } from "@/components/Countdown";
+import { PageHeader, SectionTitle } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
-
-import { useApproveAndCall, useMasonry, useDeployment, useEpoch } from "@/lib/hooks";
-import { masonryAbi } from "@/lib/abis";
-import { formatToken } from "@/lib/format";
+import { NotDeployed, Reason, RuleBadge } from "@/components/Status";
+import { TokenIcon } from "@/components/TokenIcon";
+import { HoldButton } from "@/components/fx/HoldButton";
+import { formatToken, toNumber } from "@/lib/format";
+import { useActions, useProtocol } from "@/lib/hooks";
+import { useReveal } from "@/lib/motion/useReveal";
+import { NAMES } from "@/lib/protocol";
 
 /**
- * xROOM — Masonry interface, wired to live state.
+ * xROOM — the Masonry. Stake its token (by default the wrapped xTOMB/xSHARE
+ * liquidity position), receive newly minted xTOMB each epoch the TWAP is above
+ * the ceiling.
  *
- * Lockup remaining seconds derivation:
- *   xROOM's `epochTimerStart` is the epoch index at the user's last
- *   stake/withdraw/claim. They can withdraw when `currentEpoch - timerStart >=
- *   withdrawLockupEpochs` and claim when `>= rewardLockupEpochs`.
- *
- *   Remaining-time math: (timerStart + lockupEpochs) is the epoch at which the
- *   gate opens. Multiplied by PERIOD (6h) and added to startTime, we get the
- *   absolute unlock timestamp. The hook can't run this multiplication because
- *   it'd need PERIOD; we compose it here using useEpoch's period + startTime.
- *
- * Write actions (stake/withdraw/claim) are placeholders this turn — wired in T9.
+ * Two lockups, both counted in epochs from your last stake, claim or
+ * withdrawal: rewards after 3, the stake after 6. The page says exactly when
+ * each opens, and warns before an action that would restart them.
  */
 export function Masonry() {
-  const deployment = useDeployment();
-  const epoch = useEpoch();
-  const masonry = useMasonry();
+  const root = useRef<HTMLDivElement>(null);
+  const p = useProtocol();
+  const act = useActions();
+  const m = p.masonry;
+  const [mode, setMode] = useState<"stake" | "withdraw">("stake");
+  const [raw, setRaw] = useState("");
+  useReveal(root, [p.deployed]);
 
-  function parseAmount(s: string): bigint {
-    try {
-      return parseUnits(s || "0", 18);
-    } catch {
-      return 0n;
-    }
+  const amount = parseAmount(raw);
+  const staked = m.staked ?? 0n;
+  const earned = m.earned ?? 0n;
+  const hasStake = staked > 0n;
+
+  // Lockups open at a known epoch; turn that into a wall-clock time via the Treasury's clock.
+  const unlockAt = (epochs: number): number | null => {
+    if (m.epochTimerStart === null || p.epoch.current === null || p.epoch.nextAt === null) return null;
+    const left = m.epochTimerStart + epochs - p.epoch.current;
+    return left <= 0 ? 0 : p.epoch.nextAt + (left - 1) * p.epoch.period;
+  };
+  const claimAt = unlockAt(m.rewardLockupEpochs);
+  const withdrawAt = unlockAt(m.withdrawLockupEpochs);
+
+  const restartNote = hasStake ? `This restarts both lockups: rewards unlock ${m.rewardLockupEpochs} epochs and your stake ${m.withdrawLockupEpochs} epochs from now.` : null;
+
+  const stakeReason =
+    act.blocked ??
+    (!m.stakeToken
+      ? "Reading the stake token…"
+      : amount === null
+        ? "Enter an amount."
+        : m.wallet !== null && amount > m.wallet
+          ? `You only hold ${formatToken(m.wallet)} ${m.stakeSymbol}.`
+          : null);
+  const withdrawReason =
+    act.blocked ??
+    (!hasStake
+      ? "You have nothing staked."
+      : m.canWithdraw === false
+        ? `Locked for ${m.withdrawLockupEpochs} epochs after your last stake or claim.`
+        : amount === null
+          ? "Enter an amount."
+          : amount > staked
+            ? `You only have ${formatToken(staked)} staked.`
+            : null);
+  const claimReason = act.blocked ?? (earned === 0n ? "Nothing earned yet. Rewards arrive only in epochs where the TWAP is above the ceiling." : m.canClaim === false ? `Rewards unlock ${m.rewardLockupEpochs} epochs after your last stake or claim.` : null);
+  const reason = mode === "stake" ? stakeReason : withdrawReason;
+
+  async function submit() {
+    if (amount === null || reason) return;
+    const okay = mode === "stake" ? await act.roomStake(m.stakeToken!, amount) : await act.roomWithdraw(amount);
+    if (okay) setRaw("");
   }
-
-  // One shared write pipeline — xROOM only ever runs one action at a time.
-  const action = useApproveAndCall();
-
-  // Lockup countdown derivation. PERIOD is the Treasury epoch length (6h);
-  // each epoch nextEpochPoint = startTime + epoch * PERIOD.
-  const period = epoch.period ?? 0n;
-  const startTime = epoch.startTime ?? 0n;
-  const currentEpoch = epoch.epoch ?? 0n;
-  const timerStart = masonry.epochTimerStart ?? 0n;
-  const wLockup = masonry.withdrawLockupEpochs ?? 0n;
-  const rLockup = masonry.rewardLockupEpochs ?? 0n;
-
-  const nowSec = BigInt(Math.floor(Date.now() / 1000));
-  function lockupSeconds(lockup: bigint): number {
-    if (currentEpoch === 0n && timerStart === 0n) return 0; // never staked
-    const unlockEpoch = timerStart + lockup;
-    if (unlockEpoch <= currentEpoch) return 0;
-    const unlockAt = startTime + unlockEpoch * period;
-    if (unlockAt <= nowSec) return 0;
-    return Number(unlockAt - nowSec);
-  }
-  const withdrawLockupSec = lockupSeconds(wLockup);
-  const claimLockupSec = lockupSeconds(rLockup);
-
-  const stakedDisplay = formatToken(masonry.yourStake, 4);
-  const pendingDisplay = formatToken(masonry.earned, 4);
-  const walletDisplay = formatToken(masonry.shareInWallet, 4);
-  const totalDisplay = formatToken(masonry.totalStaked, 2);
-
-  // Disable Withdraw/Claim when timer hasn't matured, or when nothing to act on.
-  const cantWithdraw = !masonry.canWithdraw || masonry.yourStake === 0n;
-  const cantClaim = !masonry.canClaimReward || masonry.earned === 0n;
 
   return (
-    <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            A Pavilion of The Trust · xROOM
+    <div ref={root}>
+      <PageHeader
+        eyebrow={`${NAMES.room} · the Masonry`}
+        token="xROOM"
+        title={
+          <>
+            Stake in <span className="amethyst-text">{NAMES.room}</span>
+          </>
+        }
+        lede={`Stake the ${NAMES.peg}/${NAMES.share} liquidity token and receive newly minted ${NAMES.peg} every epoch the TWAP closes above the ceiling. The pool behind it cannot be traded, and deposits are untaxed.`}
+        aside={
+          <div className="panel panel-raised p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="label">Epoch {p.epoch.current ?? "—"}</span>
+              <span className={`chip ${p.market.phase === "expansion" ? "chip-ok" : ""}`}>{p.market.phase === "expansion" ? "Expanding" : p.market.phase === "hold" ? "Not expanding" : "No reading"}</span>
+            </div>
+            <div className="font-display text-3xl font-semibold tracking-[-0.03em] text-bone">
+              <Countdown to={p.epoch.nextAt} done="due now" />
+            </div>
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-ash">until the next epoch</p>
+            <p className="mt-4 border-t border-white/[0.06] pt-3 text-[13px] leading-relaxed text-bone-dim">
+              {p.market.nextExpansion === null
+                ? "The next expansion is read from the Treasury once deployed."
+                : p.market.nextExpansion > 0n
+                  ? `At the recorded TWAP the next epoch mints ${formatToken(p.market.nextExpansion)} ${NAMES.peg}, shared by stakers after fund cuts.`
+                  : "At the recorded TWAP the next epoch mints nothing. Stakers earn only above the 1.01 ceiling."}
+            </p>
           </div>
-          <div
-            className="font-ornament mb-4 text-3xl font-bold text-deco-gold"
-            style={{ letterSpacing: "0.2em" }}
-          >
-            I
-          </div>
-          <h1 className="gold-text font-display italic text-section">xROOM</h1>
-          <RuleTrio className="mb-6 mt-8" />
-          <p
-            className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
-            style={{ letterSpacing: "0.04em" }}
-          >
-            Members stake $xSHARE. Members receive $xTOMB each expansion epoch.
-            Patience is rewarded.
-          </p>
-        </div>
-      </section>
+        }
+      />
 
-      {/* ===== Your Position ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            Your Position
+      <div className="mx-auto w-full max-w-7xl space-y-10 px-4 pb-10 md:px-8">
+        {!p.deployed && <NotDeployed what={NAMES.room} />}
+        {p.deployed && m.stakesPairLp === false && (
+          <div data-reveal className="rounded-2xl border border-warn/35 bg-warn/[0.05] p-4 text-[13.5px] leading-relaxed text-bone-dim">
+            <span className="font-semibold text-warn">Heads up:</span> this deployment's {NAMES.room} stakes <span className="font-mono text-bone">{m.stakeSymbol}</span>, not the {NAMES.peg}/{NAMES.share} liquidity wrapper. The steps below still apply to whichever token it reads from chain.
           </div>
-          <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Staked" value={stakedDisplay} hint="$xSHARE · in xROOM" />
-            <StatTile label="Pending" value={pendingDisplay} hint="$xTOMB · Unclaimed" />
-            <StatTile label="In Wallet" value={walletDisplay} hint="$xSHARE · Available" />
-            <StatTile
-              label="Last Activity"
-              value={timerStart > 0n ? `Epoch ${timerStart.toString()}` : "—"}
-              hint="Resets Each Stake or Claim"
-            />
-          </div>
+        )}
 
-          {/* Lockup clocks */}
-          <div className="deco-panel mx-auto grid max-w-3xl grid-cols-1 gap-8 md:grid-cols-2">
-            <LockupClock
-              label="Withdraw Available In"
-              secondsRemaining={withdrawLockupSec}
-            />
-            <LockupClock
-              label="Claim Available In"
-              secondsRemaining={claimLockupSec}
-            />
-          </div>
-        </div>
-      </section>
+        <section className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="Your position">
+          <StatTile label="Total staked" numeric={toNumber(m.totalStaked)} unit={p.deployed ? m.stakeSymbol : undefined} hint="All stakers" />
+          <StatTile label="Your stake" numeric={toNumber(m.staked)} unit={p.deployed ? m.stakeSymbol : undefined} hint={p.account ? "Earning each expansion" : "Connect a wallet to see it"} tone="amethyst" />
+          <StatTile label="Earned" numeric={toNumber(m.earned)} unit={NAMES.peg} hint={earned > 0n ? (m.canClaim ? "Ready to claim" : "Locked for now") : "Paid per expansion epoch"} tone={earned > 0n ? "iris" : "default"} />
+          <StatTile label="In your wallet" numeric={toNumber(m.wallet)} unit={p.deployed ? m.stakeSymbol : undefined} hint="Ready to stake" />
+        </section>
 
-      {/* ===== Actions ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The Actions of The Member
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <ActionPanel
-              numeral="I"
-              title="Make a Deposit"
-              blurb="Deposit $xSHARE into the Masonry. Begin earning seigniorage each expansion epoch."
-              asset="xSHARE"
-              maxAvailable={walletDisplay}
-              maxWei={masonry.shareInWallet ?? 0n}
-              cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
-              disabled={masonry.shareInWallet === 0n || action.isInFlight || !deployment}
-              disabledReason="No $xSHARE in wallet."
-              onSubmit={(s) => {
-                if (!deployment) return;
-                const amount = parseAmount(s);
-                if (amount <= 0n) return;
-                action.submit({
-                  amount,
-                  currentAllowance: masonry.shareAllowance ?? 0n,
-                  token: deployment.share,
-                  spender: deployment.masonry,
-                  call: {
-                    address: deployment.masonry,
-                    abi: masonryAbi,
-                    functionName: "stake",
-                    args: [amount],
-                  },
-                  label: "Stake into xROOM",
-                  onSuccess: () => masonry.refetch(),
-                });
-              }}
-            />
-            <ActionPanel
-              numeral="II"
-              title="Withdraw"
-              blurb="Recall your $xSHARE from the Masonry. Six-epoch lock from your last interaction."
-              asset="xSHARE"
-              maxAvailable={stakedDisplay}
-              maxWei={masonry.yourStake ?? 0n}
-              cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
-              disabled={cantWithdraw || action.isInFlight || !deployment}
-              disabledReason={
-                masonry.yourStake === 0n
-                  ? "Nothing currently deposited."
-                  : "Withdraw lockup not yet matured."
-              }
-              onSubmit={(s) => {
-                if (!deployment) return;
-                const amount = parseAmount(s);
-                if (amount <= 0n) return;
-                action.submit({
-                  amount: 0n,
-                  currentAllowance: 0n,
-                  token: null,
-                  spender: null,
-                  call: {
-                    address: deployment.masonry,
-                    abi: masonryAbi,
-                    functionName: "withdraw",
-                    args: [amount],
-                  },
-                  label: "Withdraw from xROOM",
-                  onSuccess: () => masonry.refetch(),
-                });
-              }}
-            />
-            <ActionPanel
-              numeral="III"
-              title="Claim Your Returns"
-              blurb="Claim accrued $xTOMB. Three-epoch lock from your last interaction."
-              asset="xTOMB"
-              maxAvailable={pendingDisplay}
-              cta={action.isInFlight ? "Awaiting…" : "Claim Returns"}
-              noInput
-              disabled={cantClaim || action.isInFlight || !deployment}
-              disabledReason={
-                masonry.earned === 0n
-                  ? "No returns currently accrued."
-                  : "Reward lockup not yet matured."
-              }
-              onSubmit={() => {
-                if (!deployment) return;
-                action.submit({
-                  amount: 0n,
-                  currentAllowance: 0n,
-                  token: null,
-                  spender: null,
-                  call: {
-                    address: deployment.masonry,
-                    abi: masonryAbi,
-                    functionName: "claimReward",
-                    args: [],
-                  },
-                  label: "Claim Returns",
-                  onSuccess: () => masonry.refetch(),
-                });
-              }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ===== Masonry State ===== */}
-      <section className="px-6 pb-12 md:px-12 md:pb-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The State of xROOM
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile
-              label="Aggregate Deposited"
-              value={totalDisplay}
-              hint="$xSHARE · in xROOM"
-            />
-            <StatTile
-              label="Withdraw Lockup"
-              value={wLockup > 0n ? `${wLockup.toString()} Epochs` : "—"}
-              hint="From Last Interaction"
-            />
-            <StatTile
-              label="Reward Lockup"
-              value={rLockup > 0n ? `${rLockup.toString()} Epochs` : "—"}
-              hint="From Last Interaction"
-            />
-            <StatTile
-              label="Current Epoch"
-              value={currentEpoch.toString()}
-              hint="As Counted by The Treasury"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ===== The Lockup Schedule ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="deco-panel">
-            <div className="label-deco mb-3 text-deco-gold-dark">The Schedule</div>
-            <h2
-              className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
-              style={{ letterSpacing: "0.06em" }}
-            >
-              The Lockups of xROOM
-            </h2>
-            <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
-            <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Withdraw Lockup</div>
-                <div
-                  className="font-display text-3xl text-deco-ivory"
-                  style={{ letterSpacing: "0.05em" }}
-                >
-                  {wLockup > 0n ? wLockup.toString() : "6"}{" "}
-                  <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
-                </div>
-                <p className="mt-2 font-body text-sm italic text-deco-ivory-soft">
-                  Counted from your last interaction with the Masonry — any stake,
-                  withdraw, or claim resets the clock.
-                </p>
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_1fr]">
+          {/* ---- Stake / withdraw ---- */}
+          <div data-reveal className="panel panel-raised p-5 md:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <TokenIcon symbol="PAIR-LP" size={30} />
+                <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-bone">{mode === "stake" ? "Stake" : "Withdraw"}</h2>
               </div>
-              <div className="border-l border-deco-gold/40 pl-5">
-                <div className="label-deco mb-2 text-deco-gold">Reward Lockup</div>
-                <div
-                  className="font-display text-3xl text-deco-ivory"
-                  style={{ letterSpacing: "0.05em" }}
-                >
-                  {rLockup > 0n ? rLockup.toString() : "3"}{" "}
-                  <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
-                </div>
-                <p className="mt-2 font-body text-sm italic text-deco-ivory-soft">
-                  The Members do not extract on impulse. The Trust observes its own
-                  equilibrium.
-                </p>
+              <div className="inline-flex gap-1 rounded-xl border border-white/[0.07] bg-black/30 p-1" role="tablist" aria-label="Action">
+                {(["stake", "withdraw"] as const).map((x) => (
+                  <button key={x} role="tab" aria-selected={mode === x} type="button" onClick={() => { setMode(x); setRaw(""); }} className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold capitalize transition-colors ${mode === x ? "bg-iris/15 text-iris-hot" : "text-ash hover:bg-white/5 hover:text-bone"}`}>
+                    {x}
+                  </button>
+                ))}
               </div>
             </div>
+            <AmountField
+              label={mode === "stake" ? "Amount to stake" : "Amount to withdraw"}
+              value={raw}
+              onChange={setRaw}
+              symbol={p.deployed ? m.stakeSymbol : `${NAMES.peg}/${NAMES.share} LP`}
+              balance={p.account ? (mode === "stake" ? m.wallet : m.staked) : undefined}
+              balanceLabel={mode === "stake" ? "In wallet" : "Staked"}
+              disabled={act.busy || !p.deployed}
+            />
+            {mode === "stake" && !stakeReason && restartNote && <Reason tone="warn">{restartNote}</Reason>}
+            <button type="button" onClick={submit} disabled={!!reason || act.busy} className={`btn mt-4 w-full ${mode === "stake" ? "btn-primary" : ""}`}>
+              {act.busy ? "Working…" : mode === "stake" ? `Stake in ${NAMES.room}` : "Withdraw"}
+            </button>
+            {reason && <Reason>{reason}</Reason>}
+            {mode === "stake" && !reason && <Reason>Staking is not a trade: no sell tax and no fee. One approval for the exact amount, then the stake.</Reason>}
+            {mode === "withdraw" && !reason && <Reason tone="warn">Withdrawing also claims your rewards and restarts both lockups on what stays staked.</Reason>}
+            {mode === "stake" && p.account && m.wallet === 0n && (
+              <Reason tone="warn">
+                You hold no {m.stakeSymbol}.{" "}
+                <Link to="/farm" className="font-semibold text-iris-hot underline underline-offset-4">
+                  Make it in the farm's workshop
+                </Link>{" "}
+                from {NAMES.peg} and {NAMES.share}.
+              </Reason>
+            )}
           </div>
-        </div>
-      </section>
+
+          {/* ---- Rewards + lockups ---- */}
+          <div data-reveal className="panel p-5 md:p-6">
+            <div className="label mb-4">Rewards and lockups</div>
+            <div className="mb-5 flex items-end justify-between gap-3">
+              <div>
+                <div className="font-display text-3xl font-semibold tracking-[-0.03em] text-bone">{formatToken(m.earned)}</div>
+                <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-ash">{NAMES.peg} earned</div>
+              </div>
+              <button type="button" onClick={() => act.roomClaim()} disabled={!!claimReason || act.busy} className="btn btn-spectre">
+                Claim
+              </button>
+            </div>
+            {claimReason ? <Reason>{claimReason}</Reason> : <Reason tone="warn">Claiming restarts both lockups: your stake stays locked for another {m.withdrawLockupEpochs} epochs.</Reason>}
+
+            <dl className="mt-5 space-y-3 border-t border-white/[0.06] pt-4 text-[13.5px]">
+              <Lock label="Rewards" epochs={m.rewardLockupEpochs} open={m.canClaim} at={claimAt} active={hasStake} />
+              <Lock label="Stake" epochs={m.withdrawLockupEpochs} open={m.canWithdraw} at={withdrawAt} active={hasStake} />
+            </dl>
+
+            {hasStake && (
+              <div className="mt-5 border-t border-white/[0.06] pt-4">
+                <p className="mb-3 text-[12.5px] leading-relaxed text-ash">Leaving entirely? Exit withdraws your whole stake and claims in one transaction.</p>
+                <HoldButton onConfirm={() => act.roomExit()} disabled={!!act.blocked || m.canWithdraw === false || act.busy} hold={1.2}>
+                  Exit {NAMES.room} — withdraw everything
+                </HoldButton>
+                {m.canWithdraw === false && <Reason>Exit is locked until the stake lockup ends.</Reason>}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section>
+          <SectionTitle kicker="Rules" title={`How ${NAMES.room} pays`} right={<RuleBadge />} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Paid in expansion only", `When an epoch closes with the TWAP above 1.01, the Treasury mints ${NAMES.peg} and sends it here. At or below 1.01 there is no payout.`],
+              ["Pro-rata", "Each expansion is split across stakers by their share of the total stake at that moment."],
+              ["Two lockups", `Rewards unlock after ${m.rewardLockupEpochs} epochs and the stake after ${m.withdrawLockupEpochs}. Both count from your last stake, or your last claim or withdrawal that paid a reward — each of those restarts the clock.`],
+              ["Untradeable pool", `The ${NAMES.peg}/${NAMES.share} pool rejects every swap. It exists to be staked, so it can never be used to route around the sell tax.`],
+            ].map(([k, v]) => (
+              <div key={k} data-reveal className="panel p-5">
+                <div className="label mb-2">{k}</div>
+                <p className="text-[13.5px] leading-relaxed text-bone-dim">{v}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Lock({ label, epochs, open, at, active }: { label: string; epochs: number; open: boolean | null; at: number | null; active: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-bone-dim">
+        {label} <span className="font-mono text-[11px] text-ash">· {epochs} epochs</span>
+      </dt>
+      <dd>
+        {!active ? (
+          <span className="font-mono text-[12px] text-ash">starts when you stake</span>
+        ) : open ? (
+          <span className="chip chip-ok">Unlocked</span>
+        ) : (
+          <span className="chip chip-warn">
+            Unlocks in <Countdown to={at && at > 0 ? at : null} done="moments" />
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
