@@ -106,7 +106,7 @@ function Footer() {
             className="mt-3 font-ornament text-sm text-deco-gold"
             style={{ letterSpacing: "0.3em" }}
           >
-            MMXXVI · The House of Old Money
+            MMXXVI · The House of Mint
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-5">
             <Link to="/dashboard" className="label-deco hover:text-deco-gold-light">

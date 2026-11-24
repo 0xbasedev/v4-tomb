@@ -19,7 +19,7 @@ import {IOracle} from "../interfaces/IOracle.sol";
  *         from the treasury reserve during expansion.
  * @dev    Direct port of Tomb Finance's Treasury.sol (bombmoney/bomb-contracts).
  *
- *         Branded as "Trustees" in Old Money docs/UI; the on-chain class name is `Treasury`
+ *         The on-chain class name is `Treasury`
  *         to match Tomb's source one-for-one for auditor familiarity.
  *
  *         Modernizations applied (no logic changes):
@@ -319,7 +319,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         bootstrapSupplyExpansionPercent = 450;
 
         // POL bondTreasury mechanism (Tomb's _sendToBondTreasury, 5% supply/epoch to a
-        // separate POL bond contract) is intentionally OMITTED from Old Money v1. See
+        // separate POL bond contract) is intentionally OMITTED from v1. See
         // docs/TOMB_AUDIT.md BUG #3 and docs/GAP_AUDIT.md. Rationale: the core peg-defense
         // mechanism (seigniorage + contraction bonds) functions identically without it;
         // POL is a long-term durability layer that can be added in a future Treasury

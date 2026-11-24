@@ -16,7 +16,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *         the moment of wrapping.
  *
  *         Bridges the gap between V4's ERC-721 LP positions and Tomb's MasterChef-style
- *         reward pools, which expect ERC-20 LP tokens. Sprint 16 of the Old Money build.
+ *         reward pools, which expect ERC-20 LP tokens. Sprint 16 of the build.
  *
  * @dev    Each wrapper instance is bound to ONE specific `(poolId, tickLower, tickUpper)`
  *         tuple. To support multiple LP "pairs" (e.g., PEG/WETH full-range AND
@@ -57,7 +57,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *             the V4 PositionManager directly for that.
  *           - Tokenize fees separately from the NFT.
  *           - Combine multiple NFTs into a single fungible position (ALM behavior). For
- *             the Old Money v1 launch this simple NFT-wrap model is what we ship; a
+ *             the v1 launch this simple NFT-wrap model is what we ship; a
  *             future ALM upgrade can layer on top.
  */
 contract V4PositionWrapper is ERC20 {

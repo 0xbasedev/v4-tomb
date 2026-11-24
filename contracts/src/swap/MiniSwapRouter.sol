@@ -14,7 +14,7 @@ import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 
 /**
  * @title MiniSwapRouter
- * @notice A purpose-built V4 swap router for Old Money. Exposes a single
+ * @notice A purpose-built V4 swap router for the protocol. Exposes a single
  *         exact-input swap entry, plain ERC-20 approve flow (no Permit2),
  *         and the canonical V4 unlock+callback pattern wrapped behind a
  *         simple external API.

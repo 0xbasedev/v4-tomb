@@ -3,14 +3,14 @@ pragma solidity 0.8.26;
 
 /**
  * @title Addresses
- * @notice Per-chain canonical contract addresses used by Old Money deploys.
+ * @notice Per-chain canonical contract addresses used by protocol deploys.
  *
  *         - V4 PoolManager (real, from developers.uniswap.org/contracts/v4/deployments)
  *         - WETH (canonical wrapped ETH; pre-deployed on every OP-stack chain at
  *           the predeploy slot 0x4200...0006; canonical 0xC02a... on Ethereum mainnet;
  *           etc.)
  *
- *         Old Money pegs $PEG 1:1 to WETH (1 PEG = 1 ETH at parity). WETH is
+ *         The protocol pegs $PEG 1:1 to WETH (1 PEG = 1 ETH at parity). WETH is
  *         available on every supported chain — no mock needed on testnets, which
  *         is a deliberate improvement over the prior cbETH peg (cbETH was Coinbase-
  *         issued only on mainnet chains, forcing a `MockCbeth` shim on testnets).

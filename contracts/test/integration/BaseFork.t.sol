@@ -15,7 +15,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title BaseForkTest
- * @notice Forks Base mainnet at runtime and validates that the Old Money stack deploys
+ * @notice Forks Base mainnet at runtime and validates that the stack deploys
  *         cleanly against the live WETH token and Uniswap V4 PoolManager. The full V4
  *         hook integration (real pool initialization, swap-driven observation feed)
  *         lives in BaseForkHook.t.sol.

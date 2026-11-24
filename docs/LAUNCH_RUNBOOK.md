@@ -1,4 +1,4 @@
-# Old Money — Launch Runbook
+# Mint — Launch Runbook
 
 The runbook for taking a fresh `Deploy.s.sol` deployment from "contracts exist on chain" to "Trust is operational." Documents every post-deploy action required, when it must run, what role can run it, and the script that wraps it.
 

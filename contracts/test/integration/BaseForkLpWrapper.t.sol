@@ -107,8 +107,7 @@ contract BaseForkLpWrapperTest is BaseTest {
         permit2.approve(weth, address(positionManager), type(uint160).max, type(uint48).max);
 
         // Deploy the wrapper bound to our pool + tick range.
-        wrapper =
-            new V4PositionWrapper(positionManager, poolKey, TICK_LOWER, TICK_UPPER, "Old Money PEG/WETH LP", "om-MWLP");
+        wrapper = new V4PositionWrapper(positionManager, poolKey, TICK_LOWER, TICK_UPPER, "PEG/WETH LP", "om-MWLP");
     }
 
     // ---------------------------------------------------------------------

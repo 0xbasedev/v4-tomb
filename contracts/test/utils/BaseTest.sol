@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 /// @title BaseTest
-/// @notice Shared test scaffolding for Old Money. All unit / integration / fuzz tests inherit
+/// @notice Shared test scaffolding for the protocol. All unit / integration / fuzz tests inherit
 ///         from this so actor addresses, labels, and helper conventions stay consistent.
 abstract contract BaseTest is Test {
     // -- Canonical actors. Set in setUp() of derived tests via labelAll(). --

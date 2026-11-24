@@ -40,7 +40,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 
 /**
  * @title Deploy
- * @notice One-shot Foundry deploy script for the Old Money protocol.
+ * @notice One-shot Foundry deploy script for the protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
  *         PegFarm, ShareFarm) so the only remaining env-var addresses are
@@ -93,7 +93,7 @@ contract Deploy is NetworkConfig {
         Genesis memory g = _readGenesis();
         _preflight();
 
-        console2.log("=== Old Money deploy ===");
+        console2.log("=== Protocol deploy ===");
         console2.log("chain id:", block.chainid);
         console2.log("deployer:", deployer);
 

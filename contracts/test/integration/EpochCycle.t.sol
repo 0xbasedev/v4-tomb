@@ -16,7 +16,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title EpochCycle integration test
- * @notice Exercises the full Old Money system as it would behave on Base: deploy every
+ * @notice Exercises the full the protocol system as it would behave on Base: deploy every
  *         contract, wire the operator handoffs the same way the production deploy script
  *         will, run through expansion → staker claim → contraction → bond purchase →
  *         recovery expansion → bond redemption at premium. The Oracle is mocked so the

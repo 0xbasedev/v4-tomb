@@ -97,7 +97,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
 
         // Deploy wrapper bound to full-range PEG/WETH.
         wrapper = new V4PositionWrapper(
-            positionManager, poolKey, TICK_LOWER_RANGE, TICK_UPPER_RANGE, "Old Money PEG-WETH LP", "om-MWLP"
+            positionManager, poolKey, TICK_LOWER_RANGE, TICK_UPPER_RANGE, "PEG-WETH LP", "om-MWLP"
         );
 
         // Permit2 dance — production script does this itself, test does it in setUp so

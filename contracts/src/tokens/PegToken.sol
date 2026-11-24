@@ -11,7 +11,7 @@ import {Trustees} from "../governance/Trustees.sol";
 
 /**
  * @title PegToken
- * @notice $PEG — the algorithmic stable side of the Old Money trust. Pegged to 1 WETH TWAP on Base.
+ * @notice $PEG — the algorithmic stable side of the trust. Pegged to 1 WETH TWAP on Base.
  * @dev    Direct port of Tomb Finance's BOMB token (Bomb.sol in bombmoney/bomb-contracts),
  *         with one deliberate omission: the in-contract tax mechanism (TaxOffice / TaxOracle /
  *         taxTiers / `_transferWithTax` override of `transferFrom`) is REMOVED. Peg defense and

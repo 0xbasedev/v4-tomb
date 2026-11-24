@@ -19,7 +19,7 @@
   <circle cx="600" cy="240" r="14" fill="#d4af37"/>
 
   <!-- Wordmark -->
-  <text x="600" y="430" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="#f5f0e0">Old Money</text>
+  <text x="600" y="430" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="#f5f0e0">Mint</text>
   <text x="600" y="490" text-anchor="middle" font-family="'Cinzel', serif" font-weight="600" font-size="22" letter-spacing="12" fill="#d4af37">A N   A L G O R I T H M I C   T R U S T</text>
   <text x="600" y="540" text-anchor="middle" font-family="'Cormorant Garamond', Georgia, serif" font-style="italic" font-size="26" fill="#a89060">Wealth Engineered with Precision · Base · MMXXVI</text>
 </svg>

@@ -5,7 +5,7 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
 
 /**
  * @title Trustees
- * @notice Two-tier access pattern shared by all Old Money contracts: an `owner` who can rotate
+ * @notice Two-tier access pattern shared by all protocol contracts: an `owner` who can rotate
  *         the `trustees` address, and a `trustees` address (a single account) authorized to
  *         perform protocol-state mutations.
  * @dev    Direct port of Tomb Finance's `Operator` contract (contracts/owner/Operator.sol in the
@@ -14,7 +14,7 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
  *             rotation. Identical user-facing behavior outside the transfer flow itself.
  *           - Uses custom errors instead of `require` strings (gas, behavior-identical).
  *
- *         "Trustees" is the themed rename of Tomb's "Operator". Convention across Old Money:
+ *         "Trustees" is the themed rename of Tomb's "Operator". Convention across the protocol:
  *         the Treasury contract becomes the trustees of every token and core contract once
  *         deployment finishes.
  */

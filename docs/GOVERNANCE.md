@@ -1,6 +1,6 @@
 # Governance
 
-How Old Money's admin roles are organized and how the deployer EOA hands them off to a Timelock after launch.
+How Mint's admin roles are organized and how the deployer EOA hands them off to a Timelock after launch.
 
 ## The role hierarchy
 

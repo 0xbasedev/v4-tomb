@@ -1,4 +1,4 @@
-# Tomb Audit — Old Money vs Tomb Finance, line-by-line
+# Tomb Audit — Mint vs Tomb Finance, line-by-line
 
 Systematic comparison of every claim in `docs/tomb-skill/SKILL.md` and `docs/tomb-skill/references/*` against our implementation in `contracts/src/`. Per `memory/feedback_tomb_reference_first.md`, this is the canonical pre-launch sanity check.
 
@@ -117,7 +117,7 @@ Ours requires Treasury is operator of: LEVEL, BOND, SQUARE, Masonry.
 
 **Decision needed:**
 - **A.** Build it. Add `bondTreasury` parameter, `_sendToBondTreasury` step in `allocateSeigniorage`, `bondSupplyExpansionPercent = 500` default. Real new contract surface (the POL bond treasury itself). Multi-turn work.
-- **B.** Document as a deliberate Tomb deviation. Old Money's peg defense uses only the contraction-bond + (Sprint 4b hook tax) mechanism, no POL bonds.
+- **B.** Document as a deliberate Tomb deviation. Mint's peg defense uses only the contraction-bond + (Sprint 4b hook tax) mechanism, no POL bonds.
 
 This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controlled liquidity over time and can be used to backstop the peg from a separate reserve. They're a real defensive lever. Recommend **A** if we want full Tomb-fidelity + maximum peg defense.
 

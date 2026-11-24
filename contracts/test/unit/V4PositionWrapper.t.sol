@@ -104,7 +104,7 @@ contract V4PositionWrapperTest is BaseTest {
             expectedPoolKey,
             TICK_LOWER,
             TICK_UPPER,
-            "Old Money PEG/WETH LP",
+            "PEG/WETH LP",
             "om-MWLP"
         );
     }
@@ -118,7 +118,7 @@ contract V4PositionWrapperTest is BaseTest {
         assertEq(wrapper.tickLower(), TICK_LOWER);
         assertEq(wrapper.tickUpper(), TICK_UPPER);
         // Pool id derived from expectedPoolKey
-        assertEq(wrapper.name(), "Old Money PEG/WETH LP");
+        assertEq(wrapper.name(), "PEG/WETH LP");
         assertEq(wrapper.symbol(), "om-MWLP");
     }
 

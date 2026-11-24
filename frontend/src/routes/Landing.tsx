@@ -11,7 +11,7 @@ import { Sunburst } from "@/components/Sunburst";
  *
  * Anatomy (top to bottom, all centered on a vertical axis):
  *   1. Minimal nav — brand mark + ConnectButton
- *   2. Hero — sunburst behind metallic OLD MONEY title, rule trios above and below,
+ *   2. Hero — sunburst behind metallic MINT title, rule trios above and below,
  *      formal subhead, dual CTA. Stats panel (six tiles) directly below.
  *   3. "The Three SQUARE" — three pillar cards equal in weight, framed-within-framed
  *   4. "The Mechanism" — three formal step panels explaining the protocol
@@ -57,7 +57,7 @@ export function Landing() {
 
           {/* Chrome hero title */}
           <h1 className="gold-text-shimmer font-display italic text-hero">
-            OLD MONEY
+            MINT
           </h1>
 
           {/* Subhead */}
@@ -216,7 +216,7 @@ export function Landing() {
               Wealth Engineered with Precision.
             </p>
             <div className="mt-4 font-ornament text-sm text-deco-gold" style={{ letterSpacing: "0.3em" }}>
-              MMXXVI · The House of Old Money
+              MMXXVI · The House of Mint
             </div>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-6">
               <a href="#twitter" className="label-deco hover:text-deco-gold-light">

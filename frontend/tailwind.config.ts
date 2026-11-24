@@ -1,14 +1,14 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Old Money Tailwind config — Art Deco grammar.
+ * Mint Tailwind config — Art Deco grammar.
  *
  * Per docs/skill-art-deco.md. Three palette modes:
  *   - Classic Black & Gold (default — warm black ground, ivory text, metallic gold)
  *   - Cream & Gold (editorial — ivory ground, near-black text)
  *   - Jewel & Gold (glamour — warm dark ground with one jewel-tone accent)
  *
- * "Old Money" = inherited wealth = Gatsby-era opulence. Art Deco is the natural
+ * "Mint" = inherited wealth = Gatsby-era opulence. Art Deco is the natural
  * grammar — geometry as glamour, symmetry as power, ornament as structure.
  */
 export default {

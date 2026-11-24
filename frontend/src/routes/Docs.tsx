@@ -83,7 +83,7 @@ export function Docs() {
       {/* ===== In Sixty Seconds ===== */}
       <Section id="summary" title="In Sixty Seconds">
         <P>
-          Old Money is an algorithmic stable protocol where <Token>$LEVEL</Token>
+          Mint is an algorithmic stable protocol where <Token>$LEVEL</Token>
           is pegged 1:1 to <Token>WETH</Token>. The peg is held by three forces:
           a Uniswap V4 swap hook that taxes sells when LEVEL trades below par; a
           Treasury that mints fresh LEVEL to <Token>$SQUARE</Token> stakers when
@@ -353,7 +353,7 @@ export function Docs() {
         <P className="text-deco-ruby">
           Algorithmic stables are speculative instruments. The peg holds while
           the mechanism's incentives outweigh the participants' willingness to
-          exit. When confidence breaks, peg can break with it. Old Money is the
+          exit. When confidence breaks, peg can break with it. Mint is the
           experiment, not the guarantee.
         </P>
         <Risk
@@ -383,7 +383,7 @@ export function Docs() {
         <Term term="Epoch" body="A six-hour window. The Treasury ticks at each boundary, advancing the epoch counter and executing expansion or contraction logic." />
         <Term term="Seigniorage" body="Newly-minted LEVEL distributed during expansion epochs. Routed primarily to The Masonry, with optional cuts to the daoFund and devFund." />
         <Term term="Bootstrap" body="The first 28 epochs (seven days) after deploy. Unconditional 4.5% expansion regardless of price, to seed Masonry and establish initial economy." />
-        <Term term="Hook" body="A Uniswap V4 contract that runs on every swap of a specific pool. Old Money's PegDefenseHook handles observation, dynamic fees, and the sell-side tax." />
+        <Term term="Hook" body="A Uniswap V4 contract that runs on every swap of a specific pool. Mint's PegDefenseHook handles observation, dynamic fees, and the sell-side tax." />
         <Term term="The Masonry / Masonry" body="The contract that holds staked SQUARE and distributes seigniorage. Same thing, two names — the contract is named Masonry for auditor familiarity; the user-facing label is The Masonry." />
         <Term term="TWAP" body="Time-Weighted Average Price. The oracle reports this rather than spot, smoothing short-term volatility. Computed from the hook's accumulated tick observations." />
         <Term term="V4 LP NFT" body="An ERC-721 representing a Uniswap V4 liquidity position. Holds the position's exact tick range and accumulated fees. Not directly stake-able in our reward pools — must be wrapped first." />
