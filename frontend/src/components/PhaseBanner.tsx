@@ -4,7 +4,7 @@
  * with a centered ornament.
  *
  * Phases per the Treasury mechanics:
- *   - Bootstrap (epoch < 28): unconditional 4.5% supply expansion to Boardroom
+ *   - Bootstrap (epoch < 28): unconditional 4.5% supply expansion to Masonry
  *   - Expansion (price ≥ 1.01 ETH): seigniorage minted, distributed pro-rata
  *   - Redemption (price ≥ premium): Bonds can be presented at premium
  *   - Contraction (price < 1.00 ETH): LEVEL can be burned for Bonds
@@ -26,14 +26,14 @@ const PHASE_COPY: Record<
     label: "Phase · Bootstrap",
     title: "The Trust is Founding",
     gloss:
-      "For the first twenty-eight epochs, four and one-half per cent of supply is minted to The Club each cycle regardless of the price. Patience is rewarded.",
+      "For the first twenty-eight epochs, four and one-half per cent of supply is minted to The Masonry each cycle regardless of the price. Patience is rewarded.",
     tone: "text-deco-gold",
   },
   expansion: {
     label: "Phase · Expansion",
     title: "Seigniorage Flows",
     gloss:
-      "LEVEL trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Club.",
+      "LEVEL trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Masonry.",
     tone: "text-deco-gold",
   },
   redemption: {

@@ -29,7 +29,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *           2. `IERC721(positionManager).approve(wrapper, tokenId)` then
  *              `wrapper.wrap(tokenId)`. Wrapper pulls the NFT and mints ERC-20 equal to
  *              the position's V4 liquidity to the caller.
- *           3. Stake the ERC-20 in a reward pool (e.g., MainRewardPool, ShareRewardPool).
+ *           3. Stake the ERC-20 in a reward pool (e.g., PegFarm, ShareFarm).
  *              The ERC-20 is freely transferable — staking moves it; the reward pool
  *              holds it until withdrawal.
  *           4. After withdrawing the ERC-20 from the reward pool, call

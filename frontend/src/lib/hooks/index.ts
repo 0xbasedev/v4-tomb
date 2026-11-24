@@ -2,7 +2,7 @@ export { useDeployment } from "./useDeployment";
 export { useEpoch } from "./useEpoch";
 export { usePegMarket } from "./usePegMarket";
 export { useTokenSupplies } from "./useTokenSupplies";
-export { useBoardroom } from "./useBoardroom";
+export { useMasonry } from "./useMasonry";
 export { useBondMarket } from "./useBondMarket";
 export { useRewardPool, useTokenStatus } from "./useRewardPool";
 export { useApproveAndCall, type CallState } from "./useApproveAndCall";

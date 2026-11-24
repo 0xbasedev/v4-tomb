@@ -11,8 +11,8 @@ import {BondToken} from "../src/tokens/BondToken.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Timelock} from "../src/governance/Timelock.sol";
 import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
-import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
-import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
+import {PegFarm} from "../src/distribution/PegFarm.sol";
+import {ShareFarm} from "../src/distribution/ShareFarm.sol";
 import {PegDefenseHook} from "../src/hooks/PegDefenseHook.sol";
 import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
 
@@ -47,8 +47,8 @@ import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
  *           HOOK address is resolved from the selected manifest deployment.
  *           TREASURY address is resolved from the selected manifest deployment.
  *           GENESIS_REWARD_POOL address is resolved from the selected manifest deployment.
- *           MAIN_REWARD_POOL address is resolved from the selected manifest deployment.
- *           SHARE_REWARD_POOL address is resolved from the selected manifest deployment.
+ *           PEG_FARM address is resolved from the selected manifest deployment.
+ *           SHARE_FARM address is resolved from the selected manifest deployment.
  *
  *         Optional:
  *           ETA — Unix timestamp for the queued acceptOwnership transactions. Must be
@@ -68,8 +68,8 @@ contract RotateGovernanceQueue is NetworkConfig {
         ShareBuybackHook shareHook = ShareBuybackHook(_deployment("shareBuybackHook"));
         Treasury treasury = Treasury(_deployment("treasury"));
         GenesisRewardPool gp = GenesisRewardPool(_deployment("genesisRewardPool"));
-        MainRewardPool mp = MainRewardPool(_deployment("mainRewardPool"));
-        ShareRewardPool sp = ShareRewardPool(_deployment("shareRewardPool"));
+        PegFarm mp = PegFarm(_deployment("pegFarm"));
+        ShareFarm sp = ShareFarm(_deployment("shareFarm"));
 
         uint256 defaultEta = block.timestamp + timelock.delay() + 60;
         uint256 eta = vm.envOr("ETA", defaultEta);
@@ -95,7 +95,7 @@ contract RotateGovernanceQueue is NetworkConfig {
         console2.log("rotated hook + share buyback hook trustees -> Timelock");
 
         // Stage 2c: single-step operator rotation on Treasury + reward pools.
-        // Boardroom stays with Treasury (intentional — protocol-internal).
+        // Masonry stays with Treasury (intentional — protocol-internal).
         treasury.setOperator(address(timelock));
         gp.setOperator(address(timelock));
         mp.setOperator(address(timelock));

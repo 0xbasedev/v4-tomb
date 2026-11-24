@@ -1,6 +1,6 @@
 /**
  * TabBar — Art Deco tab navigation. Gold-bordered pills (no rounding); active tab
- * fills with gold + inverts text color. Used in The Vault for switching between
+ * fills with gold + inverts text color. Used in The Farms for switching between
  * Genesis / Main / Share pools.
  *
  * Centered on the horizontal axis. The label "ornament numeral" is rendered

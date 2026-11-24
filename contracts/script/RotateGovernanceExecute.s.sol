@@ -56,6 +56,6 @@ contract RotateGovernanceExecute is NetworkConfig {
 
         console2.log("\nGovernance ceremony complete. Timelock now owns peg/share/bond and both hooks,");
         console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of both hooks.");
-        console2.log("Treasury still operates Boardroom (intentional). Wrapper has no admin (intentional).");
+        console2.log("Treasury still operates Masonry (intentional). Wrapper has no admin (intentional).");
     }
 }

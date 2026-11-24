@@ -29,7 +29,7 @@ import {Trustees} from "../governance/Trustees.sol";
  *
  *         Genesis distribution (matches Tomb's BOMB exact numbers):
  *           - 11,000 PEG → genesis pool (24h zero-LP boot)
- *           - 140,000 PEG → main reward pool (days 2-5)
+ *           - 140,000 PEG → peg farm (days 2-5)
  *           - 9,000 PEG → airdrop wallet
  *           Constructor additionally mints 1 PEG to the initial owner for initial LP setup
  *           (matches Tomb's deploy-time seed mint).

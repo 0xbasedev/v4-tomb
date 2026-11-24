@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
@@ -11,7 +11,7 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Minimal ITreasury stand-in: only exposes the epoch and price views Boardroom
+/// @notice Minimal ITreasury stand-in: only exposes the epoch and price views Masonry
 ///         calls into. Tests drive its state directly via setters.
 contract MockTreasury is ITreasury {
     uint256 public epoch_;
@@ -53,8 +53,8 @@ contract MockTreasury is ITreasury {
     ) external pure {}
 }
 
-contract BoardroomTest is BaseTest {
-    Boardroom internal boardroom;
+contract MasonryTest is BaseTest {
+    Masonry internal masonry;
     PegToken internal peg;
     ShareToken internal share;
     MockTreasury internal treasuryMock;
@@ -85,9 +85,9 @@ contract BoardroomTest is BaseTest {
         treasuryMock.setStartTime(block.timestamp);
 
         vm.prank(owner);
-        boardroom = new Boardroom();
+        masonry = new Masonry();
         vm.prank(owner);
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasuryMock)));
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasuryMock)));
 
         // Hand off mint authority on PEG to a controllable address so this test can
         // mint PEG directly for testing reward flows.
@@ -108,19 +108,19 @@ contract BoardroomTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Initialize_StoresParams() public view {
-        assertEq(address(boardroom.peg()), address(peg));
-        assertEq(address(boardroom.share()), address(share));
-        assertEq(address(boardroom.treasury()), address(treasuryMock));
-        assertEq(boardroom.operator(), owner);
-        assertTrue(boardroom.initialized());
-        assertEq(boardroom.withdrawLockupEpochs(), 6);
-        assertEq(boardroom.rewardLockupEpochs(), 3);
+        assertEq(address(masonry.peg()), address(peg));
+        assertEq(address(masonry.share()), address(share));
+        assertEq(address(masonry.treasury()), address(treasuryMock));
+        assertEq(masonry.operator(), owner);
+        assertTrue(masonry.initialized());
+        assertEq(masonry.withdrawLockupEpochs(), 6);
+        assertEq(masonry.rewardLockupEpochs(), 3);
     }
 
     function test_Initialize_OneShot() public {
         vm.prank(owner);
-        vm.expectRevert(Boardroom.AlreadyInitialized.selector);
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasuryMock)));
+        vm.expectRevert(Masonry.AlreadyInitialized.selector);
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasuryMock)));
     }
 
     // ---------------------------------------------------------------------
@@ -129,28 +129,28 @@ contract BoardroomTest is BaseTest {
 
     function test_Stake_RecordsBalance() public {
         vm.prank(alice);
-        share.approve(address(boardroom), 10 ether);
+        share.approve(address(masonry), 10 ether);
 
         vm.expectEmit(true, true, true, true);
         emit Staked(alice, 10 ether);
         vm.prank(alice);
-        boardroom.stake(10 ether);
+        masonry.stake(10 ether);
 
-        assertEq(boardroom.balanceOf(alice), 10 ether);
-        assertEq(boardroom.totalSupply(), 10 ether);
-        assertEq(share.balanceOf(address(boardroom)), 10 ether);
+        assertEq(masonry.balanceOf(alice), 10 ether);
+        assertEq(masonry.totalSupply(), 10 ether);
+        assertEq(share.balanceOf(address(masonry)), 10 ether);
     }
 
     function test_Stake_RejectsZero() public {
         vm.prank(alice);
-        vm.expectRevert(Boardroom.CannotStakeZero.selector);
-        boardroom.stake(0);
+        vm.expectRevert(Masonry.CannotStakeZero.selector);
+        masonry.stake(0);
     }
 
     function test_Stake_StartsEpochTimer() public {
         treasuryMock.setEpoch(5);
         _stakeAlice(10 ether);
-        (,, uint256 epochTimerStart) = boardroom.members(alice);
+        (,, uint256 epochTimerStart) = masonry.members(alice);
         assertEq(epochTimerStart, 5);
     }
 
@@ -165,8 +165,8 @@ contract BoardroomTest is BaseTest {
         treasuryMock.setEpoch(5);
         vm.roll(block.number + 1);
         vm.prank(alice);
-        vm.expectRevert(Boardroom.InWithdrawLockup.selector);
-        boardroom.withdraw(5 ether);
+        vm.expectRevert(Masonry.InWithdrawLockup.selector);
+        masonry.withdraw(5 ether);
     }
 
     function test_Withdraw_AllowedAfterLockup() public {
@@ -177,17 +177,17 @@ contract BoardroomTest is BaseTest {
         vm.expectEmit(true, true, true, true);
         emit Withdrawn(alice, 4 ether);
         vm.prank(alice);
-        boardroom.withdraw(4 ether);
+        masonry.withdraw(4 ether);
 
-        assertEq(boardroom.balanceOf(alice), 6 ether);
+        assertEq(masonry.balanceOf(alice), 6 ether);
         assertEq(share.balanceOf(alice), 100 ether - 6 ether); // started at 100, staked 10, withdrew 4
     }
 
     function test_Withdraw_RequiresMembership() public {
         treasuryMock.setEpoch(10);
         vm.prank(stranger);
-        vm.expectRevert(Boardroom.MemberDoesNotExist.selector);
-        boardroom.withdraw(1 ether);
+        vm.expectRevert(Masonry.MemberDoesNotExist.selector);
+        masonry.withdraw(1 ether);
     }
 
     function test_Exit_WithdrawsAllAndClaims() public {
@@ -199,8 +199,8 @@ contract BoardroomTest is BaseTest {
         vm.roll(block.number + 1);
 
         vm.prank(alice);
-        boardroom.exit();
-        assertEq(boardroom.balanceOf(alice), 0);
+        masonry.exit();
+        assertEq(masonry.balanceOf(alice), 0);
         assertEq(peg.balanceOf(alice), 1 ether); // got the full reward (sole staker)
     }
 
@@ -212,28 +212,28 @@ contract BoardroomTest is BaseTest {
         _stakeAlice(10 ether);
         peg.mint(stranger, 1 ether); // this test contract is currently trustees
         vm.prank(stranger);
-        peg.approve(address(boardroom), 1 ether);
+        peg.approve(address(masonry), 1 ether);
         vm.roll(block.number + 1); // dodge onlyOneBlock
         vm.prank(stranger);
-        vm.expectRevert(Boardroom.NotOperator.selector);
-        boardroom.allocateSeigniorage(1 ether);
+        vm.expectRevert(Masonry.NotOperator.selector);
+        masonry.allocateSeigniorage(1 ether);
     }
 
     function test_AllocateSeigniorage_RejectsZero() public {
         _stakeAlice(10 ether);
         vm.roll(block.number + 1);
         vm.prank(owner);
-        vm.expectRevert(Boardroom.CannotAllocateZero.selector);
-        boardroom.allocateSeigniorage(0);
+        vm.expectRevert(Masonry.CannotAllocateZero.selector);
+        masonry.allocateSeigniorage(0);
     }
 
     function test_AllocateSeigniorage_RejectsEmptyPool() public {
         peg.mint(owner, 1 ether);
         vm.prank(owner);
-        peg.approve(address(boardroom), 1 ether);
+        peg.approve(address(masonry), 1 ether);
         vm.prank(owner);
-        vm.expectRevert(Boardroom.CannotAllocateWhenTotalSupplyZero.selector);
-        boardroom.allocateSeigniorage(1 ether);
+        vm.expectRevert(Masonry.CannotAllocateWhenTotalSupplyZero.selector);
+        masonry.allocateSeigniorage(1 ether);
     }
 
     function test_AllocateSeigniorage_DistributesProRata() public {
@@ -244,8 +244,8 @@ contract BoardroomTest is BaseTest {
         _allocateReward(4 ether);
 
         // earned() is what each member can claim.
-        assertApproxEqAbs(boardroom.earned(alice), 1 ether, 1);
-        assertApproxEqAbs(boardroom.earned(bob), 3 ether, 1);
+        assertApproxEqAbs(masonry.earned(alice), 1 ether, 1);
+        assertApproxEqAbs(masonry.earned(bob), 3 ether, 1);
     }
 
     function test_ClaimReward_BlockedDuringRewardLockup() public {
@@ -254,8 +254,8 @@ contract BoardroomTest is BaseTest {
         // rewardLockupEpochs = 3. epoch starts at 0. Lockup passes at epoch 3.
         treasuryMock.setEpoch(2);
         vm.prank(alice);
-        vm.expectRevert(bytes("Boardroom: still in reward lockup"));
-        boardroom.claimReward();
+        vm.expectRevert(bytes("Masonry: still in reward lockup"));
+        masonry.claimReward();
     }
 
     function test_ClaimReward_AllowedAfterLockup() public {
@@ -266,7 +266,7 @@ contract BoardroomTest is BaseTest {
         vm.expectEmit(true, true, true, true);
         emit RewardPaid(alice, 1 ether);
         vm.prank(alice);
-        boardroom.claimReward();
+        masonry.claimReward();
         assertEq(peg.balanceOf(alice), 1 ether);
     }
 
@@ -275,7 +275,7 @@ contract BoardroomTest is BaseTest {
         treasuryMock.setEpoch(3);
         // No reward allocated. claimReward should be a silent no-op.
         vm.prank(alice);
-        boardroom.claimReward();
+        masonry.claimReward();
         assertEq(peg.balanceOf(alice), 0);
     }
 
@@ -285,27 +285,27 @@ contract BoardroomTest is BaseTest {
 
     function test_SetLockUp_OnlyOperator() public {
         vm.prank(stranger);
-        vm.expectRevert(Boardroom.NotOperator.selector);
-        boardroom.setLockUp(10, 5);
+        vm.expectRevert(Masonry.NotOperator.selector);
+        masonry.setLockUp(10, 5);
     }
 
     function test_SetLockUp_RejectsWithdrawLessThanReward() public {
         vm.prank(owner);
-        vm.expectRevert(Boardroom.LockupOutOfRange.selector);
-        boardroom.setLockUp(2, 5);
+        vm.expectRevert(Masonry.LockupOutOfRange.selector);
+        masonry.setLockUp(2, 5);
     }
 
     function test_SetLockUp_RejectsAboveCeiling() public {
         vm.prank(owner);
-        vm.expectRevert(Boardroom.LockupOutOfRange.selector);
-        boardroom.setLockUp(57, 3);
+        vm.expectRevert(Masonry.LockupOutOfRange.selector);
+        masonry.setLockUp(57, 3);
     }
 
     function test_SetLockUp_UpdatesValues() public {
         vm.prank(owner);
-        boardroom.setLockUp(10, 5);
-        assertEq(boardroom.withdrawLockupEpochs(), 10);
-        assertEq(boardroom.rewardLockupEpochs(), 5);
+        masonry.setLockUp(10, 5);
+        assertEq(masonry.withdrawLockupEpochs(), 10);
+        assertEq(masonry.rewardLockupEpochs(), 5);
     }
 
     // ---------------------------------------------------------------------
@@ -314,14 +314,14 @@ contract BoardroomTest is BaseTest {
 
     function test_GovernanceRecoverUnsupported_BlocksPeg() public {
         vm.prank(owner);
-        vm.expectRevert(Boardroom.ProtectedToken.selector);
-        boardroom.governanceRecoverUnsupported(IERC20(address(peg)), 1, alice);
+        vm.expectRevert(Masonry.ProtectedToken.selector);
+        masonry.governanceRecoverUnsupported(IERC20(address(peg)), 1, alice);
     }
 
     function test_GovernanceRecoverUnsupported_BlocksShare() public {
         vm.prank(owner);
-        vm.expectRevert(Boardroom.ProtectedToken.selector);
-        boardroom.governanceRecoverUnsupported(IERC20(address(share)), 1, alice);
+        vm.expectRevert(Masonry.ProtectedToken.selector);
+        masonry.governanceRecoverUnsupported(IERC20(address(share)), 1, alice);
     }
 
     // ---------------------------------------------------------------------
@@ -332,19 +332,19 @@ contract BoardroomTest is BaseTest {
         uint256 amount
     ) internal {
         vm.prank(alice);
-        share.approve(address(boardroom), amount);
+        share.approve(address(masonry), amount);
         vm.prank(alice);
-        boardroom.stake(amount);
+        masonry.stake(amount);
     }
 
     function _stakeBob(
         uint256 amount
     ) internal {
         vm.prank(bob);
-        share.approve(address(boardroom), amount);
+        share.approve(address(masonry), amount);
         vm.roll(block.number + 1); // dodge onlyOneBlock if alice and bob both staked
         vm.prank(bob);
-        boardroom.stake(amount);
+        masonry.stake(amount);
     }
 
     function _allocateReward(
@@ -353,9 +353,9 @@ contract BoardroomTest is BaseTest {
         // This test contract is the PEG trustees (set in setUp); mint PEG to owner.
         peg.mint(owner, amount);
         vm.prank(owner);
-        peg.approve(address(boardroom), amount);
+        peg.approve(address(masonry), amount);
         vm.roll(block.number + 1);
         vm.prank(owner);
-        boardroom.allocateSeigniorage(amount);
+        masonry.allocateSeigniorage(amount);
     }
 }

@@ -102,10 +102,10 @@ function publication() {
   const document = clone(currentFixture);
   const deployment = document.networks[0].deployment;
   const artifact = { ...deployment, chainId: 84532 };
-  const names = ['PegToken', 'ShareToken', 'BondToken', 'Treasury', 'Boardroom', 'Oracle',
-    'V4PositionWrapper', 'GenesisRewardPool', 'MainRewardPool', 'ShareRewardPool', 'MiniSwapRouter', 'Timelock'];
-  const keys = ['peg', 'share', 'bond', 'treasury', 'boardroom', 'oracle', 'lpWrapper',
-    'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'miniSwapRouter', 'timelock'];
+  const names = ['PegToken', 'ShareToken', 'BondToken', 'Treasury', 'Masonry', 'Oracle',
+    'V4PositionWrapper', 'GenesisRewardPool', 'PegFarm', 'ShareFarm', 'MiniSwapRouter', 'Timelock'];
+  const keys = ['peg', 'share', 'bond', 'treasury', 'masonry', 'oracle', 'lpWrapper',
+    'genesisRewardPool', 'pegFarm', 'shareFarm', 'miniSwapRouter', 'timelock'];
   const broadcast = { chain: 84532, transactions: names.map((contractName, index) => ({
     contractName, transactionType: 'CREATE', hash: `0x${(index + 1).toString(16).padStart(64, '0')}`,
   })) };

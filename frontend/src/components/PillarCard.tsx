@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 
 /**
- * PillarCard — large action card for the protocol's "Three SQUARE" (The Club /
- * The Vault / Bonds). Frame-within-frame, centered axis, ornament label,
+ * PillarCard — large action card for the protocol's "Three SQUARE" (The Masonry /
+ * The Farms / Bonds). Frame-within-frame, centered axis, ornament label,
  * formal voice CTA. All three pillars share the same palette — Art Deco doesn't
  * vary the palette per card; the cards are siblings, equal in weight.
  *

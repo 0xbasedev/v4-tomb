@@ -43,9 +43,9 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 | 2. Read `previousEpochPrice` | ✓ | ✓ | ✓ MATCH |
 | 3. Calculate circulating supply | ✓ | `getPegCirculatingSupply() - seigniorageSaved` | ✓ MATCH |
 | 4. **`_sendToBondTreasury(supply * bondSupplyExpansionPercent / 10000)`** | ✓ Tomb does this every epoch | **MISSING** | ❌ Part of BUG #3 |
-| 5. Bootstrap branch (epoch < bootstrap): `_sendToBoardroom(supply * bootstrapPct / 10000)` | ✓ | ✓ but bootstrapEpochs=0 so branch is dead | ❌ Part of BUG #1 |
-| 6. Expansion branch (price > ceiling): tier-capped mint + debt-phase split | ✓ | ✓ correct math + `_sendToBoardroom` | ✓ MATCH |
-| 7. Debt-free path: full to boardroom | ✓ | ✓ | ✓ MATCH |
+| 5. Bootstrap branch (epoch < bootstrap): `_sendToMasonry(supply * bootstrapPct / 10000)` | ✓ | ✓ but bootstrapEpochs=0 so branch is dead | ❌ Part of BUG #1 |
+| 6. Expansion branch (price > ceiling): tier-capped mint + debt-phase split | ✓ | ✓ correct math + `_sendToMasonry` | ✓ MATCH |
+| 7. Debt-free path: full to masonry | ✓ | ✓ | ✓ MATCH |
 | 8. Debt path: 35%/65% split (with `mintingFactorForPayingDebt`) | ✓ | ✓ | ✓ MATCH |
 
 ### `buyBonds()` flow
@@ -72,17 +72,17 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 ### `checkOperator` modifier
 
 Tomb requires Treasury is operator of: TOMB, TBOND, TSHARE, Masonry.
-Ours requires Treasury is operator of: LEVEL, BOND, SQUARE, Boardroom.
+Ours requires Treasury is operator of: LEVEL, BOND, SQUARE, Masonry.
 ✓ MATCH.
 
-### `_sendToBoardroom` (= Tomb's `_sendToMasonry`)
+### `_sendToMasonry` (= Tomb's `_sendToMasonry`)
 
 | Step | Tomb | Ours | Status |
 |---|---|---|---|
 | Mint amount to Treasury self | ✓ | ✓ via `IBasisAsset(peg).mint(address(this), amount)` | ✓ MATCH |
 | DAO fund cut | ✓ | ✓ via `daoFundSharedPercent` | ✓ MATCH |
 | Dev fund cut | ✓ | ✓ via `devFundSharedPercent` | ✓ MATCH |
-| Remainder to Boardroom | ✓ | ✓ via `forceApprove` + `boardroom.allocateSeigniorage()` | ✓ MATCH |
+| Remainder to Masonry | ✓ | ✓ via `forceApprove` + `masonry.allocateSeigniorage()` | ✓ MATCH |
 
 ---
 
@@ -90,9 +90,9 @@ Ours requires Treasury is operator of: LEVEL, BOND, SQUARE, Boardroom.
 
 #### BUG #1 — `bootstrapEpochs = 0`
 
-**What it does:** With `bootstrapEpochs = 0`, the bootstrap branch in `allocateSeigniorage` is dead code. The protocol immediately enters the expansion/contraction logic, requiring TWAP-driven price action to mint anything to the Boardroom.
+**What it does:** With `bootstrapEpochs = 0`, the bootstrap branch in `allocateSeigniorage` is dead code. The protocol immediately enters the expansion/contraction logic, requiring TWAP-driven price action to mint anything to the Masonry.
 
-**Tomb behavior:** Bootstrap of 12 (or 28, depending on version) epochs gives early Boardroom stakers guaranteed 4.5%-5% APY on their first interaction with the protocol — buys them in regardless of where LEVEL trades vs peg. **This is load-bearing for getting SQUARE staked in Boardroom early**, which is required for the Treasury to function at all (gap #16, Boardroom-empty bricks expansion).
+**Tomb behavior:** Bootstrap of 12 (or 28, depending on version) epochs gives early Masonry stakers guaranteed 4.5%-5% APY on their first interaction with the protocol — buys them in regardless of where LEVEL trades vs peg. **This is load-bearing for getting SQUARE staked in Masonry early**, which is required for the Treasury to function at all (gap #16, Masonry-empty bricks expansion).
 
 **Decision needed:**
 - **A.** Set `bootstrapEpochs = 28` and `bootstrapSupplyExpansionPercent = 450` (Tomb-faithful per `HOW_IT_WORKED.md`). Recommended.
@@ -123,7 +123,7 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 
 ---
 
-## Boardroom (was Masonry)
+## Masonry (was Masonry)
 
 ### Defaults
 
@@ -140,12 +140,12 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 | Any interaction (stake/withdraw/claimReward) resets `epochTimerStart` | ✓ | ✓ | ✓ MATCH |
 | `allocateSeigniorage` is operator-only | ✓ | ✓ via `onlyOperator` | ✓ MATCH |
 | `allocateSeigniorage` reverts if `totalSupply() == 0` | ✓ — and this is load-bearing for gap #16 | ✓ via `CannotAllocateWhenTotalSupplyZero` | ✓ MATCH |
-| Snapshot-based cumulative rewardPerShare | ✓ | ✓ via `boardroomHistory` array | ✓ MATCH |
+| Snapshot-based cumulative rewardPerShare | ✓ | ✓ via `masonryHistory` array | ✓ MATCH |
 | `earned` = `balance * (latestRPS - storedRPS) / 1e18 + rewardEarned` | ✓ | (verify) | ❓ TBD |
 | `claimReward` requires `epochTimerStart + rewardLockupEpochs <= epoch()` | ✓ | ✓ | ✓ MATCH |
 | `withdraw` requires `epochTimerStart + withdrawLockupEpochs <= epoch()` | ✓ | ✓ | ✓ MATCH |
 
-**No bugs found in Boardroom so far. Continue audit on full file in next pass.**
+**No bugs found in Masonry so far. Continue audit on full file in next pass.**
 
 ---
 
@@ -199,21 +199,21 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 - `governanceRecoverUnsupported` protects LEVEL + every staked LP for 90 days post-end ✓ MATCH
 - Per-pool reward debt accounting ✓ MATCH (MasterChef pattern)
 
-## MainRewardPool — ✓ CLEAN
+## PegFarm — ✓ CLEAN
 
 - `TOTAL_REWARDS = 140_000 ether` ✓ MATCH
 - Two epochs: 80k over 4 days + 60k over 5 days = 9 days total ✓ MATCH (Tomb's exact "Day 2-5" + "Day 6-10")
 - Multi-epoch `getGeneratedReward` math correctly walks epoch boundary ✓ MATCH (8 tests passing)
 
-## ShareRewardPool — ⚠️ ARCHITECTURAL DECISION NEEDED (gap #17)
+## ShareFarm — ⚠️ ARCHITECTURAL DECISION NEEDED (gap #17)
 
 - `TOTAL_REWARDS = 59_500 ether` ✓ MATCH
 - `RUNNING_TIME = 370 days` ✓ MATCH (HOW_IT_WORKED says 370; SKILL says 365 — our 370 matches actual bomb-contracts)
-- ⚠️ **Single-pool vs Tomb's TWO-pool model.** Tomb's TShareRewardPool launched with:
+- ⚠️ **Single-pool vs Tomb's TWO-pool model.** Tomb's TShareFarm launched with:
   - Pool 0: TOMB-FTM LP → 35,700 TSHARE (60%)
   - Pool 1: TSHARE-FTM LP → 23,800 TSHARE (40%)
 
-  Our `ShareRewardPool` mechanically supports multiple pools (operator can call `.add()` for each LP token), but to be Tomb-faithful we'd need to launch a SECOND V4 pool (SQUARE/WETH) and a SECOND LP wrapper for it. Without that, Tomb's incentive to maintain SQUARE/native liquidity is missing — SQUARE has no AMM market.
+  Our `ShareFarm` mechanically supports multiple pools (operator can call `.add()` for each LP token), but to be Tomb-faithful we'd need to launch a SECOND V4 pool (SQUARE/WETH) and a SECOND LP wrapper for it. Without that, Tomb's incentive to maintain SQUARE/native liquidity is missing — SQUARE has no AMM market.
 
   **Decision: how do we want SQUARE to trade?**
   - **A.** Build the second V4 pool (SQUARE/WETH) + second LP wrapper. Full Tomb-fidelity. Adds work to Sprint 16. Recommended for a long-term protocol.
@@ -257,11 +257,11 @@ Our `PegDefenseHook`:
 
 ## Final consolidated decisions matrix
 
-Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Boardroom`, `src/core/Distributor`, `src/tokens/PegToken`, `src/tokens/ShareToken`, `src/tokens/BondToken`, `src/oracle/Oracle`, `src/governance/Timelock`, `src/hooks/PegDefenseHook`, `src/distribution/GenesisRewardPool`, `src/distribution/MainRewardPool`, `src/distribution/ShareRewardPool`).
+Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Masonry`, `src/core/Distributor`, `src/tokens/PegToken`, `src/tokens/ShareToken`, `src/tokens/BondToken`, `src/oracle/Oracle`, `src/governance/Timelock`, `src/hooks/PegDefenseHook`, `src/distribution/GenesisRewardPool`, `src/distribution/PegFarm`, `src/distribution/ShareFarm`).
 
 ### 7 contracts found CLEAN
 
-PegToken, ShareToken, BondToken, Oracle, GenesisRewardPool, MainRewardPool, Timelock, Distributor, Boardroom — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
+PegToken, ShareToken, BondToken, Oracle, GenesisRewardPool, PegFarm, Timelock, Distributor, Masonry — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
 
 ### Decisions (signed off 2026-05-22)
 
@@ -271,7 +271,7 @@ PegToken, ShareToken, BondToken, Oracle, GenesisRewardPool, MainRewardPool, Time
 | BUG #2 | Treasury: `maxDebtRatioPercent = 4500` | MEDIUM | **FIXED** — set to 3500 per Tomb | ✅ done (commit pending) |
 | BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | MEDIUM | **DEFERRED** — documented as v1 deliberate omission; core peg mechanics function without it; future Treasury upgrade may add | ✅ documented in Treasury.sol NatSpec |
 | Gap #3 | PegDefenseHook doesn't burn/route value | HIGH | **BUILD SPRINT 4B** — `beforeSwapReturnDelta` tax routing | ⏳ pending implementation |
-| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when SQUARE/WETH V4 pool + wrapper exists | ⏳ pending |
+| Gap #17 | ShareFarm single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when SQUARE/WETH V4 pool + wrapper exists | ⏳ pending |
 | Peg | cbETH → WETH | Decided | **DONE** — commit `c1fd029` | ✅ done |
 
 ### What's NOT a decision (just execution)
@@ -279,7 +279,7 @@ PegToken, ShareToken, BondToken, Oracle, GenesisRewardPool, MainRewardPool, Time
 - Token contracts: leave as-is. All clean.
 - Oracle: leave as-is. Clean.
 - Reward pool contracts: leave as-is. Clean.
-- Boardroom: leave as-is. Clean.
+- Masonry: leave as-is. Clean.
 - Timelock + Distributor: leave as-is. Clean.
 
 ### Sequencing once user signs off

@@ -5,7 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
- * @title MainRewardPool
+ * @title PegFarm
  * @notice Multi-epoch MasterChef farm distributing the 140,000 PEG main reward
  *         allocation across two epochs:
  *           - Epoch 0: 80,000 PEG over 4 days (day 2-5)
@@ -23,7 +23,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  *           - `require` strings → custom errors.
  *           - BSC-specific `cake` LP-deposit-fee dropped.
  */
-contract MainRewardPool {
+contract PegFarm {
     using SafeERC20 for IERC20;
 
     struct UserInfo {

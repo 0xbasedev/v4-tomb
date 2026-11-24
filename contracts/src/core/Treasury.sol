@@ -8,13 +8,13 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 import {ContractGuard} from "../libs/ContractGuard.sol";
 import {IBasisAsset} from "../interfaces/IBasisAsset.sol";
-import {IBoardroom} from "../interfaces/IBoardroom.sol";
+import {IMasonry} from "../interfaces/IMasonry.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 
 /**
  * @title Treasury
  * @notice The seigniorage engine. Ticks every 6 hours: reads the PEG/WETH TWAP, decides
- *         expansion or contraction, mints $PEG to TheClub (Boardroom) during expansion,
+ *         expansion or contraction, mints $PEG to the Masonry during expansion,
  *         opens a discounted $BOND bond window during contraction, and redeems bonds
  *         from the treasury reserve during expansion.
  * @dev    Direct port of Tomb Finance's Treasury.sol (bombmoney/bomb-contracts).
@@ -55,7 +55,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     address public peg;
     address public bond;
     address public share;
-    address public boardroom;
+    address public masonry;
     address public oracle;
 
     // Peg
@@ -95,7 +95,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     event RedeemedBonds(address indexed from, uint256 pegAmount, uint256 bondAmount);
     event BoughtBonds(address indexed from, uint256 pegAmount, uint256 bondAmount);
     event TreasuryFunded(uint256 timestamp, uint256 seigniorage);
-    event BoardroomFunded(uint256 timestamp, uint256 seigniorage);
+    event MasonryFunded(uint256 timestamp, uint256 seigniorage);
     event DaoFundFunded(uint256 timestamp, uint256 seigniorage);
     event DevFundFunded(uint256 timestamp, uint256 seigniorage);
 
@@ -156,7 +156,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
     modifier checkOperator() {
         if (
             IBasisAsset(peg).operator() != address(this) || IBasisAsset(bond).operator() != address(this)
-                || IBasisAsset(share).operator() != address(this) || IBoardroom(boardroom).operator() != address(this)
+                || IBasisAsset(share).operator() != address(this) || IMasonry(masonry).operator() != address(this)
         ) revert InsufficientPermissions();
         _;
     }
@@ -267,7 +267,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         address _bond,
         address _share,
         address _oracle,
-        address _boardroom,
+        address _masonry,
         uint256 _startTime,
         address[] memory _excludedFromTotalSupply
     ) public notInitialized {
@@ -275,7 +275,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         bond = _bond;
         share = _share;
         oracle = _oracle;
-        boardroom = _boardroom;
+        masonry = _masonry;
         startTime = _startTime;
 
         for (uint256 i = 0; i < _excludedFromTotalSupply.length; ++i) {
@@ -310,10 +310,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         premiumPercent = 7000;
 
         // Tomb-faithful per docs/tomb-skill/references/HOW_IT_WORKED.md: 28 epochs (7 days
-        // at 6h epochs) of guaranteed expansion to Boardroom regardless of price.
+        // at 6h epochs) of guaranteed expansion to Masonry regardless of price.
         // Previously 0 — fixed per TOMB_AUDIT BUG #1 (2026-05-22). The bootstrap phase
         // is load-bearing: it incentivizes early SHARE staking, which is what
-        // prevents the Boardroom-empty bricking condition (gap #16) from triggering
+        // prevents the Masonry-empty bricking condition (gap #16) from triggering
         // when the protocol enters its first expansion epoch.
         bootstrapEpochs = 28;
         bootstrapSupplyExpansionPercent = 450;
@@ -338,10 +338,10 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         operator = _operator;
     }
 
-    function setBoardroom(
-        address _boardroom
+    function setMasonry(
+        address _masonry
     ) external onlyOperator {
-        boardroom = _boardroom;
+        masonry = _masonry;
     }
 
     function setOracle(
@@ -546,7 +546,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         emit RedeemedBonds(msg.sender, pegAmount, bondAmount);
     }
 
-    function _sendToBoardroom(
+    function _sendToMasonry(
         uint256 amount
     ) internal {
         require(IBasisAsset(peg).mint(address(this), amount), "Treasury: peg mint failed");
@@ -566,9 +566,9 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         }
 
         uint256 remaining = amount - daoShare - devShare;
-        IERC20(peg).forceApprove(boardroom, remaining);
-        IBoardroom(boardroom).allocateSeigniorage(remaining);
-        emit BoardroomFunded(block.timestamp, remaining);
+        IERC20(peg).forceApprove(masonry, remaining);
+        IMasonry(masonry).allocateSeigniorage(remaining);
+        emit MasonryFunded(block.timestamp, remaining);
     }
 
     function _calculateMaxSupplyExpansionPercent(
@@ -592,32 +592,32 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         uint256 supply = getPegCirculatingSupply() - seigniorageSaved;
 
         if (epoch < bootstrapEpochs) {
-            _sendToBoardroom(supply * bootstrapSupplyExpansionPercent / 10_000);
+            _sendToMasonry(supply * bootstrapSupplyExpansionPercent / 10_000);
         } else if (previousEpochPegPrice > pegPriceCeiling) {
             // Expansion.
             uint256 bondSupply = IERC20(bond).totalSupply();
             uint256 percentage = previousEpochPegPrice - pegPriceOne;
             uint256 savedForBond = 0;
-            uint256 savedForBoardroom = 0;
+            uint256 savedForMasonry = 0;
             uint256 mse = _calculateMaxSupplyExpansionPercent(supply) * pegPriceOne / 10_000;
 
             if (percentage > mse) percentage = mse;
 
             if (seigniorageSaved >= bondSupply * bondDepletionFloorPercent / 10_000) {
-                savedForBoardroom = supply * percentage / pegPriceOne;
+                savedForMasonry = supply * percentage / pegPriceOne;
             } else {
-                // Compute boardroom share with mul-before-div to avoid the
+                // Compute masonry share with mul-before-div to avoid the
                 // divide-before-multiply pattern (Slither). Algebraically equivalent to
                 // Tomb's two-step (supply*pct/priceOne then *floorPct/10000) at sub-wei
                 // precision, which is meaningless at our 1e23+ wei scale.
-                savedForBoardroom = supply * percentage * seigniorageExpansionFloorPercent / pegPriceOne / 10_000;
+                savedForMasonry = supply * percentage * seigniorageExpansionFloorPercent / pegPriceOne / 10_000;
                 uint256 totalSeigniorage = supply * percentage / pegPriceOne;
-                savedForBond = totalSeigniorage - savedForBoardroom;
+                savedForBond = totalSeigniorage - savedForMasonry;
                 if (mintingFactorForPayingDebt > 0) {
                     savedForBond = savedForBond * mintingFactorForPayingDebt / 10_000;
                 }
             }
-            if (savedForBoardroom > 0) _sendToBoardroom(savedForBoardroom);
+            if (savedForMasonry > 0) _sendToMasonry(savedForMasonry);
             if (savedForBond > 0) {
                 // Effects-before-interactions: bump seigniorageSaved first, then mint.
                 seigniorageSaved += savedForBond;
@@ -627,7 +627,7 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         }
     }
 
-    /* =================== RESCUES + BOARDROOM PROXIES =================== */
+    /* =================== RESCUES + MASONRY PROXIES =================== */
 
     function governanceRecoverUnsupported(
         IERC20 token,
@@ -640,30 +640,30 @@ contract Treasury is ContractGuard, ReentrancyGuard {
         token.safeTransfer(to, amount);
     }
 
-    function boardroomSetOperator(
+    function masonrySetOperator(
         address _operator
     ) external onlyOperator {
-        IBoardroom(boardroom).setOperator(_operator);
+        IMasonry(masonry).setOperator(_operator);
     }
 
-    function boardroomSetLockUp(
+    function masonrySetLockUp(
         uint256 withdrawLockupEpochs,
         uint256 rewardLockupEpochs
     ) external onlyOperator {
-        IBoardroom(boardroom).setLockUp(withdrawLockupEpochs, rewardLockupEpochs);
+        IMasonry(masonry).setLockUp(withdrawLockupEpochs, rewardLockupEpochs);
     }
 
-    function boardroomAllocateSeigniorage(
+    function masonryAllocateSeigniorage(
         uint256 amount
     ) external onlyOperator {
-        IBoardroom(boardroom).allocateSeigniorage(amount);
+        IMasonry(masonry).allocateSeigniorage(amount);
     }
 
-    function boardroomGovernanceRecoverUnsupported(
+    function masonryGovernanceRecoverUnsupported(
         address token,
         uint256 amount,
         address to
     ) external onlyOperator {
-        IBoardroom(boardroom).governanceRecoverUnsupported(token, amount, to);
+        IMasonry(masonry).governanceRecoverUnsupported(token, amount, to);
     }
 }

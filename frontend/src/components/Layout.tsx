@@ -15,8 +15,8 @@ import { useIsAdmin } from "@/lib/hooks";
 
 const NAV_ITEMS: { label: string; to: string }[] = [
   { label: "The Ledger", to: "/dashboard" },
-  { label: "The Club", to: "/club" },
-  { label: "The Vault", to: "/vault" },
+  { label: "The Masonry", to: "/masonry" },
+  { label: "The Farms", to: "/farms" },
   { label: "Bonds", to: "/bonds" },
   { label: "Exchange", to: "/swap" },
   { label: "Docs", to: "/docs" },
@@ -117,8 +117,8 @@ function Footer() {
               The Mechanism
             </Link>
             <span className="text-deco-gold-dark">·</span>
-            <Link to="/club" className="label-deco hover:text-deco-gold-light">
-              The Club
+            <Link to="/masonry" className="label-deco hover:text-deco-gold-light">
+              The Masonry
             </Link>
           </div>
         </div>

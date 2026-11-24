@@ -23,7 +23,7 @@ import {
  * LiquidityAmounts ports.
  *
  * On confirmation the user holds a new V4 NFT in their wallet. The WrapPanel
- * below this on /vault is the next step in the chain.
+ * below this on /farms is the next step in the chain.
  */
 
 const TICK_SPACING = 60;
@@ -32,7 +32,7 @@ const DYNAMIC_FEE_FLAG = 0x800000;
 interface MintPositionPanelProps {
   poolName: string;
   /**
-   * Called when a mint receipt confirms with the parsed tokenId. The Vault
+   * Called when a mint receipt confirms with the parsed tokenId. The Farms
    * uses this to hand the tokenId straight to the WrapPanel below, so the
    * user doesn't have to copy/paste from BaseScan.
    */

@@ -7,11 +7,11 @@ import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {Timelock} from "../../src/governance/Timelock.sol";
 import {GenesisRewardPool} from "../../src/distribution/GenesisRewardPool.sol";
-import {MainRewardPool} from "../../src/distribution/MainRewardPool.sol";
-import {ShareRewardPool} from "../../src/distribution/ShareRewardPool.sol";
+import {PegFarm} from "../../src/distribution/PegFarm.sol";
+import {ShareFarm} from "../../src/distribution/ShareFarm.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {MockOracle} from "../utils/MockOracle.sol";
@@ -35,11 +35,11 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  *           Single-step operator (rotated to Timelock directly):
  *             - Treasury.operator       = Timelock
  *             - GenesisRewardPool.operator = Timelock
- *             - MainRewardPool.operator    = Timelock
- *             - ShareRewardPool.operator   = Timelock
+ *             - PegFarm.operator    = Timelock
+ *             - ShareFarm.operator   = Timelock
  *
  *           Unchanged (protocol-internal — rotating breaks the seigniorage flow):
- *             - Boardroom.operator   = Treasury   (Treasury calls allocateSeigniorage)
+ *             - Masonry.operator   = Treasury   (Treasury calls allocateSeigniorage)
  *             - PegToken.trustees    = Treasury   (Treasury mints/burns)
  *             - ShareToken.trustees      = Treasury
  *             - BondToken.trustees   = Treasury
@@ -64,10 +64,10 @@ contract GovernanceRotationTest is BaseTest {
     ShareToken internal share;
     BondToken internal bond;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     GenesisRewardPool internal genesisRewardPool;
-    MainRewardPool internal mainRewardPool;
-    ShareRewardPool internal shareRewardPool;
+    PegFarm internal pegFarm;
+    ShareFarm internal shareFarm;
     MockOracle internal oracle;
     Timelock internal timelock;
 
@@ -95,30 +95,30 @@ contract GovernanceRotationTest is BaseTest {
 
         // Deploy reward pools (deployer = owner = operator of each).
         genesisRewardPool = new GenesisRewardPool(address(peg), startTime);
-        mainRewardPool = new MainRewardPool(address(peg), startTime + 1 days);
-        shareRewardPool = new ShareRewardPool(address(share), startTime + 1 days);
+        pegFarm = new PegFarm(address(peg), startTime + 1 days);
+        shareFarm = new ShareFarm(address(share), startTime + 1 days);
 
-        // Deploy Treasury + Boardroom and wire.
+        // Deploy Treasury + Masonry and wire.
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = address(genesisRewardPool);
-        excluded[1] = address(mainRewardPool);
+        excluded[1] = address(pegFarm);
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
-        peg.distributeReward(address(genesisRewardPool), address(mainRewardPool), airdropWallet);
-        share.distributeReward(address(shareRewardPool));
+        peg.distributeReward(address(genesisRewardPool), address(pegFarm), airdropWallet);
+        share.distributeReward(address(shareFarm));
 
-        // Hand off trustees on tokens and operator on boardroom to Treasury.
+        // Hand off trustees on tokens and operator on masonry to Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
 
         // Deploy Timelock with admin = owner (the deployer EOA).
         timelock = new Timelock(owner, TIMELOCK_DELAY);
@@ -144,11 +144,11 @@ contract GovernanceRotationTest is BaseTest {
         // Treasury + reward pools: operator = deployer.
         assertEq(treasury.operator(), owner, "treasury operator == deployer");
         assertEq(genesisRewardPool.operator(), owner, "genesis operator == deployer");
-        assertEq(mainRewardPool.operator(), owner, "main operator == deployer");
-        assertEq(shareRewardPool.operator(), owner, "share operator == deployer");
+        assertEq(pegFarm.operator(), owner, "main operator == deployer");
+        assertEq(shareFarm.operator(), owner, "share operator == deployer");
 
-        // Boardroom: operator = Treasury (stays).
-        assertEq(boardroom.operator(), address(treasury), "boardroom operator == treasury");
+        // Masonry: operator = Treasury (stays).
+        assertEq(masonry.operator(), address(treasury), "masonry operator == treasury");
 
         // Timelock: admin = deployer, delay = 24h.
         assertEq(timelock.admin(), owner, "timelock admin == deployer");
@@ -171,8 +171,8 @@ contract GovernanceRotationTest is BaseTest {
         // Stage 2b: single-step operator rotation.
         treasury.setOperator(address(timelock));
         genesisRewardPool.setOperator(address(timelock));
-        mainRewardPool.setOperator(address(timelock));
-        shareRewardPool.setOperator(address(timelock));
+        pegFarm.setOperator(address(timelock));
+        shareFarm.setOperator(address(timelock));
 
         // Stage 2c: queue acceptOwnership for each Ownable2Step contract via Timelock.
         timelock.queueTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
@@ -186,8 +186,8 @@ contract GovernanceRotationTest is BaseTest {
         assertEq(bond.pendingOwner(), address(timelock), "bond pendingOwner == timelock");
         assertEq(treasury.operator(), address(timelock), "treasury operator == timelock");
         assertEq(genesisRewardPool.operator(), address(timelock), "genesis operator == timelock");
-        assertEq(mainRewardPool.operator(), address(timelock), "main operator == timelock");
-        assertEq(shareRewardPool.operator(), address(timelock), "share operator == timelock");
+        assertEq(pegFarm.operator(), address(timelock), "main operator == timelock");
+        assertEq(shareFarm.operator(), address(timelock), "share operator == timelock");
 
         // Cannot execute before eta.
         vm.expectRevert(Timelock.TransactionNotMature.selector);
@@ -213,8 +213,8 @@ contract GovernanceRotationTest is BaseTest {
         assertEq(share.trustees(), address(treasury), "share trustees still treasury");
         assertEq(bond.trustees(), address(treasury), "bond trustees still treasury");
 
-        // Boardroom unchanged.
-        assertEq(boardroom.operator(), address(treasury), "boardroom operator still treasury");
+        // Masonry unchanged.
+        assertEq(masonry.operator(), address(treasury), "masonry operator still treasury");
 
         // pendingOwner cleared after acceptOwnership.
         assertEq(peg.pendingOwner(), address(0), "peg pendingOwner cleared");
@@ -316,8 +316,8 @@ contract GovernanceRotationTest is BaseTest {
         bond.transferOwnership(address(timelock));
         treasury.setOperator(address(timelock));
         genesisRewardPool.setOperator(address(timelock));
-        mainRewardPool.setOperator(address(timelock));
-        shareRewardPool.setOperator(address(timelock));
+        pegFarm.setOperator(address(timelock));
+        shareFarm.setOperator(address(timelock));
         timelock.queueTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);

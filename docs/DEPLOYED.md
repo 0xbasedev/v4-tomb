@@ -25,10 +25,10 @@ The authoritative source is always the broadcast file at `contracts/broadcast/De
 | `PegDefenseHook` | `0xF0DBfD05d9Aab625e489e49F97f16c9fA9Ee9080` | [view](https://sepolia.basescan.org/address/0xF0DBfD05d9Aab625e489e49F97f16c9fA9Ee9080) |
 | `Oracle` | `0xcacF0Cd984491679c8F10cBc8cE1A57657Fd1A74` | [view](https://sepolia.basescan.org/address/0xcacF0Cd984491679c8F10cBc8cE1A57657Fd1A74) |
 | `GenesisRewardPool` | `0x72cE03cCA932E6C4B5380693d0f914e52dc574C8` | [view](https://sepolia.basescan.org/address/0x72cE03cCA932E6C4B5380693d0f914e52dc574C8) |
-| `MainRewardPool` | `0x58b149740d2Bb6dc47CC03AEDA088435bDAb9256` | [view](https://sepolia.basescan.org/address/0x58b149740d2Bb6dc47CC03AEDA088435bDAb9256) |
-| `ShareRewardPool` | `0xA0CA315073C65A97692b57343d0EB1f3889F989e` | [view](https://sepolia.basescan.org/address/0xA0CA315073C65A97692b57343d0EB1f3889F989e) |
+| `PegFarm` | `0x58b149740d2Bb6dc47CC03AEDA088435bDAb9256` | [view](https://sepolia.basescan.org/address/0x58b149740d2Bb6dc47CC03AEDA088435bDAb9256) |
+| `ShareFarm` | `0xA0CA315073C65A97692b57343d0EB1f3889F989e` | [view](https://sepolia.basescan.org/address/0xA0CA315073C65A97692b57343d0EB1f3889F989e) |
 | `Treasury` | `0x522b65A06EEdf277B5784eC18167963157C9cC06` | [view](https://sepolia.basescan.org/address/0x522b65A06EEdf277B5784eC18167963157C9cC06) |
-| `Boardroom` | `0xE9648a87450e933c76Cfc19415F03c3EF65af373` | [view](https://sepolia.basescan.org/address/0xE9648a87450e933c76Cfc19415F03c3EF65af373) |
+| `Masonry` | `0xE9648a87450e933c76Cfc19415F03c3EF65af373` | [view](https://sepolia.basescan.org/address/0xE9648a87450e933c76Cfc19415F03c3EF65af373) |
 
 ### V4 pool
 
@@ -50,8 +50,8 @@ All 11 contracts verified during the deploy via `--verify`. Compile profile: sol
 | Address | $LEVEL | $SQUARE |
 |---|---|---|
 | GenesisRewardPool | 11,000 | — |
-| MainRewardPool | 140,000 | — |
-| ShareRewardPool | — | 59,500 |
+| PegFarm | 140,000 | — |
+| ShareFarm | — | 59,500 |
 | Airdrop wallet (`0x6d60...5Bb9`) | 9,001 ¹ | — |
 | Deployer (`0x6d60...5Bb9`) | (same as airdrop wallet in testnet) | 1 ² |
 
@@ -65,19 +65,19 @@ All 11 contracts verified during the deploy via `--verify`. Compile profile: sol
 | $LEVEL | `Treasury` `0x522b...cC06` ✓ |
 | $SQUARE | `Treasury` `0x522b...cC06` ✓ |
 | $BOND | `Treasury` `0x522b...cC06` ✓ |
-| `Boardroom` | `Treasury` `0x522b...cC06` ✓ |
+| `Masonry` | `Treasury` `0x522b...cC06` ✓ |
 | `Treasury` | Deployer `0x6d60...5Bb9` (rotate to Timelock in Sprint 14) |
 | `PegDefenseHook` | Deployer `0x6d60...5Bb9` (also a Trustees field, rotate to Timelock) |
 | `Oracle` | Deployer `0x6d60...5Bb9` (rotate to Timelock) |
-| `GenesisRewardPool` / `MainRewardPool` / `ShareRewardPool` | Deployer `0x6d60...5Bb9` (operator-only — adds LP pool entries) |
+| `GenesisRewardPool` / `PegFarm` / `ShareFarm` | Deployer `0x6d60...5Bb9` (operator-only — adds LP pool entries) |
 
 ### Pending manual steps before testnet is "alive"
 
 1. **Add LP pool entries** to the three reward pools. The deployer calls `add(allocPoint, lpToken, false, 0)` on each pool for every LP token the protocol supports. Example sequence:
    ```
    genesisRewardPool.add(100, LEVEL_CBETH_LP_TOKEN, false, 0);
-   mainRewardPool.add(100, LEVEL_CBETH_LP_TOKEN, false, 0);
-   shareRewardPool.add(100, SQUARE_CBETH_LP_TOKEN, false, 0);
+   pegFarm.add(100, LEVEL_CBETH_LP_TOKEN, false, 0);
+   shareFarm.add(100, SQUARE_CBETH_LP_TOKEN, false, 0);
    ```
    On Base Sepolia, "LP tokens" come from the V4 PositionManager — adding liquidity to a V4 pool gives you an ERC-721 position NFT, NOT an ERC-20 LP token. To use MasterChef-style staking, we'll need wrapper contracts that ERC-20-ize the V4 positions. **This is a real gap to fix before Sprint 17 (frontend).**
 2. **Seed initial liquidity** into the LEVEL/cbETH V4 pool (manual call to `PositionManager.modifyLiquidities`).

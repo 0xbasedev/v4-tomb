@@ -8,7 +8,7 @@ import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
 import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
@@ -62,7 +62,7 @@ contract BaseForkHookTaxTest is BaseTest {
     ShareToken internal share;
     BondToken internal bond;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     Oracle internal oracle;
     PegDefenseHook internal hook;
     IPoolManager internal poolManager;
@@ -138,17 +138,17 @@ contract BaseForkHookTaxTest is BaseTest {
         // Deploy Oracle pointing at the hook as IPriceSource.
         oracle = new Oracle(IPriceSource(address(hook)), address(peg), weth, 6 hours, startTime);
 
-        // Deploy Treasury + Boardroom, init, hand off operator.
+        // Deploy Treasury + Masonry, init, hand off operator.
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
@@ -158,15 +158,15 @@ contract BaseForkHookTaxTest is BaseTest {
         // the trustees handoff to Treasury (otherwise test contract loses mint authority).
         peg.mint(address(this), TEST_PEG_BAL);
 
-        // Hand off operator authority on every token + boardroom to Treasury.
+        // Hand off operator authority on every token + masonry to Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
 
-        // Boardroom seed so bootstrap-branch allocateSeigniorage doesn't revert (gap #16).
-        share.approve(address(boardroom), 1);
-        boardroom.stake(1);
+        // Masonry seed so bootstrap-branch allocateSeigniorage doesn't revert (gap #16).
+        share.approve(address(masonry), 1);
+        masonry.stake(1);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.
         vm.deal(address(this), TEST_WETH_BAL);

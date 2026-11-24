@@ -5,13 +5,13 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
- * @title ShareRewardPool
+ * @title ShareFarm
  * @notice 370-day MasterChef-style farm for $SHARE distribution. ShareToken's farming
  *         allocation (59,500 SHARE from `ShareToken.distributeReward(farmingPool)`) is
  *         pre-funded into this contract; LPs stake their LP tokens and earn SHARE
  *         pro-rata over the year.
  *
- * @dev    Direct port of Tomb Finance's BShareRewardPool. Same MasterChef machinery
+ * @dev    Direct port of Tomb Finance's BShareFarm. Same MasterChef machinery
  *         as GenesisRewardPool but with `share` (SHARE) as the reward token, a longer
  *         RUNNING_TIME (370 days), and different TOTAL_REWARDS (59,500 SHARE).
  *
@@ -23,7 +23,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  *         No `cake` deposit-fee logic (BSC-specific, dropped — same reason as
  *         GenesisRewardPool).
  */
-contract ShareRewardPool {
+contract ShareFarm {
     using SafeERC20 for IERC20;
 
     struct UserInfo {

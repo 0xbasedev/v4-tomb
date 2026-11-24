@@ -101,7 +101,7 @@ export const pegRewardPoolAbi = [
 ] as const;
 
 /** Share-emitting reward pool (Share pool — emits SQUARE). */
-export const shareRewardPoolAbi = [
+export const shareFarmAbi = [
   {
     type: "function",
     name: "poolInfo",

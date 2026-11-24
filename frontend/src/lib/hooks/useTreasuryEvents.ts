@@ -11,7 +11,7 @@ import { useDeployment } from "./useDeployment";
  *
  * Events scanned:
  *   - TreasuryFunded(timestamp, seigniorage)   — reserve accrual during expansion
- *   - BoardroomFunded(timestamp, seigniorage)  — Boardroom payout (the canonical
+ *   - MasonryFunded(timestamp, seigniorage)  — Masonry payout (the canonical
  *                                                 "epoch ticked" signal)
  *   - DaoFundFunded / DevFundFunded            — team rake (off by default)
  *   - BoughtBonds(from, pegAmount, bondAmount)   — contraction-window bond buy
@@ -27,7 +27,7 @@ import { useDeployment } from "./useDeployment";
 
 const EVENTS = {
   TreasuryFunded: parseAbiItem("event TreasuryFunded(uint256 timestamp, uint256 seigniorage)"),
-  BoardroomFunded: parseAbiItem("event BoardroomFunded(uint256 timestamp, uint256 seigniorage)"),
+  MasonryFunded: parseAbiItem("event MasonryFunded(uint256 timestamp, uint256 seigniorage)"),
   DaoFundFunded: parseAbiItem("event DaoFundFunded(uint256 timestamp, uint256 seigniorage)"),
   DevFundFunded: parseAbiItem("event DevFundFunded(uint256 timestamp, uint256 seigniorage)"),
   BoughtBonds: parseAbiItem(
@@ -40,7 +40,7 @@ const EVENTS = {
 
 export type TreasuryEventKind =
   | "TreasuryFunded"
-  | "BoardroomFunded"
+  | "MasonryFunded"
   | "DaoFundFunded"
   | "DevFundFunded"
   | "BoughtBonds"
@@ -90,7 +90,7 @@ export function useTreasuryEvents({ limit = 10 }: UseTreasuryEventsOptions = {})
         };
         const [tf, bf, daoF, devF, bb, rb] = await Promise.all([
           publicClient.getLogs({ ...baseFilter, event: EVENTS.TreasuryFunded }),
-          publicClient.getLogs({ ...baseFilter, event: EVENTS.BoardroomFunded }),
+          publicClient.getLogs({ ...baseFilter, event: EVENTS.MasonryFunded }),
           publicClient.getLogs({ ...baseFilter, event: EVENTS.DaoFundFunded }),
           publicClient.getLogs({ ...baseFilter, event: EVENTS.DevFundFunded }),
           publicClient.getLogs({ ...baseFilter, event: EVENTS.BoughtBonds }),
@@ -109,7 +109,7 @@ export function useTreasuryEvents({ limit = 10 }: UseTreasuryEventsOptions = {})
           transactionHash: log.transactionHash!,
         }));
         const bfRows: TreasuryEventRow[] = bf.map((log) => ({
-          kind: "BoardroomFunded",
+          kind: "MasonryFunded",
           blockNumber: log.blockNumber!,
           logIndex: log.logIndex!,
           timestamp: log.args.timestamp!,

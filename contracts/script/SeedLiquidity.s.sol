@@ -32,7 +32,7 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
  *         **wrapper's exact tick range** (full range, `minUsableTick(60)` to
  *         `maxUsableTick(60)`). The resulting position NFT lands in the operator's
  *         wallet — they can later wrap it via `V4PositionWrapper.wrap(tokenId)` and stake
- *         the shares in `MainRewardPool` to start earning, OR lock it (transfer to a
+ *         the shares in `PegFarm` to start earning, OR lock it (transfer to a
  *         zero/burn address) to make the liquidity protocol-owned forever.
  *
  *         Where the assets come from (per `docs/tomb-skill/references/HOW_IT_WORKED.md`):
@@ -68,7 +68,8 @@ contract SeedLiquidity is NetworkConfig {
             peg: _deployment("peg"),
             weth: _infrastructure("weth"),
             hook: _deployment("hook"),
-            pegAmount: vm.envUint("PEG_AMOUNT"),
+            // MONEY_AMOUNT is the former name; still honoured so existing runbooks keep working.
+            pegAmount: vm.envOr("PEG_AMOUNT", vm.envOr("MONEY_AMOUNT", uint256(0))),
             wethAmount: vm.envUint("WETH_AMOUNT")
         });
 

@@ -55,7 +55,7 @@ function toRoman(n: number): string {
 // Friendly labels for the event-feed table.
 const EVENT_LABEL: Record<TreasuryEventKind, string> = {
   TreasuryFunded: "Reserve · Treasury Funded",
-  BoardroomFunded: "Expansion · Boardroom Paid",
+  MasonryFunded: "Expansion · Masonry Paid",
   DaoFundFunded: "Allocation · Dao Fund",
   DevFundFunded: "Allocation · Dev Fund",
   BoughtBonds: "Bond · Acquired",

@@ -199,7 +199,7 @@ Note step 10: `poolManager.take` requires the unlock context, which `beforeSwap`
 
 3. **Exact-output swaps** — when `amountSpecified > 0` (exact output), the specified token is what's received, the unspecified is what's paid. For a sell (LEVEL → WETH, exact-output WETH), the unspecified is LEVEL. To take LEVEL tax, set `deltaUnspecified > 0`. The downside: we don't know the exact LEVEL amount until after the swap clears. Approach: estimate from the pool's current tick + WETH amount, take the estimated tax, then if the actual sale's LEVEL input differs slightly, accept the rounding (sub-cent). Document the precision limitation.
 
-4. **Concurrent excluded-address management** — the trustees list controls which addresses bypass tax. Required to be set for: Treasury, PoolManager, all reward pools, the hook itself, any V4 LP wrappers we deploy. Without proper exclusion, the protocol's own seigniorage flow gets taxed (bad — seigniorage going TO Boardroom would be partially burned).
+4. **Concurrent excluded-address management** — the trustees list controls which addresses bypass tax. Required to be set for: Treasury, PoolManager, all reward pools, the hook itself, any V4 LP wrappers we deploy. Without proper exclusion, the protocol's own seigniorage flow gets taxed (bad — seigniorage going TO Masonry would be partially burned).
 
 5. **Tax during expansion is also possible** — above peg, the table still returns 1-9% tax for sells. This is correct: even when above peg, sells still cause a small amount of supply contraction. Tomb did this; we match.
 
@@ -366,7 +366,7 @@ by a `test_KnownLimit_*` test so a future change cannot alter it silently.
   recognise the official pool, so shadow pools get no emissions and cannot move the TWAP.
 - **`excludedAddresses` exempts routers, not users.** V4 passes the hook the address that
   called `PoolManager.swap`. Excluding a router exempts everyone who trades through it.
-  Treasury, Boardroom and the reward pools never call `swap`, so they never need excluding
+  Treasury, Masonry and the reward pools never call `swap`, so they never need excluding
   (the edge-case list above is wrong on this point). Leave the mapping empty unless a
   single-purpose protocol contract swaps for itself.
 - **LP positions are resting asks, not sells.** Single-sided LEVEL liquidity above the
@@ -379,7 +379,7 @@ by a `test_KnownLimit_*` test so a future change cannot alter it silently.
 
 SQUARE has no sell tax, and none is planned. Tomb's TSHARE was untaxed too. The LEVEL tax
 exists to burn supply while below peg; SQUARE has no peg, so a tax on it would only be a
-fee on entering and leaving the Boardroom. If protocol revenue from SQUARE trading is ever
+fee on entering and leaving the Masonry. If protocol revenue from SQUARE trading is ever
 wanted, the clean form is a flat LP-fee split on an SQUARE pool, not this hook's tier table.
 
 ---
@@ -492,7 +492,7 @@ red.
 `contracts/src/hooks/ShareBuybackHook.sol` implements the share-token policy as a second
 hook, on the SHARE/QUOTE pool. In the approved design that is SQUARE/USDC with LEVEL as the
 peg token; in this repository's own tokens it would be SQUARE/WETH with LEVEL. The hook
-takes all three as constructor addresses and has no dependency on Treasury, Boardroom or
+takes all three as constructor addresses and has no dependency on Treasury, Masonry or
 the Oracle.
 
 | Step | What happens | Why it cannot be abused or get stuck |

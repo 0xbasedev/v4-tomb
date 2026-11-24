@@ -181,7 +181,7 @@ contract NetworkConfigTest is Test {
         assertTrue(address(deploy.pairLpWrapper()) != address(deploy.lpWrapper()));
         assertEq(deploy.peg().operator(), address(deploy.treasury()));
         assertEq(deploy.peg().balanceOf(address(deploy.genesisRewardPool())), 11_000 ether);
-        assertEq(deploy.share().balanceOf(address(deploy.shareRewardPool())), 59_500 ether);
+        assertEq(deploy.share().balanceOf(address(deploy.shareFarm())), 59_500 ether);
         assertEq(deploy.timelock().admin(), address(0xABCD));
         assertEq(address(deploy.miniSwapRouter().poolManager()), realManager);
         string memory file = string.concat("./deployment-output/", vm.toString(block.chainid), ".json");

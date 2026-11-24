@@ -16,7 +16,7 @@ import { RuleTrio } from "@/components/RuleTrio";
  *   - The Three SQUARE ($LEVEL, $SQUARE, $BOND)
  *   - How to Begin (the three entry paths)
  *   - The Liquidity Loop (mint→wrap→stake→exit)
- *   - The Club (SQUARE staking)
+ *   - The Masonry (SQUARE staking)
  *   - The Bond Office (Bonds)
  *   - The Treasury Cycle (epochs, expansion, contraction)
  *   - Peg Defense (hook + TWAP-keyed sell tax)
@@ -29,7 +29,7 @@ const TOC: { id: string; label: string }[] = [
   { id: "shares", label: "The Three SQUARE" },
   { id: "begin", label: "How to Begin" },
   { id: "loop", label: "The Liquidity Loop" },
-  { id: "club", label: "The Club" },
+  { id: "masonry", label: "The Masonry" },
   { id: "bonds", label: "The Bond Office" },
   { id: "cycle", label: "The Treasury Cycle" },
   { id: "defense", label: "Peg Defense" },
@@ -94,7 +94,7 @@ export function Docs() {
         <P>
           Participants enter through Genesis, the 24-hour bootstrap pool, or by
           providing LEVEL-WETH liquidity to one of two reward pools. Holders of
-          SQUARE stake in The Club to receive a share of every expansion epoch's
+          SQUARE stake in The Masonry to receive a share of every expansion epoch's
           seigniorage. Speculators trade the bond market on the difference
           between depressed and recovered prices.
         </P>
@@ -111,7 +111,7 @@ export function Docs() {
           b={{
             title: "$SQUARE",
             sub: "The Share",
-            body: "Hard-capped at 70,000. Earned by providing LEVEL-WETH liquidity (Share Pool, 370 days). Stake in The Club to receive a pro-rata cut of every expansion epoch's freshly-minted LEVEL. The longer the stake, the deeper the role.",
+            body: "Hard-capped at 70,000. Earned by providing LEVEL-WETH liquidity (Share Pool, 370 days). Stake in The Masonry to receive a pro-rata cut of every expansion epoch's freshly-minted LEVEL. The longer the stake, the deeper the role.",
           }}
           c={{
             title: "$BOND",
@@ -133,7 +133,7 @@ export function Docs() {
           condition="You hold ETH and want to enter at launch."
           steps={[
             "Wrap your ETH to WETH",
-            "Visit /vault during the 24-hour Genesis Window and deposit",
+            "Visit /farms during the 24-hour Genesis Window and deposit",
             "Earn LEVEL pro-rata over the window's duration",
             "Withdraw your WETH + claim LEVEL when the window closes",
           ]}
@@ -143,7 +143,7 @@ export function Docs() {
           title="The Provider of Liquidity"
           condition="You hold LEVEL and ETH and want to earn yield."
           steps={[
-            "On /vault Main, mint a full-range LEVEL-WETH liquidity position",
+            "On /farms Main, mint a full-range LEVEL-WETH liquidity position",
             "Wrap the resulting V4 LP NFT into ERC-20 share certificates",
             "Stake the certificates in the Main Pool to earn LEVEL (9 days) or Share Pool to earn SQUARE (370 days)",
             "Withdraw, unwrap, and burn the position to reclaim your underlying assets",
@@ -154,7 +154,7 @@ export function Docs() {
           title="The Member"
           condition="You hold SQUARE and want a share of every expansion."
           steps={[
-            "Visit /club and stake your SQUARE in the Boardroom",
+            "Visit /masonry and stake your SQUARE in the Masonry",
             "Wait through the six-epoch withdraw lockup and three-epoch reward lockup",
             "Each expansion epoch, claim your share of freshly-minted LEVEL",
             "Withdraw your SQUARE when you are done",
@@ -192,10 +192,10 @@ export function Docs() {
         />
       </Section>
 
-      {/* ===== The Club ===== */}
-      <Section id="club" title="The Club">
+      {/* ===== The Masonry ===== */}
+      <Section id="masonry" title="The Masonry">
         <P>
-          The Club is what the protocol calls its Boardroom — the contract that
+          The Masonry is what the protocol calls its Masonry — the contract that
           receives every expansion epoch's freshly-minted LEVEL and distributes
           it pro-rata to SQUARE stakers.
         </P>
@@ -210,11 +210,11 @@ export function Docs() {
         </P>
         <P>
           Mechanically: when the Treasury enters an expansion epoch, it mints
-          LEVEL directly to the Boardroom and calls{" "}
+          LEVEL directly to the Masonry and calls{" "}
           <code className="font-ornament text-deco-gold">
-            boardroom.allocateSeigniorage(amount)
+            masonry.allocateSeigniorage(amount)
           </code>
-          . The Boardroom records a per-share snapshot. When you call{" "}
+          . The Masonry records a per-share snapshot. When you call{" "}
           <code className="font-ornament text-deco-gold">claimReward()</code> the
           contract computes your earned amount as{" "}
           <code className="font-ornament text-deco-gold">
@@ -294,12 +294,12 @@ export function Docs() {
           a={{
             title: "Bootstrap",
             sub: "Epochs 0 – 27",
-            body: "Unconditional expansion. The Treasury mints 4.5% of circulating supply each epoch and routes it to The Club regardless of price. Seven days. This period is load-bearing — it incentivizes early staking so that subsequent oracle-driven expansion has somewhere to land.",
+            body: "Unconditional expansion. The Treasury mints 4.5% of circulating supply each epoch and routes it to The Masonry regardless of price. Seven days. This period is load-bearing — it incentivizes early staking so that subsequent oracle-driven expansion has somewhere to land.",
           }}
           b={{
             title: "Expansion",
             sub: "price ≥ 1.01 WETH",
-            body: "Above the ceiling. Treasury mints fresh LEVEL scaled by the price premium. Either funds the seigniorage reserve (for future bond redemptions) or routes to The Club, depending on whether outstanding bonds need backing. DaoFund and DevFund take their configured cuts.",
+            body: "Above the ceiling. Treasury mints fresh LEVEL scaled by the price premium. Either funds the seigniorage reserve (for future bond redemptions) or routes to The Masonry, depending on whether outstanding bonds need backing. DaoFund and DevFund take their configured cuts.",
           }}
           c={{
             title: "Contraction",
@@ -362,7 +362,7 @@ export function Docs() {
         />
         <Risk
           title="Bootstrap Drift"
-          body="The first 28 epochs (seven days) mint unconditionally. If demand for SQUARE is weak in this window, the resulting LEVEL supply can exceed market appetite and push price below par before the price-aware mechanisms activate at epoch 29. Mitigations: Genesis pool gives early participants a first-mover advantage; the protocol launches with the 1-SQUARE construction mint to seed Boardroom from day one."
+          body="The first 28 epochs (seven days) mint unconditionally. If demand for SQUARE is weak in this window, the resulting LEVEL supply can exceed market appetite and push price below par before the price-aware mechanisms activate at epoch 29. Mitigations: Genesis pool gives early participants a first-mover advantage; the protocol launches with the 1-SQUARE construction mint to seed Masonry from day one."
         />
         <Risk
           title="Oracle Lag"
@@ -381,10 +381,10 @@ export function Docs() {
       {/* ===== Glossary ===== */}
       <Section id="glossary" title="Glossary">
         <Term term="Epoch" body="A six-hour window. The Treasury ticks at each boundary, advancing the epoch counter and executing expansion or contraction logic." />
-        <Term term="Seigniorage" body="Newly-minted LEVEL distributed during expansion epochs. Routed primarily to The Club, with optional cuts to the daoFund and devFund." />
-        <Term term="Bootstrap" body="The first 28 epochs (seven days) after deploy. Unconditional 4.5% expansion regardless of price, to seed Boardroom and establish initial economy." />
+        <Term term="Seigniorage" body="Newly-minted LEVEL distributed during expansion epochs. Routed primarily to The Masonry, with optional cuts to the daoFund and devFund." />
+        <Term term="Bootstrap" body="The first 28 epochs (seven days) after deploy. Unconditional 4.5% expansion regardless of price, to seed Masonry and establish initial economy." />
         <Term term="Hook" body="A Uniswap V4 contract that runs on every swap of a specific pool. Old Money's PegDefenseHook handles observation, dynamic fees, and the sell-side tax." />
-        <Term term="The Club / Boardroom" body="The contract that holds staked SQUARE and distributes seigniorage. Same thing, two names — the contract is named Boardroom for auditor familiarity; the user-facing label is The Club." />
+        <Term term="The Masonry / Masonry" body="The contract that holds staked SQUARE and distributes seigniorage. Same thing, two names — the contract is named Masonry for auditor familiarity; the user-facing label is The Masonry." />
         <Term term="TWAP" body="Time-Weighted Average Price. The oracle reports this rather than spot, smoothing short-term volatility. Computed from the hook's accumulated tick observations." />
         <Term term="V4 LP NFT" body="An ERC-721 representing a Uniswap V4 liquidity position. Holds the position's exact tick range and accumulated fees. Not directly stake-able in our reward pools — must be wrapped first." />
         <Term term="Wrapper Shares" body="ERC-20 tokens minted 1:1 with V4 LP NFT liquidity by the V4PositionWrapper. Stake-able in Main and Share pools." />
@@ -409,8 +409,8 @@ export function Docs() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link to="/dashboard" className="btn-deco">The Ledger</Link>
-              <Link to="/vault" className="btn-deco">The Vault</Link>
-              <Link to="/club" className="btn-deco">The Club</Link>
+              <Link to="/farms" className="btn-deco">The Farms</Link>
+              <Link to="/masonry" className="btn-deco">The Masonry</Link>
               <Link to="/bonds" className="btn-deco">Bonds</Link>
               <Link to="/swap" className="btn-deco">The Exchange</Link>
             </div>

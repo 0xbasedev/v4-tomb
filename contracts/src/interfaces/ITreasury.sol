@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 /**
  * @title ITreasury
- * @notice Tomb-shape interface for the Treasury contract. Boardroom and any peripheral
+ * @notice Tomb-shape interface for the Treasury contract. Masonry and any peripheral
  *         contracts call into this for epoch / price / bond data.
  */
 interface ITreasury {

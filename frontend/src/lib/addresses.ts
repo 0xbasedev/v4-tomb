@@ -10,8 +10,8 @@ export interface PegTokenDeployment {
   bond: Address;
   /** Treasury — seigniorage engine, bond office. */
   treasury: Address;
-  /** Boardroom — SQUARE staking, LEVEL rewards. */
-  boardroom: Address;
+  /** Masonry — SQUARE staking, LEVEL rewards. */
+  masonry: Address;
   /** TWAP oracle. */
   oracle: Address;
   /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
@@ -27,9 +27,9 @@ export interface PegTokenDeployment {
   /** Genesis reward pool (24h window, accepts outside ERC-20s). */
   genesisRewardPool: Address;
   /** Main reward pool (9d, accepts lpWrapper). */
-  mainRewardPool: Address;
+  pegFarm: Address;
   /** Share reward pool (370d, accepts lpWrapper). */
-  shareRewardPool: Address;
+  shareFarm: Address;
   /** Compound-style Timelock for governance rotations. */
   timelock: Address;
   /** Canonical WETH on this chain. */

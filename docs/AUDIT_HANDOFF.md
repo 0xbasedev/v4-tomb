@@ -21,15 +21,15 @@ Peg = 1 LEVEL ≡ 1 WETH (1e18-scaled). This is one of two changes from Tomb's `
 ```
 src/
 ├── core/
-│   ├── Boardroom.sol          SQUARE stakers earn LEVEL each expansion epoch
+│   ├── Masonry.sol          SQUARE stakers earn LEVEL each expansion epoch
 │   ├── Distributor.sol        Genesis distributor (initial LEVEL mint to reward pools)
 │   └── Treasury.sol           Seigniorage engine. Epoch tick, bond office,
 │                              expansion/contraction logic. The protocol's brain.
 │
 ├── distribution/
 │   ├── GenesisRewardPool.sol  24h window, accepts outside ERC-20s, distributes 11k LEVEL
-│   ├── MainRewardPool.sol     9d, accepts LP wrapper shares, distributes 140k LEVEL
-│   ├── ShareRewardPool.sol    370d, accepts LP wrapper shares, distributes 59.5k SQUARE
+│   ├── PegFarm.sol     9d, accepts LP wrapper shares, distributes 140k LEVEL
+│   ├── ShareFarm.sol    370d, accepts LP wrapper shares, distributes 59.5k SQUARE
 │   └── V4PositionWrapper.sol  ERC-721 → ERC-20 wrapper for V4 LP positions
 │
 ├── governance/
@@ -87,7 +87,7 @@ Out of scope (third-party, audited elsewhere):
 Invariant suites cover:
 - `PegTokenInvariants` — LEVEL token supply integrity
 - `ShareTokenInvariants` — SQUARE cap + fund allocation
-- `BoardroomInvariants` — Masonry stake/withdraw conservation
+- `MasonryInvariants` — Masonry stake/withdraw conservation
 - `EpochInvariants` — Epoch counter monotonicity, period bounds, immutability
 - `OracleInvariants` — TWAP timestamp monotonicity, sticky-init, error paths
 - `PegDefenseHookInvariants` — Tax tier table monotonicity, rate caps, immutables
@@ -156,7 +156,7 @@ What we'd ask the auditor to focus on:
 
 1. **`PegDefenseHook.beforeSwap` tax delta math.** This is the only contract that uses `BeforeSwapDelta` to extract value mid-swap. Sign conventions on `deltaSpecified` vs `deltaUnspecified` for exact-in vs exact-out swaps are subtle. The unit + integration tests cover both paths, but a careful eye on the sign handling at L319-325 is warranted.
 
-2. **`Treasury.allocateSeigniorage` boundaries.** The bootstrap/expansion/contraction branching is faithful to Tomb but is doing arithmetic on percentages, supplies, and a TWAP that may revert. We rely on `_updatePegPrice`'s try/catch to absorb a pre-init oracle. Confirm: no path mints LEVEL beyond `maxSupplyExpansionPercent`; no path under-funds the Boardroom; no path advances the epoch without invoking the modifier's update loop.
+2. **`Treasury.allocateSeigniorage` boundaries.** The bootstrap/expansion/contraction branching is faithful to Tomb but is doing arithmetic on percentages, supplies, and a TWAP that may revert. We rely on `_updatePegPrice`'s try/catch to absorb a pre-init oracle. Confirm: no path mints LEVEL beyond `maxSupplyExpansionPercent`; no path under-funds the Masonry; no path advances the epoch without invoking the modifier's update loop.
 
 3. **`V4PositionWrapper` unwrap gating.** `unwrap` is gated to `wrappedBy[tokenId] == msg.sender`. The mapping is set in `wrap()` before the NFT pull (CEI). Confirm no path lets a non-wrapper redeem.
 
@@ -171,7 +171,7 @@ Documented in `docs/LAUNCH_RUNBOOK.md` §9. Summary:
 - `getPegPrice()` reverts before the first `oracle.update()` with non-zero time elapsed. `_updatePegPrice` swallows this in `allocateSeigniorage`.
 - Genesis pool stake tokens must be registered before `poolStartTime`. Unregistered emission is lost.
 - `buyBonds` / `redeemBonds` use strict price equality. Race window between user read and broadcast inclusion can revert.
-- Bootstrap supply expansion is unconditional — even at sub-peg, the protocol mints 4.5% to Boardroom for the first 28 epochs.
+- Bootstrap supply expansion is unconditional — even at sub-peg, the protocol mints 4.5% to Masonry for the first 28 epochs.
 
 ## 8 · Communication
 

@@ -137,7 +137,7 @@ contract TreasuryParamHandler is Test {
  *         sequence ever leaves a parameter outside its documented range.
  *
  *         Setters NOT covered (intentionally — they have no numeric bound to verify):
- *           setOperator, setBoardroom, setOracle, setMaxDiscountRate, setMaxPremiumRate.
+ *           setOperator, setMasonry, setOracle, setMaxDiscountRate, setMaxPremiumRate.
  *           These rotate addresses or set unbounded rates that the bond-math caps on read.
  */
 contract TreasuryParamInvariants is StdInvariant, Test {
@@ -148,7 +148,7 @@ contract TreasuryParamInvariants is StdInvariant, Test {
     address constant BOND = address(0xA2);
     address constant SHARE = address(0xA3);
     address constant ORACLE = address(0xA4);
-    address constant BOARDROOM = address(0xA5);
+    address constant MASONRY = address(0xA5);
 
     function setUp() public {
         vm.warp(1_700_000_000);
@@ -156,7 +156,7 @@ contract TreasuryParamInvariants is StdInvariant, Test {
         peg = new PegToken(); // needed for initialize()'s balanceOf snapshot
 
         address[] memory excluded = new address[](0);
-        treasury.initialize(address(peg), BOND, SHARE, ORACLE, BOARDROOM, block.timestamp + 1 hours, excluded);
+        treasury.initialize(address(peg), BOND, SHARE, ORACLE, MASONRY, block.timestamp + 1 hours, excluded);
 
         handler = new TreasuryParamHandler(treasury);
         treasury.setOperator(address(handler));

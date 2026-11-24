@@ -2,12 +2,12 @@
 pragma solidity 0.8.26;
 
 /**
- * @title IBoardroom
- * @notice Tomb-shape interface for the Boardroom contract. Treasury proxies a few admin
- *         calls through this interface so it doesn't need to know the full Boardroom
+ * @title IMasonry
+ * @notice Tomb-shape interface for the Masonry contract. Treasury proxies a few admin
+ *         calls through this interface so it doesn't need to know the full Masonry
  *         storage layout.
  */
-interface IBoardroom {
+interface IMasonry {
     function balanceOf(
         address member
     ) external view returns (uint256);
@@ -25,7 +25,7 @@ interface IBoardroom {
     function nextEpochPoint() external view returns (uint256);
     function getPegPrice() external view returns (uint256);
 
-    /// @notice Auto-generated getter for the Boardroom's `operator` storage field.
+    /// @notice Auto-generated getter for the Masonry's `operator` storage field.
     function operator() external view returns (address);
 
     function setOperator(

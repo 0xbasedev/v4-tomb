@@ -5,15 +5,15 @@ import { LockupClock } from "@/components/LockupClock";
 import { RuleTrio } from "@/components/RuleTrio";
 import { StatTile } from "@/components/StatTile";
 
-import { useApproveAndCall, useBoardroom, useDeployment, useEpoch } from "@/lib/hooks";
-import { boardroomAbi } from "@/lib/abis";
+import { useApproveAndCall, useMasonry, useDeployment, useEpoch } from "@/lib/hooks";
+import { masonryAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
- * The Club — Boardroom interface, wired to live state.
+ * The Masonry — Masonry interface, wired to live state.
  *
  * Lockup remaining seconds derivation:
- *   The Boardroom's `epochTimerStart` is the epoch index at the user's last
+ *   The Masonry's `epochTimerStart` is the epoch index at the user's last
  *   stake/withdraw/claim. They can withdraw when `currentEpoch - timerStart >=
  *   withdrawLockupEpochs` and claim when `>= rewardLockupEpochs`.
  *
@@ -24,10 +24,10 @@ import { formatToken } from "@/lib/format";
  *
  * Write actions (stake/withdraw/claim) are placeholders this turn — wired in T9.
  */
-export function TheClub() {
+export function Masonry() {
   const deployment = useDeployment();
   const epoch = useEpoch();
-  const club = useBoardroom();
+  const masonry = useMasonry();
 
   function parseAmount(s: string): bigint {
     try {
@@ -37,7 +37,7 @@ export function TheClub() {
     }
   }
 
-  // One shared write pipeline — Club only ever runs one action at a time.
+  // One shared write pipeline — The Masonry only ever runs one action at a time.
   const action = useApproveAndCall();
 
   // Lockup countdown derivation. PERIOD is the Treasury epoch length (6h);
@@ -45,9 +45,9 @@ export function TheClub() {
   const period = epoch.period ?? 0n;
   const startTime = epoch.startTime ?? 0n;
   const currentEpoch = epoch.epoch ?? 0n;
-  const timerStart = club.epochTimerStart ?? 0n;
-  const wLockup = club.withdrawLockupEpochs ?? 0n;
-  const rLockup = club.rewardLockupEpochs ?? 0n;
+  const timerStart = masonry.epochTimerStart ?? 0n;
+  const wLockup = masonry.withdrawLockupEpochs ?? 0n;
+  const rLockup = masonry.rewardLockupEpochs ?? 0n;
 
   const nowSec = BigInt(Math.floor(Date.now() / 1000));
   function lockupSeconds(lockup: bigint): number {
@@ -61,14 +61,14 @@ export function TheClub() {
   const withdrawLockupSec = lockupSeconds(wLockup);
   const claimLockupSec = lockupSeconds(rLockup);
 
-  const stakedDisplay = formatToken(club.yourStake, 4);
-  const pendingDisplay = formatToken(club.earned, 4);
-  const walletDisplay = formatToken(club.shareInWallet, 4);
-  const totalDisplay = formatToken(club.totalStaked, 2);
+  const stakedDisplay = formatToken(masonry.yourStake, 4);
+  const pendingDisplay = formatToken(masonry.earned, 4);
+  const walletDisplay = formatToken(masonry.shareInWallet, 4);
+  const totalDisplay = formatToken(masonry.totalStaked, 2);
 
   // Disable Withdraw/Claim when timer hasn't matured, or when nothing to act on.
-  const cantWithdraw = !club.canWithdraw || club.yourStake === 0n;
-  const cantClaim = !club.canClaimReward || club.earned === 0n;
+  const cantWithdraw = !masonry.canWithdraw || masonry.yourStake === 0n;
+  const cantClaim = !masonry.canClaimReward || masonry.earned === 0n;
 
   return (
     <div className="bg-deco-ground">
@@ -76,7 +76,7 @@ export function TheClub() {
       <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
         <div className="mx-auto max-w-4xl text-center">
           <div className="label-deco mb-3 text-deco-gold-dark">
-            A Pavilion of The Trust · The Boardroom
+            A Pavilion of The Trust · The Masonry
           </div>
           <div
             className="font-ornament mb-4 text-3xl font-bold text-deco-gold"
@@ -84,7 +84,7 @@ export function TheClub() {
           >
             I
           </div>
-          <h1 className="gold-text font-display italic text-section">The Club</h1>
+          <h1 className="gold-text font-display italic text-section">The Masonry</h1>
           <RuleTrio className="mb-6 mt-8" />
           <p
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
@@ -103,7 +103,7 @@ export function TheClub() {
             Your Position
           </div>
           <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Staked" value={stakedDisplay} hint="$SQUARE · in The Club" />
+            <StatTile label="Staked" value={stakedDisplay} hint="$SQUARE · in The Masonry" />
             <StatTile label="Pending" value={pendingDisplay} hint="$LEVEL · Unclaimed" />
             <StatTile label="In Wallet" value={walletDisplay} hint="$SQUARE · Available" />
             <StatTile
@@ -137,12 +137,12 @@ export function TheClub() {
             <ActionPanel
               numeral="I"
               title="Make a Deposit"
-              blurb="Deposit $SQUARE into the Boardroom. Begin earning seigniorage each expansion epoch."
+              blurb="Deposit $SQUARE into the Masonry. Begin earning seigniorage each expansion epoch."
               asset="SQUARE"
               maxAvailable={walletDisplay}
-              maxWei={club.shareInWallet ?? 0n}
+              maxWei={masonry.shareInWallet ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
-              disabled={club.shareInWallet === 0n || action.isInFlight || !deployment}
+              disabled={masonry.shareInWallet === 0n || action.isInFlight || !deployment}
               disabledReason="No $SQUARE in wallet."
               onSubmit={(s) => {
                 if (!deployment) return;
@@ -150,31 +150,31 @@ export function TheClub() {
                 if (amount <= 0n) return;
                 action.submit({
                   amount,
-                  currentAllowance: club.shareAllowance ?? 0n,
+                  currentAllowance: masonry.shareAllowance ?? 0n,
                   token: deployment.share,
-                  spender: deployment.boardroom,
+                  spender: deployment.masonry,
                   call: {
-                    address: deployment.boardroom,
-                    abi: boardroomAbi,
+                    address: deployment.masonry,
+                    abi: masonryAbi,
                     functionName: "stake",
                     args: [amount],
                   },
-                  label: "Stake into The Club",
-                  onSuccess: () => club.refetch(),
+                  label: "Stake into The Masonry",
+                  onSuccess: () => masonry.refetch(),
                 });
               }}
             />
             <ActionPanel
               numeral="II"
               title="Withdraw"
-              blurb="Recall your $SQUARE from the Boardroom. Six-epoch lock from your last interaction."
+              blurb="Recall your $SQUARE from the Masonry. Six-epoch lock from your last interaction."
               asset="SQUARE"
               maxAvailable={stakedDisplay}
-              maxWei={club.yourStake ?? 0n}
+              maxWei={masonry.yourStake ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
               disabled={cantWithdraw || action.isInFlight || !deployment}
               disabledReason={
-                club.yourStake === 0n
+                masonry.yourStake === 0n
                   ? "Nothing currently deposited."
                   : "Withdraw lockup not yet matured."
               }
@@ -188,13 +188,13 @@ export function TheClub() {
                   token: null,
                   spender: null,
                   call: {
-                    address: deployment.boardroom,
-                    abi: boardroomAbi,
+                    address: deployment.masonry,
+                    abi: masonryAbi,
                     functionName: "withdraw",
                     args: [amount],
                   },
-                  label: "Withdraw from The Club",
-                  onSuccess: () => club.refetch(),
+                  label: "Withdraw from The Masonry",
+                  onSuccess: () => masonry.refetch(),
                 });
               }}
             />
@@ -208,7 +208,7 @@ export function TheClub() {
               noInput
               disabled={cantClaim || action.isInFlight || !deployment}
               disabledReason={
-                club.earned === 0n
+                masonry.earned === 0n
                   ? "No returns currently accrued."
                   : "Reward lockup not yet matured."
               }
@@ -220,13 +220,13 @@ export function TheClub() {
                   token: null,
                   spender: null,
                   call: {
-                    address: deployment.boardroom,
-                    abi: boardroomAbi,
+                    address: deployment.masonry,
+                    abi: masonryAbi,
                     functionName: "claimReward",
                     args: [],
                   },
                   label: "Claim Returns",
-                  onSuccess: () => club.refetch(),
+                  onSuccess: () => masonry.refetch(),
                 });
               }}
             />
@@ -234,17 +234,17 @@ export function TheClub() {
         </div>
       </section>
 
-      {/* ===== Boardroom State ===== */}
+      {/* ===== Masonry State ===== */}
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-7xl">
           <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The State of The Boardroom
+            The State of The Masonry
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="Aggregate Deposited"
               value={totalDisplay}
-              hint="$SQUARE · in The Club"
+              hint="$SQUARE · in The Masonry"
             />
             <StatTile
               label="Withdraw Lockup"
@@ -274,7 +274,7 @@ export function TheClub() {
               className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
               style={{ letterSpacing: "0.06em" }}
             >
-              The Lockups of The Club
+              The Lockups of The Masonry
             </h2>
             <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
             <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
@@ -288,7 +288,7 @@ export function TheClub() {
                   <span className="font-ornament text-base text-deco-gold-dark">EPOCHS</span>
                 </div>
                 <p className="mt-2 font-body text-sm italic text-deco-ivory-soft">
-                  Counted from your last interaction with the Boardroom — any stake,
+                  Counted from your last interaction with the Masonry — any stake,
                   withdraw, or claim resets the clock.
                 </p>
               </div>

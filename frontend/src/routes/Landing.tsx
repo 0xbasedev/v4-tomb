@@ -67,7 +67,7 @@ export function Landing() {
           >
             Engineered with Precision. Defended by Sovereign Code.
             <br />
-            Earned at The Club.
+            Earned at The Masonry.
           </p>
 
           {/* Bottom rule trio with diamond */}
@@ -122,17 +122,17 @@ export function Landing() {
           <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             <PillarCard
               numeral="I"
-              title="The Club"
-              blurb="Stake $SQUARE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
+              title="The Masonry"
+              blurb="Stake $SQUARE within the Masonry. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
               cta="Take a Seat"
-              to="/club"
+              to="/masonry"
             />
             <PillarCard
               numeral="II"
-              title="The Vault"
+              title="The Farms"
               blurb="Provide LEVEL-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand LEVEL across nine days."
-              cta="Open The Vault"
-              to="/vault"
+              cta="Open The Farms"
+              to="/farms"
             />
             <PillarCard
               numeral="III"
@@ -184,7 +184,7 @@ export function Landing() {
               </h3>
               <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
               <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                Acquire $SQUARE. Stake at The Club. When the Trust expands above peg,
+                Acquire $SQUARE. Stake at The Masonry. When the Trust expands above peg,
                 seigniorage is distributed to The Members. Patience is rewarded.
               </p>
             </div>

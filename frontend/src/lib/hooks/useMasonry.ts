@@ -1,27 +1,27 @@
 import { useAccount, useReadContracts } from "wagmi";
 import { zeroAddress } from "viem";
 
-import { boardroomAbi, erc20Abi } from "@/lib/abis";
+import { masonryAbi, erc20Abi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
 /**
- * Composite Boardroom (The Club) state read.
+ * Composite Masonry (The Masonry) state read.
  *
  * Returns:
- *   totalStaked       — Boardroom.totalSupply (all members' SQUARE)
- *   yourStake         — Boardroom.balanceOf(you)
+ *   totalStaked       — Masonry.totalSupply (all members' SQUARE)
+ *   yourStake         — Masonry.balanceOf(you)
  *   earned            — claimable LEVEL for you
  *   canWithdraw       — false until withdrawLockupEpochs since last stake
  *   canClaimReward    — false until rewardLockupEpochs since last stake
  *   epochTimerStart   — epoch at last stake (used to compute remaining lockup)
  *   withdrawLockupEpochs / rewardLockupEpochs — protocol parameters
  *   shareInWallet    — SQUARE.balanceOf(you), for the stake input's MAX
- *   shareAllowance   — SQUARE → Boardroom allowance, for the approve gate (T9)
+ *   shareAllowance   — SQUARE → Masonry allowance, for the approve gate (T9)
  *
  * Anonymous browsing (no wallet) returns zero/false for the user-specific
  * fields but still surfaces the protocol parameters.
  */
-export function useBoardroom() {
+export function useMasonry() {
   const deployment = useDeployment();
   const { address } = useAccount();
   const user = address ?? zeroAddress;
@@ -31,20 +31,20 @@ export function useBoardroom() {
     allowFailure: false,
     contracts: enabled
       ? [
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "totalSupply" },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "balanceOf", args: [user] },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "earned", args: [user] },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "canWithdraw", args: [user] },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "canClaimReward", args: [user] },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "members", args: [user] },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "withdrawLockupEpochs" },
-          { address: deployment.boardroom, abi: boardroomAbi, functionName: "rewardLockupEpochs" },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "totalSupply" },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "balanceOf", args: [user] },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "earned", args: [user] },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "canWithdraw", args: [user] },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "canClaimReward", args: [user] },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "members", args: [user] },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "withdrawLockupEpochs" },
+          { address: deployment.masonry, abi: masonryAbi, functionName: "rewardLockupEpochs" },
           { address: deployment.share, abi: erc20Abi, functionName: "balanceOf", args: [user] },
           {
             address: deployment.share,
             abi: erc20Abi,
             functionName: "allowance",
-            args: [user, deployment.boardroom],
+            args: [user, deployment.masonry],
           },
         ]
       : [],

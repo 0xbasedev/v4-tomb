@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 /**
  * @title ContractGuard
  * @notice "One block, one function" anti-front-run guard. Verbatim port of Tomb Finance's
- *         utils/ContractGuard.sol. Used by Treasury and Boardroom on user-facing mutative
+ *         utils/ContractGuard.sol. Used by Treasury and Masonry on user-facing mutative
  *         functions (buyBonds / redeemBonds / stake / withdraw / etc.) to prevent the same
  *         tx.origin or msg.sender from making more than one such call in a single block.
  *

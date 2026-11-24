@@ -8,7 +8,7 @@ import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
@@ -31,7 +31,7 @@ contract EpochCycleTest is BaseTest {
     ShareToken internal share;
     BondToken internal bond;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     MockOracle internal oracle;
 
     address internal genesisPool = makeAddr("genesisPool");
@@ -68,17 +68,17 @@ contract EpochCycleTest is BaseTest {
         // 3. Deploy core contracts.
         vm.startPrank(owner);
         treasury = new Treasury();
-        boardroom = new Boardroom();
+        masonry = new Masonry();
 
-        // 4. Initialize boardroom + treasury. owner becomes operator on both.
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        // 4. Initialize masonry + treasury. owner becomes operator on both.
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
         // 5. One-shot genesis distributions BEFORE the operator handoff (owner is still trustees).
@@ -91,11 +91,11 @@ contract EpochCycleTest is BaseTest {
         // doesn't rotate Treasury's own operator).
         treasury.setBootstrap(0, 100);
 
-        // 6. Hand off mint/burn authority on every token + boardroom to Treasury.
+        // 6. Hand off mint/burn authority on every token + masonry to Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
         vm.stopPrank();
 
         // 7. Distribute some SHARE from the farming pool to test stakers.
@@ -125,7 +125,7 @@ contract EpochCycleTest is BaseTest {
     // EXPANSION PHASE
     // =================================================================
 
-    function test_Expansion_AllocatesSeigniorageToBoardroom() public {
+    function test_Expansion_AllocatesSeigniorageToMasonry() public {
         _stakeAll();
 
         // Drive oracle above ceiling (1.01e18) — say 1.05e18.
@@ -136,21 +136,21 @@ contract EpochCycleTest is BaseTest {
         vm.roll(block.number + 1);
         treasury.allocateSeigniorage();
 
-        // Treasury minted PEG and routed it to boardroom (no daoFund/devFund set yet).
+        // Treasury minted PEG and routed it to masonry (no daoFund/devFund set yet).
         // At 1.05e18 with supply ~160k (genesis), the mse cap (4%) bites:
         //   percentage = min(0.05, 0.04) * 1e18 = 0.04e18
-        //   savedForBoardroom = supply * 0.04 ≈ 160k * 0.04 = 6.4k PEG
-        // Pre-distribution PEG in boardroom was 0; after, it's the seigniorage.
-        assertGt(peg.balanceOf(address(boardroom)), 0);
+        //   savedForMasonry = supply * 0.04 ≈ 160k * 0.04 = 6.4k PEG
+        // Pre-distribution PEG in masonry was 0; after, it's the seigniorage.
+        assertGt(peg.balanceOf(address(masonry)), 0);
         assertEq(treasury.epoch(), 1);
 
         // Each staker has accrued reward proportional to their stake.
-        uint256 totalStake = boardroom.totalSupply();
+        uint256 totalStake = masonry.totalSupply();
         assertEq(totalStake, 10_000 ether); // 1k + 3k + 6k
 
-        uint256 aliceEarn = boardroom.earned(alice);
-        uint256 bobEarn = boardroom.earned(bob);
-        uint256 carolEarn = boardroom.earned(carol);
+        uint256 aliceEarn = masonry.earned(alice);
+        uint256 bobEarn = masonry.earned(bob);
+        uint256 carolEarn = masonry.earned(carol);
         // bob earned 3x alice; carol earned 6x alice.
         assertApproxEqRel(bobEarn, aliceEarn * 3, 0.001e18);
         assertApproxEqRel(carolEarn, aliceEarn * 6, 0.001e18);
@@ -164,7 +164,7 @@ contract EpochCycleTest is BaseTest {
         vm.roll(block.number + 1);
         treasury.allocateSeigniorage();
 
-        uint256 aliceEarn = boardroom.earned(alice);
+        uint256 aliceEarn = masonry.earned(alice);
         assertGt(aliceEarn, 0);
 
         // Reward lockup is 3 epochs — must advance treasury.epoch() past then.
@@ -176,7 +176,7 @@ contract EpochCycleTest is BaseTest {
 
         uint256 pegBefore = peg.balanceOf(alice);
         vm.prank(alice);
-        boardroom.claimReward();
+        masonry.claimReward();
         uint256 pegAfter = peg.balanceOf(alice);
         assertGt(pegAfter, pegBefore);
     }
@@ -346,10 +346,10 @@ contract EpochCycleTest is BaseTest {
 
     function test_AllocateSeigniorage_RejectsBeforeEpoch() public {
         _stakeAll();
-        // Advance one block past the last boardroom.stake — otherwise Boardroom's
-        // onlyOneBlock guard rejects the chained boardroom.allocateSeigniorage call
+        // Advance one block past the last masonry.stake — otherwise Masonry's
+        // onlyOneBlock guard rejects the chained masonry.allocateSeigniorage call
         // from Treasury (bootstrap branch fires every epoch for epochs 0–27, which
-        // routes through boardroom.allocateSeigniorage).
+        // routes through masonry.allocateSeigniorage).
         vm.roll(block.number + 1);
         // No warp — block.timestamp == startTime+1, epoch=0, nextEpochPoint=startTime.
         // The first call IS allowed since nextEpochPoint() == startTime <= block.timestamp.
@@ -407,10 +407,10 @@ contract EpochCycleTest is BaseTest {
     ) internal {
         vm.roll(block.number + 1);
         vm.prank(who);
-        share.approve(address(boardroom), amount);
+        share.approve(address(masonry), amount);
         vm.roll(block.number + 1);
         vm.prank(who);
-        boardroom.stake(amount);
+        masonry.stake(amount);
     }
 
     function _allocateAtPrice(

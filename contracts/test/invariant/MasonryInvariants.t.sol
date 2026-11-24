@@ -3,14 +3,14 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Bare-minimum ITreasury implementation so the Boardroom's view-throughs work.
+/// @notice Bare-minimum ITreasury implementation so the Masonry's view-throughs work.
 ///         Epoch is settable so we can bypass the withdraw lockup at will.
 contract MockTreasury is ITreasury {
     uint256 public epoch_;
@@ -44,27 +44,27 @@ contract MockTreasury is ITreasury {
 }
 
 /**
- * @title BoardroomHandler
+ * @title MasonryHandler
  * @notice Drives stake / withdraw / exit actions across three actors. Each action pranks the
- *         actor so msg.sender inside the Boardroom is that actor (which is what the
+ *         actor so msg.sender inside the Masonry is that actor (which is what the
  *         memberExists, updateReward, and stake-tracking logic depends on).
  *
  *         The handler bypasses the onlyOneBlock guard between actions by rolling forward
  *         one block before each call.
  */
-contract BoardroomHandler is Test {
-    Boardroom public boardroom;
+contract MasonryHandler is Test {
+    Masonry public masonry;
     ShareToken public share;
     MockTreasury public treasury;
 
     address[] public actors;
 
     constructor(
-        Boardroom _boardroom,
+        Masonry _masonry,
         ShareToken _share,
         MockTreasury _treasury
     ) {
-        boardroom = _boardroom;
+        masonry = _masonry;
         share = _share;
         treasury = _treasury;
         actors.push(makeAddr("alice"));
@@ -87,10 +87,10 @@ contract BoardroomHandler is Test {
 
         vm.roll(block.number + 1);
         vm.prank(actor);
-        share.approve(address(boardroom), amount);
+        share.approve(address(masonry), amount);
         vm.roll(block.number + 1);
         vm.prank(actor);
-        boardroom.stake(amount);
+        masonry.stake(amount);
     }
 
     function withdraw(
@@ -98,7 +98,7 @@ contract BoardroomHandler is Test {
         uint256 amount
     ) external {
         address actor = actors[actorSeed % actors.length];
-        uint256 staked = boardroom.balanceOf(actor);
+        uint256 staked = masonry.balanceOf(actor);
         if (staked == 0) return;
         amount = bound(amount, 1, staked);
 
@@ -107,19 +107,19 @@ contract BoardroomHandler is Test {
 
         vm.roll(block.number + 1);
         vm.prank(actor);
-        boardroom.withdraw(amount);
+        masonry.withdraw(amount);
     }
 
     function exit(
         uint256 actorSeed
     ) external {
         address actor = actors[actorSeed % actors.length];
-        uint256 staked = boardroom.balanceOf(actor);
+        uint256 staked = masonry.balanceOf(actor);
         if (staked == 0) return;
         treasury.setEpoch(treasury.epoch() + 100);
         vm.roll(block.number + 1);
         vm.prank(actor);
-        boardroom.exit();
+        masonry.exit();
     }
 
     /// @notice Move SHARE between actors so the fuzzer has reason to stake from many directions.
@@ -138,12 +138,12 @@ contract BoardroomHandler is Test {
     }
 }
 
-contract BoardroomInvariants is StdInvariant, Test {
+contract MasonryInvariants is StdInvariant, Test {
     PegToken public peg;
     ShareToken public share;
-    Boardroom public boardroom;
+    Masonry public masonry;
     MockTreasury public treasury;
-    BoardroomHandler public handler;
+    MasonryHandler public handler;
 
     address public farmingPool = makeAddr("farmingPool");
     address public communityFund = makeAddr("communityFund");
@@ -159,14 +159,14 @@ contract BoardroomInvariants is StdInvariant, Test {
         // 2. Mock treasury.
         treasury = new MockTreasury();
 
-        // 3. Boardroom (deployer is the initial operator).
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        // 3. Masonry (deployer is the initial operator).
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         // 4. Mint SHARE supply via distributeReward, then push to test actors.
         share.distributeReward(farmingPool);
 
-        handler = new BoardroomHandler(boardroom, share, treasury);
+        handler = new MasonryHandler(masonry, share, treasury);
 
         // Seed each actor with some SHARE. Use the farming pool's balance.
         vm.startPrank(farmingPool);
@@ -182,36 +182,36 @@ contract BoardroomInvariants is StdInvariant, Test {
     // Core invariant: no SHARE is ever lost or duplicated
     // ---------------------------------------------------------------------
 
-    /// @notice The Boardroom's internal totalSupply tracker must equal the SHARE held by
-    ///         the Boardroom contract. This is the no-leak no-counterfeit invariant.
+    /// @notice The Masonry's internal totalSupply tracker must equal the SHARE held by
+    ///         the Masonry contract. This is the no-leak no-counterfeit invariant.
     function invariant_TotalSupplyMatchesShareTokenHeld() public view {
-        assertEq(boardroom.totalSupply(), share.balanceOf(address(boardroom)));
+        assertEq(masonry.totalSupply(), share.balanceOf(address(masonry)));
     }
 
-    /// @notice Sum of every actor's recorded stake equals the boardroom's totalSupply.
+    /// @notice Sum of every actor's recorded stake equals the masonry's totalSupply.
     function invariant_SumOfMemberBalancesEqualsTotalSupply() public view {
         uint256 sum;
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            sum += boardroom.balanceOf(handler.actors(i));
+            sum += masonry.balanceOf(handler.actors(i));
         }
-        assertEq(sum, boardroom.totalSupply());
+        assertEq(sum, masonry.totalSupply());
     }
 
     /// @notice No individual actor can have more staked than the total.
     function invariant_NoStakeExceedsTotal() public view {
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            assertLe(boardroom.balanceOf(handler.actors(i)), boardroom.totalSupply());
+            assertLe(masonry.balanceOf(handler.actors(i)), masonry.totalSupply());
         }
     }
 
     /// @notice SHARE supply is conserved: the deployer's mint, farming pool, three actors,
-    ///         and the boardroom together hold all of share.totalSupply().
+    ///         and the masonry together hold all of share.totalSupply().
     function invariant_NoShareTokenLost() public view {
         uint256 sum = share.balanceOf(address(this)); // deployer 1 ether
         sum += share.balanceOf(farmingPool);
         sum += share.balanceOf(communityFund);
         sum += share.balanceOf(devFund);
-        sum += share.balanceOf(address(boardroom));
+        sum += share.balanceOf(address(masonry));
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
             sum += share.balanceOf(handler.actors(i));
         }

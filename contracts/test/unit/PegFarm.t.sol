@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {MainRewardPool} from "../../src/distribution/MainRewardPool.sol";
+import {PegFarm} from "../../src/distribution/PegFarm.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -23,8 +23,8 @@ contract MockLp is ERC20 {
     }
 }
 
-contract MainRewardPoolTest is BaseTest {
-    MainRewardPool internal pool;
+contract PegFarmTest is BaseTest {
+    PegFarm internal pool;
     PegToken internal peg;
     MockLp internal lp;
 
@@ -39,7 +39,7 @@ contract MainRewardPoolTest is BaseTest {
         peg = new PegToken();
 
         vm.prank(owner);
-        pool = new MainRewardPool(address(peg), poolStart);
+        pool = new PegFarm(address(peg), poolStart);
 
         lp = new MockLp("LP", "LP");
 

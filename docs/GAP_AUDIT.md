@@ -11,7 +11,7 @@ For severity, "Critical" = blocks mainnet launch on a chain that holds real user
 ### 1. V4 position NFT → ERC-20 wrapper missing — ✅ CLOSED 2026-05-22
 **Found:** 2026-05-22, after Base Sepolia deploy. **Scope clarified:** 2026-05-22 (same day). **Closed:** 2026-05-22 (commits `d0b9f75` + `c809217` + this commit).
 
-`MainRewardPool` and `ShareRewardPool` expect ERC-20 LP tokens. V4 issues ERC-721 position NFTs via `PositionManager`. Sprint 16 closed the gap with `V4PositionWrapper.sol`:
+`PegFarm` and `ShareFarm` expect ERC-20 LP tokens. V4 issues ERC-721 position NFTs via `PositionManager`. Sprint 16 closed the gap with `V4PositionWrapper.sol`:
 
 - Bound to one specific `(poolId, tickLower, tickUpper)` per wrapper instance
 - `wrap(tokenId)` pulls the NFT, mints ERC-20 equal to position liquidity
@@ -26,7 +26,7 @@ The deploy script now deploys the wrapper bound to the full-range LEVEL/WETH poo
 ### 2. Initial V4 pool liquidity is zero — ✅ CLOSED 2026-05-22
 The V4 LEVEL/WETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k LEVEL allocation + team-owned WETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn LEVEL have a place to swap it.
 
-**Closed by Sprint 17** (`script/SeedLiquidity.s.sol` + `test/integration/BaseForkSeedLiquidity.t.sol`). The script pulls LEVEL + WETH from the operator's wallet via Permit2, computes liquidity via `LiquidityAmounts.getLiquidityForAmounts`, mints a full-range V4 position via `PositionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)`. NFT lands in operator's wallet. The position's tick range matches `V4PositionWrapper`'s exact bounds so the operator can later wrap it (and stake the shares in `MainRewardPool` for protocol-owned LP rewards, or transfer it to a burn address for permanent liquidity).
+**Closed by Sprint 17** (`script/SeedLiquidity.s.sol` + `test/integration/BaseForkSeedLiquidity.t.sol`). The script pulls LEVEL + WETH from the operator's wallet via Permit2, computes liquidity via `LiquidityAmounts.getLiquidityForAmounts`, mints a full-range V4 position via `PositionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)`. NFT lands in operator's wallet. The position's tick range matches `V4PositionWrapper`'s exact bounds so the operator can later wrap it (and stake the shares in `PegFarm` for protocol-owned LP rewards, or transfer it to a burn address for permanent liquidity).
 
 3 fork tests verify: seeds an empty pool, the resulting NFT is wrappable, pool depth is established at tick 0 (no price drift on parity-equal deposit).
 
@@ -45,7 +45,7 @@ Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it
 - Fuzz invariants: 4 new tests (commit `b6d31cd` / pending)
 
 ### 4. Deployer is the operator of everything pre-Timelock — ✅ CLOSED 2026-05-22
-After the Sepolia deploy, the deployer EOA was `operator` / `trustees` of: Treasury, Boardroom, PegToken, ShareToken, BondToken, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool.
+After the Sepolia deploy, the deployer EOA was `operator` / `trustees` of: Treasury, Masonry, PegToken, ShareToken, BondToken, Oracle, PegDefenseHook, GenesisRewardPool, PegFarm, ShareFarm.
 
 **Closed by Sprint 14.** `DeployTimelock.s.sol` + `RotateGovernanceQueue.s.sol` + `RotateGovernanceExecute.s.sol` walk the deployer through transferring every admin role to a Compound-style Timelock with a 24h delay (configurable). 6 integration tests in `test/integration/GovernanceRotation.t.sol` verify the ceremony works end-to-end. Final state: deployer EOA has no admin power; Timelock controls everything via queue/execute. See `docs/GOVERNANCE.md` for the full ceremony.
 
@@ -65,27 +65,27 @@ Pre-deploy gate (1). Should run once via `FOUNDRY_PROFILE=audit forge test --mat
 ### 8. Reward pools deployed empty of pool entries
 Operator must call `pool.add(allocPoint, stakeToken, false, 0)` to make each pool functional. Breakdown:
 - `GenesisRewardPool.add(allocPoint, cbETH, false, 0)` — **CAN BE DONE NOW** on Sepolia. cbETH is the outside-asset stake token. No wrapper dependency.
-- `MainRewardPool.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
-- `ShareRewardPool.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
+- `PegFarm.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
+- `ShareFarm.add(allocPoint, wrappedLp, false, 0)` — blocked on Sprint 16 wrapper.
 
 Should be automated as `script/OpenPools.s.sol` (one script that does all three calls once the wrapper exists, or run in phases as each gets unblocked).
 
-### 9. MainRewardPool / ShareRewardPool thin test coverage vs GenesisRewardPool
-`GenesisRewardPool` has 20 dedicated unit tests; the other two have ~8 and ~3 respectively. Same MasterChef shape, but new code paths in `MainRewardPool` (epoch boundary math) deserve their own coverage. Sprint 15.
+### 9. PegFarm / ShareFarm thin test coverage vs GenesisRewardPool
+`GenesisRewardPool` has 20 dedicated unit tests; the other two have ~8 and ~3 respectively. Same MasterChef shape, but new code paths in `PegFarm` (epoch boundary math) deserve their own coverage. Sprint 15.
 
-### 16. Boardroom-empty bricks expansion
+### 16. Masonry-empty bricks expansion
 **Found:** 2026-05-22 during the post-launch user-flow re-walk.
 
-When `Treasury.allocateSeigniorage()` enters the expansion branch (price > ceiling), it calls `_sendToBoardroom` → `Boardroom.allocateSeigniorage(amount)`. Boardroom requires `totalSupply() > 0` (matches Tomb). **If no SQUARE has been staked yet, this reverts — and since `checkEpoch`'s postfix runs AFTER the body, the epoch never advances.** Treasury is bricked until someone stakes.
+When `Treasury.allocateSeigniorage()` enters the expansion branch (price > ceiling), it calls `_sendToMasonry` → `Masonry.allocateSeigniorage(amount)`. Masonry requires `totalSupply() > 0` (matches Tomb). **If no SQUARE has been staked yet, this reverts — and since `checkEpoch`'s postfix runs AFTER the body, the epoch never advances.** Treasury is bricked until someone stakes.
 
-At launch the only SQUARE in circulation is 1 unit on the deployer (constructor seed) + slow vesting drips to community/dev funds. The 59.5k SQUARE in `ShareRewardPool` is locked and only emits to stakers of that pool's stake tokens, which require the LP wrapper. So the brick window is real.
+At launch the only SQUARE in circulation is 1 unit on the deployer (constructor seed) + slow vesting drips to community/dev funds. The 59.5k SQUARE in `ShareFarm` is locked and only emits to stakers of that pool's stake tokens, which require the LP wrapper. So the brick window is real.
 
-**Status:** Operational fix — the launch ceremony must include staking at least 1 wei of SQUARE into the Boardroom from the deployer. Tomb handled this the same way (not a contract change, a ceremony step). Closed by `script/OpenLaunch.s.sol`.
+**Status:** Operational fix — the launch ceremony must include staking at least 1 wei of SQUARE into the Masonry from the deployer. Tomb handled this the same way (not a contract change, a ceremony step). Closed by `script/OpenLaunch.s.sol`.
 
 ## Polish (tracked in `SECURITY.md`)
 
 ### 10-12. Slither LOW / INFO findings
-- `OperatorTransferred` events missing on `Treasury.setOperator` / `Boardroom.setOperator` (LOW)
+- `OperatorTransferred` events missing on `Treasury.setOperator` / `Masonry.setOperator` (LOW)
 - `is IBasisAsset` annotations not declared on tokens (INFO)
 - Two `shadowing-local` cases (LOW)
 

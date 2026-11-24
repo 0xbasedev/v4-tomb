@@ -8,7 +8,7 @@ import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
 import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
@@ -34,7 +34,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *           3. Initialize a real PEG/WETH V4 pool, which fires afterInitialize on
  *              the hook and binds it.
  *           4. Deploy our Oracle pointing to the hook as its IPriceSource.
- *           5. Deploy Treasury and Boardroom against the real Oracle (no MockOracle).
+ *           5. Deploy Treasury and Masonry against the real Oracle (no MockOracle).
  *           6. Verify the wiring — Oracle reads from hook, Treasury reads from Oracle,
  *              one full no-op epoch ticks correctly.
  *
@@ -52,7 +52,7 @@ contract BaseForkHookTest is BaseTest {
     ShareToken internal share;
     BondToken internal bond;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     Oracle internal oracle;
     PegDefenseHook internal hook;
     IPoolManager internal poolManager;
@@ -123,17 +123,17 @@ contract BaseForkHookTest is BaseTest {
         // 4. Deploy Oracle pointing at the hook as IPriceSource.
         oracle = new Oracle(IPriceSource(address(hook)), address(peg), weth, 6 hours, startTime);
 
-        // 5. Deploy Treasury + Boardroom, init, hand off operator.
+        // 5. Deploy Treasury + Masonry, init, hand off operator.
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
@@ -142,14 +142,14 @@ contract BaseForkHookTest is BaseTest {
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
 
-        // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
+        // Launch ceremony Masonry seed (see docs/GAP_AUDIT.md gap #16):
         // The test contract (deployer) holds 1 SHARE from ShareToken's constructor mint.
-        // Stake a tiny amount in Boardroom so allocateSeigniorage doesn't revert with
+        // Stake a tiny amount in Masonry so allocateSeigniorage doesn't revert with
         // CannotAllocateWhenTotalSupplyZero when the bootstrap branch fires.
-        share.approve(address(boardroom), 1);
-        boardroom.stake(1);
+        share.approve(address(masonry), 1);
+        masonry.stake(1);
 
         vm.warp(startTime + 1);
     }
@@ -210,7 +210,7 @@ contract BaseForkHookTest is BaseTest {
         assertEq(peg.operator(), address(treasury));
         assertEq(share.operator(), address(treasury));
         assertEq(bond.operator(), address(treasury));
-        assertEq(boardroom.operator(), address(treasury));
+        assertEq(masonry.operator(), address(treasury));
         assertTrue(treasury.isInitialized());
     }
 }

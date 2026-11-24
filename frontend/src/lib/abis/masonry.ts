@@ -1,8 +1,8 @@
 /**
- * Boardroom — The Club. SQUARE stakers earn LEVEL from Treasury seigniorage,
+ * Masonry — The Masonry. SQUARE stakers earn LEVEL from Treasury seigniorage,
  * subject to epoch lockups on withdraw + claim.
  */
-export const boardroomAbi = [
+export const masonryAbi = [
   // ----- Reads -----
   {
     type: "function",

@@ -10,7 +10,7 @@ import {ITreasury} from "../interfaces/ITreasury.sol";
 /**
  * @title ShareWrapper
  * @notice Internal balance accounting for staked $SHARE. Direct port of Tomb's same-named
- *         contract embedded in Boardroom.sol. Kept in the same file as the Boardroom to
+ *         contract embedded in Masonry.sol. Kept in the same file as the Masonry to
  *         match Tomb's source layout one-for-one.
  */
 abstract contract ShareWrapper {
@@ -43,7 +43,7 @@ abstract contract ShareWrapper {
         uint256 amount
     ) public virtual {
         uint256 memberShare = _balances[msg.sender];
-        require(memberShare >= amount, "Boardroom: withdraw request greater than staked amount");
+        require(memberShare >= amount, "Masonry: withdraw request greater than staked amount");
         _totalSupply -= amount;
         _balances[msg.sender] = memberShare - amount;
         share.safeTransfer(msg.sender, amount);
@@ -51,25 +51,25 @@ abstract contract ShareWrapper {
 }
 
 /**
- * @title Boardroom
+ * @title Masonry
  * @notice $SHARE-staking pool. Stakers earn $PEG seigniorage minted by the Treasury during
  *         expansion epochs. Snapshot-based reward accounting matches the masterchef-derived
  *         pattern Tomb uses.
- * @dev    Direct port of Tomb Finance's Boardroom.sol (bombmoney/bomb-contracts).
+ * @dev    Direct port of Tomb Finance's Masonry.sol (bombmoney/bomb-contracts).
  *
- *         Branded as "TheClub" in Old Money docs/UI; the on-chain class name is `Boardroom`
+ *         Shown as "The Masonry" in the UI; the on-chain class name is `Masonry`
  *         to match Tomb's source one-for-one for auditor familiarity.
  *
  *         Modernizations applied (no logic changes):
  *         - 0.6.12 → 0.8.26; SafeMath dropped (built-in overflow).
  *         - `require` strings → custom errors.
- *         - Tomb's anonymous BoardroomSnapshot type stays the same shape.
+ *         - Tomb's anonymous MasonrySnapshot type stays the same shape.
  *
  *         Lockup defaults preserved from Tomb:
  *         - withdrawLockupEpochs = 6 (36h at 6h epochs)
  *         - rewardLockupEpochs   = 3 (18h)
  */
-contract Boardroom is ShareWrapper, ContractGuard {
+contract Masonry is ShareWrapper, ContractGuard {
     using SafeERC20 for IERC20;
 
     /* ========== DATA STRUCTURES ========== */
@@ -80,7 +80,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         uint256 epochTimerStart;
     }
 
-    struct BoardroomSnapshot {
+    struct MasonrySnapshot {
         uint256 time;
         uint256 rewardReceived;
         uint256 rewardPerShare;
@@ -101,7 +101,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
     ITreasury public treasury;
 
     mapping(address => Memberseat) public members;
-    BoardroomSnapshot[] public boardroomHistory;
+    MasonrySnapshot[] public masonryHistory;
 
     uint256 public withdrawLockupEpochs;
     uint256 public rewardLockupEpochs;
@@ -167,7 +167,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         share = _share;
         treasury = _treasury;
 
-        boardroomHistory.push(BoardroomSnapshot({time: block.number, rewardReceived: 0, rewardPerShare: 0}));
+        masonryHistory.push(MasonrySnapshot({time: block.number, rewardReceived: 0, rewardPerShare: 0}));
 
         withdrawLockupEpochs = 6;
         rewardLockupEpochs = 3;
@@ -197,11 +197,11 @@ contract Boardroom is ShareWrapper, ContractGuard {
     /* ========== VIEW FUNCTIONS ========== */
 
     function latestSnapshotIndex() public view returns (uint256) {
-        return boardroomHistory.length - 1;
+        return masonryHistory.length - 1;
     }
 
-    function getLatestSnapshot() internal view returns (BoardroomSnapshot memory) {
-        return boardroomHistory[latestSnapshotIndex()];
+    function getLatestSnapshot() internal view returns (MasonrySnapshot memory) {
+        return masonryHistory[latestSnapshotIndex()];
     }
 
     function getLastSnapshotIndexOf(
@@ -212,8 +212,8 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
     function getLastSnapshotOf(
         address member
-    ) internal view returns (BoardroomSnapshot memory) {
-        return boardroomHistory[getLastSnapshotIndexOf(member)];
+    ) internal view returns (MasonrySnapshot memory) {
+        return masonryHistory[getLastSnapshotIndexOf(member)];
     }
 
     function canWithdraw(
@@ -287,7 +287,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         if (reward > 0) {
             require(
                 members[msg.sender].epochTimerStart + rewardLockupEpochs <= treasury.epoch(),
-                "Boardroom: still in reward lockup"
+                "Masonry: still in reward lockup"
             );
             members[msg.sender].epochTimerStart = treasury.epoch();
             members[msg.sender].rewardEarned = 0;
@@ -308,7 +308,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         uint256 prevRPS = getLatestSnapshot().rewardPerShare;
         uint256 nextRPS = prevRPS + (amount * 1e18 / totalSupply());
 
-        boardroomHistory.push(BoardroomSnapshot({time: block.number, rewardReceived: amount, rewardPerShare: nextRPS}));
+        masonryHistory.push(MasonrySnapshot({time: block.number, rewardReceived: amount, rewardPerShare: nextRPS}));
 
         peg.safeTransferFrom(msg.sender, address(this), amount);
         emit RewardAdded(msg.sender, amount);

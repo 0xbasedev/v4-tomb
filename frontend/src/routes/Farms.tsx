@@ -13,11 +13,11 @@ import { UnwindPanel } from "@/components/UnwindPanel";
 import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
-import { erc20Abi, pegRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
+import { erc20Abi, pegRewardPoolAbi, shareFarmAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
- * The Vault — three reward pools, wired to live state.
+ * The Farms — three reward pools, wired to live state.
  *
  * Pool-level state (allocation, time window) comes from each pool's first PID
  * (pid=0). Genesis has no registered PIDs at deploy time — the operator must
@@ -30,8 +30,8 @@ import { formatToken } from "@/lib/format";
  *   Share   pid 0 — V4PositionWrapper (same)
  *
  * Total allocation (rewards distributed over the window) stays as protocol
- * constants because the on-chain GenesisRewardPool / MainRewardPool /
- * ShareRewardPool don't expose a single "totalRewards" view — they compute it
+ * constants because the on-chain GenesisRewardPool / PegFarm /
+ * ShareFarm don't expose a single "totalRewards" view — they compute it
  * from a per-second emission rate × duration.
  */
 
@@ -80,7 +80,7 @@ const META: Record<PoolId, PoolMeta> = {
   },
 };
 
-export function TheVault() {
+export function Farms() {
   const [activeId, setActiveId] = useState<PoolId>("genesis");
   const deployment = useDeployment();
   const meta = META[activeId];
@@ -104,8 +104,8 @@ export function TheVault() {
     activeId === "genesis"
       ? deployment?.genesisRewardPool
       : activeId === "main"
-        ? deployment?.mainRewardPool
-        : deployment?.shareRewardPool;
+        ? deployment?.pegFarm
+        : deployment?.shareFarm;
 
   const reward = meta.rewardAsset === "LEVEL" ? "peg" : "share";
   const pid0 = useRewardPool({ pool: poolAddress, pid: 0, reward });
@@ -162,7 +162,7 @@ export function TheVault() {
   const pendingDisplay = formatToken(pid0.pending, 4);
   const walletDisplay = formatToken(tokenStatus.balance, 4);
 
-  const poolAbi = reward === "peg" ? pegRewardPoolAbi : shareRewardPoolAbi;
+  const poolAbi = reward === "peg" ? pegRewardPoolAbi : shareFarmAbi;
   const refetchAll = () => {
     pid0.refetch();
     tokenStatus.refetch();
@@ -182,7 +182,7 @@ export function TheVault() {
           >
             II
           </div>
-          <h1 className="gold-text font-display italic text-section">The Vault</h1>
+          <h1 className="gold-text font-display italic text-section">The Farms</h1>
           <RuleTrio className="mb-6 mt-8" />
           <p
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"

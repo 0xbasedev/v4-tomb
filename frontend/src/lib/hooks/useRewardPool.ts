@@ -2,7 +2,7 @@ import { useAccount, useReadContracts } from "wagmi";
 import type { Address } from "viem";
 import { zeroAddress } from "viem";
 
-import { erc20Abi, pegRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
+import { erc20Abi, pegRewardPoolAbi, shareFarmAbi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
 type RewardKind = "peg" | "share";
@@ -28,7 +28,7 @@ interface UseRewardPoolArgs {
  *
  * Bonds:
  *   - We can't read `poolInfo.length` without a custom view, so the caller must
- *     already know the PIDs they want. The Vault page hardcodes PID lists; later
+ *     already know the PIDs they want. The Farms page hardcodes PID lists; later
  *     versions can probe via multicall with allowFailure to count.
  *   - When pool is undefined or pid is invalid, all values come back as zero —
  *     allowFailure=true catches the per-PID revert gracefully.
@@ -38,7 +38,7 @@ export function useRewardPool({ pool, pid, reward }: UseRewardPoolArgs) {
   const { address } = useAccount();
   const user = address ?? zeroAddress;
 
-  const abi = reward === "peg" ? pegRewardPoolAbi : shareRewardPoolAbi;
+  const abi = reward === "peg" ? pegRewardPoolAbi : shareFarmAbi;
   const pendingName = reward === "peg" ? "pendingPeg" : "pendingShare";
 
   const enabled = deployment !== null && pool !== undefined;
@@ -53,7 +53,7 @@ export function useRewardPool({ pool, pid, reward }: UseRewardPoolArgs) {
             { address: pool, abi, functionName: "userInfo", args: [pidArg, user] },
             {
               address: pool,
-              abi: abi as typeof pegRewardPoolAbi & typeof shareRewardPoolAbi,
+              abi: abi as typeof pegRewardPoolAbi & typeof shareFarmAbi,
               // pendingPeg for LEVEL pools, pendingShare for share pools
               functionName: pendingName as "pendingPeg",
               args: [pidArg, user],

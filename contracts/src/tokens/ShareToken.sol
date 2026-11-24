@@ -12,7 +12,7 @@ import {Trustees} from "../governance/Trustees.sol";
 /**
  * @title ShareToken
  * @notice $SHARE — the share / governance side of the Old Money trust. Holders stake $SHARE
- *         in TheClub (the Boardroom) to earn $PEG seigniorage during expansion epochs.
+ *         in the Masonry to earn $PEG seigniorage during expansion epochs.
  * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
  *
  *         Supply (Tomb-exact):

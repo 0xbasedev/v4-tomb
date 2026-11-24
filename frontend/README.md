@@ -59,7 +59,7 @@ frontend/
 - ✅ Landing page (Miami Vice Split: chrome hero + diagonal + night-ground 3-card)
 - ✅ Wallet connect (injected/MetaMask)
 - ⏳ Dashboard (epoch state, price, supply) — next sprint
-- ⏳ TheClub (Boardroom staking) — next sprint
-- ⏳ TheVault (reward pools) — next sprint
+- ⏳ Masonry (Masonry staking) — next sprint
+- ⏳ Farms (reward pools) — next sprint
 - ⏳ Bonds (bond buy/redeem) — next sprint
 - ⏳ Swap (V4 pool) — next sprint

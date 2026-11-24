@@ -7,7 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 
 /**
  * WrapPanel — converts a V4 LEVEL-WETH LP NFT into wrapper ERC-20 share
- * certificates. Used on the Main + Share tabs of /vault.
+ * certificates. Used on the Main + Share tabs of /farms.
  *
  * Flow:
  *   1. User pastes a tokenId.
@@ -25,7 +25,7 @@ interface WrapPanelProps {
   /** Title shown above the panel — varies by pool tab ("Main" / "Share"). */
   poolName: string;
   /**
-   * Optional: pre-fill the input with this tokenId. Vault wires this from
+   * Optional: pre-fill the input with this tokenId. Farms wires this from
    * the MintPositionPanel's onMinted so a fresh mint flows straight into wrap.
    * Uses a useEffect to react when the value changes; doesn't clobber the
    * user's input if they're actively typing.
@@ -33,7 +33,7 @@ interface WrapPanelProps {
   prefillTokenId?: bigint | null;
   /**
    * Called when a wrap receipt confirms with the tokenId that was wrapped.
-   * Vault uses this to propagate the same tokenId into UnwindPanel so the
+   * Farms uses this to propagate the same tokenId into UnwindPanel so the
    * later unwrap/burn don't ask the user to re-enter the ID.
    */
   onWrapped?: (tokenId: bigint) => void;
@@ -135,7 +135,7 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
         txHash: wrap.data,
       });
       // Surface the wrapped tokenId to the parent BEFORE clearing the input,
-      // so the Vault can propagate it into UnwindPanel for the eventual exit.
+      // so Farms can propagate it into UnwindPanel for the eventual exit.
       if (pos.tokenId !== null) onWrapped?.(pos.tokenId);
       pos.refetch();
       // Reset the input so the user can wrap another or move on

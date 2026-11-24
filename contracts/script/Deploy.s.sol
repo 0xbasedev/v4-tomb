@@ -7,7 +7,7 @@ import {PegToken} from "../src/tokens/PegToken.sol";
 import {ShareToken} from "../src/tokens/ShareToken.sol";
 import {BondToken} from "../src/tokens/BondToken.sol";
 import {Treasury} from "../src/core/Treasury.sol";
-import {Boardroom} from "../src/core/Boardroom.sol";
+import {Masonry} from "../src/core/Masonry.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
 import {PegDefenseHook, PegDefenseHookPermissions} from "../src/hooks/PegDefenseHook.sol";
 import {ShareBuybackHook, ShareBuybackHookPermissions, IFireTaxSource} from "../src/hooks/ShareBuybackHook.sol";
@@ -17,8 +17,8 @@ import {ITreasury} from "../src/interfaces/ITreasury.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
 import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
-import {MainRewardPool} from "../src/distribution/MainRewardPool.sol";
-import {ShareRewardPool} from "../src/distribution/ShareRewardPool.sol";
+import {PegFarm} from "../src/distribution/PegFarm.sol";
+import {ShareFarm} from "../src/distribution/ShareFarm.sol";
 import {V4PositionWrapper} from "../src/distribution/V4PositionWrapper.sol";
 
 import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
@@ -43,7 +43,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
  * @notice One-shot Foundry deploy script for the Old Money protocol.
  *
  *         The script deploys the three reward pool contracts itself (GenesisRewardPool,
- *         MainRewardPool, ShareRewardPool) so the only remaining env-var addresses are
+ *         PegFarm, ShareFarm) so the only remaining env-var addresses are
  *         the manifest infrastructure and human-controlled recipient/admin addresses.
  *
  *         See docs/DEPLOY.md for env-var setup and per-chain commands.
@@ -68,10 +68,10 @@ contract Deploy is NetworkConfig {
     ShareBuybackHook public shareBuybackHook;
     Oracle public oracle;
     Treasury public treasury;
-    Boardroom public boardroom;
+    Masonry public masonry;
     GenesisRewardPool public genesisRewardPool;
-    MainRewardPool public mainRewardPool;
-    ShareRewardPool public shareRewardPool;
+    PegFarm public pegFarm;
+    ShareFarm public shareFarm;
     V4PositionWrapper public lpWrapper;
     LpOnlyHook public pairLpHook;
     V4PositionWrapper public pairLpWrapper;
@@ -113,15 +113,15 @@ contract Deploy is NetworkConfig {
         timelock = new Timelock(g.timelockAdmin, g.timelockDelay);
 
         // Genesis distributions go directly to the freshly deployed pool contracts.
-        peg.distributeReward(address(genesisRewardPool), address(mainRewardPool), g.airdropWallet);
-        share.distributeReward(address(shareRewardPool));
+        peg.distributeReward(address(genesisRewardPool), address(pegFarm), g.airdropWallet);
+        share.distributeReward(address(shareFarm));
 
         // Register the LP wrapper as the stake token in the Main + Share reward pools.
         // Deployer is still the operator on these pools — handoff to a Timelock happens
         // via the governance ceremony. Sets a single 100-weight entry on each; future
         // ops can call .set() to add more LP types or adjust weights.
-        mainRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
-        shareRewardPool.add(100, IERC20(address(lpWrapper)), false, 0);
+        pegFarm.add(100, IERC20(address(lpWrapper)), false, 0);
+        shareFarm.add(100, IERC20(address(lpWrapper)), false, 0);
 
         // Wire Treasury into the hook so the Sprint 4b tax can route PEG there above
         // the burn threshold. Hook trustees defaults to the deployer at construction; the
@@ -134,7 +134,7 @@ contract Deploy is NetworkConfig {
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
 
         vm.stopBroadcast();
 
@@ -259,11 +259,11 @@ contract Deploy is NetworkConfig {
     /// @notice Deploy the three reward pools. Each constructor requires
     ///         block.timestamp < _poolStartTime, so:
     ///           - GenesisRewardPool opens at epochStart (24h window).
-    ///           - MainRewardPool opens at epochStart + 1 day (genesis closes first).
-    ///           - ShareRewardPool opens at epochStart + 1 day (concurrent with main).
+    ///           - PegFarm opens at epochStart + 1 day (genesis closes first).
+    ///           - ShareFarm opens at epochStart + 1 day (concurrent with main).
     /// @notice Deploy the V4 position wrapper for the PEG/WETH pool. Full-range LP
     ///         positions on this pool wrap into ERC-20 shares that can be staked in
-    ///         MainRewardPool + ShareRewardPool.
+    ///         PegFarm + ShareFarm.
     function _deployLpWrapper() internal {
         int24 tickLower = TickMath.minUsableTick(60);
         int24 tickUpper = TickMath.maxUsableTick(60);
@@ -330,32 +330,32 @@ contract Deploy is NetworkConfig {
         Genesis memory g
     ) internal {
         genesisRewardPool = new GenesisRewardPool(address(peg), g.epochStart);
-        mainRewardPool = new MainRewardPool(address(peg), g.epochStart + 1 days);
-        shareRewardPool = new ShareRewardPool(address(share), g.epochStart + 1 days);
+        pegFarm = new PegFarm(address(peg), g.epochStart + 1 days);
+        shareFarm = new ShareFarm(address(share), g.epochStart + 1 days);
         console2.log("GenesisRewardPool:", address(genesisRewardPool));
-        console2.log("MainRewardPool:   ", address(mainRewardPool));
-        console2.log("ShareRewardPool:  ", address(shareRewardPool));
+        console2.log("PegFarm:   ", address(pegFarm));
+        console2.log("ShareFarm:  ", address(shareFarm));
     }
 
     function _deployCoreAndInit(
         Genesis memory g
     ) internal {
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         // Pools + airdrop wallet are the addresses that hold un-emitted PEG; they
         // must be excluded from `getPegCirculatingSupply` so the contraction-headroom
         // math doesn't count them as circulating.
         address[] memory excluded = new address[](3);
         excluded[0] = address(genesisRewardPool);
-        excluded[1] = address(mainRewardPool);
+        excluded[1] = address(pegFarm);
         excluded[2] = g.airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), g.epochStart, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), g.epochStart, excluded
         );
         console2.log("Treasury: ", address(treasury));
-        console2.log("Boardroom:", address(boardroom));
+        console2.log("Masonry:", address(masonry));
     }
 
     /// @notice Simulation output only. Publish after confirming broadcast receipts.
@@ -366,7 +366,7 @@ contract Deploy is NetworkConfig {
         vm.serializeAddress(key, "share", address(share));
         vm.serializeAddress(key, "bond", address(bond));
         vm.serializeAddress(key, "treasury", address(treasury));
-        vm.serializeAddress(key, "boardroom", address(boardroom));
+        vm.serializeAddress(key, "masonry", address(masonry));
         vm.serializeAddress(key, "oracle", address(oracle));
         vm.serializeAddress(key, "hook", address(hook));
         vm.serializeAddress(key, "shareBuybackHook", address(shareBuybackHook));
@@ -374,8 +374,8 @@ contract Deploy is NetworkConfig {
         vm.serializeAddress(key, "pairLpHook", address(pairLpHook));
         vm.serializeAddress(key, "pairLpWrapper", address(pairLpWrapper));
         vm.serializeAddress(key, "genesisRewardPool", address(genesisRewardPool));
-        vm.serializeAddress(key, "mainRewardPool", address(mainRewardPool));
-        vm.serializeAddress(key, "shareRewardPool", address(shareRewardPool));
+        vm.serializeAddress(key, "pegFarm", address(pegFarm));
+        vm.serializeAddress(key, "shareFarm", address(shareFarm));
         vm.serializeAddress(key, "miniSwapRouter", address(miniSwapRouter));
         vm.serializeAddress(key, "timelock", address(timelock));
         vm.serializeAddress(key, "weth", wethAddress);
@@ -393,7 +393,7 @@ contract Deploy is NetworkConfig {
         require(peg.operator() == address(treasury), "Deploy: peg operator");
         require(share.operator() == address(treasury), "Deploy: share operator");
         require(bond.operator() == address(treasury), "Deploy: bond operator");
-        require(boardroom.operator() == address(treasury), "Deploy: boardroom operator");
+        require(masonry.operator() == address(treasury), "Deploy: masonry operator");
         require(hook.bound(), "Deploy: hook not bound");
         require(shareBuybackHook.bound(), "Deploy: share hook not bound");
         require(
@@ -408,17 +408,17 @@ contract Deploy is NetworkConfig {
         require(treasury.isInitialized(), "Deploy: treasury not initialized");
 
         require(peg.balanceOf(address(genesisRewardPool)) == 11_000 ether, "Deploy: genesis funding mismatch");
-        require(peg.balanceOf(address(mainRewardPool)) == 140_000 ether, "Deploy: main funding mismatch");
+        require(peg.balanceOf(address(pegFarm)) == 140_000 ether, "Deploy: main funding mismatch");
         // Airdrop wallet may already hold PEG (e.g., the 1-unit constructor seed if the
         // wallet happens to equal the deployer in a dry-run). Assert at least the 9k landed.
         require(peg.balanceOf(g.airdropWallet) >= 9000 ether, "Deploy: airdrop funding mismatch");
-        require(share.balanceOf(address(shareRewardPool)) == 59_500 ether, "Deploy: share funding mismatch");
+        require(share.balanceOf(address(shareFarm)) == 59_500 ether, "Deploy: share funding mismatch");
 
         console2.log("\n=== POST-DEPLOY SANITY ===");
         console2.log("GenesisRewardPool PEG:", peg.balanceOf(address(genesisRewardPool)));
-        console2.log("MainRewardPool PEG:   ", peg.balanceOf(address(mainRewardPool)));
+        console2.log("PegFarm PEG:   ", peg.balanceOf(address(pegFarm)));
         console2.log("airdropWallet PEG:    ", peg.balanceOf(g.airdropWallet));
-        console2.log("ShareRewardPool SHARE: ", share.balanceOf(address(shareRewardPool)));
+        console2.log("ShareFarm SHARE: ", share.balanceOf(address(shareFarm)));
         console2.log("\nNext steps (post-deploy):");
         console2.log("  1. operator (deployer) calls genesisRewardPool.add(allocPoint, WETH, false, 0)");
         console2.log("     and/or .add(..., USDC, ...) to open the genesis pool for stakers.");

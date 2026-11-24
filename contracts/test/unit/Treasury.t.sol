@@ -5,7 +5,7 @@ import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
@@ -16,7 +16,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TreasuryTest is BaseTest {
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     PegToken internal peg;
     ShareToken internal share;
     BondToken internal bond;
@@ -47,25 +47,25 @@ contract TreasuryTest is BaseTest {
         // 2. Deploy oracle (mocked) — initialize at parity.
         oracle = new MockOracle(1e18);
 
-        // 3. Deploy Treasury and Boardroom.
+        // 3. Deploy Treasury and Masonry.
         vm.startPrank(owner);
         treasury = new Treasury();
-        boardroom = new Boardroom();
+        masonry = new Masonry();
 
-        // 4. Initialize Boardroom (owner becomes operator).
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        // 4. Initialize Masonry (owner becomes operator).
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         // 5. Initialize Treasury (owner becomes operator).
         address[] memory excluded = new address[](0);
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
-        // 6. Transfer mint authority on every token + boardroom to the Treasury.
+        // 6. Transfer mint authority on every token + masonry to the Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
         vm.stopPrank();
     }
 
@@ -78,7 +78,7 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.bond(), address(bond));
         assertEq(treasury.share(), address(share));
         assertEq(treasury.oracle(), address(oracle));
-        assertEq(treasury.boardroom(), address(boardroom));
+        assertEq(treasury.masonry(), address(masonry));
         assertEq(treasury.startTime(), startTime);
         assertEq(treasury.operator(), owner);
         assertTrue(treasury.isInitialized());
@@ -113,7 +113,7 @@ contract TreasuryTest is BaseTest {
         vm.prank(owner);
         vm.expectRevert(Treasury.AlreadyInitialized.selector);
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
     }
 
@@ -124,7 +124,7 @@ contract TreasuryTest is BaseTest {
         assertEq(peg.operator(), address(treasury));
         assertEq(share.operator(), address(treasury));
         assertEq(bond.operator(), address(treasury));
-        assertEq(boardroom.operator(), address(treasury));
+        assertEq(masonry.operator(), address(treasury));
     }
 
     // ---------------------------------------------------------------------

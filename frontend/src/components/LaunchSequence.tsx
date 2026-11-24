@@ -32,7 +32,7 @@ export function LaunchSequence() {
   const epoch = useEpoch();
   const market = usePegMarket();
 
-  // Direct multicall here (not via useBoardroom etc.) — these specific reads
+  // Direct multicall here (not via useMasonry etc.) — these specific reads
   // exist nowhere else in the hook layer and adding hooks just for the wizard
   // would be over-abstraction. One off, clear.
   const { data } = useReadContracts({

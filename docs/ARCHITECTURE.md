@@ -10,7 +10,7 @@ The smart contracts are the backend. The React client reads RPC state and sends 
 | --- | --- | --- |
 | PegToken, ShareToken, BondToken | Stable / capped share / bond | Runtime source unchanged |
 | Treasury | Expansion, bootstrap, contraction, debt caps, bond office | Runtime source unchanged |
-| Boardroom | SQUARE staking and LEVEL claims with epoch locks | Runtime source unchanged |
+| Masonry | SQUARE staking and LEVEL claims with epoch locks | Runtime source unchanged |
 | Genesis / Main / Share pools | MasterChef reward distribution | Runtime source unchanged; deployment still funds and wires all three |
 | PegDefenseHook / Oracle | Fourteen-tier sell tax and V4 tick TWAP | Runtime source unchanged; hook factory and dependencies selected from config |
 | V4PositionWrapper | Full-range position NFT receipts for reward staking | Runtime source unchanged |
@@ -37,4 +37,4 @@ Publication checks chain IDs, successful receipts for every recorded transaction
 - Cancun opcodes and a compatible Uniswap V4 stack are required. “Chain-agnostic” does not mean arbitrary virtual machines or arbitrary router implementations.
 - The upstream SQUARE/WETH Exchange tab remains an unavailable pool placeholder; this branch does not silently create a new trading market.
 - Historical Base fork suites retain historical fixture addresses. They remain opt-in with `BASE_RPC_URL`; they are not dependencies of the production configuration.
-- Governance rotation, seed liquidity, Genesis token selection, Boardroom seeding, and launch approval remain deliberate operator steps. Creating a Timelock does not transfer authority to it.
+- Governance rotation, seed liquidity, Genesis token selection, Masonry seeding, and launch approval remain deliberate operator steps. Creating a Timelock does not transfer authority to it.

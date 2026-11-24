@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 /**
  * @title IOracle
- * @notice Exact interface match for Tomb Finance's IOracle. Treasury and Boardroom call
+ * @notice Exact interface match for Tomb Finance's IOracle. Treasury and Masonry call
  *         `consult(token, amountIn)` to get a TWAP-denominated quote.
  */
 interface IOracle {

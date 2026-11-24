@@ -38,10 +38,10 @@ All 11 original Medium findings have been resolved.
 
 | Original count | Detector | Resolution |
 |---|---|---|
-| 4 | `uninitialized-local` | Added explicit `= 0` initializers in Treasury (`daoShare`, `devShare`, `excluded`, `savedForBond`, `savedForBoardroom`). |
-| 3 | `unused-return` on `IBasisAsset.mint()` | Wrapped all three callsites (`buyBonds`, `_sendToBoardroom`, `allocateSeigniorage`) in `require(...)`. Tomb-faithful: `mint` returns true for any nonzero amount, and we always pass nonzero — `require` is defensive and removes the warning. |
+| 4 | `uninitialized-local` | Added explicit `= 0` initializers in Treasury (`daoShare`, `devShare`, `excluded`, `savedForBond`, `savedForMasonry`). |
+| 3 | `unused-return` on `IBasisAsset.mint()` | Wrapped all three callsites (`buyBonds`, `_sendToMasonry`, `allocateSeigniorage`) in `require(...)`. Tomb-faithful: `mint` returns true for any nonzero amount, and we always pass nonzero — `require` is defensive and removes the warning. |
 | 1 | `unused-return` on `getSlot0` destructuring | `// slither-disable-next-line unused-return` immediately above the destructuring assignment. We legitimately only need the tick. |
-| 1 | `divide-before-multiply` in `allocateSeigniorage` | Rewrote the boardroom share to do multiplications first: `savedForBoardroom = supply * percentage * floorPercent / pegPriceOne / 10_000`. Algebraically equivalent to Tomb's two-step at sub-wei precision (meaningless at our 1e23+ wei scales) but linear. |
+| 1 | `divide-before-multiply` in `allocateSeigniorage` | Rewrote the masonry share to do multiplications first: `savedForMasonry = supply * percentage * floorPercent / pegPriceOne / 10_000`. Algebraically equivalent to Tomb's two-step at sub-wei precision (meaningless at our 1e23+ wei scales) but linear. |
 | 1 | `reentrancy-no-eth` in `buyBonds` | Added `nonReentrant` modifier; moved `epochSupplyContractionLeft -= pegAmount` BEFORE the external burn/mint calls (CEI). |
 | 1 | `reentrancy-no-eth` in `allocateSeigniorage` | Added `nonReentrant` modifier; moved `seigniorageSaved += savedForBond` BEFORE the mint. The remaining cross-call ordering is governed by `nonReentrant` (Slither does not model OZ ReentrancyGuard's protection, so we suppress with an inline `// slither-disable-next-line reentrancy-no-eth` directive above the function). |
 
@@ -57,7 +57,7 @@ All 44 LOW findings are accepted with rationale. They fall into 8 categories.
 
 State variables modified inside computations without dedicated events. E.g., `epochSupplyContractionLeft -= pegAmount` in `buyBonds`.
 
-**Accepted.** Tomb-faithful: high-level events (`BoughtBonds`, `RedeemedBonds`, `BoardroomFunded`, etc.) cover the meaningful state transitions. Indexers reconstruct the math-derived state from those rather than emitting an event on every individual math step. Adding per-update events would bloat bytecode and indexer overhead without informing any new offchain decision.
+**Accepted.** Tomb-faithful: high-level events (`BoughtBonds`, `RedeemedBonds`, `MasonryFunded`, etc.) cover the meaningful state transitions. Indexers reconstruct the math-derived state from those rather than emitting an event on every individual math step. Adding per-update events would bloat bytecode and indexer overhead without informing any new offchain decision.
 
 ### `missing-zero-check` (13 findings)
 
@@ -65,7 +65,7 @@ Setters that accept `address` without `if (addr == address(0)) revert ZeroAddres
 
 **Accepted.** Three reasons:
 
-1. Most accept-an-address setters live on Treasury/Boardroom and the caller is the Timelock (`admin`); the Timelock's two-step queue → execute flow gives the admin multisig 1 day minimum to catch a mistyped zero address before it lands.
+1. Most accept-an-address setters live on Treasury/Masonry and the caller is the Timelock (`admin`); the Timelock's two-step queue → execute flow gives the admin multisig 1 day minimum to catch a mistyped zero address before it lands.
 2. A few are intentional — e.g., `setOperator(address)` could be used to rotate operator to zero as a last-resort renounce (no future privileged calls succeed). Adding a hard zero-check forecloses that escape hatch.
 3. Where Tomb specifically check-zeros (e.g., `setExtraFunds.daoFund`, `setExtraFunds.devFund`, `oracle != address(0)` in `_getOldmPrice`), we match Tomb.
 
@@ -90,7 +90,7 @@ DoS via runaway loop is impossible — the loop bound is set at deploy or under 
 
 Access-control state changes that don't emit. E.g., `setOperator` on Treasury doesn't emit `OperatorTransferred`.
 
-**Accepted with TODO.** Tomb's Treasury also doesn't emit; we're matching. Polish pass before mainnet should add `OperatorTransferred(prev, next)` events on `Treasury.setOperator` and `Boardroom.setOperator`. Tracked separately; not load-bearing for security.
+**Accepted with TODO.** Tomb's Treasury also doesn't emit; we're matching. Polish pass before mainnet should add `OperatorTransferred(prev, next)` events on `Treasury.setOperator` and `Masonry.setOperator`. Tracked separately; not load-bearing for security.
 
 ### `shadowing-local` (2 findings)
 
@@ -158,7 +158,7 @@ Function parameters use `_camelCase` (e.g., `_peg`, `_bond`, `_devFund`). Slithe
 
 ## Outstanding TODOs (polish-pass items)
 
-1. Emit `OperatorTransferred(prev, next)` on `Treasury.setOperator` and `Boardroom.setOperator`.
+1. Emit `OperatorTransferred(prev, next)` on `Treasury.setOperator` and `Masonry.setOperator`.
 2. Add explicit `is IBasisAsset` / `is IDistributor` annotations to `PegToken`, `BondToken`, `Distributor`.
 3. Mark `Epoch._startTime`, `ShareToken.startTime` / `endTime` / `communityFundRewardRate` / `devFundRewardRate` as `immutable`.
 4. Resolve two `shadowing-local` cases by renaming the inner variable.

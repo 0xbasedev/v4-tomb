@@ -8,7 +8,7 @@ import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
-import {Boardroom} from "../../src/core/Boardroom.sol";
+import {Masonry} from "../../src/core/Masonry.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -34,7 +34,7 @@ contract BaseForkTest is BaseTest {
     ShareToken internal share;
     BondToken internal bond;
     Treasury internal treasury;
-    Boardroom internal boardroom;
+    Masonry internal masonry;
     MockOracle internal oracle;
 
     address internal genesisPool = makeAddr("genesisPool");
@@ -73,15 +73,15 @@ contract BaseForkTest is BaseTest {
 
         vm.startPrank(owner);
         treasury = new Treasury();
-        boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        masonry = new Masonry();
+        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
+            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
         );
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
@@ -94,14 +94,14 @@ contract BaseForkTest is BaseTest {
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
         bond.transferTrustees(address(treasury));
-        boardroom.setOperator(address(treasury));
+        masonry.setOperator(address(treasury));
 
-        // Launch ceremony Boardroom seed (see docs/GAP_AUDIT.md gap #16):
+        // Launch ceremony Masonry seed (see docs/GAP_AUDIT.md gap #16):
         // owner holds 1 SHARE from ShareToken's constructor mint. Stake a tiny
-        // amount so allocateSeigniorage's bootstrap branch can credit Boardroom
+        // amount so allocateSeigniorage's bootstrap branch can credit Masonry
         // without reverting CannotAllocateWhenTotalSupplyZero.
-        share.approve(address(boardroom), 1);
-        boardroom.stake(1);
+        share.approve(address(masonry), 1);
+        masonry.stake(1);
 
         vm.stopPrank();
 
@@ -140,13 +140,13 @@ contract BaseForkTest is BaseTest {
         assertEq(treasury.bond(), address(bond));
         assertEq(treasury.share(), address(share));
         assertEq(treasury.oracle(), address(oracle));
-        assertEq(treasury.boardroom(), address(boardroom));
+        assertEq(treasury.masonry(), address(masonry));
 
         // Operator handoff complete on every protocol contract.
         assertEq(peg.operator(), address(treasury));
         assertEq(share.operator(), address(treasury));
         assertEq(bond.operator(), address(treasury));
-        assertEq(boardroom.operator(), address(treasury));
+        assertEq(masonry.operator(), address(treasury));
 
         // Genesis distributions landed.
         assertEq(peg.balanceOf(genesisPool), 11_000 ether);
@@ -156,7 +156,7 @@ contract BaseForkTest is BaseTest {
     }
 
     function test_EpochCycleRunsAgainstFork() public {
-        // Seed circulation: alice + bob get OLDM from the main reward pool.
+        // Seed circulation: alice + bob get OLDM from the peg farm.
         vm.startPrank(mainPool);
         peg.transfer(alice, 10_000 ether);
         peg.transfer(bob, 10_000 ether);
@@ -168,10 +168,10 @@ contract BaseForkTest is BaseTest {
 
         // Alice stakes.
         vm.prank(alice);
-        share.approve(address(boardroom), 1000 ether);
+        share.approve(address(masonry), 1000 ether);
         vm.roll(block.number + 1);
         vm.prank(alice);
-        boardroom.stake(1000 ether);
+        masonry.stake(1000 ether);
 
         // Drive the oracle and allocate one expansion epoch.
         oracle.setPrice(1.05e18);
@@ -181,7 +181,7 @@ contract BaseForkTest is BaseTest {
         assertEq(treasury.epoch(), 1);
 
         // Alice accrued reward.
-        assertGt(boardroom.earned(alice), 0);
+        assertGt(masonry.earned(alice), 0);
     }
 
     function test_TreasuryHoldsPegAfterContractionRecovery() public {
@@ -192,10 +192,10 @@ contract BaseForkTest is BaseTest {
         vm.prank(farmingPool);
         share.transfer(alice, 1000 ether);
         vm.prank(alice);
-        share.approve(address(boardroom), 1000 ether);
+        share.approve(address(masonry), 1000 ether);
         vm.roll(block.number + 1);
         vm.prank(alice);
-        boardroom.stake(1000 ether);
+        masonry.stake(1000 ether);
 
         // Expansion (need a tick at all).
         oracle.setPrice(1.05e18);

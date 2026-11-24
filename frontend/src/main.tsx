@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 
@@ -13,8 +13,8 @@ import "./styles/index.css";
 
 const Landing = lazy(() => import("./routes/Landing").then((module) => ({ default: module.Landing })));
 const Dashboard = lazy(() => import("./routes/Dashboard").then((module) => ({ default: module.Dashboard })));
-const TheClub = lazy(() => import("./routes/TheClub").then((module) => ({ default: module.TheClub })));
-const TheVault = lazy(() => import("./routes/TheVault").then((module) => ({ default: module.TheVault })));
+const Masonry = lazy(() => import("./routes/Masonry").then((module) => ({ default: module.Masonry })));
+const Farms = lazy(() => import("./routes/Farms").then((module) => ({ default: module.Farms })));
 const Bonds = lazy(() => import("./routes/Bonds").then((module) => ({ default: module.Bonds })));
 const Swap = lazy(() => import("./routes/Swap").then((module) => ({ default: module.Swap })));
 const Admin = lazy(() => import("./routes/Admin").then((module) => ({ default: module.Admin })));
@@ -40,9 +40,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             {/* All other routes render inside the shared Layout */}
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/club" element={<TheClub />} />
-              <Route path="/vault" element={<TheVault />} />
+              <Route path="/masonry" element={<Masonry />} />
+              <Route path="/farms" element={<Farms />} />
               <Route path="/bonds" element={<Bonds />} />
+              {/* Former paths. Kept so existing links and bookmarks still land. */}
+              <Route path="/club" element={<Navigate to="/masonry" replace />} />
+              <Route path="/vault" element={<Navigate to="/farms" replace />} />
+              <Route path="/notes" element={<Navigate to="/bonds" replace />} />
               <Route path="/swap" element={<Swap />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/docs" element={<Docs />} />

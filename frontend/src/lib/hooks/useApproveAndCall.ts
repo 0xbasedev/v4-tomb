@@ -43,7 +43,7 @@ export interface SubmitArgs {
     functionName: string;
     args: readonly unknown[];
   };
-  /** Short label shown in toasts ("Stake into The Club"). */
+  /** Short label shown in toasts ("Stake into The Masonry"). */
   label: string;
   /** Called once after the actual call's receipt confirms. */
   onSuccess?: () => void;
