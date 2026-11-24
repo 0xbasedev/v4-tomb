@@ -13,12 +13,12 @@ import { encodeBurnPosition } from "@/lib/swap/encodeBurnPosition";
  *   1. Unwrap: wrapper.unwrap(tokenId) — burns your wrapper shares, returns
  *      the V4 LP NFT to your wallet.
  *   2. Burn:   positionManager.modifyLiquidities(BURN_POSITION + TAKE_PAIR)
- *      — burns the LP position, transfers the underlying LEVEL + WETH back
+ *      — burns the LP position, transfers the underlying xTOMB + WETH back
  *      to your wallet.
  *
  * Status line reads on-chain state and tells the user which step is next:
  *   - "Wrapper holds this NFT. Unwrap to reclaim it."
- *   - "You own this NFT. Burn it to recover the underlying LEVEL + WETH."
+ *   - "You own this NFT. Burn it to recover the underlying xTOMB + WETH."
  *   - "Already burned" / "Owned by someone else" / etc.
  *
  * Each action is a single wallet pop. Slippage on the burn defaults to 0n
@@ -120,7 +120,7 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
       toast.update(unwrapToastId.current, {
         variant: "success",
         title: "Unwrap Confirmed",
-        message: "NFT returned to your wallet. Burn below to recover LEVEL + WETH.",
+        message: "NFT returned to your wallet. Burn below to recover xTOMB + WETH.",
         txHash: unwrap.data,
       });
       ownerRead.refetch();
@@ -152,7 +152,7 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
       toast.update(burnToastId.current, {
         variant: "success",
         title: "Burn Confirmed",
-        message: "Position closed. LEVEL + WETH are in your wallet.",
+        message: "Position closed. xTOMB + WETH are in your wallet.",
         txHash: burn.data,
       });
       ownerRead.refetch();
@@ -187,7 +187,7 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
         statusLine = "Wrapper holds this NFT, but it was wrapped by someone else.";
       }
     } else if (youOwnIt) {
-      statusLine = "You own this NFT. Burn it to recover the underlying LEVEL + WETH.";
+      statusLine = "You own this NFT. Burn it to recover the underlying xTOMB + WETH.";
       canBurn = true;
     } else {
       statusLine = `NFT is owned by ${owner?.slice(0, 6)}…${owner?.slice(-4)}, not you.`;
@@ -243,13 +243,13 @@ export function UnwindPanel({ poolName, prefillTokenId }: UnwindPanelProps) {
         className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
         style={{ letterSpacing: "0.06em" }}
       >
-        Reclaim Your LEVEL + WETH
+        Reclaim Your xTOMB + WETH
       </h2>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
         Two steps to fully exit a {poolName} position. First withdraw your
         wrapper shares above (returns them to your wallet), then <em>unwrap</em>
-        (returns the NFT), then <em>burn</em> (returns the underlying LEVEL +
+        (returns the NFT), then <em>burn</em> (returns the underlying xTOMB +
         WETH). Each step is one wallet signature; no approvals required.
       </p>
 

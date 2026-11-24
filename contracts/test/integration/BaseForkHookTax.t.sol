@@ -6,7 +6,6 @@ import {HookMiner} from "../utils/HookMiner.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
-import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Masonry} from "../../src/core/Masonry.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
@@ -60,7 +59,6 @@ contract BaseForkHookTaxTest is BaseTest {
 
     PegToken internal peg;
     ShareToken internal share;
-    BondToken internal bond;
     Treasury internal treasury;
     Masonry internal masonry;
     Oracle internal oracle;
@@ -104,9 +102,8 @@ contract BaseForkHookTaxTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
-        peg = new PegToken();
-        share = new ShareToken(startTime, communityFund, devFund);
-        bond = new BondToken();
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", startTime, communityFund, devFund);
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
         uint160 flags = PegDefenseHookPermissions.FLAGS;
@@ -147,9 +144,7 @@ contract BaseForkHookTaxTest is BaseTest {
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
-        treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), startTime, excluded);
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
         share.distributeReward(farmingPool);
@@ -161,7 +156,6 @@ contract BaseForkHookTaxTest is BaseTest {
         // Hand off operator authority on every token + masonry to Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
-        bond.transferTrustees(address(treasury));
         masonry.setOperator(address(treasury));
 
         // Masonry seed so bootstrap-branch allocateSeigniorage doesn't revert (gap #16).
@@ -173,7 +167,7 @@ contract BaseForkHookTaxTest is BaseTest {
         IWeth9(weth).deposit{value: TEST_WETH_BAL}();
 
         // Wire Treasury into the hook so the route path has a destination.
-        hook.setTreasury(address(treasury));
+        hook.setFeeRecipient(address(treasury));
 
         // Deploy v4-core test routers + approve them on both currencies.
         swapRouter = new PoolSwapTest(poolManager);

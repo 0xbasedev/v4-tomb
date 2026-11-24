@@ -5,7 +5,6 @@ import {console2} from "forge-std/Script.sol";
 
 import {PegToken} from "../src/tokens/PegToken.sol";
 import {ShareToken} from "../src/tokens/ShareToken.sol";
-import {BondToken} from "../src/tokens/BondToken.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Masonry} from "../src/core/Masonry.sol";
 import {Oracle} from "../src/oracle/Oracle.sol";
@@ -53,6 +52,15 @@ contract Deploy is NetworkConfig {
 
     struct Genesis {
         address airdropWallet;
+        address daoWallet;
+        uint256 genesisStart;
+        string pegName;
+        string pegSymbol;
+        string shareName;
+        string shareSymbol;
+        uint256 farmPegLpAlloc;
+        uint256 farmShareLpAlloc;
+        bool masonryStakesPairLp;
         address communityFund;
         address devFund;
         uint256 vestingStart;
@@ -63,7 +71,6 @@ contract Deploy is NetworkConfig {
 
     PegToken public peg;
     ShareToken public share;
-    BondToken public bond;
     PegDefenseHook public hook;
     ShareBuybackHook public shareBuybackHook;
     Oracle public oracle;
@@ -75,6 +82,7 @@ contract Deploy is NetworkConfig {
     V4PositionWrapper public lpWrapper;
     LpOnlyHook public pairLpHook;
     V4PositionWrapper public pairLpWrapper;
+    V4PositionWrapper public shareLpWrapper;
     MiniSwapRouter public miniSwapRouter;
     Timelock public timelock;
     address public wethAddress;
@@ -116,24 +124,23 @@ contract Deploy is NetworkConfig {
         peg.distributeReward(address(genesisRewardPool), address(pegFarm), g.airdropWallet);
         share.distributeReward(address(shareFarm));
 
-        // Register the LP wrapper as the stake token in the Main + Share reward pools.
-        // Deployer is still the operator on these pools — handoff to a Timelock happens
-        // via the governance ceremony. Sets a single 100-weight entry on each; future
-        // ops can call .set() to add more LP types or adjust weights.
+        // Register the LP wrappers as farm stake tokens. The deployer is still the operator
+        // on these pools; the governance ceremony hands them to the Timelock, which can
+        // re-weight with .set() later.
+        //   - PEG farm: the peg LP only.
+        //   - SHARE farm: split between the peg LP and the share LP (default 30 / 70).
         pegFarm.add(100, IERC20(address(lpWrapper)), false, 0);
-        shareFarm.add(100, IERC20(address(lpWrapper)), false, 0);
+        if (g.farmPegLpAlloc > 0) shareFarm.add(g.farmPegLpAlloc, IERC20(address(lpWrapper)), false, 0);
+        if (g.farmShareLpAlloc > 0) shareFarm.add(g.farmShareLpAlloc, IERC20(address(shareLpWrapper)), false, 0);
 
-        // Wire Treasury into the hook so the Sprint 4b tax can route PEG there above
-        // the burn threshold. Hook trustees defaults to the deployer at construction; the
-        // setter is invoked from that role. (autoCalculateTax stays false at deploy —
-        // Trustees enables post-launch.)
-        hook.setTreasury(address(treasury));
+        // Sell tax collected above the burn threshold goes to the DAO wallet. Nothing is
+        // ever sent to the Treasury contract. (The tax itself stays off at deploy.)
+        hook.setFeeRecipient(g.daoWallet);
         // Assess the sell tax against the epoch TWAP rather than the pool's spot price.
         hook.setTaxOracle(address(oracle));
 
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
-        bond.transferTrustees(address(treasury));
         masonry.setOperator(address(treasury));
 
         vm.stopBroadcast();
@@ -151,7 +158,21 @@ contract Deploy is NetworkConfig {
         g.communityFund = vm.envAddress("COMMUNITY_FUND");
         g.devFund = vm.envAddress("DEV_FUND");
         g.vestingStart = vm.envOr("VESTING_START", block.timestamp + 1 hours);
-        g.epochStart = vm.envOr("EPOCH_START", g.vestingStart);
+        // Genesis runs first and must be over before the Treasury's epoch 0.
+        g.genesisStart = vm.envOr("GENESIS_START", g.vestingStart);
+        g.epochStart = vm.envOr("EPOCH_START", g.genesisStart + 1 days);
+        // Every fee and fund the protocol collects goes to this wallet, never to the Treasury.
+        g.daoWallet = vm.envAddress("DAO_WALLET");
+        // Token names come from the environment so the contracts carry no brand.
+        g.pegName = vm.envOr("PEG_NAME", string("Peg Token"));
+        g.pegSymbol = vm.envOr("PEG_SYMBOL", string("PEG"));
+        g.shareName = vm.envOr("SHARE_NAME", string("Share Token"));
+        g.shareSymbol = vm.envOr("SHARE_SYMBOL", string("SHARE"));
+        // Split of share-token farm emissions between the two LP positions.
+        g.farmPegLpAlloc = vm.envOr("FARM_PEG_LP_ALLOC", uint256(30));
+        g.farmShareLpAlloc = vm.envOr("FARM_SHARE_LP_ALLOC", uint256(70));
+        // The Masonry stakes the untradeable peg/share LP by default; false stakes the share token.
+        g.masonryStakesPairLp = vm.envOr("MASONRY_STAKES_PAIR_LP", true);
         g.timelockAdmin = vm.envAddress("TIMELOCK_ADMIN");
         g.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
         require(
@@ -159,19 +180,20 @@ contract Deploy is NetworkConfig {
             "Deploy: zero wallet"
         );
         require(g.timelockAdmin != address(0), "Deploy: zero admin");
-        require(g.epochStart > block.timestamp && g.vestingStart > block.timestamp, "Deploy: start must be future");
+        require(g.daoWallet != address(0), "Deploy: zero DAO wallet");
+        require(g.genesisStart > block.timestamp && g.vestingStart > block.timestamp, "Deploy: start must be future");
+        require(g.epochStart >= g.genesisStart + 1 days, "Deploy: epoch 0 must follow genesis");
+        require(g.farmPegLpAlloc + g.farmShareLpAlloc > 0, "Deploy: farm split is empty");
         require(g.timelockDelay >= 1 days && g.timelockDelay <= 30 days, "Deploy: invalid timelock delay");
     }
 
     function _deployTokens(
         Genesis memory g
     ) internal {
-        peg = new PegToken();
-        share = new ShareToken(g.vestingStart, g.communityFund, g.devFund);
-        bond = new BondToken();
+        peg = new PegToken(g.pegName, g.pegSymbol);
+        share = new ShareToken(g.shareName, g.shareSymbol, g.vestingStart, g.communityFund, g.devFund);
         console2.log("$PEG:    ", address(peg));
         console2.log("$SHARE:   ", address(share));
-        console2.log("$BOND:", address(bond));
     }
 
     function _deployHookAndInitPool(
@@ -268,12 +290,7 @@ contract Deploy is NetworkConfig {
         int24 tickLower = TickMath.minUsableTick(60);
         int24 tickUpper = TickMath.maxUsableTick(60);
         lpWrapper = new V4PositionWrapper(
-            IPositionManager(_infrastructure("positionManager")),
-            poolKey,
-            tickLower,
-            tickUpper,
-            "LEVEL-WETH LP",
-            "LEVEL-WETH-LP"
+            IPositionManager(_infrastructure("positionManager")), poolKey, tickLower, tickUpper, "Peg LP", "PEG-LP"
         );
         console2.log("V4PositionWrapper (PEG/WETH full-range):", address(lpWrapper));
         console2.log("  tickLower:", int256(tickLower));
@@ -320,18 +337,30 @@ contract Deploy is NetworkConfig {
             pairPoolKey,
             TickMath.minUsableTick(60),
             TickMath.maxUsableTick(60),
-            "LEVEL-SQUARE LP",
-            "LEVEL-SQUARE-LP"
+            "Peg-Share LP",
+            "PEG-SHARE-LP"
         );
         console2.log("V4PositionWrapper (PEG/SHARE full-range):", address(pairLpWrapper));
+
+        // The tradeable SHARE/quote pool gets a wrapper too, so its LPs can farm.
+        shareLpWrapper = new V4PositionWrapper(
+            IPositionManager(_infrastructure("positionManager")),
+            sharePoolKey,
+            TickMath.minUsableTick(60),
+            TickMath.maxUsableTick(60),
+            "Share LP",
+            "SHARE-LP"
+        );
+        console2.log("V4PositionWrapper (SHARE/quote full-range):", address(shareLpWrapper));
     }
 
     function _deployRewardPools(
         Genesis memory g
     ) internal {
-        genesisRewardPool = new GenesisRewardPool(address(peg), g.epochStart);
-        pegFarm = new PegFarm(address(peg), g.epochStart + 1 days);
-        shareFarm = new ShareFarm(address(share), g.epochStart + 1 days);
+        // Genesis opens first; the farms open with epoch 0, once genesis has closed.
+        genesisRewardPool = new GenesisRewardPool(address(peg), g.genesisStart);
+        pegFarm = new PegFarm(address(peg), g.epochStart);
+        shareFarm = new ShareFarm(address(share), g.epochStart);
         console2.log("GenesisRewardPool:", address(genesisRewardPool));
         console2.log("PegFarm:   ", address(pegFarm));
         console2.log("ShareFarm:  ", address(shareFarm));
@@ -342,18 +371,17 @@ contract Deploy is NetworkConfig {
     ) internal {
         treasury = new Treasury();
         masonry = new Masonry();
-        masonry.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
+        // The Masonry pays expansion to whoever stakes its token. By default that is the
+        // untradeable PEG/SHARE LP position; it can be the share token itself instead.
+        IERC20 stakeToken = g.masonryStakesPairLp ? IERC20(address(pairLpWrapper)) : IERC20(address(share));
+        masonry.initialize(IERC20(address(peg)), stakeToken, ITreasury(address(treasury)));
 
-        // Pools + airdrop wallet are the addresses that hold un-emitted PEG; they
-        // must be excluded from `getPegCirculatingSupply` so the contraction-headroom
-        // math doesn't count them as circulating.
-        address[] memory excluded = new address[](3);
+        // Only the two pools holding un-emitted PEG are left out of circulating supply.
+        // The airdrop allocation is real, held supply and counts.
+        address[] memory excluded = new address[](2);
         excluded[0] = address(genesisRewardPool);
         excluded[1] = address(pegFarm);
-        excluded[2] = g.airdropWallet;
-        treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(masonry), g.epochStart, excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), g.epochStart, excluded);
         console2.log("Treasury: ", address(treasury));
         console2.log("Masonry:", address(masonry));
     }
@@ -364,7 +392,7 @@ contract Deploy is NetworkConfig {
         vm.serializeUint(key, "chainId", block.chainid);
         vm.serializeAddress(key, "peg", address(peg));
         vm.serializeAddress(key, "share", address(share));
-        vm.serializeAddress(key, "bond", address(bond));
+        vm.serializeAddress(key, "shareLpWrapper", address(shareLpWrapper));
         vm.serializeAddress(key, "treasury", address(treasury));
         vm.serializeAddress(key, "masonry", address(masonry));
         vm.serializeAddress(key, "oracle", address(oracle));
@@ -392,7 +420,6 @@ contract Deploy is NetworkConfig {
     ) internal view {
         require(peg.operator() == address(treasury), "Deploy: peg operator");
         require(share.operator() == address(treasury), "Deploy: share operator");
-        require(bond.operator() == address(treasury), "Deploy: bond operator");
         require(masonry.operator() == address(treasury), "Deploy: masonry operator");
         require(hook.bound(), "Deploy: hook not bound");
         require(shareBuybackHook.bound(), "Deploy: share hook not bound");
@@ -412,6 +439,8 @@ contract Deploy is NetworkConfig {
         // Airdrop wallet may already hold PEG (e.g., the 1-unit constructor seed if the
         // wallet happens to equal the deployer in a dry-run). Assert at least the 9k landed.
         require(peg.balanceOf(g.airdropWallet) >= 9000 ether, "Deploy: airdrop funding mismatch");
+        require(hook.feeRecipient() == g.daoWallet, "Deploy: tax must go to the DAO wallet");
+        require(treasury.excludedFromTotalSupply(1) == address(pegFarm), "Deploy: supply exclusions");
         require(share.balanceOf(address(shareFarm)) == 59_500 ether, "Deploy: share funding mismatch");
 
         console2.log("\n=== POST-DEPLOY SANITY ===");

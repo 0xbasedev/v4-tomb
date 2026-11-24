@@ -77,7 +77,7 @@ contract BaseForkSeedLiquidityTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy PEG (we mint for tests).
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
         peg.mint(address(this), PEG_BAL);
 
         // Acquire WETH from real ETH via OP-stack predeploy deposit.

@@ -573,6 +573,41 @@ token to the other around the sell tax.
 entries (`pairLpHook`, `pairLpWrapper`). The wrapper is **not** registered with any reward
 pool: emissions weights are left to the operator.
 
+---
+
+## Revision 7 — no bonds, no bootstrap, DAO wallet, farm split
+
+The Treasury is now an emissions engine and nothing more.
+
+| Area | Before | Now |
+|---|---|---|
+| Bonds | Bond token, discount purchases below peg, premium redemptions above 1.10, debt ratio, a seigniorage reserve | Removed entirely: the token, both functions and every related parameter. Below the ceiling the Treasury mints nothing; above it the whole expansion is paid out, with no debt to service first |
+| Bootstrap | 28 epochs of guaranteed 4.5% expansion | Removed, with no option to restore it. Genesis runs for 24 hours before epoch 0; every epoch is earned by price |
+| Treasury balance | Held the bond reserve and received sell tax above 1.10 | Holds nothing. What it mints leaves in the same call; anything sent by mistake can be swept by the operator |
+| Sell tax above 1.10 | Sent to the Treasury contract | Sent to the DAO wallet (`DAO_WALLET`, stored as the hook's `feeRecipient`) |
+| Empty Masonry | An expansion with no stakers reverted and stalled the epoch | The mint is skipped and the epoch advances |
+| Share farm | 100% to the peg LP | Configurable split, default 30% peg LP and 70% share LP (`FARM_PEG_LP_ALLOC`, `FARM_SHARE_LP_ALLOC`) |
+| Masonry stake token | The share token | The untradeable peg/share LP position by default (`MASONRY_STAKES_PAIR_LP`) |
+| Circulating supply | Excluded the genesis pool, the peg farm and the airdrop wallet | Excludes the two pools only; the airdrop counts |
+| Oracle admin | Stayed with the deployer after rotation | Ownership and trustees go to the Timelock with everything else. Its window stays bounded to 1–48 hours by the contract |
+| Token names | Hardcoded | Constructor arguments, read from `PEG_NAME`, `PEG_SYMBOL`, `SHARE_NAME`, `SHARE_SYMBOL` |
+| Swap router | No deadline | An overload with a deadline; the original entry point is kept |
+| Distributor | Present but unused | Removed |
+
+Signed approvals (`permit`) are kept on both tokens. They save users an approval
+transaction and add no privileged surface.
+
+### Not yet done
+
+- **Different quote assets per pool.** The approved layout pairs the peg token with USDC and
+  the share token with the chain's wrapped native asset. `ShareBuybackHook` currently
+  requires both pools to share one quote asset, because the buyback swaps that asset
+  straight into the peg token. Supporting two needs a second hop through a native/USDC pool
+  and a price guard for that hop.
+- **Airdrop split.** The peg token still mints its airdrop allocation to one wallet. Sending
+  it to several (DAO, team, dev, arbitrage bot) needs the amounts for each.
+- **Zap.** `MiniSwapRouter` is kept. Replacing it with a zap contract needs those sources.
+
 ### Still outside this repository
 
 - **LEVEL / SQUARE and Masonry.** The tokens themselves are not here. `ShareBuybackHook`

@@ -3,20 +3,11 @@ pragma solidity 0.8.26;
 
 /**
  * @title ITreasury
- * @notice Tomb-shape interface for the Treasury contract. Masonry and any peripheral
- *         contracts call into this for epoch / price / bond data.
+ * @notice The slice of the Treasury the Masonry and peripheral contracts read: the epoch
+ *         clock and the peg token's TWAP.
  */
 interface ITreasury {
     function epoch() external view returns (uint256);
     function nextEpochPoint() external view returns (uint256);
     function getPegPrice() external view returns (uint256);
-
-    function buyBonds(
-        uint256 amount,
-        uint256 targetPrice
-    ) external;
-    function redeemBonds(
-        uint256 amount,
-        uint256 targetPrice
-    ) external;
 }

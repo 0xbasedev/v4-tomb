@@ -42,7 +42,7 @@ contract PegTokenTest is BaseTest {
 
         // Deploy from `owner` so owner is initial owner + initial trustees.
         vm.prank(owner);
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
 
         // Rotate trustees to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -54,15 +54,15 @@ contract PegTokenTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(peg.name(), "LEVEL");
-        assertEq(peg.symbol(), "LEVEL");
+        assertEq(peg.name(), "Peg Token");
+        assertEq(peg.symbol(), "PEG");
         assertEq(peg.decimals(), 18);
     }
 
     function test_Constructor_OwnerAndInitialDeployerMint() public {
         // Re-deploy fresh to inspect the constructor effects directly.
         vm.prank(alice);
-        PegToken fresh = new PegToken();
+        PegToken fresh = new PegToken("Peg Token", "PEG");
         assertEq(fresh.owner(), alice);
         // 1 unit minted to the deployer for initial LP / sanity.
         assertEq(fresh.balanceOf(alice), 1 ether);

@@ -15,7 +15,6 @@ const Landing = lazy(() => import("./routes/Landing").then((module) => ({ defaul
 const Dashboard = lazy(() => import("./routes/Dashboard").then((module) => ({ default: module.Dashboard })));
 const Masonry = lazy(() => import("./routes/Masonry").then((module) => ({ default: module.Masonry })));
 const Farms = lazy(() => import("./routes/Farms").then((module) => ({ default: module.Farms })));
-const Bonds = lazy(() => import("./routes/Bonds").then((module) => ({ default: module.Bonds })));
 const Swap = lazy(() => import("./routes/Swap").then((module) => ({ default: module.Swap })));
 const Admin = lazy(() => import("./routes/Admin").then((module) => ({ default: module.Admin })));
 const Docs = lazy(() => import("./routes/Docs").then((module) => ({ default: module.Docs })));
@@ -42,11 +41,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/masonry" element={<Masonry />} />
               <Route path="/farms" element={<Farms />} />
-              <Route path="/bonds" element={<Bonds />} />
               {/* Former paths. Kept so existing links and bookmarks still land. */}
               <Route path="/club" element={<Navigate to="/masonry" replace />} />
               <Route path="/vault" element={<Navigate to="/farms" replace />} />
-              <Route path="/notes" element={<Navigate to="/bonds" replace />} />
+              {/* There are no bonds. The old pages land on the dashboard. */}
+              <Route path="/notes" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/bonds" element={<Navigate to="/dashboard" replace />} />
               <Route path="/swap" element={<Swap />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/docs" element={<Docs />} />

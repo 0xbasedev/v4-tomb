@@ -1,5 +1,5 @@
 /**
- * V4PositionWrapper — wraps a LEVEL-WETH V4 LP NFT into ERC-20 share certificates
+ * V4PositionWrapper — wraps a xTOMB-WETH V4 LP NFT into ERC-20 share certificates
  * that can be staked in Main/Share reward pools.
  *
  * The wrapper validates the position's pool ID + exact tick range (full range only)

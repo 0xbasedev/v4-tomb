@@ -13,12 +13,12 @@ import {
 } from "@/lib/swap/liquidityMath";
 
 /**
- * MintPositionPanel — provide LEVEL + WETH amounts → mint a full-range V4 LP NFT.
+ * MintPositionPanel — provide xTOMB + WETH amounts → mint a full-range V4 LP NFT.
  *
  * Full range only (tickSpacing 60 → ±887220). This matches the V4PositionWrapper's
  * exact-range requirement: only positions at this canonical range can be wrapped.
  *
- * UX: user types either LEVEL or WETH; the partner amount auto-populates at the
+ * UX: user types either xTOMB or WETH; the partner amount auto-populates at the
  * current pool ratio. Liquidity is computed client-side via the TickMath +
  * LiquidityAmounts ports.
  *
@@ -49,7 +49,7 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
   const [pegInput, setPegInput] = useState("");
   const [wethInput, setWethInput] = useState("");
 
-  // Live reads — current tick (drives sqrtPriceX96), and the user's LEVEL + WETH balances.
+  // Live reads — current tick (drives sqrtPriceX96), and the user's xTOMB + WETH balances.
   const tickRead = useReadContracts({
     allowFailure: false,
     contracts:
@@ -182,25 +182,25 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
         className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
         style={{ letterSpacing: "0.06em" }}
       >
-        LEVEL · WETH at Full Range
+        xTOMB · WETH at Full Range
       </h2>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
-        Provide LEVEL and WETH at the current ratio. The PositionManager mints
+        Provide xTOMB and WETH at the current ratio. The PositionManager mints
         you a V4 LP NFT at the canonical full range (tick ±887220). Wrap it
         below to stake in {poolName}.
       </p>
 
-      {/* LEVEL input */}
+      {/* xTOMB input */}
       <div className="mb-2 flex items-baseline justify-between px-1">
-        <span className="label-deco text-deco-gold-dark">LEVEL</span>
+        <span className="label-deco text-deco-gold-dark">xTOMB</span>
         <button
           type="button"
           onClick={() => {
             setDriver("peg");
             setPegInput(formatUnits(pegBal, 18));
           }}
-          aria-label="Use full LEVEL balance"
+          aria-label="Use full xTOMB balance"
           className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold"
         >
           Bal · {formatToken(pegBal, 4)}
@@ -217,11 +217,11 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
             setPegInput(maskDecimalInput(e.target.value));
           }}
           disabled={mint.isInFlight}
-          aria-label="LEVEL amount"
+          aria-label="xTOMB amount"
           className="font-display w-full bg-transparent px-4 py-3 text-right text-2xl text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none disabled:opacity-50"
         />
         <span className="font-ornament mr-4 text-sm text-deco-gold" style={{ letterSpacing: "0.2em" }}>
-          LEVEL
+          xTOMB
         </span>
       </div>
 
@@ -264,12 +264,12 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
         {error
           ? error
           : insufficientPeg
-            ? `Insufficient LEVEL — need ${formatToken(pegAmount, 4)}, have ${formatToken(pegBal, 4)}.`
+            ? `Insufficient xTOMB — need ${formatToken(pegAmount, 4)}, have ${formatToken(pegBal, 4)}.`
             : insufficientWeth
               ? `Insufficient WETH — need ${formatToken(wethAmount, 4)}, have ${formatToken(wethBal, 4)}.`
               : hasAmounts
                 ? `Liquidity to mint: ${liquidity.toString()}`
-                : "Type a LEVEL or WETH amount to mint at the current ratio."}
+                : "Type a xTOMB or WETH amount to mint at the current ratio."}
       </p>
 
       <button

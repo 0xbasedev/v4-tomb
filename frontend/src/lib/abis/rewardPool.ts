@@ -1,6 +1,6 @@
 /**
- * Shared MasterChef-style reward pool surface. Used by Genesis (rewards LEVEL),
- * Main (rewards LEVEL), and Share (rewards SQUARE). The accessors return identical
+ * Shared MasterChef-style reward pool surface. Used by Genesis (rewards xTOMB),
+ * Main (rewards xTOMB), and Share (rewards xSHARE). The accessors return identical
  * shapes; only the reward-name view (`pendingPeg` vs `pendingShare`) differs.
  *
  * The two pendingX views are exported as separate ABIs so wagmi narrows the
@@ -20,7 +20,7 @@ const USER_INFO_OUTPUTS = [
   { name: "rewardDebt", type: "uint256" },
 ] as const;
 
-/** LEVEL-emitting reward pool (Genesis + Main). */
+/** xTOMB-emitting reward pool (Genesis + Main). */
 export const pegRewardPoolAbi = [
   {
     type: "function",
@@ -100,7 +100,7 @@ export const pegRewardPoolAbi = [
   },
 ] as const;
 
-/** Share-emitting reward pool (Share pool — emits SQUARE). */
+/** Share-emitting reward pool (Share pool — emits xSHARE). */
 export const shareFarmAbi = [
   {
     type: "function",

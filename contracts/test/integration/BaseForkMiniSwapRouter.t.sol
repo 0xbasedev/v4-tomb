@@ -85,7 +85,7 @@ contract BaseForkMiniSwapRouterTest is BaseTest {
 
         // Deploy PEG (test contract holds trustees role; no Treasury needed for swap tests).
         vm.prank(owner);
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
 
         // Mine a hook address with the required permissions (see PegDefenseHookPermissions.FLAGS,
         // low 14 bits = 0x10CC). Use HookMiner so the resulting CREATE2

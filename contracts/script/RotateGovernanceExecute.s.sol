@@ -18,7 +18,6 @@ import {Timelock} from "../src/governance/Timelock.sol";
  *           TIMELOCK address is resolved from the selected manifest deployment.
  *           PEG address is resolved from the selected manifest deployment.
  *           SHARE address is resolved from the selected manifest deployment.
- *           BOND address is resolved from the selected manifest deployment.
  *           HOOK address is resolved from the selected manifest deployment.
  *           ETA — Unix timestamp that was used in `RotateGovernanceQueue.s.sol`. Same value!
  *
@@ -33,9 +32,9 @@ contract RotateGovernanceExecute is NetworkConfig {
         Timelock timelock = Timelock(payable(_deployment("timelock")));
         address peg = _deployment("peg");
         address share = _deployment("share");
-        address bond = _deployment("bond");
         address hook = _deployment("hook");
         address shareHook = _deployment("shareBuybackHook");
+        address oracle = _deployment("oracle");
         uint256 eta = vm.envUint("ETA");
 
         console2.log("=== RotateGovernanceExecute ===");
@@ -49,12 +48,11 @@ contract RotateGovernanceExecute is NetworkConfig {
         vm.startBroadcast(pk);
         timelock.executeTransaction(peg, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(share, 0, "acceptOwnership()", bytes(""), eta);
-        timelock.executeTransaction(bond, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(hook, 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(shareHook, 0, "acceptOwnership()", bytes(""), eta);
+        timelock.executeTransaction(oracle, 0, "acceptOwnership()", bytes(""), eta);
         vm.stopBroadcast();
 
-        console2.log("\nGovernance ceremony complete. Timelock now owns peg/share/bond and both hooks,");
         console2.log("operator of Treasury and Genesis/Main/Share reward pools, and trustees of both hooks.");
         console2.log("Treasury still operates Masonry (intentional). Wrapper has no admin (intentional).");
     }

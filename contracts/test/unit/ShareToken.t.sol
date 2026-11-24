@@ -42,7 +42,7 @@ contract ShareTokenTest is BaseTest {
         vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        share = new ShareToken(vestingStart, communityFund, devFund);
+        share = new ShareToken("Share Token", "SHARE", vestingStart, communityFund, devFund);
 
         // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
@@ -54,8 +54,8 @@ contract ShareTokenTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(share.name(), "SQUARE");
-        assertEq(share.symbol(), "SQUARE");
+        assertEq(share.name(), "Share Token");
+        assertEq(share.symbol(), "SHARE");
         assertEq(share.decimals(), 18);
     }
 
@@ -95,13 +95,13 @@ contract ShareTokenTest is BaseTest {
     function test_Constructor_RejectsZeroCommunityFund() public {
         vm.prank(owner);
         vm.expectRevert(ShareToken.ZeroAddress.selector);
-        new ShareToken(vestingStart, address(0), devFund);
+        new ShareToken("Share Token", "SHARE", vestingStart, address(0), devFund);
     }
 
     function test_Constructor_RejectsZeroDevFund() public {
         vm.prank(owner);
         vm.expectRevert(ShareToken.ZeroAddress.selector);
-        new ShareToken(vestingStart, communityFund, address(0));
+        new ShareToken("Share Token", "SHARE", vestingStart, communityFund, address(0));
     }
 
     // ---------------------------------------------------------------------

@@ -40,7 +40,7 @@ contract ShareFarmTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        share = new ShareToken(poolStart, communityFund, devFund);
+        share = new ShareToken("Share Token", "SHARE", poolStart, communityFund, devFund);
 
         vm.prank(owner);
         pool = new ShareFarm(address(share), poolStart);

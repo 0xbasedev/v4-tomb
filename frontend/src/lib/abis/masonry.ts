@@ -1,5 +1,5 @@
 /**
- * Masonry — The Masonry. SQUARE stakers earn LEVEL from Treasury seigniorage,
+ * Masonry — xROOM. xSHARE stakers earn xTOMB from Treasury seigniorage,
  * subject to epoch lockups on withdraw + claim.
  */
 export const masonryAbi = [

@@ -2,7 +2,7 @@
  * Ownable2Step minimal read surface — owner() + pendingOwner() — used by the
  * Rotation Status panel to detect ceremony state. Every admin-bearing contract
  * in the protocol inherits Ownable2Step via Trustees, so the same ABI works
- * for PegToken, SQUARE, Bond, and PegDefenseHook.
+ * for PegToken, xSHARE, Bond, and PegDefenseHook.
  */
 export const ownable2StepAbi = [
   {

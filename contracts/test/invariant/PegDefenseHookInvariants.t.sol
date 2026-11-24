@@ -89,7 +89,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     function setUp() public {
         vm.warp(1_700_000_000);
 
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions

@@ -12,7 +12,7 @@ interface UseRewardPoolArgs {
   pool: Address | undefined;
   /** Which PID within the pool. Most pools have one PID; Genesis can have many. */
   pid: number;
-  /** Whether this pool emits LEVEL (Genesis, Main) or SQUARE (Share). */
+  /** Whether this pool emits xTOMB (Genesis, Main) or xSHARE (Share). */
   reward: RewardKind;
 }
 
@@ -26,7 +26,7 @@ interface UseRewardPoolArgs {
  *   ERC20.balanceOf(user) on the stake token
  *   ERC20.allowance(user, pool) on the stake token
  *
- * Bonds:
+ * Notes:
  *   - We can't read `poolInfo.length` without a custom view, so the caller must
  *     already know the PIDs they want. The Farms page hardcodes PID lists; later
  *     versions can probe via multicall with allowFailure to count.
@@ -54,7 +54,7 @@ export function useRewardPool({ pool, pid, reward }: UseRewardPoolArgs) {
             {
               address: pool,
               abi: abi as typeof pegRewardPoolAbi & typeof shareFarmAbi,
-              // pendingPeg for LEVEL pools, pendingShare for share pools
+              // pendingPeg for xTOMB pools, pendingShare for share pools
               functionName: pendingName as "pendingPeg",
               args: [pidArg, user],
             },

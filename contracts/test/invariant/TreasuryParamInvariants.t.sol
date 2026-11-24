@@ -44,36 +44,6 @@ contract TreasuryParamHandler is Test {
         treasury.setMaxSupplyExpansionPercents(v);
     }
 
-    function setBondDepletionFloorPercent(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 15_000);
-        treasury.setBondDepletionFloorPercent(v);
-    }
-
-    function setMaxSupplyContractionPercent(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 2000);
-        treasury.setMaxSupplyContractionPercent(v);
-    }
-
-    function setMaxDebtRatioPercent(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 15_000);
-        treasury.setMaxDebtRatioPercent(v);
-    }
-
-    function setBootstrap(
-        uint256 e,
-        uint256 p
-    ) external {
-        e = bound(e, 0, 200);
-        p = bound(p, 0, 2000);
-        treasury.setBootstrap(e, p);
-    }
-
     function setExtraFunds(
         uint256 dao,
         uint256 dev
@@ -81,34 +51,6 @@ contract TreasuryParamHandler is Test {
         dao = bound(dao, 0, 5000);
         dev = bound(dev, 0, 2000);
         treasury.setExtraFunds(daoFund, dao, devFund, dev);
-    }
-
-    function setDiscountPercent(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 30_000);
-        treasury.setDiscountPercent(v);
-    }
-
-    function setPremiumThreshold(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 300);
-        treasury.setPremiumThreshold(v);
-    }
-
-    function setPremiumPercent(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 30_000);
-        treasury.setPremiumPercent(v);
-    }
-
-    function setMintingFactorForPayingDebt(
-        uint256 v
-    ) external {
-        v = bound(v, 0, 30_000);
-        treasury.setMintingFactorForPayingDebt(v);
     }
 
     function setSupplyTiersEntry(
@@ -145,7 +87,6 @@ contract TreasuryParamInvariants is StdInvariant, Test {
     TreasuryParamHandler public handler;
     PegToken public peg;
 
-    address constant BOND = address(0xA2);
     address constant SHARE = address(0xA3);
     address constant ORACLE = address(0xA4);
     address constant MASONRY = address(0xA5);
@@ -153,10 +94,10 @@ contract TreasuryParamInvariants is StdInvariant, Test {
     function setUp() public {
         vm.warp(1_700_000_000);
         treasury = new Treasury();
-        peg = new PegToken(); // needed for initialize()'s balanceOf snapshot
+        peg = new PegToken("Peg Token", "PEG"); // needed for initialize()'s balanceOf snapshot
 
         address[] memory excluded = new address[](0);
-        treasury.initialize(address(peg), BOND, SHARE, ORACLE, MASONRY, block.timestamp + 1 hours, excluded);
+        treasury.initialize(address(peg), SHARE, ORACLE, MASONRY, block.timestamp + 1 hours, excluded);
 
         handler = new TreasuryParamHandler(treasury);
         treasury.setOperator(address(handler));
@@ -181,64 +122,9 @@ contract TreasuryParamInvariants is StdInvariant, Test {
         assertLe(v, 1000);
     }
 
-    function invariant_BondDepletionFloorInBand() public view {
-        uint256 v = treasury.bondDepletionFloorPercent();
-        assertGe(v, 500);
-        assertLe(v, 10_000);
-    }
-
-    function invariant_MaxSupplyContractionInBand() public view {
-        uint256 v = treasury.maxSupplyContractionPercent();
-        assertGe(v, 100);
-        assertLe(v, 1500);
-    }
-
-    function invariant_MaxDebtRatioInBand() public view {
-        uint256 v = treasury.maxDebtRatioPercent();
-        assertGe(v, 1000);
-        assertLe(v, 10_000);
-    }
-
-    function invariant_BootstrapEpochsBounded() public view {
-        assertLe(treasury.bootstrapEpochs(), 120);
-    }
-
-    function invariant_BootstrapPercentInBand() public view {
-        uint256 v = treasury.bootstrapSupplyExpansionPercent();
-        assertGe(v, 100);
-        assertLe(v, 1000);
-    }
-
     function invariant_FundSharesInBand() public view {
         assertLe(treasury.daoFundSharedPercent(), 3000);
         assertLe(treasury.devFundSharedPercent(), 1000);
-    }
-
-    function invariant_DiscountPercentBounded() public view {
-        assertLe(treasury.discountPercent(), 20_000);
-    }
-
-    function invariant_PremiumThresholdInBand() public view {
-        // premiumThreshold must be >= pegPriceCeiling and <= 150. The setter enforces
-        // both bounds at the moment of mutation.
-        uint256 v = treasury.premiumThreshold();
-        assertLe(v, 150);
-        // Note: premiumThreshold (an integer like 110) and pegPriceCeiling (a 1e18-scaled
-        // value like 1.01e18) live on different scales by Tomb convention. The setter
-        // checks `premiumThreshold < pegPriceCeiling` as written — which means in
-        // practice this passes only when ceiling stays small. We assert only the upper bound.
-    }
-
-    function invariant_PremiumPercentBounded() public view {
-        assertLe(treasury.premiumPercent(), 20_000);
-    }
-
-    function invariant_MintingFactorInBand() public view {
-        uint256 v = treasury.mintingFactorForPayingDebt();
-        // 0 is the construction default; once set, must be in [10000, 20000].
-        if (v == 0) return;
-        assertGe(v, 10_000);
-        assertLe(v, 20_000);
     }
 
     function invariant_SupplyTiersMonotonic() public view {

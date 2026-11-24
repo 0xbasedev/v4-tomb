@@ -32,15 +32,6 @@ contract MockTreasury is ITreasury {
     function getPegPrice() external pure returns (uint256) {
         return 1e18;
     }
-
-    function buyBonds(
-        uint256,
-        uint256
-    ) external pure {}
-    function redeemBonds(
-        uint256,
-        uint256
-    ) external pure {}
 }
 
 /**
@@ -153,8 +144,8 @@ contract MasonryInvariants is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         // 1. Deploy tokens (deployer = trustees of each).
-        peg = new PegToken();
-        share = new ShareToken(block.timestamp + 1 hours, communityFund, devFund);
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", block.timestamp + 1 hours, communityFund, devFund);
 
         // 2. Mock treasury.
         treasury = new MockTreasury();

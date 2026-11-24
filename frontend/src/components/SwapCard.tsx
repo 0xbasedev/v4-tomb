@@ -13,7 +13,7 @@ import { SlippageChips } from "./SlippageChips";
  * Layout (Art Deco, centered axis):
  *   ┌───────────────────────────────────┐
  *   │  YOU PROVIDE      Max · 0          │
- *   │  [ 0.00     ]  ◆ LEVEL            │
+ *   │  [ 0.00     ]  ◆ xTOMB            │
  *   │                                    │
  *   │              ◇  (flip button)      │
  *   │                                    │
@@ -22,7 +22,7 @@ import { SlippageChips } from "./SlippageChips";
  *   │                                    │
  *   │  ─── ◆ ─── ◆ ─── ◆ ───            │
  *   │                                    │
- *   │  Rate         1.00 LEVEL · WETH    │
+ *   │  Rate         1.00 xTOMB · WETH    │
  *   │  Hook Fee     0.30%                │
  *   │  Tax Tier     0 % (above peg)      │
  *   │  Net Out      0.00 WETH            │
@@ -39,7 +39,7 @@ interface SwapCardProps {
   rate: number;
   /** Hook fee in basis points (0.30% = 30 bps). */
   hookFeeBps: number;
-  /** Tomb-style tax in basis points on tokenIn = LEVEL when price < peg. 0 otherwise. */
+  /** Tomb-style tax in basis points on tokenIn = xTOMB when price < peg. 0 otherwise. */
   taxBps: number;
   /** Label for the current tier ("Above Peg" / "Tier 7 · 12% Tax" / etc.). */
   tierLabel: string;

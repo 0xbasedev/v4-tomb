@@ -64,7 +64,12 @@ contract PegToken is ERC20Burnable, ERC20Permit, Trustees {
     error AlreadyDistributed();
     error ZeroAddress();
 
-    constructor() ERC20("LEVEL", "LEVEL") ERC20Permit("LEVEL") Trustees() {
+    /// @param name_   ERC-20 name. Supplied at deploy so the contract carries no brand.
+    /// @param symbol_ ERC-20 symbol.
+    constructor(
+        string memory name_,
+        string memory symbol_
+    ) ERC20(name_, symbol_) ERC20Permit(name_) Trustees() {
         // Tomb-faithful: mint 1 unit to the deployer for initial pool setup / sanity check.
         _mint(msg.sender, 1 ether);
     }

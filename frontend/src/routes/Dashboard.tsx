@@ -6,7 +6,6 @@ import { PhaseBanner } from "@/components/PhaseBanner";
 import { RuleTrio } from "@/components/RuleTrio";
 
 import {
-  useBondMarket,
   useDeployment,
   useEpoch,
   usePegMarket,
@@ -23,7 +22,7 @@ import { formatToken, formatTokenAuto, formatPrice, formatCountdown } from "@/li
  *   useEpoch         → epoch counter, next-epoch countdown
  *   usePegMarket   → price, peg, ceiling, premium threshold, circulating supply,
  *                       seigniorage reserve, current phase (bootstrap/expansion/etc)
- *   useTokenSupplies → LEVEL / SQUARE / BOND totalSupply
+ *   useTokenSupplies → xTOMB / xSHARE / BOND totalSupply
  *
  * Pre-Oracle-update (first epoch on a fresh deploy), `usePegMarket.price` is 0n
  * because `getPegPrice()` reverts until the oracle records its first observation.
@@ -74,13 +73,12 @@ export function Dashboard() {
   const deployment = useDeployment();
   const { epoch, secondsUntilNextEpoch } = useEpoch();
   const market = usePegMarket();
-  const bonds = useBondMarket();
   const supplies = useTokenSupplies();
   const events = useTreasuryEvents({ limit: 10 });
 
   const epochNum = epoch !== undefined ? Number(epoch) : 0;
   const bootstrapNum = Number(market.bootstrapEpochs);
-  const inBootstrap = market.phase === "bootstrap";
+  const inBootstrap = false; // there is no bootstrap period
 
   // Phase banner detail line — formal "Epoch X of Y" formatting.
   const phaseDetail = inBootstrap
@@ -134,7 +132,7 @@ export function Dashboard() {
         <PhaseBanner phase={market.phase} detail={phaseDetail} />
       </section>
 
-      {/* ===== Headline metric: LEVEL price + epoch countdown ===== */}
+      {/* ===== Headline metric: xTOMB price + epoch countdown ===== */}
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-7xl">
           <div className="label-deco mb-6 text-center text-deco-gold-dark">
@@ -142,7 +140,7 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             <FeaturedTile
-              label="LEVEL · Quoted in Ether"
+              label="xTOMB · Quoted in Ether"
               value={priceStr}
               unit="ETH"
               badge={badge}
@@ -187,33 +185,23 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
-              label="LEVEL · Circulating"
+              label="xTOMB · Circulating"
               value={formatTokenAuto(market.circulatingSupply)}
               hint="Per Treasury (excludes reward pools + airdrop)"
             />
             <StatTile
-              label="LEVEL · Total Supply"
+              label="xTOMB · Total Supply"
               value={formatTokenAuto(supplies.pegSupply)}
               hint="Including Treasury + Pools"
             />
             <StatTile
-              label="SQUARE · Outstanding"
+              label="xSHARE · Outstanding"
               value={formatTokenAuto(supplies.shareSupply)}
               hint="Hard Cap 70,000"
             />
-            <StatTile
-              label="Bonds · Outstanding"
-              value={formatTokenAuto(supplies.bondSupply)}
-              hint="Bonds Held"
-            />
-            <StatTile
-              label="Treasury · Reserve"
-              value={formatTokenAuto(market.seigniorageSaved)}
-              hint="LEVEL · Empty in Bootstrap"
-            />
-            <StatTile label="Genesis Pool" value="11,000" hint="LEVEL · 24-Hour Window" />
-            <StatTile label="Main Pool" value="140,000" hint="LEVEL · 9-Day Distribution" />
-            <StatTile label="Share Pool" value="59,500" hint="SQUARE · 370-Day Distribution" />
+            <StatTile label="Genesis Pool" value="11,000" hint="xTOMB · 24-Hour Window" />
+            <StatTile label="Main Pool" value="140,000" hint="xTOMB · 9-Day Distribution" />
+            <StatTile label="Share Pool" value="59,500" hint="xSHARE · 370-Day Distribution" />
           </div>
         </div>
       </section>
@@ -226,32 +214,9 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
-              label="Bond Discount"
-              value={
-                bonds.discountRate > 0n
-                  ? `${(Number(bonds.discountRate) / 1e18).toFixed(4)}×`
-                  : "—"
-              }
-              hint={bonds.discountRate > 0n ? "BOND per LEVEL burned" : "Active only below peg"}
-            />
-            <StatTile
-              label="Bond Premium"
-              value={
-                bonds.premiumRate > 0n
-                  ? `${(Number(bonds.premiumRate) / 1e18).toFixed(4)}×`
-                  : "—"
-              }
-              hint={bonds.premiumRate > 0n ? "LEVEL per BOND redeemed" : "Active above 1.10 ETH"}
-            />
-            <StatTile
-              label="Contraction Headroom"
-              value={formatTokenAuto(bonds.burnableLeft)}
-              hint="LEVEL · Burnable This Epoch"
-            />
-            <StatTile
               label="Peg Ceiling"
               value={ceilingStr}
-              hint="Below: Tax · Above: Issue Bonds"
+              hint="Above: Treasury Mints Expansion"
             />
           </div>
         </div>
@@ -299,7 +264,7 @@ export function Dashboard() {
                     const nowSec = Math.floor(Date.now() / 1000);
                     const when = Number(row.timestamp) > 0 ? formatRelativeTime(nowSec - Number(row.timestamp)) : "—";
                     const isBond = row.kind === "BoughtBonds" || row.kind === "RedeemedBonds";
-                    const amountAsset = isBond ? "LEVEL" : "LEVEL";
+                    const amountAsset = isBond ? "xTOMB" : "xTOMB";
                     return (
                       <tr key={`${row.transactionHash}-${row.logIndex}`} className="border-b border-deco-gold/15 last:border-b-0">
                         <td className="px-5 py-4 font-body text-base italic text-deco-ivory-soft">{when}</td>

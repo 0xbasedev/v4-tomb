@@ -13,10 +13,10 @@ import { RuleTrio } from "@/components/RuleTrio";
  *
  * Structure:
  *   - 60-second summary
- *   - The Three SQUARE ($LEVEL, $SQUARE, $BOND)
+ *   - The Three xSHARE ($xTOMB, $xSHARE, $BOND)
  *   - How to Begin (the three entry paths)
  *   - The Liquidity Loop (mint→wrap→stake→exit)
- *   - The Masonry (SQUARE staking)
+ *   - xROOM (xSHARE staking)
  *   - The Bond Office (Bonds)
  *   - The Treasury Cycle (epochs, expansion, contraction)
  *   - Peg Defense (hook + TWAP-keyed sell tax)
@@ -26,13 +26,11 @@ import { RuleTrio } from "@/components/RuleTrio";
 
 const TOC: { id: string; label: string }[] = [
   { id: "summary", label: "In Sixty Seconds" },
-  { id: "shares", label: "The Three SQUARE" },
+  { id: "tokens", label: "The Two Tokens" },
   { id: "begin", label: "How to Begin" },
-  { id: "loop", label: "The Liquidity Loop" },
-  { id: "masonry", label: "The Masonry" },
-  { id: "bonds", label: "The Bond Office" },
+  { id: "liquidity", label: "Providing Liquidity" },
   { id: "cycle", label: "The Treasury Cycle" },
-  { id: "defense", label: "Peg Defense" },
+  { id: "tax", label: "The Sell Tax" },
   { id: "risks", label: "Risks" },
   { id: "glossary", label: "Glossary" },
 ];
@@ -40,26 +38,21 @@ const TOC: { id: string; label: string }[] = [
 export function Docs() {
   return (
     <div className="bg-deco-ground">
-      {/* ===== Heading ===== */}
       <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
         <div className="mx-auto max-w-4xl text-center">
-          <div className="label-deco mb-3 text-deco-gold-dark">
-            The Field Guide · How to Play
-          </div>
+          <div className="label-deco mb-3 text-deco-gold-dark">How It Works</div>
           <h1 className="gold-text font-display italic text-section">The Mechanism</h1>
           <RuleTrio className="mb-6 mt-8" />
           <p
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
             style={{ letterSpacing: "0.04em" }}
           >
-            A complete primer on the three tokens, the four user paths, and the
-            mechanical loops that hold the peg. Written for the participant, not
-            the auditor.
+            Two tokens, three places to put them, and one rule that holds the
+            peg. Written for the participant, not the auditor.
           </p>
         </div>
       </section>
 
-      {/* ===== TOC ===== */}
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-3xl">
           <div className="deco-panel">
@@ -80,350 +73,169 @@ export function Docs() {
         </div>
       </section>
 
-      {/* ===== In Sixty Seconds ===== */}
       <Section id="summary" title="In Sixty Seconds">
         <P>
-          Mint is an algorithmic stable protocol where <Token>$LEVEL</Token>
-          is pegged 1:1 to <Token>WETH</Token>. The peg is held by three forces:
-          a Uniswap V4 swap hook that taxes sells when LEVEL trades below par; a
-          Treasury that mints fresh LEVEL to <Token>$SQUARE</Token> stakers when
-          LEVEL trades above par; and a bond office that issues{" "}
-          <Token>$BOND</Token> at a discount when LEVEL is depressed and
-          redeems them at a premium when LEVEL recovers.
+          <Token>$xTOMB</Token> is built to trade at one unit of its paired
+          asset. When it trades above that, the Treasury mints new xTOMB and
+          pays it to stakers in xROOM. When it trades at or below, the
+          Treasury mints nothing. There are no bonds and no debt: the protocol
+          never owes anyone before it can expand again.
         </P>
         <P>
-          Participants enter through Genesis, the 24-hour bootstrap pool, or by
-          providing LEVEL-WETH liquidity to one of two reward pools. Holders of
-          SQUARE stake in The Masonry to receive a share of every expansion epoch's
-          seigniorage. Speculators trade the bond market on the difference
-          between depressed and recovered prices.
+          Selling xTOMB or <Token>$xSHARE</Token> for the paired asset pays a
+          sell tax of at most 12%. Buying is never taxed, and neither is
+          staking or providing liquidity.
         </P>
       </Section>
 
-      {/* ===== The Three SQUARE ===== */}
-      <Section id="shares" title="The Three SQUARE">
+      <Section id="tokens" title="The Two Tokens">
         <Three
           a={{
-            title: "$LEVEL",
-            sub: "The Stable",
-            body: "Pegged 1:1 to WETH. Used as collateral, in swaps, and burned in exchange for Bonds. Distributed at deploy across the reward pools and an airdrop allocation; minted further by the Treasury during expansion epochs.",
+            title: "$xTOMB",
+            sub: "The Pegged Token",
+            body: "Targets a one-to-one price with its paired asset. New supply is minted only when the time-weighted price is above the ceiling, and it goes to xROOM.",
           }}
           b={{
-            title: "$SQUARE",
-            sub: "The Share",
-            body: "Hard-capped at 70,000. Earned by providing LEVEL-WETH liquidity (Share Pool, 370 days). Stake in The Masonry to receive a pro-rata cut of every expansion epoch's freshly-minted LEVEL. The longer the stake, the deeper the role.",
+            title: "$xSHARE",
+            sub: "The Share Token",
+            body: "Fixed supply, released over time to the farms. Its sell tax is collected in the paired asset, used to buy xTOMB, and that xTOMB is burned.",
           }}
           c={{
-            title: "$BOND",
-            sub: "The Bond",
-            body: "Issued when LEVEL trades below par. Burn LEVEL at the Treasury to mint Bonds. Hold until LEVEL trades above the premium threshold (1.10 ETH), then present the Bonds for more LEVEL than you originally burned. A wager on recovery.",
+            title: "LP Positions",
+            sub: "What You Stake",
+            body: "Liquidity positions are wrapped into tokens you can stake: in The Farms to earn xSHARE, or in xROOM to earn newly minted xTOMB.",
           }}
         />
       </Section>
 
-      {/* ===== How to Begin ===== */}
       <Section id="begin" title="How to Begin">
-        <P>
-          Four paths in. Pick the one that matches what you hold and how patient
-          you are.
-        </P>
         <Path
           numeral="I"
-          title="The Founder"
-          condition="You hold ETH and want to enter at launch."
+          title="Genesis"
+          condition="Open for 24 hours, before the first epoch."
           steps={[
-            "Wrap your ETH to WETH",
-            "Visit /farms during the 24-hour Genesis Window and deposit",
-            "Earn LEVEL pro-rata over the window's duration",
-            "Withdraw your WETH + claim LEVEL when the window closes",
+            "Visit /farms while Genesis is open and deposit an accepted asset",
+            "Earn xTOMB for the duration of the window",
+            "Withdraw at any time",
           ]}
         />
         <Path
           numeral="II"
-          title="The Provider of Liquidity"
-          condition="You hold LEVEL and ETH and want to earn yield."
+          title="The Farms"
+          condition="You want to earn xSHARE."
           steps={[
-            "On /farms Main, mint a full-range LEVEL-WETH liquidity position",
-            "Wrap the resulting V4 LP NFT into ERC-20 share certificates",
-            "Stake the certificates in the Main Pool to earn LEVEL (9 days) or Share Pool to earn SQUARE (370 days)",
-            "Withdraw, unwrap, and burn the position to reclaim your underlying assets",
+            "Provide full-range liquidity to the xTOMB pool or the xSHARE pool",
+            "Wrap the position on /farms and stake it",
+            "Claim xSHARE as it accrues",
           ]}
         />
         <Path
           numeral="III"
-          title="The Member"
-          condition="You hold SQUARE and want a share of every expansion."
+          title="xROOM"
+          condition="You want a share of every expansion."
           steps={[
-            "Visit /masonry and stake your SQUARE in the Masonry",
-            "Wait through the six-epoch withdraw lockup and three-epoch reward lockup",
-            "Each expansion epoch, claim your share of freshly-minted LEVEL",
-            "Withdraw your SQUARE when you are done",
-          ]}
-        />
-        <Path
-          numeral="IV"
-          title="The Bondholder"
-          condition="You believe LEVEL's peg will recover."
-          steps={[
-            "Watch /bonds for the Acquisition Open state (LEVEL below 1.00 WETH)",
-            "Burn LEVEL in exchange for BOND at the current discount rate",
-            "Wait for LEVEL to recover above 1.10 WETH (the premium threshold)",
-            "Present BOND for LEVEL at the recovered premium rate",
+            "Provide xTOMB and xSHARE to the staking pool, which cannot be traded",
+            "Stake the position on /masonry",
+            "Claim xTOMB after each epoch in which the Treasury mints",
           ]}
         />
       </Section>
 
-      {/* ===== The Liquidity Loop ===== */}
-      <Section id="loop" title="The Liquidity Loop">
+      <Section id="liquidity" title="Providing Liquidity">
         <P>
-          The Main and Share reward pools accept only the wrapper's ERC-20
-          share certificates — not raw V4 LP NFTs. The full loop is six steps,
-          three to enter and three to exit:
+          Positions on Uniswap V4 are individual NFTs, so the protocol wraps a
+          full-range position into an ordinary token before it can be staked.
+          Unwrapping returns the same position.
         </P>
-        <Loop
-          steps={[
-            { dir: "in", title: "Mint", body: "Provide LEVEL + WETH at the pool's current ratio. Receive a full-range V4 LP NFT in your wallet (Uniswap V4 standard, ERC-721)." },
-            { dir: "in", title: "Wrap", body: "Approve the V4PositionWrapper to take your NFT. The wrapper validates the exact full-range tick range, then mints you ERC-20 shares equal to your position's liquidity." },
-            { dir: "in", title: "Stake", body: "Approve the reward pool to spend your shares. Deposit. Begin accruing LEVEL (Main) or SQUARE (Share)." },
-            { dir: "out", title: "Withdraw", body: "Withdraw your shares from the pool. Any pending rewards are claimed automatically. Wrapper shares return to your wallet." },
-            { dir: "out", title: "Unwrap", body: "Burn your wrapper shares. Receive the original V4 LP NFT back. Only the original wrapper can unwrap." },
-            { dir: "out", title: "Burn", body: "Submit the NFT to the V4 PositionManager. Receive your LEVEL + WETH back, less any swap fees the position absorbed during its lifetime." },
-          ]}
-        />
-      </Section>
-
-      {/* ===== The Masonry ===== */}
-      <Section id="masonry" title="The Masonry">
+        <SubHeading>The Staking Pool</SubHeading>
         <P>
-          The Masonry is what the protocol calls its Masonry — the contract that
-          receives every expansion epoch's freshly-minted LEVEL and distributes
-          it pro-rata to SQUARE stakers.
-        </P>
-        <P>
-          Two timelocks govern member behavior. The <strong>withdraw lockup</strong>{" "}
-          (six epochs, thirty-six hours) blocks you from removing staked SQUARE
-          for that window after any deposit, withdraw, or claim. The{" "}
-          <strong>reward lockup</strong> (three epochs, eighteen hours) blocks
-          claiming the most recent expansion's LEVEL for that window. Both
-          counters reset on every interaction. The Trust does not reward
-          impatience.
-        </P>
-        <P>
-          Mechanically: when the Treasury enters an expansion epoch, it mints
-          LEVEL directly to the Masonry and calls{" "}
-          <code className="font-ornament text-deco-gold">
-            masonry.allocateSeigniorage(amount)
-          </code>
-          . The Masonry records a per-share snapshot. When you call{" "}
-          <code className="font-ornament text-deco-gold">claimReward()</code> the
-          contract computes your earned amount as{" "}
-          <code className="font-ornament text-deco-gold">
-            stake × (latestSnapshot.rewardPerShare − yourLastSnapshot)
-          </code>
-          .
+          The xTOMB and xSHARE pool used by xROOM rejects every swap. Its
+          ratio never moves, so you withdraw exactly what you deposited, with
+          no fees and no impermanent loss. Depositing and withdrawing are not
+          taxed.
         </P>
       </Section>
 
-      {/* ===== Bond Office ===== */}
-      <Section id="bonds" title="The Bond Office">
-        <P>
-          The bond market activates only outside the peg band. There are two
-          sides — acquisition (below par) and presentation (above premium) —
-          and each has hard caps the Treasury enforces on every call.
-        </P>
-        <SubHeading>Acquisition (price &lt; 1.00 WETH per LEVEL)</SubHeading>
-        <P>
-          When LEVEL trades below par, the Treasury issues BOND at a
-          discount. Burn N LEVEL, receive N × discount rate BOND. The
-          discount is set by{" "}
-          <code className="font-ornament text-deco-gold">discountPercent</code> on
-          the Treasury and defaults to zero (1:1 exchange) at deploy. Two hard
-          caps gate each call:
-        </P>
-        <ul className="mb-4 ml-6 list-disc font-body text-base italic text-deco-ivory-soft">
-          <li>
-            <strong>Epoch contraction cap</strong> — at most 3% of circulating
-            supply can be burned per epoch (
-            <code className="font-ornament text-deco-gold">
-              maxSupplyContractionPercent
-            </code>
-            ).
-          </li>
-          <li>
-            <strong>Debt ratio cap</strong> — outstanding BOND may not
-            exceed 35% of LEVEL supply (
-            <code className="font-ornament text-deco-gold">
-              maxDebtRatioPercent
-            </code>
-            ).
-          </li>
-        </ul>
-        <SubHeading>Presentation (price ≥ 1.10 WETH per LEVEL)</SubHeading>
-        <P>
-          When LEVEL recovers above the premium threshold, the Treasury redeems
-          BOND at a premium. Present N BOND, receive N × premium rate
-          LEVEL. The premium is computed from how far above peg the price is, up
-          to a configurable cap. The Treasury must hold sufficient LEVEL reserve
-          (the{" "}
-          <code className="font-ornament text-deco-gold">seigniorageSaved</code>{" "}
-          accumulated from prior expansion epochs).
-        </P>
-        <SubHeading>The Strict Price Match</SubHeading>
-        <P>
-          Both calls require the price you read at click time to match the price
-          observed when the transaction includes. If the oracle updates between
-          your read and your broadcast, the Treasury reverts with{" "}
-          <code className="font-ornament text-deco-gold">PriceMoved</code>. You
-          keep your LEVEL (or BOND); only gas is spent. Retry on the next
-          oracle observation.
-        </P>
-      </Section>
-
-      {/* ===== Treasury Cycle ===== */}
       <Section id="cycle" title="The Treasury Cycle">
         <P>
-          The protocol's heartbeat is the Treasury's <strong>epoch</strong> — a
-          six-hour window. At each epoch boundary, anyone may call{" "}
-          <code className="font-ornament text-deco-gold">
-            treasury.allocateSeigniorage()
-          </code>{" "}
-          and the Treasury executes its expansion or contraction logic. In
-          practice a keeper bot fires this every thirty minutes.
+          Every six hours the Treasury reads the time-weighted price of xTOMB.
+          Genesis finishes before the first epoch, and no epoch pays a
+          guaranteed emission.
         </P>
         <Three
           a={{
-            title: "Bootstrap",
-            sub: "Epochs 0 – 27",
-            body: "Unconditional expansion. The Treasury mints 4.5% of circulating supply each epoch and routes it to The Masonry regardless of price. Seven days. This period is load-bearing — it incentivizes early staking so that subsequent oracle-driven expansion has somewhere to land.",
+            title: "Above the Ceiling",
+            sub: "price > 1.01",
+            body: "The Treasury mints xTOMB in proportion to how far the price is above one, up to a cap set by supply. A configured cut goes to the DAO and development wallets; the rest goes to xROOM.",
           }}
           b={{
-            title: "Expansion",
-            sub: "price ≥ 1.01 WETH",
-            body: "Above the ceiling. Treasury mints fresh LEVEL scaled by the price premium. Either funds the seigniorage reserve (for future bond redemptions) or routes to The Masonry, depending on whether outstanding bonds need backing. DaoFund and DevFund take their configured cuts.",
+            title: "At or Below",
+            sub: "price ≤ 1.01",
+            body: "Nothing is minted. Nothing is owed. The next epoch above the ceiling expands in full.",
           }}
           c={{
-            title: "Contraction",
-            sub: "price < 1.00 WETH",
-            body: "Below par. No new LEVEL is minted. The bond office accepts LEVEL burns in exchange for BOND. The hook taxes LEVEL sells at 12%. Both mechanisms work to retire supply and rebuild scarcity.",
+            title: "No Balance Held",
+            sub: "always",
+            body: "The Treasury contract holds no funds. What it mints leaves in the same transaction, and tax proceeds go to the DAO wallet, never to the Treasury.",
           }}
         />
       </Section>
 
-      {/* ===== Peg Defense ===== */}
-      <Section id="defense" title="Peg Defense">
+      <Section id="tax" title="The Sell Tax">
         <P>
-          Every swap on LEVEL-WETH passes through the PegDefenseHook. The hook
-          serves three roles in one call:
+          The rate is set by the time-weighted price of xTOMB, so it cannot be
+          dodged by moving the price for a moment. It never exceeds 12%, which
+          is the most the contract can charge. From 1.12 it is 6%, and from
+          1.20 it is 3%. A higher rate applies at once; a lower rate applies
+          only after it has been due for seven hours.
         </P>
-        <ol className="mb-4 ml-6 list-decimal font-body text-base italic text-deco-ivory-soft">
-          <li>
-            <strong>Observation.</strong> The hook records each swap's pre-trade
-            tick and timestamp. The Oracle reads these accumulating values to
-            compute a time-weighted average price.
-          </li>
-          <li>
-            <strong>Dynamic LP fee.</strong> The hook adjusts the pool's swap
-            fee based on how far the current tick is from the peg tick. Cheaper
-            to trade when LEVEL is moving toward par; more expensive when it is
-            drifting.
-          </li>
-          <li>
-            <strong>Sell-side tax.</strong> When the operator enables{" "}
-            <code className="font-ornament text-deco-gold">autoCalculateTax</code>{" "}
-            , the hook takes a slice of every LEVEL sale. The rate is set by
-            the time-weighted price, so it cannot be dodged by moving the spot
-            price for a moment. Below the burn threshold (1.10 WETH), the slice
-            is destroyed outright; above, it accrues to the Treasury reserve.
-          </li>
-        </ol>
-        <SubHeading>The Three Tiers</SubHeading>
         <P>
-          The tax eases as the peg strengthens. While the time-weighted price
-          is below 1.12 ETH, sales pay 12%, which is the most the contract can
-          ever charge. From 1.12 they pay 6%, and from 1.20 they pay 3%. A
-          higher rate applies at once; a lower rate applies only after it has
-          been due for seven hours. Purchases are never taxed. The schedule is rendered
-          live on /swap when LEVEL-WETH is selected, with the tier in force
-          highlighted.
+          Tax on xTOMB sales is burned while the price is below 1.10 and sent
+          to the DAO wallet above it. Tax on xSHARE sales buys xTOMB, and that
+          xTOMB is burned. The schedule is shown live on /swap.
         </P>
       </Section>
 
-      {/* ===== Risks ===== */}
       <Section id="risks" title="Risks">
         <P className="text-deco-ruby">
-          Algorithmic stables are speculative instruments. The peg holds while
-          the mechanism's incentives outweigh the participants' willingness to
-          exit. When confidence breaks, peg can break with it. Mint is the
-          experiment, not the guarantee.
+          This is an experimental algorithmic design. Nothing backs xTOMB but
+          the mechanism described here. It has not been audited.
         </P>
         <Risk
-          title="Bond Death Spiral"
-          body="The classic algorithmic-stable failure mode. If LEVEL trades far below par and bond buyers stop believing in eventual recovery, no one burns LEVEL to mint Bonds. Supply doesn't retire. Price drifts further down. Tomb hit this in mid-2022. Mitigations: the hook's burn-on-sell removes supply even without bond demand; every sell below a 1.12 TWAP pays 12%, burned while below 1.10."
+          title="The Peg Can Break"
+          body="If confidence leaves, xTOMB can trade below its target for a long time. With no bonds there is no built-in buyer below the peg; recovery relies on the sell-tax burn and on demand returning."
         />
         <Risk
-          title="Bootstrap Drift"
-          body="The first 28 epochs (seven days) mint unconditionally. If demand for SQUARE is weak in this window, the resulting LEVEL supply can exceed market appetite and push price below par before the price-aware mechanisms activate at epoch 29. Mitigations: Genesis pool gives early participants a first-mover advantage; the protocol launches with the 1-SQUARE construction mint to seed Masonry from day one."
+          title="The Price Is an Average"
+          body="The Treasury and the tax both read a time-weighted price. In a fast market they react to where the price has been, not to where it is."
         />
         <Risk
-          title="Oracle Lag"
-          body="The TWAP oracle reports a moving average, not the spot price. In fast-moving markets, the bond office and tax mechanism react to where price was, not where it is. A sudden dump can mint cheap bonds at a lagged price; a sudden rally can let sellers escape the tax. Mitigations: oracle updates every six hours via the same allocateSeigniorage call that ticks the epoch."
-        />
-        <Risk
-          title="Operator Risk (pre-rotation)"
-          body="At deploy, all admin powers (setting tax tiers, fund cut percentages, governance addresses) sit with the deployer EOA. The launch runbook calls for rotating these to a 24-hour Timelock before mainnet. Until rotation, the deployer can change parameters within the contracts' declared bounds. Verify the rotation has happened on /admin's Rotation Status panel."
-        />
-        <Risk
-          title="V4 Newness"
-          body="Uniswap V4 launched in early 2025; the contract surface and tooling are less battle-tested than V2 or V3. The PoolManager itself has been audited extensively, but the hooks ecosystem is young, and integration patterns are still emerging. Our hook is purpose-built and tested, but novel attack surfaces are easier to find in newer systems."
+          title="Other Markets Are Untaxed"
+          body="The tax applies only in the protocol's own pools. Tokens traded elsewhere pay nothing, and rewards are paid only for liquidity in the official pools."
         />
       </Section>
 
-      {/* ===== Glossary ===== */}
       <Section id="glossary" title="Glossary">
-        <Term term="Epoch" body="A six-hour window. The Treasury ticks at each boundary, advancing the epoch counter and executing expansion or contraction logic." />
-        <Term term="Seigniorage" body="Newly-minted LEVEL distributed during expansion epochs. Routed primarily to The Masonry, with optional cuts to the daoFund and devFund." />
-        <Term term="Bootstrap" body="The first 28 epochs (seven days) after deploy. Unconditional 4.5% expansion regardless of price, to seed Masonry and establish initial economy." />
-        <Term term="Hook" body="A Uniswap V4 contract that runs on every swap of a specific pool. Mint's PegDefenseHook handles observation, dynamic fees, and the sell-side tax." />
-        <Term term="The Masonry / Masonry" body="The contract that holds staked SQUARE and distributes seigniorage. Same thing, two names — the contract is named Masonry for auditor familiarity; the user-facing label is The Masonry." />
-        <Term term="TWAP" body="Time-Weighted Average Price. The oracle reports this rather than spot, smoothing short-term volatility. Computed from the hook's accumulated tick observations." />
-        <Term term="V4 LP NFT" body="An ERC-721 representing a Uniswap V4 liquidity position. Holds the position's exact tick range and accumulated fees. Not directly stake-able in our reward pools — must be wrapped first." />
-        <Term term="Wrapper Shares" body="ERC-20 tokens minted 1:1 with V4 LP NFT liquidity by the V4PositionWrapper. Stake-able in Main and Share pools." />
-        <Term term="Debt Ratio" body="Outstanding BOND divided by LEVEL supply. The Treasury caps this at 35% to prevent runaway bond issuance during prolonged contraction." />
-        <Term term="Burn Threshold" body="The price (default 1.10 WETH per LEVEL) above which the hook's tax accrues to Treasury reserve. Below the threshold, the tax is burned outright." />
-      </Section>
+        <Term term="Epoch" body="A six-hour period. The Treasury acts once per epoch." />
+        <Term term="Ceiling" body="The price (1.01 by default) above which the Treasury mints." />
+        <Term term="TWAP" body="Time-weighted average price, measured from the protocol's own pool." />
+        <Term term="Hook" body="A Uniswap V4 contract that runs on every swap in one specific pool. The protocol uses hooks to collect the sell tax and to make the staking pool untradeable." />
+        <Term term="Burn Threshold" body="The price (1.10 by default) below which xTOMB sell tax is burned rather than sent to the DAO wallet." />
 
-      {/* ===== CTAs ===== */}
-      <section className="px-6 pb-20 md:px-12 md:pb-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="deco-panel text-center">
-            <div className="label-deco mb-3 text-deco-gold-dark">Ready</div>
-            <h2
-              className="mb-4 font-display text-3xl italic text-deco-ivory md:text-4xl"
-              style={{ letterSpacing: "0.06em" }}
-            >
-              Enter The Trust
-            </h2>
-            <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
-            <p className="mx-auto mb-8 max-w-xl font-body text-base italic text-deco-ivory-soft">
-              The mechanism is here for you to participate in. Pick a path.
-            </p>
+        <section className="px-6 py-12 md:px-12 md:py-16">
+          <div className="mx-auto max-w-3xl text-center">
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link to="/dashboard" className="btn-deco">The Ledger</Link>
+              <Link to="/dashboard" className="btn-deco">Dashboard</Link>
               <Link to="/farms" className="btn-deco">The Farms</Link>
-              <Link to="/masonry" className="btn-deco">The Masonry</Link>
-              <Link to="/bonds" className="btn-deco">Bonds</Link>
-              <Link to="/swap" className="btn-deco">The Exchange</Link>
+              <Link to="/masonry" className="btn-deco">xROOM</Link>
+              <Link to="/swap" className="btn-deco">Swap</Link>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </Section>
     </div>
   );
 }
-
-/* ===========================================================
-   Composition helpers
-   =========================================================== */
 
 function Section({
   id,
@@ -533,43 +345,6 @@ function Path({
           <li key={i} className="mb-1">{s}</li>
         ))}
       </ol>
-    </div>
-  );
-}
-
-function Loop({
-  steps,
-}: {
-  steps: { dir: "in" | "out"; title: string; body: string }[];
-}) {
-  const inSteps = steps.filter((s) => s.dir === "in");
-  const outSteps = steps.filter((s) => s.dir === "out");
-  return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <div>
-        <div className="label-deco mb-3 text-deco-emerald">Going In</div>
-        {inSteps.map((s, i) => (
-          <LoopStep key={s.title} numeral={String(i + 1)} title={s.title} body={s.body} />
-        ))}
-      </div>
-      <div>
-        <div className="label-deco mb-3 text-deco-ruby">Going Out</div>
-        {outSteps.map((s, i) => (
-          <LoopStep key={s.title} numeral={String(i + 1)} title={s.title} body={s.body} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LoopStep({ numeral, title, body }: { numeral: string; title: string; body: string }) {
-  return (
-    <div className="mb-3 border-l border-deco-gold/30 pl-4">
-      <div className="flex items-baseline gap-2">
-        <span className="font-ornament text-sm text-deco-gold">{numeral}</span>
-        <span className="font-display text-base italic text-deco-ivory">{title}</span>
-      </div>
-      <p className="font-body text-sm italic text-deco-ivory-soft">{body}</p>
     </div>
   );
 }

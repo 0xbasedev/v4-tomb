@@ -15,9 +15,8 @@ import { useIsAdmin } from "@/lib/hooks";
 
 const NAV_ITEMS: { label: string; to: string }[] = [
   { label: "The Ledger", to: "/dashboard" },
-  { label: "The Masonry", to: "/masonry" },
+  { label: "xROOM", to: "/masonry" },
   { label: "The Farms", to: "/farms" },
-  { label: "Bonds", to: "/bonds" },
   { label: "Exchange", to: "/swap" },
   { label: "Docs", to: "/docs" },
 ];
@@ -106,7 +105,7 @@ function Footer() {
             className="mt-3 font-ornament text-sm text-deco-gold"
             style={{ letterSpacing: "0.3em" }}
           >
-            MMXXVI · The House of Mint
+            MMXXVI · xTOMB
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-5">
             <Link to="/dashboard" className="label-deco hover:text-deco-gold-light">
@@ -118,7 +117,7 @@ function Footer() {
             </Link>
             <span className="text-deco-gold-dark">·</span>
             <Link to="/masonry" className="label-deco hover:text-deco-gold-light">
-              The Masonry
+              xROOM
             </Link>
           </div>
         </div>

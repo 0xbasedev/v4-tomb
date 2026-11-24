@@ -86,7 +86,7 @@ contract PegTokenInvariants is StdInvariant, Test {
     PegTokenHandler public handler;
 
     function setUp() public {
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
         handler = new PegTokenHandler(peg);
         peg.transferTrustees(address(handler));
 

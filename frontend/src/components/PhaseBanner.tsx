@@ -6,8 +6,7 @@
  * Phases per the Treasury mechanics:
  *   - Bootstrap (epoch < 28): unconditional 4.5% supply expansion to Masonry
  *   - Expansion (price ≥ 1.01 ETH): seigniorage minted, distributed pro-rata
- *   - Redemption (price ≥ premium): Bonds can be presented at premium
- *   - Contraction (price < 1.00 ETH): LEVEL can be burned for Bonds
+ *   - Contraction (price < 1.00): nothing is minted; sells are taxed and burned
  *   - At Rest (1.00 ≤ price ≤ 1.01): no action — the dead zone
  */
 
@@ -26,35 +25,35 @@ const PHASE_COPY: Record<
     label: "Phase · Bootstrap",
     title: "The Trust is Founding",
     gloss:
-      "For the first twenty-eight epochs, four and one-half per cent of supply is minted to The Masonry each cycle regardless of the price. Patience is rewarded.",
+      "For the first twenty-eight epochs, four and one-half per cent of supply is minted to xROOM each cycle regardless of the price. Patience is rewarded.",
     tone: "text-deco-gold",
   },
   expansion: {
     label: "Phase · Expansion",
     title: "Seigniorage Flows",
     gloss:
-      "LEVEL trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Masonry.",
+      "xTOMB trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of xROOM.",
     tone: "text-deco-gold",
   },
   redemption: {
     label: "Phase · Premium",
-    title: "Bonds Are Redeemed",
+    title: "Expansion",
     gloss:
-      "LEVEL trades above one and one-tenth Ether. Holders of Bonds may present them at the Treasury and receive LEVEL at premium.",
+      "xTOMB trades well above the peg. The Treasury mints and pays xROOM.",
     tone: "text-deco-emerald",
   },
   contraction: {
     label: "Phase · Contraction",
-    title: "The Bonds Are Active",
+    title: "Nothing Is Minted",
     gloss:
-      "LEVEL trades below the peg. Holders may burn LEVEL for Bonds at a discount. The Hook burns supply on every sale. The peg shall recover.",
+      "xTOMB trades below the peg. The Treasury mints nothing and the Hook burns supply on every sale.",
     tone: "text-deco-ruby",
   },
   rest: {
     label: "Phase · At Rest",
     title: "The Trust is Steady",
     gloss:
-      "LEVEL is at peg. No seigniorage is minted. No Bonds are issued. The Trust observes its own equilibrium.",
+      "xTOMB is at peg. Nothing is minted until the price is above the ceiling.",
     tone: "text-deco-ivory",
   },
 };

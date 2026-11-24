@@ -42,15 +42,6 @@ contract MockTreasury is ITreasury {
     function getPegPrice() external view returns (uint256) {
         return price;
     }
-
-    function buyBonds(
-        uint256,
-        uint256
-    ) external pure {}
-    function redeemBonds(
-        uint256,
-        uint256
-    ) external pure {}
 }
 
 contract MasonryTest is BaseTest {
@@ -77,9 +68,9 @@ contract MasonryTest is BaseTest {
 
         // Deploy tokens with owner as initial trustees.
         vm.prank(owner);
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
         vm.prank(owner);
-        share = new ShareToken(block.timestamp, communityFund, devFund);
+        share = new ShareToken("Share Token", "SHARE", block.timestamp, communityFund, devFund);
 
         treasuryMock = new MockTreasury();
         treasuryMock.setStartTime(block.timestamp);

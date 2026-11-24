@@ -82,11 +82,15 @@ contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     error ZeroAddress();
     error NotDevFund();
 
+    /// @param name_   ERC-20 name. Supplied at deploy so the contract carries no brand.
+    /// @param symbol_ ERC-20 symbol.
     constructor(
+        string memory name_,
+        string memory symbol_,
         uint256 _startTime,
         address _communityFund,
         address _devFund
-    ) ERC20("SQUARE", "SQUARE") ERC20Permit("SQUARE") Trustees() {
+    ) ERC20(name_, symbol_) ERC20Permit(name_) Trustees() {
         if (_communityFund == address(0)) revert ZeroAddress();
         if (_devFund == address(0)) revert ZeroAddress();
 

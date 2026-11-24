@@ -6,7 +6,6 @@ import {HookMiner} from "../utils/HookMiner.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
-import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Masonry} from "../../src/core/Masonry.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
@@ -50,7 +49,6 @@ contract BaseForkHookTest is BaseTest {
 
     PegToken internal peg;
     ShareToken internal share;
-    BondToken internal bond;
     Treasury internal treasury;
     Masonry internal masonry;
     Oracle internal oracle;
@@ -86,9 +84,8 @@ contract BaseForkHookTest is BaseTest {
         weth = Addresses.weth();
 
         // 1. Deploy tokens.
-        peg = new PegToken();
-        share = new ShareToken(startTime, communityFund, devFund);
-        bond = new BondToken();
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", startTime, communityFund, devFund);
 
         // 2. CREATE2-mine + deploy the PegDefenseHook at an address with the right
         //    permission bits (AFTER_INITIALIZE | BEFORE_SWAP).
@@ -132,16 +129,13 @@ contract BaseForkHookTest is BaseTest {
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
-        treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), startTime, excluded);
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
         share.distributeReward(farmingPool);
 
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
-        bond.transferTrustees(address(treasury));
         masonry.setOperator(address(treasury));
 
         // Launch ceremony Masonry seed (see docs/GAP_AUDIT.md gap #16):
@@ -209,7 +203,6 @@ contract BaseForkHookTest is BaseTest {
         assertEq(treasury.oracle(), address(oracle));
         assertEq(peg.operator(), address(treasury));
         assertEq(share.operator(), address(treasury));
-        assertEq(bond.operator(), address(treasury));
         assertEq(masonry.operator(), address(treasury));
         assertTrue(treasury.isInitialized());
     }

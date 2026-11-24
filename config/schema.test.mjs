@@ -15,6 +15,9 @@ currentFixture.networks[0].deployment.hook =
 currentFixture.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
 currentFixture.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
 currentFixture.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
+currentFixture.networks[0].deployment.shareLpWrapper = `0x${'8'.repeat(40)}`;
+// There are no bonds; the archived profile's bond address is not part of a current deployment.
+delete currentFixture.networks[0].deployment.bond;
 
 test('local template is valid, unconfigured and contains no deployed addresses', () => {
   assert.equal(parseNetworks(local)[0].deployment, null);
@@ -29,6 +32,7 @@ test('archived upstream address is not deployable under the current hook schema'
   patched.networks[0].deployment.shareBuybackHook = `0x${'5'.repeat(36)}10cc`;
   patched.networks[0].deployment.pairLpHook = `0x${'6'.repeat(36)}2080`;
   patched.networks[0].deployment.pairLpWrapper = `0x${'7'.repeat(40)}`;
+  patched.networks[0].deployment.shareLpWrapper = `0x${'8'.repeat(40)}`;
   assert.throws(() => parseNetworks(patched), /hook permission bits must be 0x10cc/);
 });
 
@@ -102,9 +106,9 @@ function publication() {
   const document = clone(currentFixture);
   const deployment = document.networks[0].deployment;
   const artifact = { ...deployment, chainId: 84532 };
-  const names = ['PegToken', 'ShareToken', 'BondToken', 'Treasury', 'Masonry', 'Oracle',
+  const names = ['PegToken', 'ShareToken', 'Treasury', 'Masonry', 'Oracle',
     'V4PositionWrapper', 'GenesisRewardPool', 'PegFarm', 'ShareFarm', 'MiniSwapRouter', 'Timelock'];
-  const keys = ['peg', 'share', 'bond', 'treasury', 'masonry', 'oracle', 'lpWrapper',
+  const keys = ['peg', 'share', 'treasury', 'masonry', 'oracle', 'lpWrapper',
     'genesisRewardPool', 'pegFarm', 'shareFarm', 'miniSwapRouter', 'timelock'];
   const broadcast = { chain: 84532, transactions: names.map((contractName, index) => ({
     contractName, transactionType: 'CREATE', hash: `0x${(index + 1).toString(16).padStart(64, '0')}`,

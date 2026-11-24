@@ -6,7 +6,6 @@ import {MockOracle} from "../utils/MockOracle.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
-import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Masonry} from "../../src/core/Masonry.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
@@ -32,7 +31,6 @@ contract BaseForkTest is BaseTest {
 
     PegToken internal peg;
     ShareToken internal share;
-    BondToken internal bond;
     Treasury internal treasury;
     Masonry internal masonry;
     MockOracle internal oracle;
@@ -64,9 +62,8 @@ contract BaseForkTest is BaseTest {
 
         // Standard deploy sequence — same dance as EpochCycle.t.sol setUp.
         vm.startPrank(owner);
-        peg = new PegToken();
-        share = new ShareToken(startTime, communityFund, devFund);
-        bond = new BondToken();
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", startTime, communityFund, devFund);
         vm.stopPrank();
 
         oracle = new MockOracle(1e18);
@@ -80,20 +77,13 @@ contract BaseForkTest is BaseTest {
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
-        treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), startTime, excluded);
 
         peg.distributeReward(genesisPool, mainPool, airdropWallet);
         share.distributeReward(farmingPool);
 
-        // Override bootstrap to 0 so tests can exercise post-bootstrap recovery
-        // mechanics directly. Bootstrap behavior tested separately.
-        treasury.setBootstrap(0, 100);
-
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
-        bond.transferTrustees(address(treasury));
         masonry.setOperator(address(treasury));
 
         // Launch ceremony Masonry seed (see docs/GAP_AUDIT.md gap #16):
@@ -137,7 +127,6 @@ contract BaseForkTest is BaseTest {
     function test_FullStackInitializesAgainstFork() public view {
         // Treasury references all five protocol addresses post-init.
         assertEq(treasury.peg(), address(peg));
-        assertEq(treasury.bond(), address(bond));
         assertEq(treasury.share(), address(share));
         assertEq(treasury.oracle(), address(oracle));
         assertEq(treasury.masonry(), address(masonry));
@@ -145,7 +134,6 @@ contract BaseForkTest is BaseTest {
         // Operator handoff complete on every protocol contract.
         assertEq(peg.operator(), address(treasury));
         assertEq(share.operator(), address(treasury));
-        assertEq(bond.operator(), address(treasury));
         assertEq(masonry.operator(), address(treasury));
 
         // Genesis distributions landed.
@@ -184,8 +172,7 @@ contract BaseForkTest is BaseTest {
         assertGt(masonry.earned(alice), 0);
     }
 
-    function test_TreasuryHoldsPegAfterContractionRecovery() public {
-        // Quick contraction → recovery to make sure the bond reserve path works on fork.
+    function test_TreasuryHoldsNothingAcrossExpansionAndContraction() public {
         vm.startPrank(mainPool);
         peg.transfer(alice, 5000 ether);
         vm.stopPrank();
@@ -197,36 +184,20 @@ contract BaseForkTest is BaseTest {
         vm.prank(alice);
         masonry.stake(1000 ether);
 
-        // Expansion (need a tick at all).
-        oracle.setPrice(1.05e18);
-        vm.warp(treasury.nextEpochPoint() + 1);
-        vm.roll(block.number + 1);
-        treasury.allocateSeigniorage();
-
-        // Contraction tick.
-        oracle.setPrice(0.9e18);
-        vm.warp(treasury.nextEpochPoint() + 1);
-        vm.roll(block.number + 1);
-        treasury.allocateSeigniorage();
-
-        // Alice buys some bonds.
-        vm.prank(alice);
-        peg.approve(address(treasury), 100 ether);
-        uint256 contractionPrice = treasury.getPegPrice();
-        vm.roll(block.number + 1);
-        vm.prank(alice);
-        treasury.buyBonds(100 ether, contractionPrice);
-        assertEq(bond.balanceOf(alice), 100 ether);
-
-        // Three recovery expansions at 1.15 to build reserves.
-        oracle.setPrice(1.15e18);
-        for (uint256 i = 0; i < 3; ++i) {
+        // Expansion, contraction, then expansion again: no debt to repay in between.
+        uint256[4] memory prices = [uint256(1.05e18), 0.9e18, 1.15e18, 1.15e18];
+        for (uint256 i = 0; i < prices.length; ++i) {
+            oracle.setPrice(prices[i]);
+            uint256 supplyBefore = peg.totalSupply();
             vm.warp(treasury.nextEpochPoint() + 1);
             vm.roll(block.number + 1);
             treasury.allocateSeigniorage();
+            if (prices[i] <= treasury.pegPriceCeiling()) {
+                assertEq(peg.totalSupply(), supplyBefore, "nothing minted at or below the ceiling");
+            } else {
+                assertGt(peg.totalSupply(), supplyBefore, "expansion mints straight away");
+            }
+            assertEq(peg.balanceOf(address(treasury)), 0, "the Treasury never holds a balance");
         }
-
-        // Treasury now holds PEG for bond redemption.
-        assertGt(peg.balanceOf(address(treasury)), 0);
     }
 }

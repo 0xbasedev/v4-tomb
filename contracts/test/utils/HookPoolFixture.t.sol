@@ -137,7 +137,7 @@ abstract contract HookPoolFixture is BaseTest {
         vm.warp(1_700_000_000);
 
         manager = new PoolManager(address(this));
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
 
         // Place WETH directly beside PEG in address space to force the ordering.
         address wethAddr = _pegIsCurrency0() ? address(uint160(address(peg)) + 1) : address(uint160(address(peg)) - 1);
@@ -151,7 +151,7 @@ abstract contract HookPoolFixture is BaseTest {
             hookAddr
         );
         hook = PegDefenseHook(hookAddr);
-        hook.setTreasury(treasuryAddr);
+        hook.setFeeRecipient(treasuryAddr);
 
         (Currency c0, Currency c1) = _pegIsCurrency0()
             ? (Currency.wrap(address(peg)), Currency.wrap(address(weth)))

@@ -2,8 +2,8 @@ export const infrastructureKeys = [
   'weth', 'poolManager', 'positionManager', 'permit2', 'universalRouter', 'create2Deployer',
 ];
 export const deploymentKeys = [
-  'peg', 'share', 'bond', 'treasury', 'masonry', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
-  'pairLpHook', 'pairLpWrapper',
+  'peg', 'share', 'treasury', 'masonry', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
+  'pairLpHook', 'pairLpWrapper', 'shareLpWrapper',
   'genesisRewardPool', 'pegFarm', 'shareFarm', 'timelock', 'miniSwapRouter',
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
 ];

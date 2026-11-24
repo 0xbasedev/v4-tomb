@@ -2,28 +2,28 @@ import type { Address } from "viem";
 import { networks } from "./networks";
 
 export interface PegTokenDeployment {
-  /** $LEVEL token (peg target: 1 LEVEL = 1 WETH). */
+  /** $xTOMB token (peg target: 1 xTOMB = 1 WETH). */
   peg: Address;
-  /** $SQUARE share token. */
+  /** $xSHARE share token. */
   share: Address;
-  /** $BOND bond token. */
-  bond: Address;
   /** Treasury — seigniorage engine, bond office. */
   treasury: Address;
-  /** Masonry — SQUARE staking, LEVEL rewards. */
+  /** Masonry — xSHARE staking, xTOMB rewards. */
   masonry: Address;
   /** TWAP oracle. */
   oracle: Address;
   /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
   hook: Address;
-  /** ShareBuybackHook — taxes SQUARE sells in WETH, buys LEVEL with it and burns it. */
+  /** ShareBuybackHook — taxes xSHARE sells in WETH, buys xTOMB with it and burns it. */
   shareBuybackHook: Address;
-  /** V4PositionWrapper — wraps the LEVEL/WETH LP NFT into an ERC-20. */
+  /** V4PositionWrapper — wraps the xTOMB/WETH LP NFT into an ERC-20. */
   lpWrapper: Address;
-  /** LpOnlyHook — makes the LEVEL/SQUARE pool untradeable (liquidity only). */
+  /** LpOnlyHook — makes the xTOMB/xSHARE pool untradeable (liquidity only). */
   pairLpHook: Address;
-  /** V4PositionWrapper for the LEVEL/SQUARE LP NFT. */
+  /** V4PositionWrapper for the xTOMB/xSHARE LP NFT. */
   pairLpWrapper: Address;
+  /** V4PositionWrapper for the share-token LP NFT. */
+  shareLpWrapper: Address;
   /** Genesis reward pool (24h window, accepts outside ERC-20s). */
   genesisRewardPool: Address;
   /** Main reward pool (9d, accepts lpWrapper). */

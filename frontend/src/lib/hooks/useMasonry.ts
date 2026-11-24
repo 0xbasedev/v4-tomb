@@ -5,18 +5,18 @@ import { masonryAbi, erc20Abi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
 /**
- * Composite Masonry (The Masonry) state read.
+ * Composite Masonry (xROOM) state read.
  *
  * Returns:
- *   totalStaked       — Masonry.totalSupply (all members' SQUARE)
+ *   totalStaked       — Masonry.totalSupply (all members' xSHARE)
  *   yourStake         — Masonry.balanceOf(you)
- *   earned            — claimable LEVEL for you
+ *   earned            — claimable xTOMB for you
  *   canWithdraw       — false until withdrawLockupEpochs since last stake
  *   canClaimReward    — false until rewardLockupEpochs since last stake
  *   epochTimerStart   — epoch at last stake (used to compute remaining lockup)
  *   withdrawLockupEpochs / rewardLockupEpochs — protocol parameters
- *   shareInWallet    — SQUARE.balanceOf(you), for the stake input's MAX
- *   shareAllowance   — SQUARE → Masonry allowance, for the approve gate (T9)
+ *   shareInWallet    — xSHARE.balanceOf(you), for the stake input's MAX
+ *   shareAllowance   — xSHARE → Masonry allowance, for the approve gate (T9)
  *
  * Anonymous browsing (no wallet) returns zero/false for the user-specific
  * fields but still surfaces the protocol parameters.

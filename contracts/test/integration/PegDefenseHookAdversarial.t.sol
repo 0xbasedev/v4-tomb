@@ -455,7 +455,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _sellExactIn(alice, 100 ether);
         assertEq(hook.pendingTaxRoute(), 12 ether);
 
-        hook.setTreasury(address(0));
+        hook.setFeeRecipient(address(0));
         (uint256 burned, uint256 routed) = hook.settleDeferredTax();
         assertEq(burned, 12 ether, "no Treasury to pay: burned instead");
         assertEq(routed, 0);

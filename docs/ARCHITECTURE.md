@@ -1,5 +1,10 @@
 # Architecture and preservation map
 
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
+
 Source baseline: `0146a18a2e0f1c4c48a85b48879f67c6c971b7b6` (main, inspected before implementation).
 
 ## Protocol

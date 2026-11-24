@@ -94,7 +94,7 @@ contract PegDefenseHookTest is BaseTest {
         pm = new MockPoolManager();
 
         vm.prank(owner);
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
 
         // The lowest address carrying exactly the hook's permission bits.
         hookAddr = address(PegDefenseHookPermissions.FLAGS);
@@ -374,7 +374,7 @@ contract PegDefenseHookTest is BaseTest {
     function test_Tax_Defaults() public view {
         assertFalse(hook.autoCalculateTax(), "tax off at deploy (Tomb default)");
         assertEq(hook.burnThreshold(), 1.1e18, "burnThreshold default 1.10e18 (Tomb)");
-        assertEq(hook.treasury(), address(0), "treasury unset at deploy");
+        assertEq(hook.feeRecipient(), address(0), "treasury unset at deploy");
         assertEq(hook.getTaxTiersTwapsCount(), 3, "three tiers");
         assertEq(hook.getTaxTiersRatesCount(), 3, "three rates");
         assertEq(address(hook.taxOracle()), address(0), "tax oracle unset at deploy");
@@ -458,7 +458,7 @@ contract PegDefenseHookTest is BaseTest {
         vm.startPrank(trustees);
         hook.setTaxOracle(address(oracle));
         hook.setAutoCalculateTax(true);
-        hook.setTreasury(twapTreasury);
+        hook.setFeeRecipient(twapTreasury);
         vm.stopPrank();
 
         // Earn the 3% rate: open the recovery window, then let it run.
@@ -647,14 +647,14 @@ contract PegDefenseHookTest is BaseTest {
     function test_SetTreasury_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        hook.setTreasury(makeAddr("t"));
+        hook.setFeeRecipient(makeAddr("t"));
     }
 
     function test_SetTreasury_Updates() public {
         address t = makeAddr("treasury");
         vm.prank(trustees);
-        hook.setTreasury(t);
-        assertEq(hook.treasury(), t);
+        hook.setFeeRecipient(t);
+        assertEq(hook.feeRecipient(), t);
     }
 
     function test_SetTaxTiersTwap_OnlyTrustees() public {
@@ -822,7 +822,7 @@ contract PegDefenseHookTest is BaseTest {
 
         address treasuryAddr = makeAddr("treasury");
         vm.prank(trustees);
-        hook.setTreasury(treasuryAddr);
+        hook.setFeeRecipient(treasuryAddr);
 
         uint256 amount = 100 ether;
         // At tick 0 price ~= 1.0, that's the 12% tier.
@@ -850,7 +850,7 @@ contract PegDefenseHookTest is BaseTest {
         hook.setBurnThreshold(0.5e18);
         vm.prank(trustees);
         hook.setAutoCalculateTax(true);
-        assertEq(hook.treasury(), address(0), "precondition: treasury unset");
+        assertEq(hook.feeRecipient(), address(0), "precondition: treasury unset");
 
         uint256 amount = 100 ether;
         uint256 expectedTax = amount * 1200 / 10_000;
@@ -912,7 +912,7 @@ contract PegDefenseHookTest is BaseTest {
 
         address treasuryAddr = makeAddr("treasury_fuzz");
         vm.prank(trustees);
-        hook.setTreasury(treasuryAddr);
+        hook.setFeeRecipient(treasuryAddr);
 
         uint256 expectedTax = sellAmount * 1200 / 10_000;
         if (expectedTax == 0) return;

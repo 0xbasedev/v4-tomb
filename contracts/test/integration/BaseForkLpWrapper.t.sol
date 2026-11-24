@@ -82,7 +82,7 @@ contract BaseForkLpWrapperTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy PEG and pre-fund the test contract.
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
         peg.mint(address(this), PEG_BAL);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.

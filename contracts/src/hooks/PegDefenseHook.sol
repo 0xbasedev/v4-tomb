@@ -74,7 +74,7 @@ library PegDefenseHookPermissions {
  *              The price used is the Oracle's last completed epoch TWAP (`taxOracle`),
  *              not the pool's spot price. Until an oracle is wired and has completed its
  *              first epoch, the pre-swap spot price is the fallback. The tax is burned
- *              (price < `burnThreshold`) or sent to Treasury (price >= threshold).
+ *              (price < `burnThreshold`) or sent to the fee recipient (price >= threshold).
  *              `autoCalculateTax` is off by default; Trustees flips it on post-launch.
  *
  *              Both swap modes charge the same effective rate `r` on the seller's gross
@@ -200,7 +200,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     uint256 public totalTaxRouted;
 
     /// @notice Below this price (1e18-scaled), the tax slice is BURNED. At or above, it's
-    ///         transferred to `treasury`. Defaults to 1.10e18 per Tomb.
+    ///         transferred to `feeRecipient`. Defaults to 1.10e18 per Tomb.
     uint256 public burnThreshold = 1.1e18;
 
     /// @notice Source of the TWAP the tax tier and burn threshold are read against.
@@ -212,7 +212,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     /// @notice Address that receives tax when `price >= burnThreshold`. Zero address means
     ///         no destination; tax falls through to burn even above the threshold (safe
     ///         default before Trustees sets the real Treasury post-deploy).
-    address public treasury;
+    address public feeRecipient;
 
     /// @notice Sender addresses exempt from the tax. Trustees-settable. Used for protocol
     ///         contracts that need to interact with the pool without triggering the tax
@@ -228,7 +228,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ///         `settleDeferredTax` redeems them. See `_collectTax`.
     uint256 public pendingTaxBurn;
 
-    /// @notice As `pendingTaxBurn`, for tax owed to the Treasury.
+    /// @notice As `pendingTaxBurn`, for tax owed to the fee recipient.
     uint256 public pendingTaxRoute;
 
     // ------------------------------------------------------------------
@@ -244,14 +244,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     // Sprint 4b
     event AutoCalculateTaxSet(bool enabled);
     event BurnThresholdSet(uint256 previous, uint256 next);
-    event TreasurySet(address indexed previous, address indexed next);
+    event FeeRecipientSet(address indexed previous, address indexed next);
     event TaxOracleSet(address indexed previous, address indexed next);
     event TaxRateChanged(uint256 previous, uint256 next);
     event TaxRecoveryStarted(uint256 fromRate, uint256 toRate, uint256 readyAt);
     event TaxTierSet(uint256 indexed index, uint256 twap, uint256 rate);
     event AddressExclusionSet(address indexed account, bool excluded);
     event TaxBurned(uint256 amount, uint256 price);
-    event TaxRouted(address indexed treasury, uint256 amount, uint256 price);
+    event TaxRouted(address indexed feeRecipient, uint256 amount, uint256 price);
     event TaxDeferred(uint256 amount, bool toBurn, uint256 price);
     event DeferredTaxSettled(uint256 burned, uint256 routed);
 
@@ -438,11 +438,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
     /// @notice Redeem tax that was parked as PoolManager claims (see `_collectTax`) and
     ///         burn / route it. Permissionless: it only ever moves value to the burn or to
-    ///         the Treasury. Settles as much as the PoolManager's PEG reserves allow,
+    ///         the fee recipient. Settles as much as the PoolManager's PEG reserves allow,
     ///         burn first, and never reverts for lack of reserves — a call that can settle
     ///         nothing is a no-op, so it is safe to retry on any schedule.
     /// @return burned PEG burned by this call.
-    /// @return routed PEG sent to the Treasury by this call.
+    /// @return routed PEG sent to the fee recipient by this call.
     function settleDeferredTax() external returns (uint256 burned, uint256 routed) {
         if (pendingTaxBurn + pendingTaxRoute == 0) return (0, 0);
         if (IERC20(peg).balanceOf(address(poolManager)) == 0) return (0, 0);
@@ -460,8 +460,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         uint256 total = fromBurn + fromRoute;
         if (total == 0) return abi.encode(uint256(0), uint256(0));
 
-        // A Treasury that was unset since the tax was deferred falls back to the burn.
-        address dest = treasury;
+        // A fee recipient that was unset since the tax was deferred falls back to the burn.
+        address dest = feeRecipient;
         uint256 toBurn = dest == address(0) ? total : fromBurn;
         uint256 toRoute = total - toBurn;
 
@@ -482,7 +482,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
     /// @notice Everything a keeper or monitor needs about deferred tax in one call.
     /// @return pendingBurn   Tax owed to the burn, not yet redeemed.
-    /// @return pendingRoute  Tax owed to the Treasury, not yet redeemed.
+    /// @return pendingRoute  Tax owed to the fee recipient, not yet redeemed.
     /// @return claimsHeld    ERC-6909 PEG claims the hook holds on the PoolManager.
     ///                       Must be >= pendingBurn + pendingRoute; less means a deficit.
     /// @return settleableNow How much `settleDeferredTax` could redeem right now.
@@ -578,11 +578,11 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         burnThreshold = newBurnThreshold;
     }
 
-    function setTreasury(
-        address newTreasury
+    function setFeeRecipient(
+        address newFeeRecipient
     ) external onlyTrustees {
-        emit TreasurySet(treasury, newTreasury);
-        treasury = newTreasury;
+        emit FeeRecipientSet(feeRecipient, newFeeRecipient);
+        feeRecipient = newFeeRecipient;
     }
 
     /// @notice Point the tax at a TWAP source, or pass zero to fall back to spot.
@@ -774,7 +774,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         uint256 price
     ) internal {
         Currency pegCurrency = Currency.wrap(peg);
-        bool toBurn = price < burnThreshold || treasury == address(0);
+        bool toBurn = price < burnThreshold || feeRecipient == address(0);
         totalTaxAssessed += taxAmount;
 
         if (IERC20(peg).balanceOf(address(poolManager)) < taxAmount) {
@@ -795,8 +795,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             emit TaxBurned(taxAmount, price);
         } else {
             totalTaxRouted += taxAmount;
-            IERC20(peg).safeTransfer(treasury, taxAmount);
-            emit TaxRouted(treasury, taxAmount, price);
+            IERC20(peg).safeTransfer(feeRecipient, taxAmount);
+            emit TaxRouted(feeRecipient, taxAmount, price);
         }
     }
 

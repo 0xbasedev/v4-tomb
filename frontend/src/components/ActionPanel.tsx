@@ -21,7 +21,7 @@ interface ActionPanelProps {
   title: string;
   /** One-line gloss in italic Cormorant. */
   blurb: string;
-  /** Asset label shown next to the input field, e.g. "SQUARE". */
+  /** Asset label shown next to the input field, e.g. "xSHARE". */
   asset: string;
   /** Display string shown on the MAX button label (e.g. "0.0540"). */
   maxAvailable: string;

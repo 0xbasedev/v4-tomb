@@ -5,7 +5,6 @@ import {BaseTest} from "../utils/BaseTest.sol";
 
 import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ShareToken} from "../../src/tokens/ShareToken.sol";
-import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Masonry} from "../../src/core/Masonry.sol";
 import {Timelock} from "../../src/governance/Timelock.sol";
@@ -29,7 +28,6 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  *           Ownable2Step (rotated to Timelock via two-step):
  *             - PegToken.owner = Timelock
  *             - ShareToken.owner   = Timelock
- *             - BondToken.owner = Timelock
  *             - PegDefenseHook.owner = Timelock  (not exercised here — needs V4 setUp)
  *
  *           Single-step operator (rotated to Timelock directly):
@@ -42,7 +40,6 @@ import {ITreasury} from "../../src/interfaces/ITreasury.sol";
  *             - Masonry.operator   = Treasury   (Treasury calls allocateSeigniorage)
  *             - PegToken.trustees    = Treasury   (Treasury mints/burns)
  *             - ShareToken.trustees      = Treasury
- *             - BondToken.trustees   = Treasury
  *             - V4PositionWrapper    = no admin   (wrap/unwrap are permissionless)
  *
  *         The ceremony has three on-chain stages:
@@ -62,7 +59,6 @@ contract GovernanceRotationTest is BaseTest {
     // ----- protocol contracts (set up like EpochCycle/BaseFork tests) -----
     PegToken internal peg;
     ShareToken internal share;
-    BondToken internal bond;
     Treasury internal treasury;
     Masonry internal masonry;
     GenesisRewardPool internal genesisRewardPool;
@@ -88,9 +84,8 @@ contract GovernanceRotationTest is BaseTest {
 
         // Deploy tokens (owner deploys → owner is Ownable2Step.owner).
         vm.startPrank(owner);
-        peg = new PegToken();
-        share = new ShareToken(startTime, communityFund, devFund);
-        bond = new BondToken();
+        peg = new PegToken("Peg Token", "PEG");
+        share = new ShareToken("Share Token", "SHARE", startTime, communityFund, devFund);
         oracle = new MockOracle(1e18);
 
         // Deploy reward pools (deployer = owner = operator of each).
@@ -107,9 +102,7 @@ contract GovernanceRotationTest is BaseTest {
         excluded[0] = address(genesisRewardPool);
         excluded[1] = address(pegFarm);
         excluded[2] = airdropWallet;
-        treasury.initialize(
-            address(peg), address(bond), address(share), address(oracle), address(masonry), startTime, excluded
-        );
+        treasury.initialize(address(peg), address(share), address(oracle), address(masonry), startTime, excluded);
 
         peg.distributeReward(address(genesisRewardPool), address(pegFarm), airdropWallet);
         share.distributeReward(address(shareFarm));
@@ -117,7 +110,6 @@ contract GovernanceRotationTest is BaseTest {
         // Hand off trustees on tokens and operator on masonry to Treasury.
         peg.transferTrustees(address(treasury));
         share.transferTrustees(address(treasury));
-        bond.transferTrustees(address(treasury));
         masonry.setOperator(address(treasury));
 
         // Deploy Timelock with admin = owner (the deployer EOA).
@@ -134,12 +126,10 @@ contract GovernanceRotationTest is BaseTest {
         // Ownable2Step contracts: owner = the deployer (owner addr).
         assertEq(peg.owner(), owner, "peg owner == deployer");
         assertEq(share.owner(), owner, "share owner == deployer");
-        assertEq(bond.owner(), owner, "bond owner == deployer");
 
         // Trustees: Treasury (set in setUp).
         assertEq(peg.trustees(), address(treasury), "peg trustees == treasury");
         assertEq(share.trustees(), address(treasury), "share trustees == treasury");
-        assertEq(bond.trustees(), address(treasury), "bond trustees == treasury");
 
         // Treasury + reward pools: operator = deployer.
         assertEq(treasury.operator(), owner, "treasury operator == deployer");
@@ -166,7 +156,6 @@ contract GovernanceRotationTest is BaseTest {
         vm.startPrank(owner);
         peg.transferOwnership(address(timelock));
         share.transferOwnership(address(timelock));
-        bond.transferOwnership(address(timelock));
 
         // Stage 2b: single-step operator rotation.
         treasury.setOperator(address(timelock));
@@ -177,13 +166,11 @@ contract GovernanceRotationTest is BaseTest {
         // Stage 2c: queue acceptOwnership for each Ownable2Step contract via Timelock.
         timelock.queueTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.queueTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);
         vm.stopPrank();
 
         // Mid-ceremony state: pendingOwner == timelock on tokens; operator already rotated.
         assertEq(peg.pendingOwner(), address(timelock), "peg pendingOwner == timelock");
         assertEq(share.pendingOwner(), address(timelock), "share pendingOwner == timelock");
-        assertEq(bond.pendingOwner(), address(timelock), "bond pendingOwner == timelock");
         assertEq(treasury.operator(), address(timelock), "treasury operator == timelock");
         assertEq(genesisRewardPool.operator(), address(timelock), "genesis operator == timelock");
         assertEq(pegFarm.operator(), address(timelock), "main operator == timelock");
@@ -200,18 +187,15 @@ contract GovernanceRotationTest is BaseTest {
         vm.startPrank(owner);
         timelock.executeTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.executeTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);
         vm.stopPrank();
 
         // Final state: every Ownable2Step contract has Timelock as owner.
         assertEq(peg.owner(), address(timelock), "peg owner == timelock");
         assertEq(share.owner(), address(timelock), "share owner == timelock");
-        assertEq(bond.owner(), address(timelock), "bond owner == timelock");
 
         // Trustees on tokens still Treasury (unchanged).
         assertEq(peg.trustees(), address(treasury), "peg trustees still treasury");
         assertEq(share.trustees(), address(treasury), "share trustees still treasury");
-        assertEq(bond.trustees(), address(treasury), "bond trustees still treasury");
 
         // Masonry unchanged.
         assertEq(masonry.operator(), address(treasury), "masonry operator still treasury");
@@ -313,21 +297,18 @@ contract GovernanceRotationTest is BaseTest {
         vm.startPrank(owner);
         peg.transferOwnership(address(timelock));
         share.transferOwnership(address(timelock));
-        bond.transferOwnership(address(timelock));
         treasury.setOperator(address(timelock));
         genesisRewardPool.setOperator(address(timelock));
         pegFarm.setOperator(address(timelock));
         shareFarm.setOperator(address(timelock));
         timelock.queueTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.queueTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);
         vm.stopPrank();
 
         vm.warp(eta + 1);
         vm.startPrank(owner);
         timelock.executeTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
         timelock.executeTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.executeTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);
         vm.stopPrank();
     }
 }

@@ -6,7 +6,7 @@ import { useDeployment, useV4Position } from "@/lib/hooks";
 import { useToast } from "@/components/ToastProvider";
 
 /**
- * WrapPanel — converts a V4 LEVEL-WETH LP NFT into wrapper ERC-20 share
+ * WrapPanel — converts a V4 xTOMB-WETH LP NFT into wrapper ERC-20 share
  * certificates. Used on the Main + Share tabs of /farms.
  *
  * Flow:
@@ -191,12 +191,12 @@ export function WrapPanel({ poolName, prefillTokenId, onWrapped }: WrapPanelProp
         className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
         style={{ letterSpacing: "0.06em" }}
       >
-        Wrap your LEVEL · WETH Position
+        Wrap your xTOMB · WETH Position
       </h2>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-4 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
         The {poolName} accepts only the wrapper's ERC-20 share certificate. Provide
-        the token ID of your full-range LEVEL-WETH V4 LP, and the wrapper will
+        the token ID of your full-range xTOMB-WETH V4 LP, and the wrapper will
         mint you shares equal to its liquidity. Mint a position above if you do
         not yet hold one.
       </p>

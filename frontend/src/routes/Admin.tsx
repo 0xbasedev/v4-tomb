@@ -134,7 +134,7 @@ export function Admin() {
           <LaunchSequence />
           <StatusBoard
             epoch={epoch.epoch !== undefined ? Number(epoch.epoch) : 0}
-            inBootstrap={market.phase === "bootstrap"}
+            inBootstrap={false}
             bootstrapEpochs={Number(market.bootstrapEpochs)}
             isTreasuryOperator={admin.isTreasuryOperator}
             isHookTrustees={admin.isHookTrustees}

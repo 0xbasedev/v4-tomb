@@ -1,4 +1,4 @@
-# Mint frontend
+# xTOMB frontend
 
 Vite + React + TypeScript + Tailwind + Wagmi/Viem.
 
@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The landing page should render with the chrome MINT hero, diagonal pink band, and night-ground cards below.
+Open http://localhost:5173. The landing page should render with the chrome xTOMB hero, diagonal pink band, and night-ground cards below.
 
 ## Env vars
 

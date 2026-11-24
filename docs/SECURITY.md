@@ -1,6 +1,11 @@
 # Security Triage
 
-This document tracks the Slither static-analysis triage for Mint. Each finding category from `slither contracts/ --filter-paths "lib/|test/|script/"` is listed with either a code fix, an inline justification, or a written-acceptance rationale.
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
+
+This document tracks the Slither static-analysis triage for xTOMB. Each finding category from `slither contracts/ --filter-paths "lib/|test/|script/"` is listed with either a code fix, an inline justification, or a written-acceptance rationale.
 
 Per `feedback_pre_deploy_gates.md`: **HIGH and MEDIUM severity findings must be fixed or explicitly justified inline. LOW / INFO findings get a written triage here.**
 

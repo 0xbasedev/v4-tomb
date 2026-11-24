@@ -10,7 +10,7 @@
  */
 
 interface Tier {
-  /** Lower bound of the tier, in WETH per LEVEL (e.g. 0.95 means price ≥ 0.95). */
+  /** Lower bound of the tier, in WETH per xTOMB (e.g. 0.95 means price ≥ 0.95). */
   fromEth: number;
   /** Upper bound (exclusive). */
   toEth: number;
@@ -25,7 +25,7 @@ const TIERS: Tier[] = [
 ];
 
 interface TaxScheduleTableProps {
-  /** The TWAP (ETH per LEVEL) the hook taxes against. Highlights the active tier. */
+  /** The TWAP (ETH per xTOMB) the hook taxes against. Highlights the active tier. */
   activePriceEth: number;
 }
 
@@ -41,7 +41,7 @@ export function TaxScheduleTable({ activePriceEth }: TaxScheduleTableProps) {
       </h3>
       <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-6 font-body text-sm italic text-deco-ivory-soft">
-        Every sale of LEVEL pays a tax set by the time-weighted price, not the
+        Every sale of xTOMB pays a tax set by the time-weighted price, not the
         price of the moment. The tax never exceeds 12%. It rises the instant the
         peg weakens, and eases only after a stronger price has held for seven
         hours. Below 1.10 the tax is burned outright; above it, it accrues to

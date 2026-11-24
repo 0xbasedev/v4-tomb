@@ -1,5 +1,10 @@
 # Gap audit — 2026-05-22
 
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
+
 End-to-end user-flow audit done after Base Sepolia deploy surfaced a critical missing piece (V4 LP token bridge). This document is the record of every cross-contract assumption gap found by walking through the user flow from "user has cbETH in their wallet" to "user claims LEVEL rewards."
 
 Sprints not yet started (14+) close most of these. The point of this doc is to make every gap explicit BEFORE more code ships, instead of discovering them after deploy.

@@ -21,7 +21,7 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
  * @notice One-shot V4 swap on PEG/WETH pool, bypassing UniversalRouter.
  *         Deploys a fresh PoolSwapTest helper, approves it for the input
  *         token, swaps. Use for testnet experiments — to push price below peg
- *         (activates bond acquire) or above premium (activates bond redeem).
+ *         (no expansion) or above the ceiling (expansion).
  *
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY — signer; must hold input token + ETH for gas.

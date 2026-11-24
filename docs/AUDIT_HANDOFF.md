@@ -1,10 +1,15 @@
-# Mint — Audit Handoff
+# xTOMB — Audit Handoff
+
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
 
 Package for an external security auditor. Compiled 2026-05-23 against commit `02b6975` (and successor commits on the same branch).
 
 ## 1 · Protocol summary
 
-Mint is a Tomb-Finance-style algorithmic stablecoin on Base, deployed against Uniswap V4. The economic mechanics are a direct port of Tomb (`bombmoney/bomb-contracts`); the *only* deliberate architectural deviation is replacing Tomb's TaxOfficeV2 / transferFrom-tax mechanism with a Uniswap V4 hook (`PegDefenseHook`). All other contracts are minimal-modification ports.
+xTOMB is a Tomb-Finance-style algorithmic stablecoin on Base, deployed against Uniswap V4. The economic mechanics are a direct port of Tomb (`bombmoney/bomb-contracts`); the *only* deliberate architectural deviation is replacing Tomb's TaxOfficeV2 / transferFrom-tax mechanism with a Uniswap V4 hook (`PegDefenseHook`). All other contracts are minimal-modification ports.
 
 Three tokens:
 
@@ -109,7 +114,7 @@ Each `slither-disable-next-line` annotation has a one-line rationale comment.
 
 **Tomb behaviour:** every `transferFrom` of TOMB triggers a 14-tier price-based tax. Implemented as an override of OZ's `_transfer` plus a `taxCollectorAddress` settable by `TaxOffice`.
 
-**Mint behaviour:** sells through the LEVEL/WETH V4 pool trigger the same 14-tier tax. Wallet-to-wallet LEVEL transfers are free. Implemented as a `beforeSwap` hook that:
+**xTOMB behaviour:** sells through the LEVEL/WETH V4 pool trigger the same 14-tier tax. Wallet-to-wallet LEVEL transfers are free. Implemented as a `beforeSwap` hook that:
 1. Reads the current tick from the pool.
 2. Computes the 1e18-scaled LEVEL/WETH price via `TickMath.getSqrtPriceAtTick`.
 3. Looks up the tax rate from the same 14-tier table Tomb uses.
@@ -123,7 +128,7 @@ See `docs/HOOK_TAX_DESIGN.md` for the full design rationale and tier table justi
 
 **Tomb behaviour:** `tombPriceOne = 1e14`, against BTC at $10k. Cents-level scale.
 
-**Mint behaviour:** `pegPriceOne = 1e18`, against WETH. 1 LEVEL = 1 WETH. Same algebra at a different scale; all `1e14` literals in Tomb's math replaced with `pegPriceOne`.
+**xTOMB behaviour:** `pegPriceOne = 1e18`, against WETH. 1 LEVEL = 1 WETH. Same algebra at a different scale; all `1e14` literals in Tomb's math replaced with `pegPriceOne`.
 
 **Rationale:** WETH is the deepest-liquidity asset on Base. Canonical pre-deploy at the OP-stack slot `0x4200…0006`, no mock needed on testnets, no Coinbase-only restriction (which cbETH had). USDC was considered but introduces an additional oracle (USDC depeg risk) and a centralization vector.
 
@@ -131,7 +136,7 @@ See `docs/HOOK_TAX_DESIGN.md` for the full design rationale and tier table justi
 
 **Tomb behaviour:** Main/Share reward pools accept LP tokens from PancakeSwap/SpookySwap directly (those are V2 pairs, which are ERC-20).
 
-**Mint behaviour:** V4 LPs are NFTs, not fungible. The `V4PositionWrapper` accepts a full-range LEVEL/WETH V4 LP NFT, validates the pool + exact tick range, and mints ERC-20 shares 1:1 with the position's liquidity. Unwrap is gated to the original wrapper of each tokenId. Reward pools stake the ERC-20 shares.
+**xTOMB behaviour:** V4 LPs are NFTs, not fungible. The `V4PositionWrapper` accepts a full-range LEVEL/WETH V4 LP NFT, validates the pool + exact tick range, and mints ERC-20 shares 1:1 with the position's liquidity. Unwrap is gated to the original wrapper of each tokenId. Reward pools stake the ERC-20 shares.
 
 **Rationale:** preserves the MasterChef stake-fungible-tokens model without rewriting the reward pools. The exact-range requirement means all stakers commit identical full-range positions, eliminating the "what tick range does the operator accept" governance question.
 

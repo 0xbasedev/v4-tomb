@@ -10,10 +10,10 @@ import { masonryAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
- * The Masonry — Masonry interface, wired to live state.
+ * xROOM — Masonry interface, wired to live state.
  *
  * Lockup remaining seconds derivation:
- *   The Masonry's `epochTimerStart` is the epoch index at the user's last
+ *   xROOM's `epochTimerStart` is the epoch index at the user's last
  *   stake/withdraw/claim. They can withdraw when `currentEpoch - timerStart >=
  *   withdrawLockupEpochs` and claim when `>= rewardLockupEpochs`.
  *
@@ -37,7 +37,7 @@ export function Masonry() {
     }
   }
 
-  // One shared write pipeline — The Masonry only ever runs one action at a time.
+  // One shared write pipeline — xROOM only ever runs one action at a time.
   const action = useApproveAndCall();
 
   // Lockup countdown derivation. PERIOD is the Treasury epoch length (6h);
@@ -76,7 +76,7 @@ export function Masonry() {
       <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-20 md:pb-16">
         <div className="mx-auto max-w-4xl text-center">
           <div className="label-deco mb-3 text-deco-gold-dark">
-            A Pavilion of The Trust · The Masonry
+            A Pavilion of The Trust · xROOM
           </div>
           <div
             className="font-ornament mb-4 text-3xl font-bold text-deco-gold"
@@ -84,13 +84,13 @@ export function Masonry() {
           >
             I
           </div>
-          <h1 className="gold-text font-display italic text-section">The Masonry</h1>
+          <h1 className="gold-text font-display italic text-section">xROOM</h1>
           <RuleTrio className="mb-6 mt-8" />
           <p
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
             style={{ letterSpacing: "0.04em" }}
           >
-            Members stake $SQUARE. Members receive $LEVEL each expansion epoch.
+            Members stake $xSHARE. Members receive $xTOMB each expansion epoch.
             Patience is rewarded.
           </p>
         </div>
@@ -103,9 +103,9 @@ export function Masonry() {
             Your Position
           </div>
           <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Staked" value={stakedDisplay} hint="$SQUARE · in The Masonry" />
-            <StatTile label="Pending" value={pendingDisplay} hint="$LEVEL · Unclaimed" />
-            <StatTile label="In Wallet" value={walletDisplay} hint="$SQUARE · Available" />
+            <StatTile label="Staked" value={stakedDisplay} hint="$xSHARE · in xROOM" />
+            <StatTile label="Pending" value={pendingDisplay} hint="$xTOMB · Unclaimed" />
+            <StatTile label="In Wallet" value={walletDisplay} hint="$xSHARE · Available" />
             <StatTile
               label="Last Activity"
               value={timerStart > 0n ? `Epoch ${timerStart.toString()}` : "—"}
@@ -137,13 +137,13 @@ export function Masonry() {
             <ActionPanel
               numeral="I"
               title="Make a Deposit"
-              blurb="Deposit $SQUARE into the Masonry. Begin earning seigniorage each expansion epoch."
-              asset="SQUARE"
+              blurb="Deposit $xSHARE into the Masonry. Begin earning seigniorage each expansion epoch."
+              asset="xSHARE"
               maxAvailable={walletDisplay}
               maxWei={masonry.shareInWallet ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
               disabled={masonry.shareInWallet === 0n || action.isInFlight || !deployment}
-              disabledReason="No $SQUARE in wallet."
+              disabledReason="No $xSHARE in wallet."
               onSubmit={(s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
@@ -159,7 +159,7 @@ export function Masonry() {
                     functionName: "stake",
                     args: [amount],
                   },
-                  label: "Stake into The Masonry",
+                  label: "Stake into xROOM",
                   onSuccess: () => masonry.refetch(),
                 });
               }}
@@ -167,8 +167,8 @@ export function Masonry() {
             <ActionPanel
               numeral="II"
               title="Withdraw"
-              blurb="Recall your $SQUARE from the Masonry. Six-epoch lock from your last interaction."
-              asset="SQUARE"
+              blurb="Recall your $xSHARE from the Masonry. Six-epoch lock from your last interaction."
+              asset="xSHARE"
               maxAvailable={stakedDisplay}
               maxWei={masonry.yourStake ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
@@ -193,7 +193,7 @@ export function Masonry() {
                     functionName: "withdraw",
                     args: [amount],
                   },
-                  label: "Withdraw from The Masonry",
+                  label: "Withdraw from xROOM",
                   onSuccess: () => masonry.refetch(),
                 });
               }}
@@ -201,8 +201,8 @@ export function Masonry() {
             <ActionPanel
               numeral="III"
               title="Claim Your Returns"
-              blurb="Claim accrued $LEVEL. Three-epoch lock from your last interaction."
-              asset="LEVEL"
+              blurb="Claim accrued $xTOMB. Three-epoch lock from your last interaction."
+              asset="xTOMB"
               maxAvailable={pendingDisplay}
               cta={action.isInFlight ? "Awaiting…" : "Claim Returns"}
               noInput
@@ -238,13 +238,13 @@ export function Masonry() {
       <section className="px-6 pb-12 md:px-12 md:pb-16">
         <div className="mx-auto max-w-7xl">
           <div className="label-deco mb-6 text-center text-deco-gold-dark">
-            The State of The Masonry
+            The State of xROOM
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
             <StatTile
               label="Aggregate Deposited"
               value={totalDisplay}
-              hint="$SQUARE · in The Masonry"
+              hint="$xSHARE · in xROOM"
             />
             <StatTile
               label="Withdraw Lockup"
@@ -274,7 +274,7 @@ export function Masonry() {
               className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
               style={{ letterSpacing: "0.06em" }}
             >
-              The Lockups of The Masonry
+              The Lockups of xROOM
             </h2>
             <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
             <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">

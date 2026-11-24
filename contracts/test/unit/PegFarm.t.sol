@@ -36,7 +36,7 @@ contract PegFarmTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        peg = new PegToken();
+        peg = new PegToken("Peg Token", "PEG");
 
         vm.prank(owner);
         pool = new PegFarm(address(peg), poolStart);

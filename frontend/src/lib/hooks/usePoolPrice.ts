@@ -4,18 +4,18 @@ import { hookAbi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
 /**
- * Live spot price for the LEVEL-WETH pool, sourced from the PegDefenseHook.
+ * Live spot price for the xTOMB-WETH pool, sourced from the PegDefenseHook.
  *
  * Two reads, one multicall:
  *   hook.lastTick()                    → tick at the last observed swap
- *   hook.priceFromTick(lastTick)       → 1e18-scaled LEVEL/WETH price
+ *   hook.priceFromTick(lastTick)       → 1e18-scaled xTOMB/WETH price
  *
  * The hook stores `lastTick` immutably at pool init and updates it on every
  * subsequent swap. For a fresh deploy at tick 0, this returns 1.0 ETH per
- * LEVEL. After trades, it reflects the most recent tick.
+ * xTOMB. After trades, it reflects the most recent tick.
  *
  * Separately exposes `autoCalculateTax` so the SwapCard can show the user
- * whether tax is currently being applied to LEVEL sells, plus the rate and
+ * whether tax is currently being applied to xTOMB sells, plus the rate and
  * price the hook itself would tax a sell at right now. The hook keys the tax
  * to the oracle TWAP, not to spot, so the tier must be read from the contract
  * rather than re-derived from the spot price here.

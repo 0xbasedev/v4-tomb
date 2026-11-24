@@ -1,4 +1,9 @@
-# Mint — Launch Runbook
+# xTOMB — Launch Runbook
+
+> **Partly superseded.** This document predates the removal of bonds and the bootstrap period,
+> the DAO-wallet fee routing and the farm split. Where it mentions bonds, debt, a Treasury
+> reserve, a 28-epoch bootstrap or tax paid to the Treasury, see
+> [HOOK_TAX_DESIGN.md, Revision 7](HOOK_TAX_DESIGN.md#revision-7--no-bonds-no-bootstrap-dao-wallet-farm-split) for what the contracts do now.
 
 The runbook for taking a fresh `Deploy.s.sol` deployment from "contracts exist on chain" to "Trust is operational." Documents every post-deploy action required, when it must run, what role can run it, and the script that wraps it.
 

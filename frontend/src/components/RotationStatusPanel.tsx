@@ -45,7 +45,6 @@ export function RotationStatusPanel() {
           { address: deployment.peg, abi: ownable2StepAbi, functionName: "owner" },
           { address: deployment.peg, abi: ownable2StepAbi, functionName: "pendingOwner" },
           { address: deployment.share, abi: ownable2StepAbi, functionName: "owner" },
-          { address: deployment.bond, abi: ownable2StepAbi, functionName: "owner" },
           { address: deployment.hook, abi: ownable2StepAbi, functionName: "owner" },
         ]
       : [],
@@ -58,8 +57,7 @@ export function RotationStatusPanel() {
   const pegOwner = data?.[3]?.status === "success" ? (data[3].result as `0x${string}`) : undefined;
   const pegPending = data?.[4]?.status === "success" ? (data[4].result as `0x${string}`) : undefined;
   const shareOwner = data?.[5]?.status === "success" ? (data[5].result as `0x${string}`) : undefined;
-  const bondOwner = data?.[6]?.status === "success" ? (data[6].result as `0x${string}`) : undefined;
-  const hookOwner = data?.[7]?.status === "success" ? (data[7].result as `0x${string}`) : undefined;
+  const hookOwner = data?.[6]?.status === "success" ? (data[6].result as `0x${string}`) : undefined;
 
   function eq(a?: string, b?: string) {
     return !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -69,7 +67,7 @@ export function RotationStatusPanel() {
   const operatorsAtTimelock =
     eq(treasuryOp, tl) && eq(hookTrust, tl) && eq(genesisOp, tl);
   const ownersAtTimelock =
-    eq(pegOwner, tl) && eq(shareOwner, tl) && eq(bondOwner, tl) && eq(hookOwner, tl);
+    eq(pegOwner, tl) && eq(shareOwner, tl) && eq(hookOwner, tl);
 
   let phase: RotationPhase = "unknown";
   if (treasuryOp && tl) {
@@ -120,9 +118,8 @@ export function RotationStatusPanel() {
             <Row label="Treasury operator" value={treasuryOp} timelock={tl} />
             <Row label="Hook trustees" value={hookTrust} timelock={tl} />
             <Row label="Genesis operator" value={genesisOp} timelock={tl} />
-            <Row label="$LEVEL owner" value={pegOwner} timelock={tl} pending={pegPending} />
-            <Row label="$SQUARE owner" value={shareOwner} timelock={tl} />
-            <Row label="$BOND owner" value={bondOwner} timelock={tl} />
+            <Row label="$xTOMB owner" value={pegOwner} timelock={tl} pending={pegPending} />
+            <Row label="$xSHARE owner" value={shareOwner} timelock={tl} />
             <Row label="Hook owner" value={hookOwner} timelock={tl} />
           </div>
 
