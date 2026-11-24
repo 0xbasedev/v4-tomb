@@ -44,7 +44,7 @@ contract StubFireTax {
  * @title ShareBuybackHookTest
  * @notice SHARE sell tax → QUOTE → PEG → burn, against a real v4-core PoolManager with the
  *         real PegDefenseHook on the peg pool. In this fixture SHARE is a plain ERC-20,
- *         QUOTE is the fixture's WETH and PEG is MONEY; the hook itself only knows them as
+ *         QUOTE is the fixture's WETH and PEG is PEG; the hook itself only knows them as
  *         addresses, so the same tests describe SQUARE / USDC / LEVEL.
  *
  *         Runs in every combination of token ordering for both pools.
@@ -62,7 +62,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     function setUp() public virtual override {
         super.setUp();
 
-        // Two slots away from WETH so it can never land on MONEY's address.
+        // Two slots away from WETH so it can never land on PEG's address.
         address shareAddr =
             _shareIsCurrency0() ? address(uint160(address(weth)) - 2) : address(uint160(address(weth)) + 2);
         deployCodeTo("HookPoolFixture.t.sol:FixtureWeth", shareAddr);
@@ -107,7 +107,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
             abi.encode(
                 IPoolManager(address(manager)),
                 address(share),
-                address(money),
+                address(peg),
                 poolKey,
                 source,
                 IPriceSource(address(hook)),
@@ -168,10 +168,10 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
         assertEq(_quoteClaims(), shareHook.pendingQuote(), "claims back pending tax 1:1");
         assertGe(weth.balanceOf(address(manager)), shareHook.pendingQuote(), "reserves cover the claims");
         assertEq(weth.balanceOf(address(shareHook)), 0, "hook holds no QUOTE");
-        assertEq(money.balanceOf(address(shareHook)), 0, "hook holds no PEG");
+        assertEq(peg.balanceOf(address(shareHook)), 0, "hook holds no PEG");
         assertEq(share.balanceOf(address(shareHook)), 0, "hook holds no SHARE");
         assertEq(
-            pegSupplyAtStart - money.totalSupply(),
+            pegSupplyAtStart - peg.totalSupply(),
             shareHook.totalPegBurned() + hook.totalTaxBurned(),
             "every PEG bought was burned"
         );
@@ -184,7 +184,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     function test_ExactInSell_TaxIsRateTimesQuoteProceeds() public {
         uint256 wethBefore = weth.balanceOf(alice);
         uint256 shareBefore = share.balanceOf(alice);
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
 
         _shareSwap(alice, true, -int256(100 ether));
 
@@ -198,7 +198,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
 
     function test_ExactOutSell_SellerGetsExactlyWhatTheyAskedFor() public {
         uint256 wethBefore = weth.balanceOf(alice);
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
 
         _shareSwap(alice, true, int256(50 ether));
 
@@ -322,7 +322,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     // ------------------------------------------------------------------
 
     function test_Buyback_ConvertsEverything_AndBurnsAllOfIt() public {
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _shareSwap(alice, true, -int256(1000 ether));
         uint256 pending = shareHook.pendingQuote();
         assertGt(pending, 0);
@@ -336,9 +336,9 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
 
         assertEq(quoteSpent, pending, "all pending QUOTE converted");
         assertGt(pegBurned, 0);
-        assertEq(supplyBefore - money.totalSupply(), pegBurned, "100% of the PEG bought is burned");
+        assertEq(supplyBefore - peg.totalSupply(), pegBurned, "100% of the PEG bought is burned");
         assertEq(shareHook.pendingQuote(), 0);
-        assertEq(money.balanceOf(stranger), 0, "the caller gains nothing");
+        assertEq(peg.balanceOf(stranger), 0, "the caller gains nothing");
         _assertShareAccounting(supplyBefore);
     }
 
@@ -357,24 +357,24 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     }
 
     function test_Buyback_CannotSettleTheSameTaxTwice() public {
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _shareSwap(alice, true, -int256(1000 ether));
         skip(30 minutes);
 
         (uint256 first,) = shareHook.executeBuyback();
-        uint256 supplyAfterFirst = money.totalSupply();
+        uint256 supplyAfterFirst = peg.totalSupply();
         (uint256 second, uint256 secondBurn) = shareHook.executeBuyback();
 
         assertGt(first, 0);
         assertEq(second, 0, "second call finds nothing to convert");
         assertEq(secondBurn, 0);
-        assertEq(money.totalSupply(), supplyAfterFirst);
+        assertEq(peg.totalSupply(), supplyAfterFirst);
         assertEq(shareHook.totalQuoteConverted(), first);
         _assertShareAccounting(supplyBefore);
     }
 
     function test_Buyback_RefusesToBuyIntoAPumpedPrice() public {
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _shareSwap(alice, true, -int256(1000 ether));
         uint256 pending = shareHook.pendingQuote();
         skip(30 minutes);
@@ -390,7 +390,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     }
 
     function test_Buyback_FillsPartially_WhenThePriceLimitIsReached() public {
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         // Enough tax that buying it all would move PEG more than the 1% guard allows.
         _shareSwap(alice, true, -int256(20_000 ether));
         uint256 pending = shareHook.pendingQuote();
@@ -400,14 +400,14 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
         assertGt(quoteSpent, 0, "bought up to the limit");
         assertLt(quoteSpent, pending, "and stopped there");
         assertEq(shareHook.pendingQuote(), pending - quoteSpent, "remainder stays pending");
-        assertEq(supplyBefore - money.totalSupply(), pegBurned);
+        assertEq(supplyBefore - peg.totalSupply(), pegBurned);
         _assertShareAccounting(supplyBefore);
     }
 
     function test_Buyback_ThatCannotRun_NeverBlocksASell() public {
         // Remove every bit of PEG liquidity: no buyback can execute at all.
         _addLiquidity(FULL_RANGE_LOWER, FULL_RANGE_UPPER, -PEG_LIQUIDITY);
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
 
         _shareSwap(alice, true, -int256(100 ether));
         _shareSwap(alice, true, int256(10 ether));
@@ -459,9 +459,9 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
 
     function test_Bind_RejectsAPoolThatIsNotShareQuote() public {
         // Same hook, but paired with PEG instead of QUOTE.
-        (Currency c0, Currency c1) = address(share) < address(money)
-            ? (Currency.wrap(address(share)), Currency.wrap(address(money)))
-            : (Currency.wrap(address(money)), Currency.wrap(address(share)));
+        (Currency c0, Currency c1) = address(share) < address(peg)
+            ? (Currency.wrap(address(share)), Currency.wrap(address(peg)))
+            : (Currency.wrap(address(peg)), Currency.wrap(address(share)));
         PoolKey memory wrong = PoolKey({
             currency0: c0, currency1: c1, fee: 3000, tickSpacing: TICK_SPACING, hooks: IHooks(address(shareHook))
         });
@@ -476,7 +476,7 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     function testFuzz_ShareTaxAccounting_ConservedAcrossAnySequence(
         uint256[10] memory seeds
     ) public {
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _enableTax(); // the peg token's own sell tax runs alongside
 
         for (uint256 i = 0; i < seeds.length; ++i) {
@@ -504,8 +504,8 @@ abstract contract ShareBuybackHookTest is HookPoolFixture {
     }
 }
 
-contract ShareBuybackHookMoney0Share0Test is ShareBuybackHookTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract ShareBuybackHookPeg0Share0Test is ShareBuybackHookTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return true;
     }
 
@@ -514,8 +514,8 @@ contract ShareBuybackHookMoney0Share0Test is ShareBuybackHookTest {
     }
 }
 
-contract ShareBuybackHookMoney0Share1Test is ShareBuybackHookTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract ShareBuybackHookPeg0Share1Test is ShareBuybackHookTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return true;
     }
 
@@ -524,8 +524,8 @@ contract ShareBuybackHookMoney0Share1Test is ShareBuybackHookTest {
     }
 }
 
-contract ShareBuybackHookMoney1Share0Test is ShareBuybackHookTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract ShareBuybackHookPeg1Share0Test is ShareBuybackHookTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return false;
     }
 
@@ -534,8 +534,8 @@ contract ShareBuybackHookMoney1Share0Test is ShareBuybackHookTest {
     }
 }
 
-contract ShareBuybackHookMoney1Share1Test is ShareBuybackHookTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract ShareBuybackHookPeg1Share1Test is ShareBuybackHookTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return false;
     }
 

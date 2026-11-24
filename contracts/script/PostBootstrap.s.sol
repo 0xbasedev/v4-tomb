@@ -95,7 +95,7 @@ contract PostBootstrap is NetworkConfig {
         if (enableTax) {
             h.setAutoCalculateTax(true);
             ShareBuybackHook(_deployment("shareBuybackHook")).setTaxEnabled(true);
-            console2.log("  Fire Tax enabled: MONEY sells and ESTATE sells are now taxed (max 12%).");
+            console2.log("  Fire Tax enabled: PEG sells and SHARE sells are now taxed (max 12%).");
         } else {
             console2.log("  Fire Tax left untouched on both hooks (ENABLE_HOOK_TAX != \"1\").");
         }

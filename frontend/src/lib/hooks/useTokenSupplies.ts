@@ -4,7 +4,7 @@ import { erc20Abi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
 /**
- * Aggregate token-supply read across MONEY, ESTATE, and TRUSTNOTE. One
+ * Aggregate token-supply read across LEVEL, SQUARE, and BOND. One
  * multicall — three totalSupply() reads.
  */
 export function useTokenSupplies() {
@@ -15,18 +15,18 @@ export function useTokenSupplies() {
     allowFailure: false,
     contracts: enabled
       ? [
-          { address: deployment.money, abi: erc20Abi, functionName: "totalSupply" },
-          { address: deployment.estate, abi: erc20Abi, functionName: "totalSupply" },
-          { address: deployment.trustNote, abi: erc20Abi, functionName: "totalSupply" },
+          { address: deployment.peg, abi: erc20Abi, functionName: "totalSupply" },
+          { address: deployment.share, abi: erc20Abi, functionName: "totalSupply" },
+          { address: deployment.bond, abi: erc20Abi, functionName: "totalSupply" },
         ]
       : [],
     query: { enabled, refetchInterval: 30_000 },
   });
 
   return {
-    moneySupply: data?.[0],
-    estateSupply: data?.[1],
-    trustNoteSupply: data?.[2],
+    pegSupply: data?.[0],
+    shareSupply: data?.[1],
+    bondSupply: data?.[2],
     isLoading,
     isError,
     refetch,

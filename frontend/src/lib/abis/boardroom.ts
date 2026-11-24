@@ -1,5 +1,5 @@
 /**
- * Boardroom — The Club. ESTATE stakers earn MONEY from Treasury seigniorage,
+ * Boardroom — The Club. SQUARE stakers earn LEVEL from Treasury seigniorage,
  * subject to epoch lockups on withdraw + claim.
  */
 export const boardroomAbi = [

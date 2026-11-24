@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {V4PositionWrapper} from "../../src/distribution/V4PositionWrapper.sol";
 import {HistoricalAddresses as Addresses} from "../fixtures/HistoricalAddresses.sol";
 
@@ -43,12 +43,12 @@ interface IWeth9 {
  *         The mock-based unit tests in test/unit/V4PositionWrapper.t.sol cover the
  *         contract's LOGIC; this fork test confirms the V4 INTEGRATION works the
  *         same way against the deployed contract. Together they form the complete
- *         coverage required by the production quality bar (real money at stake).
+ *         coverage required by the production quality bar (real peg at stake).
  *
  *         Gated on BASE_RPC_URL — skipped if unset.
  */
 contract BaseForkLpWrapperTest is BaseTest {
-    OldMoney internal money;
+    PegToken internal peg;
     V4PositionWrapper internal wrapper;
     PoolKey internal poolKey;
 
@@ -59,7 +59,7 @@ contract BaseForkLpWrapperTest is BaseTest {
 
     int24 internal constant TICK_LOWER = -6000;
     int24 internal constant TICK_UPPER = 6000;
-    uint256 internal constant MONEY_BAL = 1000 ether;
+    uint256 internal constant PEG_BAL = 1000 ether;
     uint256 internal constant WETH_BAL = 1000 ether;
 
     bool internal forked;
@@ -81,19 +81,19 @@ contract BaseForkLpWrapperTest is BaseTest {
         permit2 = IAllowanceTransfer(Addresses.permit2());
         weth = Addresses.weth();
 
-        // Deploy MONEY and pre-fund the test contract.
-        money = new OldMoney();
-        money.mint(address(this), MONEY_BAL);
+        // Deploy PEG and pre-fund the test contract.
+        peg = new PegToken();
+        peg.mint(address(this), PEG_BAL);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.
         vm.deal(address(this), WETH_BAL);
         IWeth9(weth).deposit{value: WETH_BAL}();
 
-        // Build a NO-HOOK MONEY/WETH pool — fresh, not the protocol's main pool.
+        // Build a NO-HOOK PEG/WETH pool — fresh, not the protocol's main pool.
         // Using static fee (3000) avoids needing a hook attached.
-        (Currency c0, Currency c1) = address(money) < weth
-            ? (Currency.wrap(address(money)), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < weth
+            ? (Currency.wrap(address(peg)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(peg)));
         poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: IHooks(address(0))});
 
         // Initialize the pool at parity (tick 0).
@@ -101,15 +101,14 @@ contract BaseForkLpWrapperTest is BaseTest {
 
         // Permit2 dance: approve Permit2 to pull our tokens, then have Permit2
         // approve PositionManager to spend our allowance.
-        IERC20(address(money)).approve(address(permit2), type(uint256).max);
+        IERC20(address(peg)).approve(address(permit2), type(uint256).max);
         IERC20(weth).approve(address(permit2), type(uint256).max);
-        permit2.approve(address(money), address(positionManager), type(uint160).max, type(uint48).max);
+        permit2.approve(address(peg), address(positionManager), type(uint160).max, type(uint48).max);
         permit2.approve(weth, address(positionManager), type(uint160).max, type(uint48).max);
 
         // Deploy the wrapper bound to our pool + tick range.
-        wrapper = new V4PositionWrapper(
-            positionManager, poolKey, TICK_LOWER, TICK_UPPER, "Old Money MONEY/WETH LP", "om-MWLP"
-        );
+        wrapper =
+            new V4PositionWrapper(positionManager, poolKey, TICK_LOWER, TICK_UPPER, "Old Money PEG/WETH LP", "om-MWLP");
     }
 
     // ---------------------------------------------------------------------
@@ -224,7 +223,7 @@ contract BaseForkLpWrapperTest is BaseTest {
             tickLower,
             tickUpper,
             uint256(liquidity),
-            uint128(MONEY_BAL), // amount0Max
+            uint128(PEG_BAL), // amount0Max
             uint128(WETH_BAL), // amount1Max
             address(this),
             bytes("")

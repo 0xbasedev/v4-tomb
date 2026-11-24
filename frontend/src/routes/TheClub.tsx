@@ -63,7 +63,7 @@ export function TheClub() {
 
   const stakedDisplay = formatToken(club.yourStake, 4);
   const pendingDisplay = formatToken(club.earned, 4);
-  const walletDisplay = formatToken(club.estateInWallet, 4);
+  const walletDisplay = formatToken(club.shareInWallet, 4);
   const totalDisplay = formatToken(club.totalStaked, 2);
 
   // Disable Withdraw/Claim when timer hasn't matured, or when nothing to act on.
@@ -90,7 +90,7 @@ export function TheClub() {
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
             style={{ letterSpacing: "0.04em" }}
           >
-            Members stake $ESTATE. Members receive $MONEY each expansion epoch.
+            Members stake $SQUARE. Members receive $LEVEL each expansion epoch.
             Patience is rewarded.
           </p>
         </div>
@@ -103,9 +103,9 @@ export function TheClub() {
             Your Position
           </div>
           <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Staked" value={stakedDisplay} hint="$ESTATE · in The Club" />
-            <StatTile label="Pending" value={pendingDisplay} hint="$MONEY · Unclaimed" />
-            <StatTile label="In Wallet" value={walletDisplay} hint="$ESTATE · Available" />
+            <StatTile label="Staked" value={stakedDisplay} hint="$SQUARE · in The Club" />
+            <StatTile label="Pending" value={pendingDisplay} hint="$LEVEL · Unclaimed" />
+            <StatTile label="In Wallet" value={walletDisplay} hint="$SQUARE · Available" />
             <StatTile
               label="Last Activity"
               value={timerStart > 0n ? `Epoch ${timerStart.toString()}` : "—"}
@@ -137,21 +137,21 @@ export function TheClub() {
             <ActionPanel
               numeral="I"
               title="Make a Deposit"
-              blurb="Deposit $ESTATE into the Boardroom. Begin earning seigniorage each expansion epoch."
-              asset="ESTATE"
+              blurb="Deposit $SQUARE into the Boardroom. Begin earning seigniorage each expansion epoch."
+              asset="SQUARE"
               maxAvailable={walletDisplay}
-              maxWei={club.estateInWallet ?? 0n}
+              maxWei={club.shareInWallet ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Authorize · Stake"}
-              disabled={club.estateInWallet === 0n || action.isInFlight || !deployment}
-              disabledReason="No $ESTATE in wallet."
+              disabled={club.shareInWallet === 0n || action.isInFlight || !deployment}
+              disabledReason="No $SQUARE in wallet."
               onSubmit={(s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
                 if (amount <= 0n) return;
                 action.submit({
                   amount,
-                  currentAllowance: club.estateAllowance ?? 0n,
-                  token: deployment.estate,
+                  currentAllowance: club.shareAllowance ?? 0n,
+                  token: deployment.share,
                   spender: deployment.boardroom,
                   call: {
                     address: deployment.boardroom,
@@ -167,8 +167,8 @@ export function TheClub() {
             <ActionPanel
               numeral="II"
               title="Withdraw"
-              blurb="Recall your $ESTATE from the Boardroom. Six-epoch lock from your last interaction."
-              asset="ESTATE"
+              blurb="Recall your $SQUARE from the Boardroom. Six-epoch lock from your last interaction."
+              asset="SQUARE"
               maxAvailable={stakedDisplay}
               maxWei={club.yourStake ?? 0n}
               cta={action.isInFlight ? "Awaiting…" : "Withdraw"}
@@ -201,8 +201,8 @@ export function TheClub() {
             <ActionPanel
               numeral="III"
               title="Claim Your Returns"
-              blurb="Claim accrued $MONEY. Three-epoch lock from your last interaction."
-              asset="MONEY"
+              blurb="Claim accrued $LEVEL. Three-epoch lock from your last interaction."
+              asset="LEVEL"
               maxAvailable={pendingDisplay}
               cta={action.isInFlight ? "Awaiting…" : "Claim Returns"}
               noInput
@@ -244,7 +244,7 @@ export function TheClub() {
             <StatTile
               label="Aggregate Deposited"
               value={totalDisplay}
-              hint="$ESTATE · in The Club"
+              hint="$SQUARE · in The Club"
             />
             <StatTile
               label="Withdraw Lockup"

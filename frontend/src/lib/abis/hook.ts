@@ -55,7 +55,7 @@ export const hookAbi = [
   },
   {
     type: "function",
-    name: "moneyIsCurrency0",
+    name: "pegIsCurrency0",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "bool" }],

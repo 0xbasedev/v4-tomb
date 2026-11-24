@@ -61,5 +61,5 @@ frontend/
 - ⏳ Dashboard (epoch state, price, supply) — next sprint
 - ⏳ TheClub (Boardroom staking) — next sprint
 - ⏳ TheVault (reward pools) — next sprint
-- ⏳ TrustNotes (bond buy/redeem) — next sprint
+- ⏳ Bonds (bond buy/redeem) — next sprint
 - ⏳ Swap (V4 pool) — next sprint

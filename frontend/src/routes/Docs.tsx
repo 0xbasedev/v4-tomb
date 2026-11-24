@@ -13,11 +13,11 @@ import { RuleTrio } from "@/components/RuleTrio";
  *
  * Structure:
  *   - 60-second summary
- *   - The Three Estates ($MONEY, $ESTATE, $TRUSTNOTE)
+ *   - The Three SQUARE ($LEVEL, $SQUARE, $BOND)
  *   - How to Begin (the three entry paths)
  *   - The Liquidity Loop (mint→wrap→stake→exit)
- *   - The Club (ESTATE staking)
- *   - The Bond Office (Trust Notes)
+ *   - The Club (SQUARE staking)
+ *   - The Bond Office (Bonds)
  *   - The Treasury Cycle (epochs, expansion, contraction)
  *   - Peg Defense (hook + TWAP-keyed sell tax)
  *   - Risks (honest)
@@ -26,7 +26,7 @@ import { RuleTrio } from "@/components/RuleTrio";
 
 const TOC: { id: string; label: string }[] = [
   { id: "summary", label: "In Sixty Seconds" },
-  { id: "estates", label: "The Three Estates" },
+  { id: "shares", label: "The Three SQUARE" },
   { id: "begin", label: "How to Begin" },
   { id: "loop", label: "The Liquidity Loop" },
   { id: "club", label: "The Club" },
@@ -83,40 +83,40 @@ export function Docs() {
       {/* ===== In Sixty Seconds ===== */}
       <Section id="summary" title="In Sixty Seconds">
         <P>
-          Old Money is an algorithmic stable protocol where <Token>$MONEY</Token>
+          Old Money is an algorithmic stable protocol where <Token>$LEVEL</Token>
           is pegged 1:1 to <Token>WETH</Token>. The peg is held by three forces:
-          a Uniswap V4 swap hook that taxes sells when MONEY trades below par; a
-          Treasury that mints fresh MONEY to <Token>$ESTATE</Token> stakers when
-          MONEY trades above par; and a bond office that issues{" "}
-          <Token>$TRUSTNOTE</Token> at a discount when MONEY is depressed and
-          redeems them at a premium when MONEY recovers.
+          a Uniswap V4 swap hook that taxes sells when LEVEL trades below par; a
+          Treasury that mints fresh LEVEL to <Token>$SQUARE</Token> stakers when
+          LEVEL trades above par; and a bond office that issues{" "}
+          <Token>$BOND</Token> at a discount when LEVEL is depressed and
+          redeems them at a premium when LEVEL recovers.
         </P>
         <P>
           Participants enter through Genesis, the 24-hour bootstrap pool, or by
-          providing MONEY-WETH liquidity to one of two reward pools. Holders of
-          ESTATE stake in The Club to receive a share of every expansion epoch's
+          providing LEVEL-WETH liquidity to one of two reward pools. Holders of
+          SQUARE stake in The Club to receive a share of every expansion epoch's
           seigniorage. Speculators trade the bond market on the difference
           between depressed and recovered prices.
         </P>
       </Section>
 
-      {/* ===== The Three Estates ===== */}
-      <Section id="estates" title="The Three Estates">
+      {/* ===== The Three SQUARE ===== */}
+      <Section id="shares" title="The Three SQUARE">
         <Three
           a={{
-            title: "$MONEY",
+            title: "$LEVEL",
             sub: "The Stable",
-            body: "Pegged 1:1 to WETH. Used as collateral, in swaps, and burned in exchange for Trust Notes. Distributed at deploy across the reward pools and an airdrop allocation; minted further by the Treasury during expansion epochs.",
+            body: "Pegged 1:1 to WETH. Used as collateral, in swaps, and burned in exchange for Bonds. Distributed at deploy across the reward pools and an airdrop allocation; minted further by the Treasury during expansion epochs.",
           }}
           b={{
-            title: "$ESTATE",
+            title: "$SQUARE",
             sub: "The Share",
-            body: "Hard-capped at 70,000. Earned by providing MONEY-WETH liquidity (Share Pool, 370 days). Stake in The Club to receive a pro-rata cut of every expansion epoch's freshly-minted MONEY. The longer the stake, the deeper the role.",
+            body: "Hard-capped at 70,000. Earned by providing LEVEL-WETH liquidity (Share Pool, 370 days). Stake in The Club to receive a pro-rata cut of every expansion epoch's freshly-minted LEVEL. The longer the stake, the deeper the role.",
           }}
           c={{
-            title: "$TRUSTNOTE",
+            title: "$BOND",
             sub: "The Bond",
-            body: "Issued when MONEY trades below par. Burn MONEY at the Treasury to mint Notes. Hold until MONEY trades above the premium threshold (1.10 ETH), then present the Notes for more MONEY than you originally burned. A wager on recovery.",
+            body: "Issued when LEVEL trades below par. Burn LEVEL at the Treasury to mint Bonds. Hold until LEVEL trades above the premium threshold (1.10 ETH), then present the Bonds for more LEVEL than you originally burned. A wager on recovery.",
           }}
         />
       </Section>
@@ -134,41 +134,41 @@ export function Docs() {
           steps={[
             "Wrap your ETH to WETH",
             "Visit /vault during the 24-hour Genesis Window and deposit",
-            "Earn MONEY pro-rata over the window's duration",
-            "Withdraw your WETH + claim MONEY when the window closes",
+            "Earn LEVEL pro-rata over the window's duration",
+            "Withdraw your WETH + claim LEVEL when the window closes",
           ]}
         />
         <Path
           numeral="II"
           title="The Provider of Liquidity"
-          condition="You hold MONEY and ETH and want to earn yield."
+          condition="You hold LEVEL and ETH and want to earn yield."
           steps={[
-            "On /vault Main, mint a full-range MONEY-WETH liquidity position",
+            "On /vault Main, mint a full-range LEVEL-WETH liquidity position",
             "Wrap the resulting V4 LP NFT into ERC-20 share certificates",
-            "Stake the certificates in the Main Pool to earn MONEY (9 days) or Share Pool to earn ESTATE (370 days)",
+            "Stake the certificates in the Main Pool to earn LEVEL (9 days) or Share Pool to earn SQUARE (370 days)",
             "Withdraw, unwrap, and burn the position to reclaim your underlying assets",
           ]}
         />
         <Path
           numeral="III"
           title="The Member"
-          condition="You hold ESTATE and want a share of every expansion."
+          condition="You hold SQUARE and want a share of every expansion."
           steps={[
-            "Visit /club and stake your ESTATE in the Boardroom",
+            "Visit /club and stake your SQUARE in the Boardroom",
             "Wait through the six-epoch withdraw lockup and three-epoch reward lockup",
-            "Each expansion epoch, claim your share of freshly-minted MONEY",
-            "Withdraw your ESTATE when you are done",
+            "Each expansion epoch, claim your share of freshly-minted LEVEL",
+            "Withdraw your SQUARE when you are done",
           ]}
         />
         <Path
           numeral="IV"
           title="The Bondholder"
-          condition="You believe MONEY's peg will recover."
+          condition="You believe LEVEL's peg will recover."
           steps={[
-            "Watch /notes for the Acquisition Open state (MONEY below 1.00 WETH)",
-            "Burn MONEY in exchange for TRUSTNOTE at the current discount rate",
-            "Wait for MONEY to recover above 1.10 WETH (the premium threshold)",
-            "Present TRUSTNOTE for MONEY at the recovered premium rate",
+            "Watch /bonds for the Acquisition Open state (LEVEL below 1.00 WETH)",
+            "Burn LEVEL in exchange for BOND at the current discount rate",
+            "Wait for LEVEL to recover above 1.10 WETH (the premium threshold)",
+            "Present BOND for LEVEL at the recovered premium rate",
           ]}
         />
       </Section>
@@ -182,12 +182,12 @@ export function Docs() {
         </P>
         <Loop
           steps={[
-            { dir: "in", title: "Mint", body: "Provide MONEY + WETH at the pool's current ratio. Receive a full-range V4 LP NFT in your wallet (Uniswap V4 standard, ERC-721)." },
+            { dir: "in", title: "Mint", body: "Provide LEVEL + WETH at the pool's current ratio. Receive a full-range V4 LP NFT in your wallet (Uniswap V4 standard, ERC-721)." },
             { dir: "in", title: "Wrap", body: "Approve the V4PositionWrapper to take your NFT. The wrapper validates the exact full-range tick range, then mints you ERC-20 shares equal to your position's liquidity." },
-            { dir: "in", title: "Stake", body: "Approve the reward pool to spend your shares. Deposit. Begin accruing MONEY (Main) or ESTATE (Share)." },
+            { dir: "in", title: "Stake", body: "Approve the reward pool to spend your shares. Deposit. Begin accruing LEVEL (Main) or SQUARE (Share)." },
             { dir: "out", title: "Withdraw", body: "Withdraw your shares from the pool. Any pending rewards are claimed automatically. Wrapper shares return to your wallet." },
             { dir: "out", title: "Unwrap", body: "Burn your wrapper shares. Receive the original V4 LP NFT back. Only the original wrapper can unwrap." },
-            { dir: "out", title: "Burn", body: "Submit the NFT to the V4 PositionManager. Receive your MONEY + WETH back, less any swap fees the position absorbed during its lifetime." },
+            { dir: "out", title: "Burn", body: "Submit the NFT to the V4 PositionManager. Receive your LEVEL + WETH back, less any swap fees the position absorbed during its lifetime." },
           ]}
         />
       </Section>
@@ -196,21 +196,21 @@ export function Docs() {
       <Section id="club" title="The Club">
         <P>
           The Club is what the protocol calls its Boardroom — the contract that
-          receives every expansion epoch's freshly-minted MONEY and distributes
-          it pro-rata to ESTATE stakers.
+          receives every expansion epoch's freshly-minted LEVEL and distributes
+          it pro-rata to SQUARE stakers.
         </P>
         <P>
           Two timelocks govern member behavior. The <strong>withdraw lockup</strong>{" "}
-          (six epochs, thirty-six hours) blocks you from removing staked ESTATE
+          (six epochs, thirty-six hours) blocks you from removing staked SQUARE
           for that window after any deposit, withdraw, or claim. The{" "}
           <strong>reward lockup</strong> (three epochs, eighteen hours) blocks
-          claiming the most recent expansion's MONEY for that window. Both
+          claiming the most recent expansion's LEVEL for that window. Both
           counters reset on every interaction. The Trust does not reward
           impatience.
         </P>
         <P>
           Mechanically: when the Treasury enters an expansion epoch, it mints
-          MONEY directly to the Boardroom and calls{" "}
+          LEVEL directly to the Boardroom and calls{" "}
           <code className="font-ornament text-deco-gold">
             boardroom.allocateSeigniorage(amount)
           </code>
@@ -231,10 +231,10 @@ export function Docs() {
           sides — acquisition (below par) and presentation (above premium) —
           and each has hard caps the Treasury enforces on every call.
         </P>
-        <SubHeading>Acquisition (price &lt; 1.00 WETH per MONEY)</SubHeading>
+        <SubHeading>Acquisition (price &lt; 1.00 WETH per LEVEL)</SubHeading>
         <P>
-          When MONEY trades below par, the Treasury issues TRUSTNOTE at a
-          discount. Burn N MONEY, receive N × discount rate TRUSTNOTE. The
+          When LEVEL trades below par, the Treasury issues BOND at a
+          discount. Burn N LEVEL, receive N × discount rate BOND. The
           discount is set by{" "}
           <code className="font-ornament text-deco-gold">discountPercent</code> on
           the Treasury and defaults to zero (1:1 exchange) at deploy. Two hard
@@ -250,20 +250,20 @@ export function Docs() {
             ).
           </li>
           <li>
-            <strong>Debt ratio cap</strong> — outstanding TRUSTNOTE may not
-            exceed 35% of MONEY supply (
+            <strong>Debt ratio cap</strong> — outstanding BOND may not
+            exceed 35% of LEVEL supply (
             <code className="font-ornament text-deco-gold">
               maxDebtRatioPercent
             </code>
             ).
           </li>
         </ul>
-        <SubHeading>Presentation (price ≥ 1.10 WETH per MONEY)</SubHeading>
+        <SubHeading>Presentation (price ≥ 1.10 WETH per LEVEL)</SubHeading>
         <P>
-          When MONEY recovers above the premium threshold, the Treasury redeems
-          TRUSTNOTE at a premium. Present N TRUSTNOTE, receive N × premium rate
-          MONEY. The premium is computed from how far above peg the price is, up
-          to a configurable cap. The Treasury must hold sufficient MONEY reserve
+          When LEVEL recovers above the premium threshold, the Treasury redeems
+          BOND at a premium. Present N BOND, receive N × premium rate
+          LEVEL. The premium is computed from how far above peg the price is, up
+          to a configurable cap. The Treasury must hold sufficient LEVEL reserve
           (the{" "}
           <code className="font-ornament text-deco-gold">seigniorageSaved</code>{" "}
           accumulated from prior expansion epochs).
@@ -274,7 +274,7 @@ export function Docs() {
           observed when the transaction includes. If the oracle updates between
           your read and your broadcast, the Treasury reverts with{" "}
           <code className="font-ornament text-deco-gold">PriceMoved</code>. You
-          keep your MONEY (or TRUSTNOTE); only gas is spent. Retry on the next
+          keep your LEVEL (or BOND); only gas is spent. Retry on the next
           oracle observation.
         </P>
       </Section>
@@ -299,12 +299,12 @@ export function Docs() {
           b={{
             title: "Expansion",
             sub: "price ≥ 1.01 WETH",
-            body: "Above the ceiling. Treasury mints fresh MONEY scaled by the price premium. Either funds the seigniorage reserve (for future bond redemptions) or routes to The Club, depending on whether outstanding bonds need backing. DaoFund and DevFund take their configured cuts.",
+            body: "Above the ceiling. Treasury mints fresh LEVEL scaled by the price premium. Either funds the seigniorage reserve (for future bond redemptions) or routes to The Club, depending on whether outstanding bonds need backing. DaoFund and DevFund take their configured cuts.",
           }}
           c={{
             title: "Contraction",
             sub: "price < 1.00 WETH",
-            body: "Below par. No new MONEY is minted. The bond office accepts MONEY burns in exchange for TRUSTNOTE. The hook taxes MONEY sells at 12%. Both mechanisms work to retire supply and rebuild scarcity.",
+            body: "Below par. No new LEVEL is minted. The bond office accepts LEVEL burns in exchange for BOND. The hook taxes LEVEL sells at 12%. Both mechanisms work to retire supply and rebuild scarcity.",
           }}
         />
       </Section>
@@ -312,7 +312,7 @@ export function Docs() {
       {/* ===== Peg Defense ===== */}
       <Section id="defense" title="Peg Defense">
         <P>
-          Every swap on MONEY-WETH passes through the PegDefenseHook. The hook
+          Every swap on LEVEL-WETH passes through the PegDefenseHook. The hook
           serves three roles in one call:
         </P>
         <ol className="mb-4 ml-6 list-decimal font-body text-base italic text-deco-ivory-soft">
@@ -324,13 +324,13 @@ export function Docs() {
           <li>
             <strong>Dynamic LP fee.</strong> The hook adjusts the pool's swap
             fee based on how far the current tick is from the peg tick. Cheaper
-            to trade when MONEY is moving toward par; more expensive when it is
+            to trade when LEVEL is moving toward par; more expensive when it is
             drifting.
           </li>
           <li>
             <strong>Sell-side tax.</strong> When the operator enables{" "}
             <code className="font-ornament text-deco-gold">autoCalculateTax</code>{" "}
-            , the hook takes a slice of every MONEY sale. The rate is set by
+            , the hook takes a slice of every LEVEL sale. The rate is set by
             the time-weighted price, so it cannot be dodged by moving the spot
             price for a moment. Below the burn threshold (1.10 WETH), the slice
             is destroyed outright; above, it accrues to the Treasury reserve.
@@ -343,7 +343,7 @@ export function Docs() {
           ever charge. From 1.12 they pay 6%, and from 1.20 they pay 3%. A
           higher rate applies at once; a lower rate applies only after it has
           been due for seven hours. Purchases are never taxed. The schedule is rendered
-          live on /swap when MONEY-WETH is selected, with the tier in force
+          live on /swap when LEVEL-WETH is selected, with the tier in force
           highlighted.
         </P>
       </Section>
@@ -358,11 +358,11 @@ export function Docs() {
         </P>
         <Risk
           title="Bond Death Spiral"
-          body="The classic algorithmic-stable failure mode. If MONEY trades far below par and bond buyers stop believing in eventual recovery, no one burns MONEY to mint Notes. Supply doesn't retire. Price drifts further down. Tomb hit this in mid-2022. Mitigations: the hook's burn-on-sell removes supply even without bond demand; every sell below a 1.12 TWAP pays 12%, burned while below 1.10."
+          body="The classic algorithmic-stable failure mode. If LEVEL trades far below par and bond buyers stop believing in eventual recovery, no one burns LEVEL to mint Bonds. Supply doesn't retire. Price drifts further down. Tomb hit this in mid-2022. Mitigations: the hook's burn-on-sell removes supply even without bond demand; every sell below a 1.12 TWAP pays 12%, burned while below 1.10."
         />
         <Risk
           title="Bootstrap Drift"
-          body="The first 28 epochs (seven days) mint unconditionally. If demand for ESTATE is weak in this window, the resulting MONEY supply can exceed market appetite and push price below par before the price-aware mechanisms activate at epoch 29. Mitigations: Genesis pool gives early participants a first-mover advantage; the protocol launches with the 1-ESTATE construction mint to seed Boardroom from day one."
+          body="The first 28 epochs (seven days) mint unconditionally. If demand for SQUARE is weak in this window, the resulting LEVEL supply can exceed market appetite and push price below par before the price-aware mechanisms activate at epoch 29. Mitigations: Genesis pool gives early participants a first-mover advantage; the protocol launches with the 1-SQUARE construction mint to seed Boardroom from day one."
         />
         <Risk
           title="Oracle Lag"
@@ -381,15 +381,15 @@ export function Docs() {
       {/* ===== Glossary ===== */}
       <Section id="glossary" title="Glossary">
         <Term term="Epoch" body="A six-hour window. The Treasury ticks at each boundary, advancing the epoch counter and executing expansion or contraction logic." />
-        <Term term="Seigniorage" body="Newly-minted MONEY distributed during expansion epochs. Routed primarily to The Club, with optional cuts to the daoFund and devFund." />
+        <Term term="Seigniorage" body="Newly-minted LEVEL distributed during expansion epochs. Routed primarily to The Club, with optional cuts to the daoFund and devFund." />
         <Term term="Bootstrap" body="The first 28 epochs (seven days) after deploy. Unconditional 4.5% expansion regardless of price, to seed Boardroom and establish initial economy." />
         <Term term="Hook" body="A Uniswap V4 contract that runs on every swap of a specific pool. Old Money's PegDefenseHook handles observation, dynamic fees, and the sell-side tax." />
-        <Term term="The Club / Boardroom" body="The contract that holds staked ESTATE and distributes seigniorage. Same thing, two names — the contract is named Boardroom for auditor familiarity; the user-facing label is The Club." />
+        <Term term="The Club / Boardroom" body="The contract that holds staked SQUARE and distributes seigniorage. Same thing, two names — the contract is named Boardroom for auditor familiarity; the user-facing label is The Club." />
         <Term term="TWAP" body="Time-Weighted Average Price. The oracle reports this rather than spot, smoothing short-term volatility. Computed from the hook's accumulated tick observations." />
         <Term term="V4 LP NFT" body="An ERC-721 representing a Uniswap V4 liquidity position. Holds the position's exact tick range and accumulated fees. Not directly stake-able in our reward pools — must be wrapped first." />
         <Term term="Wrapper Shares" body="ERC-20 tokens minted 1:1 with V4 LP NFT liquidity by the V4PositionWrapper. Stake-able in Main and Share pools." />
-        <Term term="Debt Ratio" body="Outstanding TRUSTNOTE divided by MONEY supply. The Treasury caps this at 35% to prevent runaway bond issuance during prolonged contraction." />
-        <Term term="Burn Threshold" body="The price (default 1.10 WETH per MONEY) above which the hook's tax accrues to Treasury reserve. Below the threshold, the tax is burned outright." />
+        <Term term="Debt Ratio" body="Outstanding BOND divided by LEVEL supply. The Treasury caps this at 35% to prevent runaway bond issuance during prolonged contraction." />
+        <Term term="Burn Threshold" body="The price (default 1.10 WETH per LEVEL) above which the hook's tax accrues to Treasury reserve. Below the threshold, the tax is burned outright." />
       </Section>
 
       {/* ===== CTAs ===== */}
@@ -411,7 +411,7 @@ export function Docs() {
               <Link to="/dashboard" className="btn-deco">The Ledger</Link>
               <Link to="/vault" className="btn-deco">The Vault</Link>
               <Link to="/club" className="btn-deco">The Club</Link>
-              <Link to="/notes" className="btn-deco">Trust Notes</Link>
+              <Link to="/bonds" className="btn-deco">Bonds</Link>
               <Link to="/swap" className="btn-deco">The Exchange</Link>
             </div>
           </div>

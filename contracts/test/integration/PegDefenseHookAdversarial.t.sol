@@ -26,7 +26,7 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     int256 internal constant DEEP_LIQUIDITY = 100_000 ether;
 
-    /// @dev Money tick −5940 → price ≈ 0.552 WETH per MONEY: below 1.12, so the 12% tier.
+    /// @dev Peg tick −5940 → price ≈ 0.552 WETH per PEG: below 1.12, so the 12% tier.
     int24 internal constant DEPEGGED_TICK = -5940;
     uint256 internal constant DEPEGGED_RATE_BPS = 1200;
 
@@ -39,44 +39,44 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _enableTax();
 
         uint256 gross = 1000 ether;
-        uint256 supplyBefore = money.totalSupply();
-        uint256 aliceBefore = money.balanceOf(alice);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 aliceBefore = peg.balanceOf(alice);
 
         _sellExactIn(alice, gross);
 
-        uint256 burned = supplyBefore - money.totalSupply();
-        assertEq(aliceBefore - money.balanceOf(alice), gross, "seller pays exactly the specified input");
+        uint256 burned = supplyBefore - peg.totalSupply();
+        assertEq(aliceBefore - peg.balanceOf(alice), gross, "seller pays exactly the specified input");
         assertEq(burned, gross * DEPEGGED_RATE_BPS / 10_000, "tax = rate x gross input");
-        assertEq(money.balanceOf(address(hook)), 0, "hook retains nothing");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook retains nothing");
     }
 
     // ------------------------------------------------------------------
     // Sell tax — exact output (unit-mixing regression)
     // ------------------------------------------------------------------
 
-    function test_ExactOutSell_TaxIsChargedOnMoneyNotOnWethOutput() public {
+    function test_ExactOutSell_TaxIsChargedOnPegNotOnWethOutput() public {
         _initWithFullRange(DEPEGGED_TICK, DEEP_LIQUIDITY);
         _enableTax();
 
         uint256 wethOut = 10 ether;
-        uint256 supplyBefore = money.totalSupply();
-        uint256 aliceMoneyBefore = money.balanceOf(alice);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 alicePegBefore = peg.balanceOf(alice);
         uint256 aliceWethBefore = weth.balanceOf(alice);
 
         _sellExactOut(alice, wethOut);
 
-        uint256 burned = supplyBefore - money.totalSupply();
-        uint256 paid = aliceMoneyBefore - money.balanceOf(alice);
+        uint256 burned = supplyBefore - peg.totalSupply();
+        uint256 paid = alicePegBefore - peg.balanceOf(alice);
         uint256 poolTook = paid - burned;
 
         assertEq(weth.balanceOf(alice) - aliceWethBefore, wethOut, "seller receives exactly the specified output");
-        // At ~0.55 WETH per MONEY the pool needs ~18 MONEY for 10 WETH. Taxing the WETH
-        // figure instead (the old behaviour) would have charged 1.2 MONEY, not ~2.5.
+        // At ~0.55 WETH per PEG the pool needs ~18 PEG for 10 WETH. Taxing the WETH
+        // figure instead (the old behaviour) would have charged 1.2 PEG, not ~2.5.
         assertGt(poolTook, 18 ether);
         assertEq(burned, _grossUp(poolTook, DEPEGGED_RATE_BPS), "tax = net x r / (1 - r), rounded up");
-        // Same effective rate as an exact-input sell: tax / gross MONEY paid == tier rate.
+        // Same effective rate as an exact-input sell: tax / gross PEG paid == tier rate.
         assertApproxEqAbs(burned * 10_000 / paid, DEPEGGED_RATE_BPS, 1, "effective rate must equal the tier rate");
-        assertEq(money.balanceOf(address(hook)), 0, "hook retains nothing");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook retains nothing");
     }
 
     function test_ExactOutSell_CostsTheSameAsTheEquivalentExactInSell() public {
@@ -84,31 +84,31 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _enableTax();
 
         uint256 snap = vm.snapshotState();
-        uint256 before = money.balanceOf(alice);
+        uint256 before = peg.balanceOf(alice);
         _sellExactOut(alice, 10 ether);
-        uint256 paidForExactOut = before - money.balanceOf(alice);
+        uint256 paidForExactOut = before - peg.balanceOf(alice);
         vm.revertToState(snap);
 
-        // Spend that same gross MONEY amount as an exact-input sell instead.
+        // Spend that same gross PEG amount as an exact-input sell instead.
         uint256 wethBefore = weth.balanceOf(alice);
         _sellExactIn(alice, paidForExactOut);
         assertApproxEqRel(weth.balanceOf(alice) - wethBefore, 10 ether, 1e9, "swap mode must not change the price paid");
     }
 
     function test_ExactOutSell_AbovePeg_RoutesToTreasury() public {
-        // Money tick 1500 → price ≈ 1.162, tier [1.12, 1.20) = 6%, above the burn threshold.
+        // Peg tick 1500 → price ≈ 1.162, tier [1.12, 1.20) = 6%, above the burn threshold.
         _initWithFullRange(1500, DEEP_LIQUIDITY);
         _enableTax();
         _earnTargetRate();
 
-        uint256 supplyBefore = money.totalSupply();
-        uint256 aliceMoneyBefore = money.balanceOf(alice);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 alicePegBefore = peg.balanceOf(alice);
 
         _sellExactOut(alice, 5 ether);
 
-        uint256 paid = aliceMoneyBefore - money.balanceOf(alice);
-        uint256 routed = money.balanceOf(treasuryAddr);
-        assertEq(money.totalSupply(), supplyBefore, "nothing burned above the threshold");
+        uint256 paid = alicePegBefore - peg.balanceOf(alice);
+        uint256 routed = peg.balanceOf(treasuryAddr);
+        assertEq(peg.totalSupply(), supplyBefore, "nothing burned above the threshold");
         assertApproxEqAbs(routed * 10_000 / paid, 600, 1, "treasury receives the tier rate");
     }
 
@@ -116,24 +116,24 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         int256 tickSeed,
         uint256 wethOut
     ) public {
-        // Money ticks across every tier: ≈0.49 (−7200) up to ≈1.52 (4200).
-        int24 moneyTick = int24(bound(tickSeed, -120, 70)) * 60;
+        // Peg ticks across every tier: ≈0.49 (−7200) up to ≈1.52 (4200).
+        int24 pegTick = int24(bound(tickSeed, -120, 70)) * 60;
         wethOut = bound(wethOut, 0.01 ether, 500 ether);
 
-        _initWithFullRange(moneyTick, DEEP_LIQUIDITY);
+        _initWithFullRange(pegTick, DEEP_LIQUIDITY);
         _enableTax();
         _earnTargetRate();
 
         uint256 rate = hook.taxRate();
-        assertEq(rate, hook.taxRateForPrice(hook.priceFromTick(_poolTick(moneyTick))), "rate settled on the tier");
-        uint256 supplyBefore = money.totalSupply();
-        uint256 aliceMoneyBefore = money.balanceOf(alice);
+        assertEq(rate, hook.taxRateForPrice(hook.priceFromTick(_poolTick(pegTick))), "rate settled on the tier");
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 alicePegBefore = peg.balanceOf(alice);
         uint256 aliceWethBefore = weth.balanceOf(alice);
 
         _sellExactOut(alice, wethOut);
 
-        uint256 paid = aliceMoneyBefore - money.balanceOf(alice);
-        uint256 tax = (supplyBefore - money.totalSupply()) + money.balanceOf(treasuryAddr);
+        uint256 paid = alicePegBefore - peg.balanceOf(alice);
+        uint256 tax = (supplyBefore - peg.totalSupply()) + peg.balanceOf(treasuryAddr);
         assertEq(weth.balanceOf(alice) - aliceWethBefore, wethOut, "exact output honoured");
         assertEq(tax, _grossUp(paid - tax, rate), "tax = net x r / (1 - r), rounded up");
         assertGe(tax * 10_000, paid * rate - 10_000, "effective rate never falls below the tier rate");
@@ -147,13 +147,13 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     function test_Buys_ExactInAndExactOut_AreUntaxed() public {
         _initWithFullRange(DEPEGGED_TICK, DEEP_LIQUIDITY);
         _enableTax();
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
 
         _buyExactIn(alice, 10 ether);
         _buyExactOut(alice, 10 ether);
 
-        assertEq(money.totalSupply(), supplyBefore, "no burn on buys");
-        assertEq(money.balanceOf(treasuryAddr), 0, "no routing on buys");
+        assertEq(peg.totalSupply(), supplyBefore, "no burn on buys");
+        assertEq(peg.balanceOf(treasuryAddr), 0, "no routing on buys");
     }
 
     // ------------------------------------------------------------------
@@ -168,19 +168,19 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         SwapParams[] memory swaps = new SwapParams[](2);
         keys[0] = poolKey;
         keys[1] = poolKey;
-        swaps[0] = _sellParams(-int256(1000 ether)); // sell 1000 MONEY
+        swaps[0] = _sellParams(-int256(1000 ether)); // sell 1000 PEG
         swaps[1] = _buyParams(int256(700 ether)); // buy 700 back in the same unlock
 
-        uint256 supplyBefore = money.totalSupply();
-        uint256 aliceBefore = money.balanceOf(alice);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 aliceBefore = peg.balanceOf(alice);
 
         vm.prank(alice);
         batchRouter.swapBatch(keys, swaps);
 
-        // Flash accounting nets the MONEY legs to 300 for settlement purposes...
-        assertEq(aliceBefore - money.balanceOf(alice), 300 ether, "only the net MONEY leg settles");
+        // Flash accounting nets the PEG legs to 300 for settlement purposes...
+        assertEq(aliceBefore - peg.balanceOf(alice), 300 ether, "only the net PEG leg settles");
         // ...but the tax is assessed per swap, on the full 1000 sold.
-        assertEq(supplyBefore - money.totalSupply(), 1000 ether * DEPEGGED_RATE_BPS / 10_000, "tax on gross sell");
+        assertEq(supplyBefore - peg.totalSupply(), 1000 ether * DEPEGGED_RATE_BPS / 10_000, "tax on gross sell");
     }
 
     // ------------------------------------------------------------------
@@ -191,56 +191,56 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _initWithFullRange(0, DEEP_LIQUIDITY);
         _enableTax();
 
-        // A MONEY-only range sits above the current MONEY price.
-        (int24 lower, int24 upper) = _moneyIsCurrency0() ? (int24(60), int24(660)) : (int24(-660), int24(-60));
+        // A PEG-only range sits above the current PEG price.
+        (int24 lower, int24 upper) = _pegIsCurrency0() ? (int24(60), int24(660)) : (int24(-660), int24(-60));
         uint256 wethBefore = weth.balanceOf(alice);
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 pegBefore = peg.balanceOf(alice);
 
         ModifyLiquidityParams memory p =
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: 5000 ether, salt: bytes32(0)});
         vm.prank(alice);
         liquidityRouter.modifyLiquidity(poolKey, p, "");
         assertEq(weth.balanceOf(alice), wethBefore, "single-sided add needs no WETH");
-        assertLt(money.balanceOf(alice), moneyBefore, "MONEY deposited");
+        assertLt(peg.balanceOf(alice), pegBefore, "PEG deposited");
 
         p.liquidityDelta = -5000 ether;
         vm.prank(alice);
         liquidityRouter.modifyLiquidity(poolKey, p, "");
 
         // Without a counterparty BUY crossing the range there is nothing to withdraw but
-        // the MONEY that went in. An LP position is a resting ask, not a market sell.
+        // the PEG that went in. An LP position is a resting ask, not a market sell.
         assertEq(weth.balanceOf(alice), wethBefore, "no WETH extracted");
-        assertApproxEqAbs(money.balanceOf(alice), moneyBefore, 2, "MONEY returned (rounding only)");
+        assertApproxEqAbs(peg.balanceOf(alice), pegBefore, 2, "PEG returned (rounding only)");
     }
 
     // ------------------------------------------------------------------
-    // Liveness: tax collection must not depend on the manager's MONEY reserves
+    // Liveness: tax collection must not depend on the manager's PEG reserves
     // ------------------------------------------------------------------
 
-    function test_Sell_WhenManagerHoldsAlmostNoMoney_DefersTaxInsteadOfReverting() public {
+    function test_Sell_WhenManagerHoldsAlmostNoPeg_DefersTaxInsteadOfReverting() public {
         _initPool(0);
         // Concentrated liquidity only. Once price leaves the range upward the position is
-        // 100% WETH and the PoolManager holds (almost) no MONEY at all.
+        // 100% WETH and the PoolManager holds (almost) no PEG at all.
         _addLiquidity(-600, 600, 10_000 ether);
         _buyExactIn(bob, 100_000 ether);
-        assertLt(money.balanceOf(address(manager)), 1 ether, "manager drained of MONEY");
+        assertLt(peg.balanceOf(address(manager)), 1 ether, "manager drained of PEG");
 
         _enableTax();
         _earnTargetRate();
-        uint256 aliceBefore = money.balanceOf(alice);
-        uint256 supplyBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
-        uint256 moneyId = uint256(uint160(address(money)));
+        uint256 aliceBefore = peg.balanceOf(alice);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(treasuryAddr);
+        uint256 pegId = uint256(uint160(address(peg)));
 
         // Price is far above peg here: 3% tier, routed to Treasury. The sell that pulls
         // price back toward peg must go through even though the tax cannot be paid out yet.
         _sellExactIn(alice, 100 ether);
 
-        assertEq(aliceBefore - money.balanceOf(alice), 100 ether, "sell executed in full");
+        assertEq(aliceBefore - peg.balanceOf(alice), 100 ether, "sell executed in full");
         assertEq(hook.pendingTaxRoute(), 3 ether, "tax parked for the Treasury");
         assertEq(hook.pendingTaxBurn(), 0);
-        assertEq(manager.balanceOf(address(hook), moneyId), 3 ether, "backed 1:1 by PoolManager claims");
-        assertEq(money.totalSupply(), supplyBefore, "nothing burned yet");
+        assertEq(manager.balanceOf(address(hook), pegId), 3 ether, "backed 1:1 by PoolManager claims");
+        assertEq(peg.totalSupply(), supplyBefore, "nothing burned yet");
         _assertTaxAccounting(supplyBefore, treasuryBefore);
 
         (uint256 pb, uint256 pr, uint256 claims, uint256 settleable) = hook.deferredTaxStatus();
@@ -256,25 +256,25 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         assertEq(routed, 3 ether, "the call reports what it settled");
         _assertTaxAccounting(supplyBefore, treasuryBefore);
         assertEq(hook.pendingTaxRoute(), 0, "pending cleared");
-        assertEq(manager.balanceOf(address(hook), moneyId), 0, "claims redeemed");
-        assertEq(money.balanceOf(treasuryAddr), 3 ether, "Treasury paid");
-        assertEq(money.balanceOf(address(hook)), 0, "hook retains nothing");
+        assertEq(manager.balanceOf(address(hook), pegId), 0, "claims redeemed");
+        assertEq(peg.balanceOf(treasuryAddr), 3 ether, "Treasury paid");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook retains nothing");
     }
 
-    function test_ExactOutSell_WhenManagerHoldsAlmostNoMoney_AlsoDefers() public {
+    function test_ExactOutSell_WhenManagerHoldsAlmostNoPeg_AlsoDefers() public {
         _initPool(0);
         _addLiquidity(-600, 600, 10_000 ether);
         _buyExactIn(bob, 100_000 ether);
         _enableTax();
         _earnTargetRate();
 
-        uint256 aliceBefore = money.balanceOf(alice);
+        uint256 aliceBefore = peg.balanceOf(alice);
         _sellExactOut(alice, 50 ether);
 
-        uint256 paid = aliceBefore - money.balanceOf(alice);
+        uint256 paid = aliceBefore - peg.balanceOf(alice);
         uint256 pending = hook.pendingTaxRoute() + hook.pendingTaxBurn();
         assertGt(pending, 0, "tax deferred");
-        assertApproxEqAbs(pending * 10_000 / paid, 300, 1, "3% tier applied to the gross MONEY paid");
+        assertApproxEqAbs(pending * 10_000 / paid, 300, 1, "3% tier applied to the gross PEG paid");
 
         hook.settleDeferredTax();
         assertEq(hook.pendingTaxRoute() + hook.pendingTaxBurn(), 0);
@@ -301,15 +301,15 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
     function test_Twap_AtomicRoundTrip_LeavesNoTraceInTheOracle() public {
         _initWithFullRange(0, DEEP_LIQUIDITY);
-        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(money), address(weth), 6 hours, block.timestamp);
+        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(peg), address(weth), 6 hours, block.timestamp);
         skip(1 hours);
         (int56 c1,) = hook.getCurrentTickCumulative();
 
-        // Same block: pump the price ~60%, then sell every MONEY bought straight back.
+        // Same block: pump the price ~60%, then sell every PEG bought straight back.
         BalanceDelta bought = _buyExactIn(alice, 30_000 ether);
-        int128 moneyOut = _moneyIsCurrency0() ? bought.amount0() : bought.amount1();
+        int128 pegOut = _pegIsCurrency0() ? bought.amount0() : bought.amount1();
         int24 peakTick = _currentPoolTick();
-        _sellExactIn(alice, uint256(uint128(moneyOut)));
+        _sellExactIn(alice, uint256(uint128(pegOut)));
         int24 restingTick = _currentPoolTick();
 
         int24 peakMove = peakTick > 0 ? peakTick : -peakTick;
@@ -322,7 +322,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
         assertEq(hook.lastTick(), restingTick, "hook rests at the real pool tick");
         assertEq((c2 - c1) / int56(uint56(6 hours)), int56(restingTick), "TWAP reflects the resting tick only");
-        assertApproxEqRel(oracle.twap(address(money), 1 ether), 1 ether, 0.02e18, "oracle price stays at peg");
+        assertApproxEqRel(oracle.twap(address(peg), 1 ether), 1 ether, 0.02e18, "oracle price stays at peg");
     }
 
     function testFuzz_LastTick_AlwaysMatchesThePoolTick(
@@ -349,7 +349,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
     function test_TaxTier_CannotBeBoughtDownWithinTheSellTransaction() public {
         _initWithFullRange(0, DEEP_LIQUIDITY);
-        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(money), address(weth), 6 hours, block.timestamp);
+        Oracle oracle = new Oracle(IPriceSource(address(hook)), address(peg), address(weth), 6 hours, block.timestamp);
         hook.setTaxOracle(address(oracle));
         _enableTax();
 
@@ -363,22 +363,22 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _buyExactIn(alice, 30_000 ether);
         assertGt(hook.priceFromTick(_currentPoolTick()), 1.2e18, "spot is above the 3% threshold");
 
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _sellExactIn(alice, 1000 ether);
-        assertEq(supplyBefore - money.totalSupply(), 120 ether, "12% burned: tier read from the TWAP");
+        assertEq(supplyBefore - peg.totalSupply(), 120 ether, "12% burned: tier read from the TWAP");
     }
 
     function test_FireTax_FallsOnlyAfterSevenHours_AndRisesAtOnce() public {
-        // Money tick 1200 → ≈1.127: the schedule's target is 6%.
+        // Peg tick 1200 → ≈1.127: the schedule's target is 6%.
         _initWithFullRange(1200, DEEP_LIQUIDITY);
         _enableTax();
 
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _sellExactIn(alice, 100 ether);
         assertEq(hook.taxRate(), 1200, "starts at the maximum");
         // 1.127 is above the burn threshold, so the 12% is routed, not burned.
-        assertEq(money.totalSupply(), supplyBefore);
-        assertEq(money.balanceOf(treasuryAddr), 12 ether, "12% charged while the lower rate is unearned");
+        assertEq(peg.totalSupply(), supplyBefore);
+        assertEq(peg.balanceOf(treasuryAddr), 12 ether, "12% charged while the lower rate is unearned");
 
         (uint256 toRate, uint256 readyAt) = hook.pendingTaxDecrease();
         assertEq(toRate, 600, "a decrease to 6% is pending");
@@ -386,18 +386,18 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
 
         skip(7 hours - 1);
         _sellExactIn(alice, 100 ether);
-        assertEq(money.balanceOf(treasuryAddr), 24 ether, "still 12% one second before the window closes");
+        assertEq(peg.balanceOf(treasuryAddr), 24 ether, "still 12% one second before the window closes");
 
         skip(1);
         _sellExactIn(alice, 100 ether);
         assertEq(hook.taxRate(), 600);
-        assertEq(money.balanceOf(treasuryAddr), 30 ether, "6% once the seven hours have run");
+        assertEq(peg.balanceOf(treasuryAddr), 30 ether, "6% once the seven hours have run");
 
         // Tighten the schedule: the higher rate bites on the very next swap.
         hook.setTaxTiersRate(1, 1100);
         _sellExactIn(alice, 100 ether);
         assertEq(hook.taxRate(), 1100, "increases are immediate");
-        assertEq(money.balanceOf(treasuryAddr), 41 ether);
+        assertEq(peg.balanceOf(treasuryAddr), 41 ether);
     }
 
     function test_FireTax_NoSetterOrPathCanExceedTwelvePercent() public {
@@ -418,14 +418,14 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _addLiquidity(-600, 600, 10_000 ether);
         _buyExactIn(bob, 100_000 ether); // pool is now ~100% WETH
         _enableTax();
-        uint256 supplyBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(treasuryAddr);
 
         // Still inside the first recovery window: 12%, routed (price is far above 1.10).
         _sellExactIn(alice, 100 ether);
         assertEq(hook.pendingTaxRoute(), 12 ether);
 
-        // Buyers take every MONEY the pool holds. The claim's backing is not the pool's to
+        // Buyers take every PEG the pool holds. The claim's backing is not the pool's to
         // give: the seller's settled input covers it, so it survives the drain.
         _buyExactIn(bob, 100_000 ether);
         (,, uint256 claims, uint256 settleable) = hook.deferredTaxStatus();
@@ -449,8 +449,8 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _addLiquidity(-600, 600, 10_000 ether);
         _buyExactIn(bob, 100_000 ether);
         _enableTax();
-        uint256 supplyBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(treasuryAddr);
 
         _sellExactIn(alice, 100 ether);
         assertEq(hook.pendingTaxRoute(), 12 ether);
@@ -469,8 +469,8 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         // Thin, concentrated liquidity so sequences really do run the manager dry.
         _addLiquidity(-600, 600, 10_000 ether);
         _enableTax();
-        uint256 supplyBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(treasuryAddr);
+        uint256 supplyBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(treasuryAddr);
 
         for (uint256 i = 0; i < seeds.length; ++i) {
             uint256 op = seeds[i] % 7;
@@ -499,7 +499,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     // Known limits — documented, not enforced
     // ------------------------------------------------------------------
 
-    /// @notice MONEY is an unrestricted ERC-20, so anyone can open a hookless pool and trade
+    /// @notice PEG is an unrestricted ERC-20, so anyone can open a hookless pool and trade
     ///         there untaxed. The protocol's answer is incentives (rewards and the oracle
     ///         only recognise the official pool), not transfer gating.
     function test_KnownLimit_HooklessPool_IsUntaxed_ButCannotMoveTheOracle() public {
@@ -523,7 +523,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         );
 
         skip(1 hours);
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         int24 officialTickBefore = _currentPoolTick();
         (int56 cBefore,) = hook.getCurrentTickCumulative();
 
@@ -531,7 +531,7 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         swapRouter.swap(shadow, _sellParams(-int256(1000 ether)), PoolSwapTest.TestSettings(false, false), "");
 
         (int56 cAfter,) = hook.getCurrentTickCumulative();
-        assertEq(money.totalSupply(), supplyBefore, "shadow-pool sell is untaxed (accepted limit)");
+        assertEq(peg.totalSupply(), supplyBefore, "shadow-pool sell is untaxed (accepted limit)");
         assertEq(_currentPoolTick(), officialTickBefore, "official pool price untouched");
         assertEq(cAfter, cBefore, "oracle input untouched");
     }
@@ -543,11 +543,11 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
         _enableTax();
         hook.setExcludedAddress(address(swapRouter), true);
 
-        uint256 supplyBefore = money.totalSupply();
+        uint256 supplyBefore = peg.totalSupply();
         _sellExactIn(alice, 1000 ether);
         _sellExactIn(bob, 1000 ether);
 
-        assertEq(money.totalSupply(), supplyBefore, "every user of an excluded router trades tax-free");
+        assertEq(peg.totalSupply(), supplyBefore, "every user of an excluded router trades tax-free");
     }
 
     // ------------------------------------------------------------------
@@ -563,14 +563,14 @@ abstract contract PegDefenseHookAdversarialTest is HookPoolFixture {
     }
 }
 
-contract PegDefenseHookAdversarialMoney0Test is PegDefenseHookAdversarialTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract PegDefenseHookAdversarialPeg0Test is PegDefenseHookAdversarialTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return true;
     }
 }
 
-contract PegDefenseHookAdversarialMoney1Test is PegDefenseHookAdversarialTest {
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+contract PegDefenseHookAdversarialPeg1Test is PegDefenseHookAdversarialTest {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return false;
     }
 }

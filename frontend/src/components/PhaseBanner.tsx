@@ -6,8 +6,8 @@
  * Phases per the Treasury mechanics:
  *   - Bootstrap (epoch < 28): unconditional 4.5% supply expansion to Boardroom
  *   - Expansion (price ≥ 1.01 ETH): seigniorage minted, distributed pro-rata
- *   - Redemption (price ≥ premium): Trust Notes can be presented at premium
- *   - Contraction (price < 1.00 ETH): MONEY can be burned for Trust Notes
+ *   - Redemption (price ≥ premium): Bonds can be presented at premium
+ *   - Contraction (price < 1.00 ETH): LEVEL can be burned for Bonds
  *   - At Rest (1.00 ≤ price ≤ 1.01): no action — the dead zone
  */
 
@@ -33,28 +33,28 @@ const PHASE_COPY: Record<
     label: "Phase · Expansion",
     title: "Seigniorage Flows",
     gloss:
-      "MONEY trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Club.",
+      "LEVEL trades above the peg. The Treasury mints, the daoFund and devFund take their cuts, and the remainder is distributed to Members of The Club.",
     tone: "text-deco-gold",
   },
   redemption: {
     label: "Phase · Premium",
-    title: "Notes Are Redeemed",
+    title: "Bonds Are Redeemed",
     gloss:
-      "MONEY trades above one and one-tenth Ether. Holders of Trust Notes may present them at the Treasury and receive MONEY at premium.",
+      "LEVEL trades above one and one-tenth Ether. Holders of Bonds may present them at the Treasury and receive LEVEL at premium.",
     tone: "text-deco-emerald",
   },
   contraction: {
     label: "Phase · Contraction",
-    title: "The Notes Are Active",
+    title: "The Bonds Are Active",
     gloss:
-      "MONEY trades below the peg. Holders may burn MONEY for Trust Notes at a discount. The Hook burns supply on every sale. The peg shall recover.",
+      "LEVEL trades below the peg. Holders may burn LEVEL for Bonds at a discount. The Hook burns supply on every sale. The peg shall recover.",
     tone: "text-deco-ruby",
   },
   rest: {
     label: "Phase · At Rest",
     title: "The Trust is Steady",
     gloss:
-      "MONEY is at peg. No seigniorage is minted. No Notes are issued. The Trust observes its own equilibrium.",
+      "LEVEL is at peg. No seigniorage is minted. No Bonds are issued. The Trust observes its own equilibrium.",
     tone: "text-deco-ivory",
   },
 };

@@ -1,7 +1,7 @@
 /**
  * LockupClock — formal Art Deco countdown showing time until an action unlocks.
  *
- * Used in The Club for the withdraw + claim lockup timers, and on Trust Notes for
+ * Used in The Club for the withdraw + claim lockup timers, and on Bonds for
  * the maturity countdown. Pure display — receives the remaining seconds and
  * formats them; the parent owns the live tick.
  */

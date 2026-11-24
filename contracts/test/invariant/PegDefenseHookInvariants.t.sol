@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -81,7 +81,7 @@ contract PegDefenseHookHandler is Test {
 contract PegDefenseHookInvariants is StdInvariant, Test {
     PegDefenseHook public hook;
     PegDefenseHookHandler public handler;
-    OldMoney public money;
+    PegToken public peg;
     StubPM public pm;
 
     address internal hookAddr;
@@ -89,7 +89,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
     function setUp() public {
         vm.warp(1_700_000_000);
 
-        money = new OldMoney();
+        peg = new PegToken();
         pm = new StubPM();
 
         // Place the hook at an address whose low bits match the declared permissions
@@ -98,7 +98,7 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
 
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
-            abi.encode(IPoolManager(address(pm)), address(money), address(this)),
+            abi.encode(IPoolManager(address(pm)), address(peg), address(this)),
             hookAddr
         );
         hook = PegDefenseHook(hookAddr);
@@ -142,9 +142,9 @@ contract PegDefenseHookInvariants is StdInvariant, Test {
         assertGt(hook.burnThreshold(), 0);
     }
 
-    /// @notice money / poolManager immutables can never change post-construction.
+    /// @notice peg / poolManager immutables can never change post-construction.
     function invariant_ImmutablesStable() public view {
-        assertEq(hook.money(), address(money));
+        assertEq(hook.peg(), address(peg));
         assertEq(address(hook.poolManager()), address(pm));
     }
 

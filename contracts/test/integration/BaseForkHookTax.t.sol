@@ -4,9 +4,9 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {HookMiner} from "../utils/HookMiner.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {TrustNote} from "../../src/tokens/TrustNote.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {Oracle} from "../../src/oracle/Oracle.sol";
@@ -43,7 +43,7 @@ interface IWeth9 {
  * @notice Real-V4 fork integration tests for the Sprint 4b tax surface. Validates that:
  *           1. A real `swap` through V4's PoolManager triggers `beforeSwap` and the
  *              hook's `take` call inside the unlock context.
- *           2. The burn path reduces `money.totalSupply` by exactly the tax amount.
+ *           2. The burn path reduces `peg.totalSupply` by exactly the tax amount.
  *           3. The route path increases `treasury.balanceOf` by exactly the tax amount.
  *           4. Buy direction (the opposite swap direction) is untaxed.
  *           5. Excluded sender bypasses tax even on sells.
@@ -58,9 +58,9 @@ interface IWeth9 {
 contract BaseForkHookTaxTest is BaseTest {
     using PoolIdLibrary for PoolKey;
 
-    OldMoney internal money;
-    Estate internal estate;
-    TrustNote internal trustnote;
+    PegToken internal peg;
+    ShareToken internal share;
+    BondToken internal bond;
     Treasury internal treasury;
     Boardroom internal boardroom;
     Oracle internal oracle;
@@ -82,7 +82,7 @@ contract BaseForkHookTaxTest is BaseTest {
     bool internal forked;
 
     // Pre-funded balances available for swap tests.
-    uint256 internal constant TEST_MONEY_BAL = 1000 ether;
+    uint256 internal constant TEST_PEG_BAL = 1000 ether;
     uint256 internal constant TEST_WETH_BAL = 1000 ether;
     int24 internal constant LIQ_TICK_LOWER = -6000;
     int24 internal constant LIQ_TICK_UPPER = 6000;
@@ -104,14 +104,14 @@ contract BaseForkHookTaxTest is BaseTest {
         weth = Addresses.weth();
 
         // Deploy tokens. Test contract is the deployer + initial trustees.
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        peg = new PegToken();
+        share = new ShareToken(startTime, communityFund, devFund);
+        bond = new BondToken();
 
         // CREATE2-mine + deploy the PegDefenseHook at the required permission-bit address.
         uint160 flags = PegDefenseHookPermissions.FLAGS;
         bytes memory hookCreationCode =
-            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(money), address(this)));
+            abi.encodePacked(type(PegDefenseHook).creationCode, abi.encode(poolManager, address(peg), address(this)));
         (address minedAddr, bytes32 hookSalt) = HookMiner.find(address(this), flags, hookCreationCode);
         PegDefenseHook deployedHook;
         bytes32 saltLocal = hookSalt;
@@ -122,10 +122,10 @@ contract BaseForkHookTaxTest is BaseTest {
         require(address(deployedHook) == minedAddr, "BaseForkHookTax: hook addr mismatch");
         hook = deployedHook;
 
-        // Initialize the V4 MONEY/WETH pool at parity (tick 0).
-        (Currency c0, Currency c1) = address(money) < weth
-            ? (Currency.wrap(address(money)), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(address(money)));
+        // Initialize the V4 PEG/WETH pool at parity (tick 0).
+        (Currency c0, Currency c1) = address(peg) < weth
+            ? (Currency.wrap(address(peg)), Currency.wrap(weth))
+            : (Currency.wrap(weth), Currency.wrap(address(peg)));
         poolKey = PoolKey({
             currency0: c0,
             currency1: c1,
@@ -136,42 +136,36 @@ contract BaseForkHookTaxTest is BaseTest {
         poolManager.initialize(poolKey, TickMath.getSqrtPriceAtTick(0));
 
         // Deploy Oracle pointing at the hook as IPriceSource.
-        oracle = new Oracle(IPriceSource(address(hook)), address(money), weth, 6 hours, startTime);
+        oracle = new Oracle(IPriceSource(address(hook)), address(peg), weth, 6 hours, startTime);
 
         // Deploy Treasury + Boardroom, init, hand off operator.
         treasury = new Treasury();
         boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            startTime,
-            excluded
+            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
         );
 
-        money.distributeReward(genesisPool, mainPool, airdropWallet);
-        estate.distributeReward(farmingPool);
+        peg.distributeReward(genesisPool, mainPool, airdropWallet);
+        share.distributeReward(farmingPool);
 
-        // Pre-fund the TEST CONTRACT with MONEY for swap tests. Must happen BEFORE
+        // Pre-fund the TEST CONTRACT with PEG for swap tests. Must happen BEFORE
         // the trustees handoff to Treasury (otherwise test contract loses mint authority).
-        money.mint(address(this), TEST_MONEY_BAL);
+        peg.mint(address(this), TEST_PEG_BAL);
 
         // Hand off operator authority on every token + boardroom to Treasury.
-        money.transferTrustees(address(treasury));
-        estate.transferTrustees(address(treasury));
-        trustnote.transferTrustees(address(treasury));
+        peg.transferTrustees(address(treasury));
+        share.transferTrustees(address(treasury));
+        bond.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
 
         // Boardroom seed so bootstrap-branch allocateSeigniorage doesn't revert (gap #16).
-        estate.approve(address(boardroom), 1);
+        share.approve(address(boardroom), 1);
         boardroom.stake(1);
 
         // Acquire WETH on the fork by depositing ETH at the OP-stack predeploy.
@@ -184,8 +178,8 @@ contract BaseForkHookTaxTest is BaseTest {
         // Deploy v4-core test routers + approve them on both currencies.
         swapRouter = new PoolSwapTest(poolManager);
         liquidityRouter = new PoolModifyLiquidityTest(poolManager);
-        IERC20(address(money)).approve(address(swapRouter), type(uint256).max);
-        IERC20(address(money)).approve(address(liquidityRouter), type(uint256).max);
+        IERC20(address(peg)).approve(address(swapRouter), type(uint256).max);
+        IERC20(address(peg)).approve(address(liquidityRouter), type(uint256).max);
         IERC20(weth).approve(address(swapRouter), type(uint256).max);
         IERC20(weth).approve(address(liquidityRouter), type(uint256).max);
 
@@ -210,7 +204,7 @@ contract BaseForkHookTaxTest is BaseTest {
         // so the burn branch fires.
         hook.setAutoCalculateTax(true);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
         uint256 sellAmount = 10 ether;
 
         // At tick 0 (below 1.12) the rate is 1200 bps. Tax = sellAmount * 0.12.
@@ -220,11 +214,11 @@ contract BaseForkHookTaxTest is BaseTest {
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
 
         // totalSupply decreased by exactly the tax amount (burn path).
-        assertEq(money.totalSupply(), totalBefore - expectedTax, "totalSupply should decrease by tax amount");
-        // Hook holds no MONEY after burn.
-        assertEq(money.balanceOf(address(hook)), 0, "hook MONEY balance is 0 after burn");
+        assertEq(peg.totalSupply(), totalBefore - expectedTax, "totalSupply should decrease by tax amount");
+        // Hook holds no PEG after burn.
+        assertEq(peg.balanceOf(address(hook)), 0, "hook PEG balance is 0 after burn");
         // Treasury didn't receive anything (we're below threshold).
-        assertEq(money.balanceOf(address(treasury)), 0, "treasury unchanged on burn path");
+        assertEq(peg.balanceOf(address(treasury)), 0, "treasury unchanged on burn path");
     }
 
     // ---------------------------------------------------------------------
@@ -236,8 +230,8 @@ contract BaseForkHookTaxTest is BaseTest {
         hook.setBurnThreshold(0.5e18);
         hook.setAutoCalculateTax(true);
 
-        uint256 totalBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(address(treasury));
+        uint256 totalBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(address(treasury));
         uint256 sellAmount = 10 ether;
         uint256 expectedTax = sellAmount * 1200 / 10_000;
 
@@ -245,11 +239,11 @@ contract BaseForkHookTaxTest is BaseTest {
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
 
         // Total supply unchanged (no burn).
-        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged on route path");
+        assertEq(peg.totalSupply(), totalBefore, "totalSupply unchanged on route path");
         // Treasury received tax.
-        assertEq(money.balanceOf(address(treasury)), treasuryBefore + expectedTax, "treasury received tax");
+        assertEq(peg.balanceOf(address(treasury)), treasuryBefore + expectedTax, "treasury received tax");
         // Hook holds nothing.
-        assertEq(money.balanceOf(address(hook)), 0, "hook MONEY balance is 0 after route");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook PEG balance is 0 after route");
     }
 
     // ---------------------------------------------------------------------
@@ -259,22 +253,22 @@ contract BaseForkHookTaxTest is BaseTest {
     function test_BuyDirection_NoTaxApplied() public {
         hook.setAutoCalculateTax(true);
 
-        uint256 totalBefore = money.totalSupply();
-        uint256 treasuryBefore = money.balanceOf(address(treasury));
+        uint256 totalBefore = peg.totalSupply();
+        uint256 treasuryBefore = peg.balanceOf(address(treasury));
         uint256 buyAmount = 10 ether;
 
-        // BUY: WETH -> MONEY. zeroForOne flipped from the sell direction.
+        // BUY: WETH -> PEG. zeroForOne flipped from the sell direction.
         SwapParams memory params = SwapParams({
-            zeroForOne: !hook.moneyIsCurrency0(),
+            zeroForOne: !hook.pegIsCurrency0(),
             amountSpecified: -int256(buyAmount),
-            sqrtPriceLimitX96: hook.moneyIsCurrency0() ? TickMath.MAX_SQRT_PRICE - 1 : TickMath.MIN_SQRT_PRICE + 1
+            sqrtPriceLimitX96: hook.pegIsCurrency0() ? TickMath.MAX_SQRT_PRICE - 1 : TickMath.MIN_SQRT_PRICE + 1
         });
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
 
         // Nothing burned, nothing routed.
-        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged on buy");
-        assertEq(money.balanceOf(address(treasury)), treasuryBefore, "treasury unchanged on buy");
-        assertEq(money.balanceOf(address(hook)), 0, "hook MONEY balance is 0 on buy");
+        assertEq(peg.totalSupply(), totalBefore, "totalSupply unchanged on buy");
+        assertEq(peg.balanceOf(address(treasury)), treasuryBefore, "treasury unchanged on buy");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook PEG balance is 0 on buy");
     }
 
     // ---------------------------------------------------------------------
@@ -289,13 +283,13 @@ contract BaseForkHookTaxTest is BaseTest {
         // router specifically.
         hook.setExcludedAddress(address(swapRouter), true);
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
         uint256 sellAmount = 10 ether;
 
         SwapParams memory params = _sellSwapParams(int256(sellAmount));
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
 
-        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged when sender excluded");
+        assertEq(peg.totalSupply(), totalBefore, "totalSupply unchanged when sender excluded");
     }
 
     // ---------------------------------------------------------------------
@@ -306,25 +300,25 @@ contract BaseForkHookTaxTest is BaseTest {
         // autoCalculateTax defaults to false. No tax, no delta, total supply unchanged.
         assertFalse(hook.autoCalculateTax(), "precondition: tax off");
 
-        uint256 totalBefore = money.totalSupply();
+        uint256 totalBefore = peg.totalSupply();
         uint256 sellAmount = 10 ether;
 
         SwapParams memory params = _sellSwapParams(int256(sellAmount));
         swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), "");
 
-        assertEq(money.totalSupply(), totalBefore, "totalSupply unchanged when tax off");
+        assertEq(peg.totalSupply(), totalBefore, "totalSupply unchanged when tax off");
     }
 
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 
-    /// @dev Exact-input MONEY sell. amountSpecified is positive in this helper's input;
+    /// @dev Exact-input PEG sell. amountSpecified is positive in this helper's input;
     ///      we negate to match V4's exact-input convention (< 0).
     function _sellSwapParams(
         int256 sellAmount
     ) internal view returns (SwapParams memory) {
-        bool zeroForOne = hook.moneyIsCurrency0();
+        bool zeroForOne = hook.pegIsCurrency0();
         return SwapParams({
             zeroForOne: zeroForOne,
             amountSpecified: -sellAmount,

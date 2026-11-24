@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -29,7 +29,7 @@ contract MockTreasury is ITreasury {
         return type(uint256).max;
     }
 
-    function getMoneyPrice() external pure returns (uint256) {
+    function getPegPrice() external pure returns (uint256) {
         return 1e18;
     }
 
@@ -54,18 +54,18 @@ contract MockTreasury is ITreasury {
  */
 contract BoardroomHandler is Test {
     Boardroom public boardroom;
-    Estate public estate;
+    ShareToken public share;
     MockTreasury public treasury;
 
     address[] public actors;
 
     constructor(
         Boardroom _boardroom,
-        Estate _estate,
+        ShareToken _share,
         MockTreasury _treasury
     ) {
         boardroom = _boardroom;
-        estate = _estate;
+        share = _share;
         treasury = _treasury;
         actors.push(makeAddr("alice"));
         actors.push(makeAddr("bob"));
@@ -81,13 +81,13 @@ contract BoardroomHandler is Test {
         uint256 amount
     ) external {
         address actor = actors[actorSeed % actors.length];
-        uint256 balance = estate.balanceOf(actor);
+        uint256 balance = share.balanceOf(actor);
         if (balance == 0) return;
         amount = bound(amount, 1, balance);
 
         vm.roll(block.number + 1);
         vm.prank(actor);
-        estate.approve(address(boardroom), amount);
+        share.approve(address(boardroom), amount);
         vm.roll(block.number + 1);
         vm.prank(actor);
         boardroom.stake(amount);
@@ -122,25 +122,25 @@ contract BoardroomHandler is Test {
         boardroom.exit();
     }
 
-    /// @notice Move ESTATE between actors so the fuzzer has reason to stake from many directions.
-    function shuffleEstate(
+    /// @notice Move SHARE between actors so the fuzzer has reason to stake from many directions.
+    function shuffleShareToken(
         uint256 fromSeed,
         uint256 toSeed,
         uint256 amount
     ) external {
         address from = actors[fromSeed % actors.length];
         address to = actors[toSeed % actors.length];
-        uint256 balance = estate.balanceOf(from);
+        uint256 balance = share.balanceOf(from);
         if (balance == 0) return;
         amount = bound(amount, 1, balance);
         vm.prank(from);
-        estate.transfer(to, amount);
+        share.transfer(to, amount);
     }
 }
 
 contract BoardroomInvariants is StdInvariant, Test {
-    OldMoney public money;
-    Estate public estate;
+    PegToken public peg;
+    ShareToken public share;
     Boardroom public boardroom;
     MockTreasury public treasury;
     BoardroomHandler public handler;
@@ -153,39 +153,39 @@ contract BoardroomInvariants is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         // 1. Deploy tokens (deployer = trustees of each).
-        money = new OldMoney();
-        estate = new Estate(block.timestamp + 1 hours, communityFund, devFund);
+        peg = new PegToken();
+        share = new ShareToken(block.timestamp + 1 hours, communityFund, devFund);
 
         // 2. Mock treasury.
         treasury = new MockTreasury();
 
         // 3. Boardroom (deployer is the initial operator).
         boardroom = new Boardroom();
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
-        // 4. Mint ESTATE supply via distributeReward, then push to test actors.
-        estate.distributeReward(farmingPool);
+        // 4. Mint SHARE supply via distributeReward, then push to test actors.
+        share.distributeReward(farmingPool);
 
-        handler = new BoardroomHandler(boardroom, estate, treasury);
+        handler = new BoardroomHandler(boardroom, share, treasury);
 
-        // Seed each actor with some ESTATE. Use the farming pool's balance.
+        // Seed each actor with some SHARE. Use the farming pool's balance.
         vm.startPrank(farmingPool);
-        estate.transfer(handler.actors(0), 5000 ether);
-        estate.transfer(handler.actors(1), 5000 ether);
-        estate.transfer(handler.actors(2), 5000 ether);
+        share.transfer(handler.actors(0), 5000 ether);
+        share.transfer(handler.actors(1), 5000 ether);
+        share.transfer(handler.actors(2), 5000 ether);
         vm.stopPrank();
 
         targetContract(address(handler));
     }
 
     // ---------------------------------------------------------------------
-    // Core invariant: no ESTATE is ever lost or duplicated
+    // Core invariant: no SHARE is ever lost or duplicated
     // ---------------------------------------------------------------------
 
-    /// @notice The Boardroom's internal totalSupply tracker must equal the ESTATE held by
+    /// @notice The Boardroom's internal totalSupply tracker must equal the SHARE held by
     ///         the Boardroom contract. This is the no-leak no-counterfeit invariant.
-    function invariant_TotalSupplyMatchesEstateHeld() public view {
-        assertEq(boardroom.totalSupply(), estate.balanceOf(address(boardroom)));
+    function invariant_TotalSupplyMatchesShareTokenHeld() public view {
+        assertEq(boardroom.totalSupply(), share.balanceOf(address(boardroom)));
     }
 
     /// @notice Sum of every actor's recorded stake equals the boardroom's totalSupply.
@@ -204,17 +204,17 @@ contract BoardroomInvariants is StdInvariant, Test {
         }
     }
 
-    /// @notice ESTATE supply is conserved: the deployer's mint, farming pool, three actors,
-    ///         and the boardroom together hold all of estate.totalSupply().
-    function invariant_NoEstateLost() public view {
-        uint256 sum = estate.balanceOf(address(this)); // deployer 1 ether
-        sum += estate.balanceOf(farmingPool);
-        sum += estate.balanceOf(communityFund);
-        sum += estate.balanceOf(devFund);
-        sum += estate.balanceOf(address(boardroom));
+    /// @notice SHARE supply is conserved: the deployer's mint, farming pool, three actors,
+    ///         and the boardroom together hold all of share.totalSupply().
+    function invariant_NoShareTokenLost() public view {
+        uint256 sum = share.balanceOf(address(this)); // deployer 1 ether
+        sum += share.balanceOf(farmingPool);
+        sum += share.balanceOf(communityFund);
+        sum += share.balanceOf(devFund);
+        sum += share.balanceOf(address(boardroom));
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            sum += estate.balanceOf(handler.actors(i));
+            sum += share.balanceOf(handler.actors(i));
         }
-        assertEq(sum, estate.totalSupply());
+        assertEq(sum, share.totalSupply());
     }
 }

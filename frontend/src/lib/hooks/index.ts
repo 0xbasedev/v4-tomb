@@ -1,6 +1,6 @@
 export { useDeployment } from "./useDeployment";
 export { useEpoch } from "./useEpoch";
-export { useMoneyMarket } from "./useMoneyMarket";
+export { usePegMarket } from "./usePegMarket";
 export { useTokenSupplies } from "./useTokenSupplies";
 export { useBoardroom } from "./useBoardroom";
 export { useBondMarket } from "./useBondMarket";

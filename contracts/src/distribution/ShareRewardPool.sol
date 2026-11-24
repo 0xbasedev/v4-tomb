@@ -6,14 +6,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 /**
  * @title ShareRewardPool
- * @notice 370-day MasterChef-style farm for $ESTATE distribution. Estate's farming
- *         allocation (59,500 ESTATE from `Estate.distributeReward(farmingPool)`) is
- *         pre-funded into this contract; LPs stake their LP tokens and earn ESTATE
+ * @notice 370-day MasterChef-style farm for $SHARE distribution. ShareToken's farming
+ *         allocation (59,500 SHARE from `ShareToken.distributeReward(farmingPool)`) is
+ *         pre-funded into this contract; LPs stake their LP tokens and earn SHARE
  *         pro-rata over the year.
  *
  * @dev    Direct port of Tomb Finance's BShareRewardPool. Same MasterChef machinery
- *         as GenesisRewardPool but with `share` (ESTATE) as the reward token, a longer
- *         RUNNING_TIME (370 days), and different TOTAL_REWARDS (59,500 ESTATE).
+ *         as GenesisRewardPool but with `share` (SHARE) as the reward token, a longer
+ *         RUNNING_TIME (370 days), and different TOTAL_REWARDS (59,500 SHARE).
  *
  *         Modernizations applied (no logic changes):
  *           - 0.6.12 → 0.8.26; SafeMath dropped.

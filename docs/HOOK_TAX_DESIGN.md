@@ -17,8 +17,8 @@ Our current `PegDefenseHook` (Sprint 4) doesn't burn or route any value. It only
 
 This sprint adds the tax slice **on top of** the existing dynamic LP fee. The two mechanisms coexist:
 
-- **Dynamic LP fee** (existing) — higher cost = lower MONEY sell pressure; revenue flows to LPs.
-- **Tax slice on sells** (new) — takes a percentage of swap input as MONEY → burns (or routes to Treasury) → permanent supply reduction.
+- **Dynamic LP fee** (existing) — higher cost = lower LEVEL sell pressure; revenue flows to LPs.
+- **Tax slice on sells** (new) — takes a percentage of swap input as LEVEL → burns (or routes to Treasury) → permanent supply reduction.
 
 ## How Tomb's tax worked, exactly
 
@@ -63,17 +63,17 @@ Tax tier table (14 tiers):
 | 1.40 → 1.50 | 200 (2%) |
 | 1.50+ | 100 (1%) |
 
-`burnThreshold = 1.10e18` → at any price below 1.10× peg (which is most of the time), the tax MONEY is burned. Above 1.10× peg (rare), it goes to a tax-collector wallet.
+`burnThreshold = 1.10e18` → at any price below 1.10× peg (which is most of the time), the tax LEVEL is burned. Above 1.10× peg (rare), it goes to a tax-collector wallet.
 
 ## Scope changes for the V4 hook port
 
 | Aspect | Tomb | Our hook (this sprint) |
 |---|---|---|
-| Trigger | Any `transferFrom` of BOMB | Only swaps through the V4 MONEY/WETH pool |
-| Direction | Symmetric (both directions) | **Sells only** — MONEY → WETH swaps. Buys (WETH → MONEY) untaxed; taxing buys discourages MONEY acquisition which contradicts contraction goals |
+| Trigger | Any `transferFrom` of BOMB | Only swaps through the V4 LEVEL/WETH pool |
+| Direction | Symmetric (both directions) | **Sells only** — LEVEL → WETH swaps. Buys (WETH → LEVEL) untaxed; taxing buys discourages LEVEL acquisition which contradicts contraction goals |
 | Burn vs route | Burned if price < 1.10; else to collector | Same threshold. Burn below 1.10; route to Treasury above 1.10 (Treasury can use it for bond redemption — replaces Tomb's separate collector wallet) |
 | Tax tier table | 14 tiers (Tomb's exact table) | **14 tiers, same exact values.** Matches Tomb 1:1. |
-| Excluded addresses | `mapping(address => bool) excludedAddresses` | Same — Trustees-settable. Set to `true` for protocol contracts (Treasury, PoolManager, wrappers) so they can move MONEY without being taxed |
+| Excluded addresses | `mapping(address => bool) excludedAddresses` | Same — Trustees-settable. Set to `true` for protocol contracts (Treasury, PoolManager, wrappers) so they can move LEVEL without being taxed |
 | Active toggle | `autoCalculateTax` (off by default) | Same. Trustees flip on after launch |
 
 **Justification for sells-only:** Tomb's symmetric tax was a side effect of intercepting `transferFrom`; on every operation including buys via a DEX, BOMB was being moved out of the LP, which triggered the tax. The economic intent was always sell-side. Our V4 swap context makes the direction explicit and lets us tax the intended side cleanly. **This is a narrowing of scope vs Tomb but matches Tomb's economic intent.**
@@ -85,18 +85,18 @@ V4's `beforeSwap` returns `(selector, BeforeSwapDelta, fee)`. The `BeforeSwapDel
 - **Upper 128 bits** = `deltaSpecified` (signed) — adjustment to the specified token's delta
 - **Lower 128 bits** = `deltaUnspecified` (signed) — adjustment to the unspecified token's delta
 
-For a sell with exact-input MONEY:
-- `params.zeroForOne = moneyIsCurrency0` (MONEY → WETH)
+For a sell with exact-input LEVEL:
+- `params.zeroForOne = pegIsCurrency0` (LEVEL → WETH)
 - `params.amountSpecified < 0` (negative for exact-input per V4 convention)
-- The **specified** token is MONEY (the one user is paying)
-- Returning `deltaSpecified = +taxAmount` (positive int128) tells V4 the hook is owed `taxAmount` of MONEY from the swap
-- V4 reduces the amount sent to the LPs by `taxAmount` and credits the hook with `taxAmount` MONEY
+- The **specified** token is LEVEL (the one user is paying)
+- Returning `deltaSpecified = +taxAmount` (positive int128) tells V4 the hook is owed `taxAmount` of LEVEL from the swap
+- V4 reduces the amount sent to the LPs by `taxAmount` and credits the hook with `taxAmount` LEVEL
 
-After `beforeSwap` returns, the hook calls `poolManager.take(moneyCurrency, address(this), taxAmount)` to pull the MONEY into the hook's balance. Then either:
-- `money.burn(taxAmount)` if `price < burnThreshold` → MONEY supply decreases
-- `money.transfer(treasury, taxAmount)` if `price >= burnThreshold` → Treasury accumulates reserves
+After `beforeSwap` returns, the hook calls `poolManager.take(pegCurrency, address(this), taxAmount)` to pull the LEVEL into the hook's balance. Then either:
+- `peg.burn(taxAmount)` if `price < burnThreshold` → LEVEL supply decreases
+- `peg.transfer(treasury, taxAmount)` if `price >= burnThreshold` → Treasury accumulates reserves
 
-For exact-output swaps (`amountSpecified > 0`): the specified token is the OUTPUT (WETH in a sell). The tax must come from the input side (MONEY), which is the unspecified token. This is messier — covered in "edge cases" below.
+For exact-output swaps (`amountSpecified > 0`): the specified token is the OUTPUT (WETH in a sell). The tax must come from the input side (LEVEL), which is the unspecified token. This is messier — covered in "edge cases" below.
 
 ## Permission bits change
 
@@ -152,14 +152,14 @@ Pseudocode:
 2. If autoCalculateTax == false → return (selector, ZERO_DELTA, fee | OVERRIDE_FEE_FLAG)
    (preserves current Sprint-4 behavior when tax is disabled)
 
-3. If swap is a BUY (WETH → MONEY direction):
+3. If swap is a BUY (WETH → LEVEL direction):
    → return (selector, ZERO_DELTA, fee | OVERRIDE_FEE_FLAG)
    (no tax on buys)
 
 4. If sender is in `excludedAddresses`:
    → return (selector, ZERO_DELTA, fee | OVERRIDE_FEE_FLAG)
 
-5. Compute current MONEY price in WETH from tick:
+5. Compute current LEVEL price in WETH from tick:
    - sqrtPriceX96 = TickMath.getSqrtPriceAtTick(currentTick)
    - price = (sqrtPriceX96^2 / 2^192) * 1e18  (or via FullMath for precision)
 
@@ -176,14 +176,14 @@ Pseudocode:
      (tax comes from input side which is unspecified for exact-output)
 
 10. After PoolManager processes the delta, call:
-    poolManager.take(moneyCurrency, address(this), taxAmount)
+    poolManager.take(pegCurrency, address(this), taxAmount)
 
 11. Conditional dispatch:
     if (price < burnThreshold):
-        money.burn(taxAmount)
+        peg.burn(taxAmount)
         emit TaxBurned(taxAmount, price)
     else:
-        money.safeTransfer(treasury, taxAmount)
+        peg.safeTransfer(treasury, taxAmount)
         emit TaxRouted(treasury, taxAmount, price)
 
 12. Return (selector, beforeSwapDelta, fee | OVERRIDE_FEE_FLAG)
@@ -193,11 +193,11 @@ Note step 10: `poolManager.take` requires the unlock context, which `beforeSwap`
 
 ## Edge cases
 
-1. **Hook doesn't hold MONEY** — solved by `take` from PoolManager into hook's balance. After take, hook can burn or transfer.
+1. **Hook doesn't hold LEVEL** — solved by `take` from PoolManager into hook's balance. After take, hook can burn or transfer.
 
 2. **Treasury address not set yet** — `treasury` is Trustees-settable on the hook. If unset (zero address) AND price >= burnThreshold, tax falls through to burn anyway (safe default). Document as such.
 
-3. **Exact-output swaps** — when `amountSpecified > 0` (exact output), the specified token is what's received, the unspecified is what's paid. For a sell (MONEY → WETH, exact-output WETH), the unspecified is MONEY. To take MONEY tax, set `deltaUnspecified > 0`. The downside: we don't know the exact MONEY amount until after the swap clears. Approach: estimate from the pool's current tick + WETH amount, take the estimated tax, then if the actual sale's MONEY input differs slightly, accept the rounding (sub-cent). Document the precision limitation.
+3. **Exact-output swaps** — when `amountSpecified > 0` (exact output), the specified token is what's received, the unspecified is what's paid. For a sell (LEVEL → WETH, exact-output WETH), the unspecified is LEVEL. To take LEVEL tax, set `deltaUnspecified > 0`. The downside: we don't know the exact LEVEL amount until after the swap clears. Approach: estimate from the pool's current tick + WETH amount, take the estimated tax, then if the actual sale's LEVEL input differs slightly, accept the rounding (sub-cent). Document the precision limitation.
 
 4. **Concurrent excluded-address management** — the trustees list controls which addresses bypass tax. Required to be set for: Treasury, PoolManager, all reward pools, the hook itself, any V4 LP wrappers we deploy. Without proper exclusion, the protocol's own seigniorage flow gets taxed (bad — seigniorage going TO Boardroom would be partially burned).
 
@@ -226,8 +226,8 @@ Unit tests (mock PoolManager):
 
 - [ ] `autoCalculateTax = false` → no tax delta returned, behavior matches Sprint 4
 - [ ] Tax tier lookup correctness — for each of 14 tiers, verify rate returned matches table
-- [ ] Buy direction (WETH → MONEY): no tax delta returned regardless of `autoCalculateTax`
-- [ ] Sell direction (MONEY → WETH) with `autoCalculateTax = true`: deltaSpecified > 0 returned
+- [ ] Buy direction (WETH → LEVEL): no tax delta returned regardless of `autoCalculateTax`
+- [ ] Sell direction (LEVEL → WETH) with `autoCalculateTax = true`: deltaSpecified > 0 returned
 - [ ] Excluded sender: no tax even on sell
 - [ ] `burnThreshold` boundary: at price = 1.10e18 exactly, route to Treasury; at 1.099e18, burn
 - [ ] Setter functions are Trustees-only
@@ -237,16 +237,16 @@ Unit tests (mock PoolManager):
 
 Fork tests (real V4):
 
-- [ ] Real sell swap through real PoolManager: tax MONEY actually gets taken to the hook's balance
-- [ ] Burn path: `money.totalSupply()` decreases by exactly `taxAmount`
-- [ ] Route path: `money.balanceOf(treasury)` increases by exactly `taxAmount`
+- [ ] Real sell swap through real PoolManager: tax LEVEL actually gets taken to the hook's balance
+- [ ] Burn path: `peg.totalSupply()` decreases by exactly `taxAmount`
+- [ ] Route path: `peg.balanceOf(treasury)` increases by exactly `taxAmount`
 - [ ] Exact-input + exact-output both work
 - [ ] Buy swap through real PoolManager: hook balance unchanged
 
 Invariant test (handler-style):
 
-- [ ] **Tax conservation**: for every swap, either (sender's MONEY balance decreased by amount+tax AND tax was burned/routed) OR (sender's MONEY balance decreased by amount AND tax was 0)
-- [ ] **No MONEY leak**: after N random swaps, `money.totalSupply() + money.balanceOf(treasury) + sum(money.balanceOf(every staker))` accounts for all MONEY in the system
+- [ ] **Tax conservation**: for every swap, either (sender's LEVEL balance decreased by amount+tax AND tax was burned/routed) OR (sender's LEVEL balance decreased by amount AND tax was 0)
+- [ ] **No LEVEL leak**: after N random swaps, `peg.totalSupply() + peg.balanceOf(treasury) + sum(peg.balanceOf(every staker))` accounts for all LEVEL in the system
 - [ ] **Burn-vs-route monotonicity**: as price moves from below to above burnThreshold, tax routing switches from burn to Treasury at exactly the threshold
 
 Slither:
@@ -296,23 +296,23 @@ Three defects in the Sprint 4b hook were reproduced against a real v4-core `Pool
 ### 1. Exact-output sells were taxed on the WETH figure
 
 `taxAmount = abs(amountSpecified) * rate` was used for both swap modes. On an exact-output
-sell `amountSpecified` is the WETH the seller wants out, so the MONEY tax was computed from a
-WETH number. MONEY and WETH share 18 decimals, so the error scales with the depeg instead of
+sell `amountSpecified` is the WETH the seller wants out, so the LEVEL tax was computed from a
+WETH number. LEVEL and WETH share 18 decimals, so the error scales with the depeg instead of
 being off by orders of magnitude — which makes it worse exactly when the tax matters:
-at 0.55 WETH per MONEY the 19% tier collected an effective **9.2%**.
+at 0.55 WETH per LEVEL the 19% tier collected an effective **9.2%**.
 
-The MONEY a pool needs for an exact-output swap is only known after the swap runs, so that
+The LEVEL a pool needs for an exact-output swap is only known after the swap runs, so that
 leg moved to `afterSwap`:
 
-| Mode | MONEY is | Assessed in | Formula | Effective rate on gross MONEY paid |
+| Mode | LEVEL is | Assessed in | Formula | Effective rate on gross LEVEL paid |
 |---|---|---|---|---|
 | exact-input | specified | `beforeSwap` (specified delta) | `tax = G × r` | `r` |
 | exact-output | unspecified | `afterSwap` (unspecified delta) | `tax = N × r / (1 − r)`, rounded up | `r` |
 
-`G` is the seller's gross input, `N` the MONEY the pool took. Both modes now cost the same
+`G` is the seller's gross input, `N` the LEVEL the pool took. Both modes now cost the same
 for the same trade. The tier is always chosen from the **pre-swap** price. The rate is capped at 12% (Revision 4), so the gross-up is always well defined.
 
-The tax stays MONEY-denominated in both modes because the burn is the point. Collecting
+The tax stays LEVEL-denominated in both modes because the burn is the point. Collecting
 WETH in `afterSwap` for every sell would be simpler but would turn a supply-contraction
 lever into a revenue line.
 
@@ -330,14 +330,14 @@ only the final tick of a block carries into the next interval (the same guarante
 Uniswap v3 observation). Moving the TWAP now requires holding the price across blocks,
 exposed to arbitrage.
 
-### 3. Taxed sells reverted when the PoolManager held too little MONEY
+### 3. Taxed sells reverted when the PoolManager held too little LEVEL
 
 Hook callbacks run before the router settles the swapper's input, so `poolManager.take`
-is paid out of MONEY the manager already holds. When price sits above a concentrated
+is paid out of LEVEL the manager already holds. When price sits above a concentrated
 liquidity range the pool is ~100% WETH, the `take` reverts, and the sells that would
 arbitrage price back toward peg are blocked.
 
-`_collectTax` now checks the manager's MONEY balance. If it cannot cover the tax, the hook
+`_collectTax` now checks the manager's LEVEL balance. If it cannot cover the tax, the hook
 takes ERC-6909 claims instead (no token transfer) and records the amount in
 `pendingTaxBurn` / `pendingTaxRoute`; the burn-vs-route decision is fixed at the swap's
 price. `settleDeferredTax()` is permissionless and redeems the claims once reserves allow.
@@ -359,7 +359,7 @@ script, tests and `config/schema.mjs` agree on.
 These are deliberate limits of taxing at the pool rather than at the token. Each is pinned
 by a `test_KnownLimit_*` test so a future change cannot alter it silently.
 
-- **Other pools are untaxed.** MONEY is an unrestricted ERC-20; anyone can open a hookless
+- **Other pools are untaxed.** LEVEL is an unrestricted ERC-20; anyone can open a hookless
   V4 pool (or a V2/V3 pool) and sell there tax-free. Closing that requires transfer-gating
   the token, which breaks wallets, lending markets, bridges and aggregators. The defence is
   economic: LP rewards (`V4PositionWrapper` checks the `PoolId`) and the oracle only
@@ -369,18 +369,18 @@ by a `test_KnownLimit_*` test so a future change cannot alter it silently.
   Treasury, Boardroom and the reward pools never call `swap`, so they never need excluding
   (the edge-case list above is wrong on this point). Leave the mapping empty unless a
   single-purpose protocol contract swaps for itself.
-- **LP positions are resting asks, not sells.** Single-sided MONEY liquidity above the
+- **LP positions are resting asks, not sells.** Single-sided LEVEL liquidity above the
   current price converts to WETH only when a buyer trades through it. Adding and removing
   it extracts no WETH, so no liquidity hooks are needed.
 - **One rate per trade.** The tier is fixed before the swap and applied to the whole
   amount (see Revision 3 for which price it is read from).
 
-### ESTATE (the share token)
+### SQUARE (the share token)
 
-ESTATE has no sell tax, and none is planned. Tomb's TSHARE was untaxed too. The MONEY tax
-exists to burn supply while below peg; ESTATE has no peg, so a tax on it would only be a
-fee on entering and leaving the Boardroom. If protocol revenue from ESTATE trading is ever
-wanted, the clean form is a flat LP-fee split on an ESTATE pool, not this hook's tier table.
+SQUARE has no sell tax, and none is planned. Tomb's TSHARE was untaxed too. The LEVEL tax
+exists to burn supply while below peg; SQUARE has no peg, so a tax on it would only be a
+fee on entering and leaving the Boardroom. If protocol revenue from SQUARE trading is ever
+wanted, the clean form is a flat LP-fee split on an SQUARE pool, not this hook's tier table.
 
 ---
 
@@ -388,7 +388,7 @@ wanted, the clean form is a flat LP-fee split on an ESTATE pool, not this hook's
 
 The Tomb 14-tier table is replaced by a curve that eases as the peg strengthens:
 
-| TWAP (WETH per MONEY) | Sell tax | Destination |
+| TWAP (WETH per LEVEL) | Sell tax | Destination |
 |---|---|---|
 | below 1.12 | 12% | burned below 1.10, Treasury from 1.10 |
 | 1.12 up to 1.20 | 6% | Treasury |
@@ -396,11 +396,11 @@ The Tomb 14-tier table is replaced by a curve that eases as the peg strengthens:
 
 `taxTiersTwaps = [0, 1.12e18, 1.2e18]`, `taxTiersRates = [1200, 600, 300]`. Both remain
 Trustees-settable per tier, within the 12% cap; the table length is fixed at three.
-Thresholds are WETH per MONEY, which equals multiples of peg while the peg is 1:1.
+Thresholds are WETH per LEVEL, which equals multiples of peg while the peg is 1:1.
 
 ### Which price
 
-The tier and the burn threshold are read from `taxOracle.consult(money, 1e18)` — the
+The tier and the burn threshold are read from `taxOracle.consult(peg, 1e18)` — the
 Oracle's **last completed epoch TWAP** — not from the pool's spot price. `Deploy.s.sol`
 wires the protocol Oracle in with `setTaxOracle`.
 
@@ -458,8 +458,8 @@ Three lifetime counters make the relationship checkable on-chain and in tests:
 
 ```
 totalTaxAssessed == totalTaxBurned + totalTaxRouted + pendingTaxBurn + pendingTaxRoute
-PoolManager ERC-6909 MONEY claims held by the hook == pendingTaxBurn + pendingTaxRoute
-PoolManager MONEY balance                          >= pendingTaxBurn + pendingTaxRoute
+PoolManager ERC-6909 LEVEL claims held by the hook == pendingTaxBurn + pendingTaxRoute
+PoolManager LEVEL balance                          >= pendingTaxBurn + pendingTaxRoute
 supply burned by the hook == totalTaxBurned;  Treasury receipts == totalTaxRouted
 ```
 
@@ -469,7 +469,7 @@ orderings.
 
 One consequence worth stating: a deferral only lasts until the swap that caused it has
 settled. The seller's own input is what backs the claim, so the claim is redeemable in full
-as soon as that transaction ends, even if buyers then take every MONEY the pool holds.
+as soon as that transaction ends, even if buyers then take every LEVEL the pool holds.
 `settleDeferredTax()` still settles partially and never reverts for lack of reserves, as a
 defence, but no reachable sequence was found that leaves a claim unbacked.
 
@@ -491,7 +491,7 @@ red.
 
 `contracts/src/hooks/ShareBuybackHook.sol` implements the share-token policy as a second
 hook, on the SHARE/QUOTE pool. In the approved design that is SQUARE/USDC with LEVEL as the
-peg token; in this repository's own tokens it would be ESTATE/WETH with MONEY. The hook
+peg token; in this repository's own tokens it would be SQUARE/WETH with LEVEL. The hook
 takes all three as constructor addresses and has no dependency on Treasury, Boardroom or
 the Oracle.
 
@@ -536,24 +536,24 @@ the 12% clamp, or the exact-output tax each makes it fail.
 `beforeSwap` with `tax = W × r / (1 − r)`, so the seller still receives exactly `W`.
 
 **Deployment.** `Deploy.s.sol` mines and deploys the hook at a `0x10CC` address, wired to
-ESTATE (share), MONEY (peg), WETH (quote, taken from the MONEY/WETH pool key) and the
-PegDefenseHook (rate and price source), then initialises the ESTATE/WETH pool at a 0.30%
+SQUARE (share), LEVEL (peg), WETH (quote, taken from the LEVEL/WETH pool key) and the
+PegDefenseHook (rate and price source), then initialises the SQUARE/WETH pool at a 0.30%
 static fee. `SHARE_POOL_INITIAL_TICK` sets the opening price and defaults to parity.
-Collection starts disabled; `PostBootstrap.s.sol` enables it together with the MONEY tax.
+Collection starts disabled; `PostBootstrap.s.sol` enables it together with the LEVEL tax.
 The address is exported as `shareBuybackHook`, which the manifest now requires and
 validates. The governance rotation scripts hand its ownership and trustees to the Timelock
 alongside the peg hook, and the keeper runs its buyback every pass.
 
 Known limits: both pools must share the same QUOTE asset; an exact-output sell that stops
 at the caller's price limit is still taxed on the amount requested; and no script seeds
-ESTATE/WETH liquidity yet (`SeedLiquidity.s.sol` covers MONEY/WETH only), so the pool is
+SQUARE/WETH liquidity yet (`SeedLiquidity.s.sol` covers LEVEL/WETH only), so the pool is
 empty after deploy.
 
 ---
 
 ## Revision 6 — untradeable peg/share staking pool
 
-`contracts/src/hooks/LpOnlyHook.sol` puts a MONEY/ESTATE pool (LEVEL/SQUARE in the approved
+`contracts/src/hooks/LpOnlyHook.sol` puts a LEVEL/SQUARE pool (LEVEL/SQUARE in the approved
 design) behind a hook that rejects every swap. Liquidity can still be added and removed, so
 the full-range position is a staking token, but the pool is never a route from one protocol
 token to the other around the sell tax.
@@ -561,14 +561,14 @@ token to the other around the sell tax.
 - **Deposits are not taxed.** The tax hooks act on swaps only; adding liquidity, wrapping
   and staking never trigger them.
 - **Leaving still pays the tax.** The only way out to the quote asset is a sell in the
-  MONEY/WETH or ESTATE/WETH pool, each taxed once.
+  LEVEL/WETH or SQUARE/WETH pool, each taxed once.
 - **The ratio is permanent.** With no trading the price never moves from the opening price,
   so providers deposit at that fixed ratio and withdraw exactly what they put in: no fees,
   no impermanent loss. Only the deployer can initialise the pool, and only one pool can
   ever use the hook. The hook has no owner and no way to re-enable swaps.
 
 `Deploy.s.sol` deploys the hook (address pattern `0x2080`), initialises the pool at
-`PAIR_POOL_INITIAL_TICK` (MONEY per ESTATE, in ticks; default 0 = one for one) and deploys a
+`PAIR_POOL_INITIAL_TICK` (LEVEL per SQUARE, in ticks; default 0 = one for one) and deploys a
 `V4PositionWrapper` for its full-range position. Both addresses are required manifest
 entries (`pairLpHook`, `pairLpWrapper`). The wrapper is **not** registered with any reward
 pool: emissions weights are left to the operator.
@@ -576,7 +576,7 @@ pool: emissions weights are left to the operator.
 ### Still outside this repository
 
 - **LEVEL / SQUARE and Masonry.** The tokens themselves are not here. `ShareBuybackHook`
-  and `PegDefenseHook` are tested with this repository's MONEY and a plain ERC-20 standing
+  and `PegDefenseHook` are tested with this repository's LEVEL and a plain ERC-20 standing
   in for the share token; the eventual LEVEL / SQUARE contracts need their own validation
   against both hooks, in particular that `LEVEL.burn(uint256)` is callable by the hooks and
   that neither token charges a transfer tax of its own (which would double-tax).

@@ -14,8 +14,8 @@ import { useDeployment } from "./useDeployment";
  *   - BoardroomFunded(timestamp, seigniorage)  — Boardroom payout (the canonical
  *                                                 "epoch ticked" signal)
  *   - DaoFundFunded / DevFundFunded            — team rake (off by default)
- *   - BoughtBonds(from, moneyAmount, bondAmount)   — contraction-window bond buy
- *   - RedeemedBonds(from, moneyAmount, bondAmount) — premium-window redemption
+ *   - BoughtBonds(from, pegAmount, bondAmount)   — contraction-window bond buy
+ *   - RedeemedBonds(from, pegAmount, bondAmount) — premium-window redemption
  *
  * fromBlock is bounded by `deployment.deployBlock` so we stay within the RPC
  * provider's per-call range limits (Alchemy caps at 10k blocks per request;
@@ -31,10 +31,10 @@ const EVENTS = {
   DaoFundFunded: parseAbiItem("event DaoFundFunded(uint256 timestamp, uint256 seigniorage)"),
   DevFundFunded: parseAbiItem("event DevFundFunded(uint256 timestamp, uint256 seigniorage)"),
   BoughtBonds: parseAbiItem(
-    "event BoughtBonds(address indexed from, uint256 moneyAmount, uint256 bondAmount)",
+    "event BoughtBonds(address indexed from, uint256 pegAmount, uint256 bondAmount)",
   ),
   RedeemedBonds: parseAbiItem(
-    "event RedeemedBonds(address indexed from, uint256 moneyAmount, uint256 bondAmount)",
+    "event RedeemedBonds(address indexed from, uint256 pegAmount, uint256 bondAmount)",
   ),
 } as const;
 
@@ -53,7 +53,7 @@ export interface TreasuryEventRow {
   /** Block-level timestamp (sec). For Funded events this matches the event's own
    *  embedded `timestamp` arg; for Bond events we pull it from the block. */
   timestamp: bigint;
-  /** Primary amount of this event — seigniorage / moneyAmount / etc. */
+  /** Primary amount of this event — seigniorage / pegAmount / etc. */
   amount: bigint;
   /** Secondary amount (only meaningful for bond events). */
   secondaryAmount?: bigint;
@@ -152,7 +152,7 @@ export function useTreasuryEvents({ limit = 10 }: UseTreasuryEventsOptions = {})
           blockNumber: log.blockNumber!,
           logIndex: log.logIndex!,
           timestamp: blockTimestamps.get(log.blockNumber!) ?? 0n,
-          amount: log.args.moneyAmount!,
+          amount: log.args.pegAmount!,
           secondaryAmount: log.args.bondAmount,
           who: log.args.from,
           transactionHash: log.transactionHash!,
@@ -162,7 +162,7 @@ export function useTreasuryEvents({ limit = 10 }: UseTreasuryEventsOptions = {})
           blockNumber: log.blockNumber!,
           logIndex: log.logIndex!,
           timestamp: blockTimestamps.get(log.blockNumber!) ?? 0n,
-          amount: log.args.moneyAmount!,
+          amount: log.args.pegAmount!,
           secondaryAmount: log.args.bondAmount,
           who: log.args.from,
           transactionHash: log.transactionHash!,

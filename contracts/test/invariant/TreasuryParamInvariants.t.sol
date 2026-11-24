@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
 import {Treasury} from "../../src/core/Treasury.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 /**
  * @title TreasuryParamHandler
@@ -28,13 +28,13 @@ contract TreasuryParamHandler is Test {
         treasury = _treasury;
     }
 
-    function setMoneyPriceCeiling(
+    function setPegPriceCeiling(
         uint256 v
     ) external {
-        // moneyPriceOne is 1e18. Setter accepts [1e18, 1.2e18]. Bound generously to cover
+        // pegPriceOne is 1e18. Setter accepts [1e18, 1.2e18]. Bound generously to cover
         // both accept and reject.
         v = bound(v, 0.5e18, 2e18);
-        treasury.setMoneyPriceCeiling(v);
+        treasury.setPegPriceCeiling(v);
     }
 
     function setMaxSupplyExpansionPercents(
@@ -143,20 +143,20 @@ contract TreasuryParamHandler is Test {
 contract TreasuryParamInvariants is StdInvariant, Test {
     Treasury public treasury;
     TreasuryParamHandler public handler;
-    OldMoney public money;
+    PegToken public peg;
 
-    address constant TRUSTNOTE = address(0xA2);
-    address constant ESTATE = address(0xA3);
+    address constant BOND = address(0xA2);
+    address constant SHARE = address(0xA3);
     address constant ORACLE = address(0xA4);
     address constant BOARDROOM = address(0xA5);
 
     function setUp() public {
         vm.warp(1_700_000_000);
         treasury = new Treasury();
-        money = new OldMoney(); // needed for initialize()'s balanceOf snapshot
+        peg = new PegToken(); // needed for initialize()'s balanceOf snapshot
 
         address[] memory excluded = new address[](0);
-        treasury.initialize(address(money), TRUSTNOTE, ESTATE, ORACLE, BOARDROOM, block.timestamp + 1 hours, excluded);
+        treasury.initialize(address(peg), BOND, SHARE, ORACLE, BOARDROOM, block.timestamp + 1 hours, excluded);
 
         handler = new TreasuryParamHandler(treasury);
         treasury.setOperator(address(handler));
@@ -168,9 +168,9 @@ contract TreasuryParamInvariants is StdInvariant, Test {
     // Bounds — verified after any handler-driven setter sequence
     // ---------------------------------------------------------------------
 
-    function invariant_MoneyPriceCeilingInBand() public view {
-        uint256 c = treasury.moneyPriceCeiling();
-        uint256 one = treasury.moneyPriceOne();
+    function invariant_PegPriceCeilingInBand() public view {
+        uint256 c = treasury.pegPriceCeiling();
+        uint256 one = treasury.pegPriceOne();
         assertGe(c, one);
         assertLe(c, one * 120 / 100);
     }
@@ -219,13 +219,13 @@ contract TreasuryParamInvariants is StdInvariant, Test {
     }
 
     function invariant_PremiumThresholdInBand() public view {
-        // premiumThreshold must be >= moneyPriceCeiling and <= 150. The setter enforces
+        // premiumThreshold must be >= pegPriceCeiling and <= 150. The setter enforces
         // both bounds at the moment of mutation.
         uint256 v = treasury.premiumThreshold();
         assertLe(v, 150);
-        // Note: premiumThreshold (an integer like 110) and moneyPriceCeiling (a 1e18-scaled
+        // Note: premiumThreshold (an integer like 110) and pegPriceCeiling (a 1e18-scaled
         // value like 1.01e18) live on different scales by Tomb convention. The setter
-        // checks `premiumThreshold < moneyPriceCeiling` as written — which means in
+        // checks `premiumThreshold < pegPriceCeiling` as written — which means in
         // practice this passes only when ceiling stays small. We assert only the upper bound.
     }
 

@@ -1,5 +1,5 @@
 /**
- * MarketStateBanner — Art Deco eligibility banner for Trust Notes.
+ * MarketStateBanner — Art Deco eligibility banner for Bonds.
  *
  * Shows the current bond market state: whether acquisition is open (price below
  * peg) or redemption is open (price above ceiling + premium threshold) or the
@@ -21,28 +21,28 @@ const STATE_COPY: Record<
 > = {
   acquisition: {
     label: "Bond Market · Open",
-    title: "Notes Are Issued",
+    title: "Bonds Are Issued",
     gloss:
-      "The Trust trades below par. Burn MONEY at the Treasury and receive Trust Notes at a discount. Hold until recovery.",
+      "The Trust trades below par. Burn LEVEL at the Treasury and receive Bonds at a discount. Hold until recovery.",
     tone: "text-deco-ruby",
   },
   redemption: {
     label: "Bond Market · Premium Active",
-    title: "Notes Are Redeemed",
+    title: "Bonds Are Redeemed",
     gloss:
-      "The Trust trades above one and one-tenth. Present your Notes at the Treasury and receive MONEY at a premium.",
+      "The Trust trades above one and one-tenth. Present your Bonds at the Treasury and receive LEVEL at a premium.",
     tone: "text-deco-emerald",
   },
   "at-rest": {
     label: "Bond Market · At Rest",
     title: "The Trust is Steady",
     gloss:
-      "The Trust trades within the band. No Notes are issued. No premium is paid. Observe and wait.",
+      "The Trust trades within the band. No Bonds are issued. No premium is paid. Observe and wait.",
     tone: "text-deco-ivory",
   },
   closed: {
     label: "Bond Market · Closed",
-    title: "No Notes Are Active",
+    title: "No Bonds Are Active",
     gloss:
       "The Trust has not yet entered its first contraction. The bond office stands by.",
     tone: "text-deco-gold-dark",

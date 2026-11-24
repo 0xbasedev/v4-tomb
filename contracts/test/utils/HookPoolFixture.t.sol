@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "./BaseTest.sol";
 
 import {PegDefenseHook, PegDefenseHookPermissions} from "../../src/hooks/PegDefenseHook.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
@@ -100,15 +100,15 @@ contract BatchSwapRouter is IUnlockCallback {
 /**
  * @title HookPoolFixture
  * @notice Deploys a REAL v4-core PoolManager locally (no fork, no RPC) with the
- *         PegDefenseHook installed on a MONEY/WETH dynamic-fee pool, plus v4-core's test
+ *         PegDefenseHook installed on a PEG/WETH dynamic-fee pool, plus v4-core's test
  *         routers. Lets the swap-path tests exercise true flash accounting, hook deltas
  *         and settlement rather than a mocked manager.
  *
- *         Subclasses pick the token ordering through `_moneyIsCurrency0()` so every test
+ *         Subclasses pick the token ordering through `_pegIsCurrency0()` so every test
  *         runs in both orientations — the tax and oracle math both branch on it.
  *
- *         All prices and ticks in the helpers are expressed in MONEY terms ("money tick"
- *         = log_1.0001 of WETH-per-MONEY); `_poolTick` converts to the pool's orientation.
+ *         All prices and ticks in the helpers are expressed in PEG terms ("peg tick"
+ *         = log_1.0001 of WETH-per-PEG); `_poolTick` converts to the pool's orientation.
  */
 abstract contract HookPoolFixture is BaseTest {
     using PoolIdLibrary for PoolKey;
@@ -116,7 +116,7 @@ abstract contract HookPoolFixture is BaseTest {
 
     PoolManager internal manager;
     PegDefenseHook internal hook;
-    OldMoney internal money;
+    PegToken internal peg;
     FixtureWeth internal weth;
     PoolKey internal poolKey;
     PoolSwapTest internal swapRouter;
@@ -130,33 +130,32 @@ abstract contract HookPoolFixture is BaseTest {
     int24 internal constant FULL_RANGE_UPPER = 887_220;
     uint256 internal constant ACTOR_BALANCE = 1_000_000 ether;
 
-    function _moneyIsCurrency0() internal pure virtual returns (bool);
+    function _pegIsCurrency0() internal pure virtual returns (bool);
 
     function setUp() public virtual override {
         super.setUp();
         vm.warp(1_700_000_000);
 
         manager = new PoolManager(address(this));
-        money = new OldMoney();
+        peg = new PegToken();
 
-        // Place WETH directly beside MONEY in address space to force the ordering.
-        address wethAddr =
-            _moneyIsCurrency0() ? address(uint160(address(money)) + 1) : address(uint160(address(money)) - 1);
+        // Place WETH directly beside PEG in address space to force the ordering.
+        address wethAddr = _pegIsCurrency0() ? address(uint160(address(peg)) + 1) : address(uint160(address(peg)) - 1);
         deployCodeTo("HookPoolFixture.t.sol:FixtureWeth", wethAddr);
         weth = FixtureWeth(wethAddr);
 
         address hookAddr = address(PegDefenseHookPermissions.FLAGS | (uint160(0xBEEF) << 144));
         deployCodeTo(
             "PegDefenseHook.sol:PegDefenseHook",
-            abi.encode(IPoolManager(address(manager)), address(money), address(this)),
+            abi.encode(IPoolManager(address(manager)), address(peg), address(this)),
             hookAddr
         );
         hook = PegDefenseHook(hookAddr);
         hook.setTreasury(treasuryAddr);
 
-        (Currency c0, Currency c1) = _moneyIsCurrency0()
-            ? (Currency.wrap(address(money)), Currency.wrap(address(weth)))
-            : (Currency.wrap(address(weth)), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = _pegIsCurrency0()
+            ? (Currency.wrap(address(peg)), Currency.wrap(address(weth)))
+            : (Currency.wrap(address(weth)), Currency.wrap(address(peg)));
         poolKey = PoolKey({
             currency0: c0,
             currency1: c1,
@@ -181,29 +180,29 @@ abstract contract HookPoolFixture is BaseTest {
     function _fund(
         address who
     ) internal {
-        money.mint(who, ACTOR_BALANCE);
+        peg.mint(who, ACTOR_BALANCE);
         weth.mint(who, ACTOR_BALANCE);
         vm.startPrank(who);
-        money.approve(address(swapRouter), type(uint256).max);
+        peg.approve(address(swapRouter), type(uint256).max);
         weth.approve(address(swapRouter), type(uint256).max);
-        money.approve(address(liquidityRouter), type(uint256).max);
+        peg.approve(address(liquidityRouter), type(uint256).max);
         weth.approve(address(liquidityRouter), type(uint256).max);
-        money.approve(address(batchRouter), type(uint256).max);
+        peg.approve(address(batchRouter), type(uint256).max);
         weth.approve(address(batchRouter), type(uint256).max);
         vm.stopPrank();
     }
 
-    /// @dev Money tick → pool tick. Negating a multiple of the spacing stays aligned.
+    /// @dev Peg tick → pool tick. Negating a multiple of the spacing stays aligned.
     function _poolTick(
-        int24 moneyTick
+        int24 pegTick
     ) internal pure returns (int24) {
-        return _moneyIsCurrency0() ? moneyTick : -moneyTick;
+        return _pegIsCurrency0() ? pegTick : -pegTick;
     }
 
     function _initPool(
-        int24 moneyTick
+        int24 pegTick
     ) internal {
-        manager.initialize(poolKey, TickMath.getSqrtPriceAtTick(_poolTick(moneyTick)));
+        manager.initialize(poolKey, TickMath.getSqrtPriceAtTick(_poolTick(pegTick)));
     }
 
     function _addLiquidity(
@@ -218,12 +217,12 @@ abstract contract HookPoolFixture is BaseTest {
         );
     }
 
-    /// @dev Initialise at `moneyTick` and seed deep full-range liquidity from the test contract.
+    /// @dev Initialise at `pegTick` and seed deep full-range liquidity from the test contract.
     function _initWithFullRange(
-        int24 moneyTick,
+        int24 pegTick,
         int256 liquidity
     ) internal {
-        _initPool(moneyTick);
+        _initPool(pegTick);
         _addLiquidity(FULL_RANGE_LOWER, FULL_RANGE_UPPER, liquidity);
     }
 
@@ -234,13 +233,13 @@ abstract contract HookPoolFixture is BaseTest {
     function _sellParams(
         int256 amountSpecified
     ) internal pure returns (SwapParams memory) {
-        return _params(_moneyIsCurrency0(), amountSpecified);
+        return _params(_pegIsCurrency0(), amountSpecified);
     }
 
     function _buyParams(
         int256 amountSpecified
     ) internal pure returns (SwapParams memory) {
-        return _params(!_moneyIsCurrency0(), amountSpecified);
+        return _params(!_pegIsCurrency0(), amountSpecified);
     }
 
     function _params(
@@ -271,15 +270,15 @@ abstract contract HookPoolFixture is BaseTest {
         delta = swapRouter.swap(poolKey, params, PoolSwapTest.TestSettings(false, false), "");
     }
 
-    /// @dev Sell exactly `moneyIn` MONEY (gross, tax included).
+    /// @dev Sell exactly `pegIn` PEG (gross, tax included).
     function _sellExactIn(
         address who,
-        uint256 moneyIn
+        uint256 pegIn
     ) internal returns (BalanceDelta) {
-        return _swap(who, _sellParams(-int256(moneyIn)));
+        return _swap(who, _sellParams(-int256(pegIn)));
     }
 
-    /// @dev Sell however much MONEY it takes to receive exactly `wethOut`.
+    /// @dev Sell however much PEG it takes to receive exactly `wethOut`.
     function _sellExactOut(
         address who,
         uint256 wethOut
@@ -296,9 +295,9 @@ abstract contract HookPoolFixture is BaseTest {
 
     function _buyExactOut(
         address who,
-        uint256 moneyOut
+        uint256 pegOut
     ) internal returns (BalanceDelta) {
-        return _swap(who, _buyParams(int256(moneyOut)));
+        return _swap(who, _buyParams(int256(pegOut)));
     }
 
     // ------------------------------------------------------------------
@@ -333,14 +332,14 @@ abstract contract HookPoolFixture is BaseTest {
             "assessed == burned + routed + pending"
         );
         assertEq(
-            manager.balanceOf(address(hook), uint256(uint160(address(money)))),
+            manager.balanceOf(address(hook), uint256(uint160(address(peg)))),
             pending,
             "PoolManager claims back pending tax 1:1"
         );
-        assertGe(money.balanceOf(address(manager)), pending, "pending tax is redeemable: reserves cover the claims");
-        assertEq(money.balanceOf(address(hook)), 0, "hook never retains MONEY");
-        assertEq(supplyAtStart - money.totalSupply(), hook.totalTaxBurned(), "completed burns left the supply");
-        assertEq(money.balanceOf(treasuryAddr) - treasuryAtStart, hook.totalTaxRouted(), "Treasury received its share");
+        assertGe(peg.balanceOf(address(manager)), pending, "pending tax is redeemable: reserves cover the claims");
+        assertEq(peg.balanceOf(address(hook)), 0, "hook never retains PEG");
+        assertEq(supplyAtStart - peg.totalSupply(), hook.totalTaxBurned(), "completed burns left the supply");
+        assertEq(peg.balanceOf(treasuryAddr) - treasuryAtStart, hook.totalTaxRouted(), "Treasury received its share");
         assertLe(hook.taxRate(), hook.MAX_TAX_BPS(), "rate within the hard cap");
     }
 }

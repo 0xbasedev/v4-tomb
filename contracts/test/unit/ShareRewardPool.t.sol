@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {ShareRewardPool} from "../../src/distribution/ShareRewardPool.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,7 +25,7 @@ contract MockLp is ERC20 {
 
 contract ShareRewardPoolTest is BaseTest {
     ShareRewardPool internal pool;
-    Estate internal estate;
+    ShareToken internal share;
     MockLp internal lp;
 
     address internal communityFund = makeAddr("communityFund");
@@ -40,24 +40,24 @@ contract ShareRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(poolStart, communityFund, devFund);
+        share = new ShareToken(poolStart, communityFund, devFund);
 
         vm.prank(owner);
-        pool = new ShareRewardPool(address(estate), poolStart);
+        pool = new ShareRewardPool(address(share), poolStart);
 
         lp = new MockLp("LP", "LP");
 
-        // Mint ESTATE supply via distributeReward to farmingPool, then forward the
+        // Mint SHARE supply via distributeReward to farmingPool, then forward the
         // pool's full allocation to the reward pool.
         vm.prank(owner);
-        estate.distributeReward(farmingPool);
+        share.distributeReward(farmingPool);
         uint256 rewards = pool.TOTAL_REWARDS();
         vm.prank(farmingPool);
-        estate.transfer(address(pool), rewards);
+        share.transfer(address(pool), rewards);
     }
 
     function test_Constructor_StoresParams() public view {
-        assertEq(address(pool.share()), address(estate));
+        assertEq(address(pool.share()), address(share));
         assertEq(pool.TOTAL_REWARDS(), 59_500 ether);
         assertEq(pool.RUNNING_TIME(), 370 days);
         assertEq(pool.SHARE_PER_SECOND(), uint256(59_500 ether) / 370 days);
@@ -97,12 +97,12 @@ contract ShareRewardPoolTest is BaseTest {
 
         vm.warp(poolStart + 30 days);
         uint256 expected = 30 days * pool.SHARE_PER_SECOND();
-        uint256 estateBefore = estate.balanceOf(alice);
+        uint256 shareBefore = share.balanceOf(alice);
 
         vm.prank(alice);
         pool.withdraw(0, 100 ether);
 
         assertEq(lp.balanceOf(alice), 100 ether);
-        assertApproxEqAbs(estate.balanceOf(alice) - estateBefore, expected, 1);
+        assertApproxEqAbs(share.balanceOf(alice) - shareBefore, expected, 1);
     }
 }

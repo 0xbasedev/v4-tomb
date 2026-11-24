@@ -27,15 +27,15 @@ import { V4_ACTIONS } from "@/lib/abis";
  *     hookData: bytes
  *   }
  *
- * Notes on slippage:
+ * Bonds on slippage:
  *   - amountOutMinimum guards the total output. Pass `0n` to skip; pass a tight
  *     value if you want slippage protection. Sprint C polish can compute this
  *     from spot price * (1 - slippageBps/10_000) - hook tax estimate.
  *   - minHopPriceX36 guards per-hop pricing. Single-hop swaps usually leave it 0.
  *
- * Notes on the hook tax:
+ * Bonds on the hook tax:
  *   - PegDefenseHook applies its tax in beforeSwap when (autoCalculateTax &&
- *     selling MONEY && price < peg). The net output already accounts for that
+ *     selling LEVEL && price < peg). The net output already accounts for that
  *     deduction by the time TAKE_ALL fires — caller doesn't need extra encoding.
  */
 

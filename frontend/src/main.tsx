@@ -15,7 +15,7 @@ const Landing = lazy(() => import("./routes/Landing").then((module) => ({ defaul
 const Dashboard = lazy(() => import("./routes/Dashboard").then((module) => ({ default: module.Dashboard })));
 const TheClub = lazy(() => import("./routes/TheClub").then((module) => ({ default: module.TheClub })));
 const TheVault = lazy(() => import("./routes/TheVault").then((module) => ({ default: module.TheVault })));
-const TrustNotes = lazy(() => import("./routes/TrustNotes").then((module) => ({ default: module.TrustNotes })));
+const Bonds = lazy(() => import("./routes/Bonds").then((module) => ({ default: module.Bonds })));
 const Swap = lazy(() => import("./routes/Swap").then((module) => ({ default: module.Swap })));
 const Admin = lazy(() => import("./routes/Admin").then((module) => ({ default: module.Admin })));
 const Docs = lazy(() => import("./routes/Docs").then((module) => ({ default: module.Docs })));
@@ -42,7 +42,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/club" element={<TheClub />} />
               <Route path="/vault" element={<TheVault />} />
-              <Route path="/notes" element={<TrustNotes />} />
+              <Route path="/bonds" element={<Bonds />} />
               <Route path="/swap" element={<Swap />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/docs" element={<Docs />} />

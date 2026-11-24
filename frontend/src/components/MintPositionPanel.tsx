@@ -13,12 +13,12 @@ import {
 } from "@/lib/swap/liquidityMath";
 
 /**
- * MintPositionPanel — provide MONEY + WETH amounts → mint a full-range V4 LP NFT.
+ * MintPositionPanel — provide LEVEL + WETH amounts → mint a full-range V4 LP NFT.
  *
  * Full range only (tickSpacing 60 → ±887220). This matches the V4PositionWrapper's
  * exact-range requirement: only positions at this canonical range can be wrapped.
  *
- * UX: user types either MONEY or WETH; the partner amount auto-populates at the
+ * UX: user types either LEVEL or WETH; the partner amount auto-populates at the
  * current pool ratio. Liquidity is computed client-side via the TickMath +
  * LiquidityAmounts ports.
  *
@@ -45,31 +45,31 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
   const mint = useMintPosition();
 
   // Driver: which side the user typed last.
-  const [driver, setDriver] = useState<"money" | "weth">("money");
-  const [moneyInput, setMoneyInput] = useState("");
+  const [driver, setDriver] = useState<"peg" | "weth">("peg");
+  const [pegInput, setPegInput] = useState("");
   const [wethInput, setWethInput] = useState("");
 
-  // Live reads — current tick (drives sqrtPriceX96), and the user's MONEY + WETH balances.
+  // Live reads — current tick (drives sqrtPriceX96), and the user's LEVEL + WETH balances.
   const tickRead = useReadContracts({
     allowFailure: false,
     contracts:
       deployment && address
         ? [
             { address: deployment.hook, abi: hookAbi, functionName: "lastTick" },
-            { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [address] },
+            { address: deployment.peg, abi: erc20Abi, functionName: "balanceOf", args: [address] },
             { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [address] },
           ]
         : [],
     query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
   });
   const currentTick = (tickRead.data?.[0] as number) ?? 0;
-  const moneyBal = (tickRead.data?.[1] as bigint) ?? 0n;
+  const pegBal = (tickRead.data?.[1] as bigint) ?? 0n;
   const wethBal = (tickRead.data?.[2] as bigint) ?? 0n;
 
   // Sort tokens — V4 PoolKey requires currency0 < currency1.
   const wethIsToken0 = useMemo(() => {
     if (!deployment) return true;
-    return (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
+    return (deployment.weth as string).toLowerCase() < (deployment.peg as string).toLowerCase();
   }, [deployment]);
 
   // Precompute the three sqrt prices we need for liquidity math.
@@ -85,28 +85,28 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
 
   // Compute the partner-side amount from the driver. Single source of truth
   // for the form — re-runs whenever the driver, its input, or the price moves.
-  const { moneyAmount, wethAmount, liquidity, error } = useMemo(() => {
+  const { pegAmount, wethAmount, liquidity, error } = useMemo(() => {
     if (!deployment) {
-      return { moneyAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Connect wallet." };
+      return { pegAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Connect wallet." };
     }
-    const clean = driver === "money" ? maskDecimalInput(moneyInput) : maskDecimalInput(wethInput);
-    if (!clean) return { moneyAmount: 0n, wethAmount: 0n, liquidity: 0n, error: undefined };
+    const clean = driver === "peg" ? maskDecimalInput(pegInput) : maskDecimalInput(wethInput);
+    if (!clean) return { pegAmount: 0n, wethAmount: 0n, liquidity: 0n, error: undefined };
 
     let driverAmount: bigint;
     try {
       driverAmount = parseUnits(clean, 18);
     } catch {
-      return { moneyAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Bad number." };
+      return { pegAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Bad number." };
     }
     if (driverAmount <= 0n)
-      return { moneyAmount: 0n, wethAmount: 0n, liquidity: 0n, error: undefined };
+      return { pegAmount: 0n, wethAmount: 0n, liquidity: 0n, error: undefined };
 
     // The price hint: at the current spot, for full range, amount0 and amount1
     // are linked through liquidity. Approach: compute liquidity from the driver
     // assuming the other side has effectively infinite headroom, then back-solve
     // for the partner amount required to hit that exact liquidity.
     const driverIsToken0 =
-      (driver === "money" && !wethIsToken0) || (driver === "weth" && wethIsToken0);
+      (driver === "peg" && !wethIsToken0) || (driver === "weth" && wethIsToken0);
 
     // First pass — generous partner amount so the driver determines liquidity.
     const guess = getLiquidityForAmounts(
@@ -117,7 +117,7 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
       driverIsToken0 ? 2n ** 127n - 1n : driverAmount,
     );
     if (guess === 0n)
-      return { moneyAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Position too small." };
+      return { pegAmount: 0n, wethAmount: 0n, liquidity: 0n, error: "Position too small." };
 
     // Back-solve partner amount at that liquidity.
     const { amount0, amount1 } = getAmountsForLiquidity(
@@ -129,25 +129,25 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
 
     const m = wethIsToken0 ? amount1 : amount0;
     const w = wethIsToken0 ? amount0 : amount1;
-    return { moneyAmount: m, wethAmount: w, liquidity: guess, error: undefined };
-  }, [deployment, driver, moneyInput, wethInput, sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, wethIsToken0]);
+    return { pegAmount: m, wethAmount: w, liquidity: guess, error: undefined };
+  }, [deployment, driver, pegInput, wethInput, sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, wethIsToken0]);
 
   // Display the partner-side amount in the form (read-only when not driving).
-  const moneyDisplay = driver === "money" ? moneyInput : formatToken(moneyAmount, 6, false);
+  const pegDisplay = driver === "peg" ? pegInput : formatToken(pegAmount, 6, false);
   const wethDisplay = driver === "weth" ? wethInput : formatToken(wethAmount, 6, false);
 
-  const insufficientMoney = moneyAmount > moneyBal;
+  const insufficientPeg = pegAmount > pegBal;
   const insufficientWeth = wethAmount > wethBal;
-  const hasAmounts = moneyAmount > 0n && wethAmount > 0n;
+  const hasAmounts = pegAmount > 0n && wethAmount > 0n;
   const canSubmit =
-    !!deployment && !!address && hasAmounts && !insufficientMoney && !insufficientWeth && !mint.isInFlight;
+    !!deployment && !!address && hasAmounts && !insufficientPeg && !insufficientWeth && !mint.isInFlight;
 
   function handleSubmit() {
     if (!deployment || !address) return;
-    const amount0 = wethIsToken0 ? wethAmount : moneyAmount;
-    const amount1 = wethIsToken0 ? moneyAmount : wethAmount;
-    const token0 = wethIsToken0 ? deployment.weth : deployment.money;
-    const token1 = wethIsToken0 ? deployment.money : deployment.weth;
+    const amount0 = wethIsToken0 ? wethAmount : pegAmount;
+    const amount1 = wethIsToken0 ? pegAmount : wethAmount;
+    const token0 = wethIsToken0 ? deployment.weth : deployment.peg;
+    const token1 = wethIsToken0 ? deployment.peg : deployment.weth;
     // 1% headroom on the amount caps for any rounding the contract sees.
     const cap = (n: bigint) => n + n / 100n;
     mint.submit({
@@ -168,7 +168,7 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
       token1: token1 as Address,
       onSuccess: (_hash, tokenId) => {
         tickRead.refetch();
-        setMoneyInput("");
+        setPegInput("");
         setWethInput("");
         if (tokenId !== null) onMinted?.(tokenId);
       },
@@ -182,28 +182,28 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
         className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
         style={{ letterSpacing: "0.06em" }}
       >
-        MONEY · WETH at Full Range
+        LEVEL · WETH at Full Range
       </h2>
       <div className="mx-auto mb-5 h-[2px] w-12 bg-deco-gold" aria-hidden />
       <p className="mb-6 mx-auto max-w-xl font-body text-sm italic text-deco-ivory-soft">
-        Provide MONEY and WETH at the current ratio. The PositionManager mints
+        Provide LEVEL and WETH at the current ratio. The PositionManager mints
         you a V4 LP NFT at the canonical full range (tick ±887220). Wrap it
         below to stake in {poolName}.
       </p>
 
-      {/* MONEY input */}
+      {/* LEVEL input */}
       <div className="mb-2 flex items-baseline justify-between px-1">
-        <span className="label-deco text-deco-gold-dark">MONEY</span>
+        <span className="label-deco text-deco-gold-dark">LEVEL</span>
         <button
           type="button"
           onClick={() => {
-            setDriver("money");
-            setMoneyInput(formatUnits(moneyBal, 18));
+            setDriver("peg");
+            setPegInput(formatUnits(pegBal, 18));
           }}
-          aria-label="Use full MONEY balance"
+          aria-label="Use full LEVEL balance"
           className="label-deco text-deco-gold transition-colors hover:text-deco-gold-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-deco-gold"
         >
-          Bal · {formatToken(moneyBal, 4)}
+          Bal · {formatToken(pegBal, 4)}
         </button>
       </div>
       <div className="mb-4 flex items-center border border-deco-gold/50 bg-deco-ground focus-within:border-deco-gold">
@@ -211,17 +211,17 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
           type="text"
           inputMode="decimal"
           placeholder="0.00"
-          value={moneyDisplay}
+          value={pegDisplay}
           onChange={(e) => {
-            setDriver("money");
-            setMoneyInput(maskDecimalInput(e.target.value));
+            setDriver("peg");
+            setPegInput(maskDecimalInput(e.target.value));
           }}
           disabled={mint.isInFlight}
-          aria-label="MONEY amount"
+          aria-label="LEVEL amount"
           className="font-display w-full bg-transparent px-4 py-3 text-right text-2xl text-deco-ivory placeholder:text-deco-gold-dark/40 focus:outline-none disabled:opacity-50"
         />
         <span className="font-ornament mr-4 text-sm text-deco-gold" style={{ letterSpacing: "0.2em" }}>
-          MONEY
+          LEVEL
         </span>
       </div>
 
@@ -263,13 +263,13 @@ export function MintPositionPanel({ poolName, onMinted }: MintPositionPanelProps
       <p className="mb-5 min-h-[1.5em] text-center font-body text-sm italic text-deco-ivory-soft">
         {error
           ? error
-          : insufficientMoney
-            ? `Insufficient MONEY — need ${formatToken(moneyAmount, 4)}, have ${formatToken(moneyBal, 4)}.`
+          : insufficientPeg
+            ? `Insufficient LEVEL — need ${formatToken(pegAmount, 4)}, have ${formatToken(pegBal, 4)}.`
             : insufficientWeth
               ? `Insufficient WETH — need ${formatToken(wethAmount, 4)}, have ${formatToken(wethBal, 4)}.`
               : hasAmounts
                 ? `Liquidity to mint: ${liquidity.toString()}`
-                : "Type a MONEY or WETH amount to mint at the current ratio."}
+                : "Type a LEVEL or WETH amount to mint at the current ratio."}
       </p>
 
       <button

@@ -9,7 +9,7 @@ import {ITreasury} from "../interfaces/ITreasury.sol";
 
 /**
  * @title ShareWrapper
- * @notice Internal balance accounting for staked $ESTATE. Direct port of Tomb's same-named
+ * @notice Internal balance accounting for staked $SHARE. Direct port of Tomb's same-named
  *         contract embedded in Boardroom.sol. Kept in the same file as the Boardroom to
  *         match Tomb's source layout one-for-one.
  */
@@ -52,7 +52,7 @@ abstract contract ShareWrapper {
 
 /**
  * @title Boardroom
- * @notice $ESTATE-staking pool. Stakers earn $MONEY seigniorage minted by the Treasury during
+ * @notice $SHARE-staking pool. Stakers earn $PEG seigniorage minted by the Treasury during
  *         expansion epochs. Snapshot-based reward accounting matches the masterchef-derived
  *         pattern Tomb uses.
  * @dev    Direct port of Tomb Finance's Boardroom.sol (bombmoney/bomb-contracts).
@@ -94,8 +94,8 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
     bool public initialized;
 
-    /// @notice $MONEY — the reward token paid out from snapshots.
-    IERC20 public money;
+    /// @notice $PEG — the reward token paid out from snapshots.
+    IERC20 public peg;
 
     /// @notice Treasury that supplies seigniorage and epoch info.
     ITreasury public treasury;
@@ -159,11 +159,11 @@ contract Boardroom is ShareWrapper, ContractGuard {
     /* ========== GOVERNANCE ========== */
 
     function initialize(
-        IERC20 _money,
+        IERC20 _peg,
         IERC20 _share,
         ITreasury _treasury
     ) public notInitialized {
-        money = _money;
+        peg = _peg;
         share = _share;
         treasury = _treasury;
 
@@ -236,8 +236,8 @@ contract Boardroom is ShareWrapper, ContractGuard {
         return treasury.nextEpochPoint();
     }
 
-    function getMoneyPrice() external view returns (uint256) {
-        return treasury.getMoneyPrice();
+    function getPegPrice() external view returns (uint256) {
+        return treasury.getPegPrice();
     }
 
     function rewardPerShare() public view returns (uint256) {
@@ -280,7 +280,7 @@ contract Boardroom is ShareWrapper, ContractGuard {
         withdraw(balanceOf(msg.sender));
     }
 
-    /// @notice Claim accumulated $MONEY reward if past the reward lockup. Tomb-faithful:
+    /// @notice Claim accumulated $PEG reward if past the reward lockup. Tomb-faithful:
     ///         silent no-op if reward is 0; reverts only if reward > 0 AND still in lockup.
     function claimReward() public updateReward(msg.sender) {
         uint256 reward = members[msg.sender].rewardEarned;
@@ -291,14 +291,14 @@ contract Boardroom is ShareWrapper, ContractGuard {
             );
             members[msg.sender].epochTimerStart = treasury.epoch();
             members[msg.sender].rewardEarned = 0;
-            money.safeTransfer(msg.sender, reward);
+            peg.safeTransfer(msg.sender, reward);
             emit RewardPaid(msg.sender, reward);
         }
     }
 
     /// @notice Called by Treasury once per expansion epoch to deposit seigniorage and
     ///         snapshot a new reward-per-share.
-    /// @dev Caller must have approved this amount of $MONEY to be pulled.
+    /// @dev Caller must have approved this amount of $PEG to be pulled.
     function allocateSeigniorage(
         uint256 amount
     ) external onlyOneBlock onlyOperator {
@@ -310,18 +310,18 @@ contract Boardroom is ShareWrapper, ContractGuard {
 
         boardroomHistory.push(BoardroomSnapshot({time: block.number, rewardReceived: amount, rewardPerShare: nextRPS}));
 
-        money.safeTransferFrom(msg.sender, address(this), amount);
+        peg.safeTransferFrom(msg.sender, address(this), amount);
         emit RewardAdded(msg.sender, amount);
     }
 
-    /// @notice Rescue tokens mistakenly sent to this contract. Core tokens (money, share=estate)
+    /// @notice Rescue tokens mistakenly sent to this contract. Core tokens (peg, share=share)
     ///         are protected.
     function governanceRecoverUnsupported(
         IERC20 token,
         uint256 amount,
         address to
     ) external onlyOperator {
-        if (address(token) == address(money)) revert ProtectedToken();
+        if (address(token) == address(peg)) revert ProtectedToken();
         if (address(token) == address(share)) revert ProtectedToken();
         token.safeTransfer(to, amount);
     }

@@ -21,9 +21,9 @@
         "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C"
       },
       "deployment": {
-        "money": "0xb650e095c528fAc0f7DBC57121c60176323d8177",
-        "estate": "0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD",
-        "trustNote": "0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588",
+        "peg": "0xb650e095c528fAc0f7DBC57121c60176323d8177",
+        "share": "0xaA5f51352c6D6fD4367dc00C0DA86f54E4f824BD",
+        "bond": "0x4B5DD3A4b6Ba475eecC8307bb9d2932c71D14588",
         "treasury": "0x928B72a3E734d6D07606d9655c55289D3a224c20",
         "boardroom": "0x4ef5Af1bAB5Ed063b08fB951da9218ed82B3EaF4",
         "oracle": "0x943FDa4b6e8eC63a944873FfE6e352c0F0e20ca6",

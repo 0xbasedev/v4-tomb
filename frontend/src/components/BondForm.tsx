@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { maskDecimalInput } from "@/lib/util/decimal";
 
 /**
- * BondForm — input field + computed preview + CTA, used for the Trust Notes
+ * BondForm — input field + computed preview + CTA, used for the Bonds
  * acquire/redeem flows.
  *
  * Unlike ActionPanel (a simple stake/withdraw), BondForm includes a separate
@@ -18,11 +18,11 @@ import { maskDecimalInput } from "@/lib/util/decimal";
 interface BondFormProps {
   /** Input field label. */
   inputLabel: string;
-  /** Input field asset suffix, e.g. "MONEY". */
+  /** Input field asset suffix, e.g. "LEVEL". */
   inputAsset: string;
   /** Max amount user has of the input asset. */
   maxAvailable: string;
-  /** Output asset suffix shown in the preview, e.g. "TRUSTNOTE". */
+  /** Output asset suffix shown in the preview, e.g. "BOND". */
   outputAsset: string;
   /** Multiplier: outputAmount = inputAmount * rate. 1 = 1:1. */
   rate: number;

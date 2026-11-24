@@ -1,7 +1,7 @@
 import { useReadContracts } from "wagmi";
 
 import { genesisRewardPoolAbi, hookAbi, treasuryAbi } from "@/lib/abis";
-import { useDeployment, useEpoch, useMoneyMarket } from "@/lib/hooks";
+import { useDeployment, useEpoch, usePegMarket } from "@/lib/hooks";
 import { formatCountdown } from "@/lib/format";
 
 /**
@@ -30,7 +30,7 @@ interface Step {
 export function LaunchSequence() {
   const deployment = useDeployment();
   const epoch = useEpoch();
-  const market = useMoneyMarket();
+  const market = usePegMarket();
 
   // Direct multicall here (not via useBoardroom etc.) — these specific reads
   // exist nowhere else in the hook layer and adding hooks just for the wizard
@@ -161,7 +161,7 @@ export function LaunchSequence() {
     numeral: "VI",
     title: "Enable Hook Tax (optional)",
     detail: autoTaxOn
-      ? "Active · 12 / 6 / 3% schedule taxing MONEY sells."
+      ? "Active · 12 / 6 / 3% schedule taxing LEVEL sells."
       : bootstrapDone
         ? "Disabled. Flip on via Panel II below to defend the peg."
         : "Pending bootstrap end.",

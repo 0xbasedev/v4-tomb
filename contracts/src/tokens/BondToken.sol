@@ -7,10 +7,10 @@ import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC2
 import {Trustees} from "../governance/Trustees.sol";
 
 /**
- * @title TrustNote
- * @notice $TRUSTNOTE — the contraction bond. During contraction epochs (TWAP < 1.0 WETH),
- *         users can burn $MONEY to mint $TRUSTNOTE at a discount. During the next expansion,
- *         trustees redeems $TRUSTNOTE for $MONEY at a premium via the Treasury.
+ * @title BondToken
+ * @notice $BOND — the contraction bond. During contraction epochs (TWAP < 1.0 WETH),
+ *         users can burn $PEG to mint $BOND at a discount. During the next expansion,
+ *         trustees redeems $BOND for $PEG at a premium via the Treasury.
  * @dev    Direct port of Tomb Finance's BBOND (BBond.sol in bombmoney/bomb-contracts).
  *
  *         Non-logic-changing modernizations:
@@ -32,10 +32,10 @@ import {Trustees} from "../governance/Trustees.sol";
  *           - `burn(amount)` — public; anyone can burn their own.
  *           - `burnFrom(account, amount)` — trustees-only (not general allowance-based).
  */
-contract TrustNote is ERC20Burnable, Trustees {
-    constructor() ERC20("Trust Note", "TRUSTNOTE") Trustees() {}
+contract BondToken is ERC20Burnable, Trustees {
+    constructor() ERC20("Bond", "BOND") Trustees() {}
 
-    /// @notice Mint $TRUSTNOTE to a recipient. Returns true if balance actually increased.
+    /// @notice Mint $BOND to a recipient. Returns true if balance actually increased.
     function mint(
         address recipient,
         uint256 amount
@@ -45,14 +45,14 @@ contract TrustNote is ERC20Burnable, Trustees {
         return balanceOf(recipient) > balanceBefore;
     }
 
-    /// @notice Burn $TRUSTNOTE from the caller's own balance.
+    /// @notice Burn $BOND from the caller's own balance.
     function burn(
         uint256 amount
     ) public override {
         super.burn(amount);
     }
 
-    /// @notice Burn $TRUSTNOTE from an arbitrary account (subject to allowance). Trustees-only.
+    /// @notice Burn $BOND from an arbitrary account (subject to allowance). Trustees-only.
     function burnFrom(
         address account,
         uint256 amount

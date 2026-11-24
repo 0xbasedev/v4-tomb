@@ -33,7 +33,7 @@ export const treasuryAbi = [
   },
   {
     type: "function",
-    name: "getMoneyPrice",
+    name: "getPegPrice",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
@@ -47,21 +47,21 @@ export const treasuryAbi = [
   },
   {
     type: "function",
-    name: "getMoneyCirculatingSupply",
+    name: "getPegCirculatingSupply",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
     type: "function",
-    name: "moneyPriceOne",
+    name: "pegPriceOne",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
     type: "function",
-    name: "moneyPriceCeiling",
+    name: "pegPriceCeiling",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
@@ -164,7 +164,7 @@ export const treasuryAbi = [
   },
   {
     type: "function",
-    name: "getBurnableMoneyLeft",
+    name: "getBurnablePegLeft",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "burnableLeft", type: "uint256" }],
@@ -182,7 +182,7 @@ export const treasuryAbi = [
     name: "buyBonds",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "_moneyAmount", type: "uint256" },
+      { name: "_pegAmount", type: "uint256" },
       { name: "targetPrice", type: "uint256" },
     ],
     outputs: [],

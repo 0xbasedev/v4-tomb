@@ -11,7 +11,7 @@ import {
   useDeployment,
   useEpoch,
   useIsAdmin,
-  useMoneyMarket,
+  usePegMarket,
 } from "@/lib/hooks";
 import {
   genesisRewardPoolAbi,
@@ -43,7 +43,7 @@ export function Admin() {
   const deployment = useDeployment();
   const admin = useIsAdmin();
   const epoch = useEpoch();
-  const market = useMoneyMarket();
+  const market = usePegMarket();
   const toast = useToast();
 
   // One write hook reused across panels — only one action runs at a time on

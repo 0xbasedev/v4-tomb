@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {MainRewardPool} from "../../src/distribution/MainRewardPool.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,7 +25,7 @@ contract MockLp is ERC20 {
 
 contract MainRewardPoolTest is BaseTest {
     MainRewardPool internal pool;
-    OldMoney internal money;
+    PegToken internal peg;
     MockLp internal lp;
 
     uint256 internal poolStart;
@@ -36,16 +36,16 @@ contract MainRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney();
+        peg = new PegToken();
 
         vm.prank(owner);
-        pool = new MainRewardPool(address(money), poolStart);
+        pool = new MainRewardPool(address(peg), poolStart);
 
         lp = new MockLp("LP", "LP");
 
         uint256 rewards = pool.TOTAL_REWARDS();
         vm.prank(owner);
-        money.mint(address(pool), rewards);
+        peg.mint(address(pool), rewards);
     }
 
     // ---------------------------------------------------------------------
@@ -60,9 +60,9 @@ contract MainRewardPoolTest is BaseTest {
         assertEq(pool.epochEndTimes(1), poolStart + 9 days);
         assertEq(pool.epochEndTimes(2), 0);
         // 80000e18 / (4 days) and 60000e18 / (5 days).
-        assertEq(pool.epochMoneyPerSecond(0), uint256(80_000 ether) / 4 days);
-        assertEq(pool.epochMoneyPerSecond(1), uint256(60_000 ether) / 5 days);
-        assertEq(pool.epochMoneyPerSecond(2), 0);
+        assertEq(pool.epochPegPerSecond(0), uint256(80_000 ether) / 4 days);
+        assertEq(pool.epochPegPerSecond(1), uint256(60_000 ether) / 5 days);
+        assertEq(pool.epochPegPerSecond(2), 0);
     }
 
     function test_GeneratedReward_Epoch0Only() public view {
@@ -79,8 +79,8 @@ contract MainRewardPoolTest is BaseTest {
     function test_GeneratedReward_CrossesEpochBoundary() public view {
         // [day 3, day 6] → 1 day of epoch 0 + 2 days of epoch 1.
         uint256 reward = pool.getGeneratedReward(poolStart + 3 days, poolStart + 6 days);
-        uint256 r0 = pool.epochMoneyPerSecond(0) * 1 days;
-        uint256 r1 = pool.epochMoneyPerSecond(1) * 2 days;
+        uint256 r0 = pool.epochPegPerSecond(0) * 1 days;
+        uint256 r1 = pool.epochPegPerSecond(1) * 2 days;
         assertEq(reward, r0 + r1); // exact since we read the rates back from the contract
     }
 
@@ -110,11 +110,11 @@ contract MainRewardPoolTest is BaseTest {
 
         // Day 5 (end of epoch 0). Alice is sole staker; should have ~80k.
         vm.warp(poolStart + 4 days);
-        assertApproxEqRel(pool.pendingMoney(0, alice), 80_000 ether, 0.0001e18);
+        assertApproxEqRel(pool.pendingPeg(0, alice), 80_000 ether, 0.0001e18);
 
         // Day 10 (end of epoch 1). Alice should have ~140k total.
         vm.warp(poolStart + 9 days);
-        assertApproxEqRel(pool.pendingMoney(0, alice), 140_000 ether, 0.0001e18);
+        assertApproxEqRel(pool.pendingPeg(0, alice), 140_000 ether, 0.0001e18);
     }
 
     function _stake(

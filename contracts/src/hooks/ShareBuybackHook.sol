@@ -107,10 +107,10 @@ contract ShareBuybackHook is BaseV4Hook, Trustees, IUnlockCallback {
     // Immutable wiring — none of this can be redirected after deployment
     // ------------------------------------------------------------------
 
-    /// @notice The taxed token (SQUARE / ESTATE).
+    /// @notice The taxed token (SQUARE / SHARE).
     address public immutable share;
 
-    /// @notice The token bought and burned (LEVEL / MONEY).
+    /// @notice The token bought and burned (LEVEL / PEG).
     address public immutable peg;
 
     /// @notice The asset the tax is collected in and the buyback is paid with (USDC / WETH).

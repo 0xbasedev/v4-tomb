@@ -20,11 +20,11 @@ import { useDeployment } from "@/lib/hooks";
  *
  * Observable phases:
  *   - **Not Started**: Treasury.operator() != Timelock — deployer holds everything.
- *   - **Awaiting Execute**: Treasury.operator() == Timelock but money.owner() !=
+ *   - **Awaiting Execute**: Treasury.operator() == Timelock but peg.owner() !=
  *     Timelock — queue ran, acceptOwnership not yet executed. ETA is recoverable
- *     from the Timelock's `pendingOwner` of money and the original queue tx, but
+ *     from the Timelock's `pendingOwner` of peg and the original queue tx, but
  *     we don't track ETA on-chain. User must remember.
- *   - **Done**: money.owner() == Timelock.
+ *   - **Done**: peg.owner() == Timelock.
  *
  *  ⚠ The actions in this panel are read-only. Do NOT trigger from UI.
  */
@@ -42,10 +42,10 @@ export function RotationStatusPanel() {
           { address: deployment.treasury, abi: treasuryAbi, functionName: "operator" },
           { address: deployment.hook, abi: hookAbi, functionName: "trustees" },
           { address: deployment.genesisRewardPool, abi: genesisRewardPoolAbi, functionName: "operator" },
-          { address: deployment.money, abi: ownable2StepAbi, functionName: "owner" },
-          { address: deployment.money, abi: ownable2StepAbi, functionName: "pendingOwner" },
-          { address: deployment.estate, abi: ownable2StepAbi, functionName: "owner" },
-          { address: deployment.trustNote, abi: ownable2StepAbi, functionName: "owner" },
+          { address: deployment.peg, abi: ownable2StepAbi, functionName: "owner" },
+          { address: deployment.peg, abi: ownable2StepAbi, functionName: "pendingOwner" },
+          { address: deployment.share, abi: ownable2StepAbi, functionName: "owner" },
+          { address: deployment.bond, abi: ownable2StepAbi, functionName: "owner" },
           { address: deployment.hook, abi: ownable2StepAbi, functionName: "owner" },
         ]
       : [],
@@ -55,10 +55,10 @@ export function RotationStatusPanel() {
   const treasuryOp = data?.[0]?.status === "success" ? (data[0].result as `0x${string}`) : undefined;
   const hookTrust = data?.[1]?.status === "success" ? (data[1].result as `0x${string}`) : undefined;
   const genesisOp = data?.[2]?.status === "success" ? (data[2].result as `0x${string}`) : undefined;
-  const moneyOwner = data?.[3]?.status === "success" ? (data[3].result as `0x${string}`) : undefined;
-  const moneyPending = data?.[4]?.status === "success" ? (data[4].result as `0x${string}`) : undefined;
-  const estateOwner = data?.[5]?.status === "success" ? (data[5].result as `0x${string}`) : undefined;
-  const trustnoteOwner = data?.[6]?.status === "success" ? (data[6].result as `0x${string}`) : undefined;
+  const pegOwner = data?.[3]?.status === "success" ? (data[3].result as `0x${string}`) : undefined;
+  const pegPending = data?.[4]?.status === "success" ? (data[4].result as `0x${string}`) : undefined;
+  const shareOwner = data?.[5]?.status === "success" ? (data[5].result as `0x${string}`) : undefined;
+  const bondOwner = data?.[6]?.status === "success" ? (data[6].result as `0x${string}`) : undefined;
   const hookOwner = data?.[7]?.status === "success" ? (data[7].result as `0x${string}`) : undefined;
 
   function eq(a?: string, b?: string) {
@@ -69,7 +69,7 @@ export function RotationStatusPanel() {
   const operatorsAtTimelock =
     eq(treasuryOp, tl) && eq(hookTrust, tl) && eq(genesisOp, tl);
   const ownersAtTimelock =
-    eq(moneyOwner, tl) && eq(estateOwner, tl) && eq(trustnoteOwner, tl) && eq(hookOwner, tl);
+    eq(pegOwner, tl) && eq(shareOwner, tl) && eq(bondOwner, tl) && eq(hookOwner, tl);
 
   let phase: RotationPhase = "unknown";
   if (treasuryOp && tl) {
@@ -120,9 +120,9 @@ export function RotationStatusPanel() {
             <Row label="Treasury operator" value={treasuryOp} timelock={tl} />
             <Row label="Hook trustees" value={hookTrust} timelock={tl} />
             <Row label="Genesis operator" value={genesisOp} timelock={tl} />
-            <Row label="$MONEY owner" value={moneyOwner} timelock={tl} pending={moneyPending} />
-            <Row label="$ESTATE owner" value={estateOwner} timelock={tl} />
-            <Row label="$TRUSTNOTE owner" value={trustnoteOwner} timelock={tl} />
+            <Row label="$LEVEL owner" value={pegOwner} timelock={tl} pending={pegPending} />
+            <Row label="$SQUARE owner" value={shareOwner} timelock={tl} />
+            <Row label="$BOND owner" value={bondOwner} timelock={tl} />
             <Row label="Hook owner" value={hookOwner} timelock={tl} />
           </div>
 

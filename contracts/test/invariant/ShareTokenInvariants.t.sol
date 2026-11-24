@@ -3,16 +3,16 @@ pragma solidity 0.8.26;
 
 import {Test, StdInvariant} from "forge-std/Test.sol";
 
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 
 /**
- * @title EstateHandler
- * @notice Fuzz-target wrapper for ESTATE. The handler holds the trustees role so it can
+ * @title ShareTokenHandler
+ * @notice Fuzz-target wrapper for SHARE. The handler holds the trustees role so it can
  *         call `distributeReward`. It also drives time forward (via vm.warp) so the
  *         claimRewards vesting math is exercised across the full 365-day schedule.
  */
-contract EstateHandler is Test {
-    Estate public estate;
+contract ShareTokenHandler is Test {
+    ShareToken public share;
 
     address public farmingPool;
     address public communityFund;
@@ -23,12 +23,12 @@ contract EstateHandler is Test {
     bool public ghost_distributed;
 
     constructor(
-        Estate _estate,
+        ShareToken _share,
         address _farmingPool,
         address _communityFund,
         address _devFund
     ) {
-        estate = _estate;
+        share = _share;
         farmingPool = _farmingPool;
         communityFund = _communityFund;
         devFund = _devFund;
@@ -46,7 +46,7 @@ contract EstateHandler is Test {
     ///         the revert by short-circuiting on the ghost flag.
     function distribute() external {
         if (ghost_distributed) return;
-        estate.distributeReward(farmingPool);
+        share.distributeReward(farmingPool);
         ghost_distributed = true;
     }
 
@@ -55,7 +55,7 @@ contract EstateHandler is Test {
     function warp(
         uint32 secondsForward
     ) external {
-        uint256 maxTs = estate.endTime() + 30 days;
+        uint256 maxTs = share.endTime() + 30 days;
         uint256 next = block.timestamp + (uint256(secondsForward) % 1 days);
         if (next > maxTs) next = maxTs;
         vm.warp(next);
@@ -65,7 +65,7 @@ contract EstateHandler is Test {
     /// @notice Anyone can poke claimRewards — it mints any due vesting to the community / dev
     ///         fund addresses.
     function claimRewards() external {
-        estate.claimRewards();
+        share.claimRewards();
     }
 
     function transfer(
@@ -75,11 +75,11 @@ contract EstateHandler is Test {
     ) external {
         address from = actors[fromSeed % actors.length];
         address to = actors[toSeed % actors.length];
-        uint256 balance = estate.balanceOf(from);
+        uint256 balance = share.balanceOf(from);
         if (balance == 0) return;
         amount = bound(amount, 0, balance);
         vm.prank(from);
-        estate.transfer(to, amount);
+        share.transfer(to, amount);
     }
 
     function burn(
@@ -87,14 +87,14 @@ contract EstateHandler is Test {
         uint256 amount
     ) external {
         address from = actors[actorSeed % actors.length];
-        uint256 balance = estate.balanceOf(from);
+        uint256 balance = share.balanceOf(from);
         if (balance == 0) return;
         amount = bound(amount, 0, balance);
         vm.prank(from);
-        estate.burn(amount);
+        share.burn(amount);
     }
 
-    /// @notice Seed actors with ESTATE from the farming pool so transfer/burn actions have
+    /// @notice Seed actors with SHARE from the farming pool so transfer/burn actions have
     ///         something to work with. The fuzzer calls this whenever it wants to top up.
     function seedFromFarmingPool(
         uint256 actorSeed,
@@ -102,21 +102,21 @@ contract EstateHandler is Test {
     ) external {
         if (!ghost_distributed) return;
         address to = actors[actorSeed % actors.length];
-        uint256 balance = estate.balanceOf(farmingPool);
+        uint256 balance = share.balanceOf(farmingPool);
         if (balance == 0) return;
         amount = bound(amount, 0, balance);
         vm.prank(farmingPool);
-        estate.transfer(to, amount);
+        share.transfer(to, amount);
     }
 }
 
 /**
- * @title EstateInvariants
- * @notice Properties that must hold across all interactions with $ESTATE.
+ * @title ShareTokenInvariants
+ * @notice Properties that must hold across all interactions with $SHARE.
  */
-contract EstateInvariants is StdInvariant, Test {
-    Estate public estate;
-    EstateHandler public handler;
+contract ShareTokenInvariants is StdInvariant, Test {
+    ShareToken public share;
+    ShareTokenHandler public handler;
 
     address public farmingPool;
     address public communityFund;
@@ -132,11 +132,11 @@ contract EstateInvariants is StdInvariant, Test {
         communityFund = makeAddr("communityFund");
         devFund = makeAddr("devFund");
 
-        estate = new Estate(startTime, communityFund, devFund);
-        handler = new EstateHandler(estate, farmingPool, communityFund, devFund);
+        share = new ShareToken(startTime, communityFund, devFund);
+        handler = new ShareTokenHandler(share, farmingPool, communityFund, devFund);
 
         // Hand trustees to the handler so it can call distributeReward.
-        estate.transferTrustees(address(handler));
+        share.transferTrustees(address(handler));
 
         targetContract(address(handler));
     }
@@ -145,37 +145,37 @@ contract EstateInvariants is StdInvariant, Test {
     ///         capped at the sum of the three Tomb-faithful allocations (70k ETH total).
     ///         Vesting drips never push past this.
     function invariant_TotalSupplyNeverExceedsCapPlusDeployMint() public view {
-        uint256 totalAlloc = estate.FARMING_POOL_REWARD_ALLOCATION() + estate.COMMUNITY_FUND_POOL_ALLOCATION()
-            + estate.DEV_FUND_POOL_ALLOCATION();
-        assertLe(estate.totalSupply(), 1 ether + totalAlloc);
+        uint256 totalAlloc = share.FARMING_POOL_REWARD_ALLOCATION() + share.COMMUNITY_FUND_POOL_ALLOCATION()
+            + share.DEV_FUND_POOL_ALLOCATION();
+        assertLe(share.totalSupply(), 1 ether + totalAlloc);
     }
 
     /// @notice The community fund vesting never mints more than its full allocation. Even
     ///         if claimRewards is called repeatedly with extreme time warps, the cap holds.
     function invariant_CommunityFundNeverOverPaid() public view {
-        assertLe(estate.balanceOf(communityFund), estate.COMMUNITY_FUND_POOL_ALLOCATION());
+        assertLe(share.balanceOf(communityFund), share.COMMUNITY_FUND_POOL_ALLOCATION());
     }
 
     /// @notice Same for dev fund.
     function invariant_DevFundNeverOverPaid() public view {
-        assertLe(estate.balanceOf(devFund), estate.DEV_FUND_POOL_ALLOCATION());
+        assertLe(share.balanceOf(devFund), share.DEV_FUND_POOL_ALLOCATION());
     }
 
     /// @notice Pre-distribution: farming pool has nothing. Post-distribution: it has at
     ///         most FARMING_POOL_REWARD_ALLOCATION (handler reseeds out to actors, never in).
     function invariant_FarmingPoolNeverOverAllocated() public view {
-        assertLe(estate.balanceOf(farmingPool), estate.FARMING_POOL_REWARD_ALLOCATION());
+        assertLe(share.balanceOf(farmingPool), share.FARMING_POOL_REWARD_ALLOCATION());
     }
 
     /// @notice Sum of every tracked address's balance equals totalSupply.
     function invariant_SumOfBalancesEqualsTotalSupply() public view {
-        uint256 sum = estate.balanceOf(address(this)); // deployer holds 1 ether
-        sum += estate.balanceOf(farmingPool);
-        sum += estate.balanceOf(communityFund);
-        sum += estate.balanceOf(devFund);
+        uint256 sum = share.balanceOf(address(this)); // deployer holds 1 ether
+        sum += share.balanceOf(farmingPool);
+        sum += share.balanceOf(communityFund);
+        sum += share.balanceOf(devFund);
         for (uint256 i = 0; i < handler.actorCount(); ++i) {
-            sum += estate.balanceOf(handler.actors(i));
+            sum += share.balanceOf(handler.actors(i));
         }
-        assertEq(sum, estate.totalSupply());
+        assertEq(sum, share.totalSupply());
     }
 }

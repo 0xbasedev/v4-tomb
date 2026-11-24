@@ -10,17 +10,17 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Trustees} from "../governance/Trustees.sol";
 
 /**
- * @title Estate
- * @notice $ESTATE — the share / governance side of the Old Money trust. Holders stake $ESTATE
- *         in TheClub (the Boardroom) to earn $MONEY seigniorage during expansion epochs.
+ * @title ShareToken
+ * @notice $SHARE — the share / governance side of the Old Money trust. Holders stake $SHARE
+ *         in TheClub (the Boardroom) to earn $PEG seigniorage during expansion epochs.
  * @dev    Direct port of Tomb Finance's BSHARE token (BShare.sol in bombmoney/bomb-contracts).
  *
  *         Supply (Tomb-exact):
- *           - Total max: 70,000 ESTATE
+ *           - Total max: 70,000 SHARE
  *           - 59,500 to farming pool (minted one-shot via `distributeReward`)
  *           -  5,500 to community fund (linear-vested over 365 days, claimable via `claimRewards`)
  *           -  5,000 to dev fund (linear-vested over 365 days, claimable via `claimRewards`)
- *           - 1 ESTATE minted to the initial owner in the constructor for initial pool setup.
+ *           - 1 SHARE minted to the initial owner in the constructor for initial pool setup.
  *
  *         Non-logic-changing modernizations from Tomb's BShare:
  *           - 0.6.12 → 0.8.26; SafeMath dropped.
@@ -31,16 +31,16 @@ import {Trustees} from "../governance/Trustees.sol";
  *         Quirk preserved from Tomb: `setTreasuryFund` and `setDevFund` are both gated to the
  *         `devFund` address, not to owner or trustees. This is Tomb's chosen pattern.
  */
-contract Estate is ERC20Burnable, ERC20Permit, Trustees {
+contract ShareToken is ERC20Burnable, ERC20Permit, Trustees {
     using SafeERC20 for IERC20;
 
-    /// @notice 59,500 ESTATE — farming pool allocation, minted one-shot via `distributeReward`.
+    /// @notice 59,500 SHARE — farming pool allocation, minted one-shot via `distributeReward`.
     uint256 public constant FARMING_POOL_REWARD_ALLOCATION = 59_500 ether;
 
-    /// @notice 5,500 ESTATE — community fund, linear-vested over `VESTING_DURATION`.
+    /// @notice 5,500 SHARE — community fund, linear-vested over `VESTING_DURATION`.
     uint256 public constant COMMUNITY_FUND_POOL_ALLOCATION = 5500 ether;
 
-    /// @notice 5,000 ESTATE — dev fund, linear-vested over `VESTING_DURATION`.
+    /// @notice 5,000 SHARE — dev fund, linear-vested over `VESTING_DURATION`.
     uint256 public constant DEV_FUND_POOL_ALLOCATION = 5000 ether;
 
     /// @notice 365 days — duration over which community and dev fund vest linearly.
@@ -86,7 +86,7 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
         uint256 _startTime,
         address _communityFund,
         address _devFund
-    ) ERC20("Estate", "ESTATE") ERC20Permit("Estate") Trustees() {
+    ) ERC20("SQUARE", "SQUARE") ERC20Permit("SQUARE") Trustees() {
         if (_communityFund == address(0)) revert ZeroAddress();
         if (_devFund == address(0)) revert ZeroAddress();
 
@@ -136,7 +136,7 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
     // Linear vesting math
     // ---------------------------------------------------------------------
 
-    /// @notice Amount of $ESTATE currently claimable by `communityFund`.
+    /// @notice Amount of $SHARE currently claimable by `communityFund`.
     function unclaimedTreasuryFund() public view returns (uint256) {
         uint256 _now = block.timestamp;
         if (_now > endTime) _now = endTime;
@@ -144,7 +144,7 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
         return (_now - communityFundLastClaimed) * communityFundRewardRate;
     }
 
-    /// @notice Amount of $ESTATE currently claimable by `devFund`.
+    /// @notice Amount of $SHARE currently claimable by `devFund`.
     function unclaimedDevFund() public view returns (uint256) {
         uint256 _now = block.timestamp;
         if (_now > endTime) _now = endTime;
@@ -186,7 +186,7 @@ contract Estate is ERC20Burnable, ERC20Permit, Trustees {
     // Burn (Tomb-faithful surface)
     // ---------------------------------------------------------------------
 
-    /// @notice Burn $ESTATE from the caller's own balance.
+    /// @notice Burn $SHARE from the caller's own balance.
     /// @dev Override preserves Tomb's explicit public restatement of the inherited symbol.
     function burn(
         uint256 amount

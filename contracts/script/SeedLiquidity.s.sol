@@ -22,11 +22,11 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
 
 /**
  * @title SeedLiquidity
- * @notice Mints the initial full-range V4 LP position in the MONEY/WETH pool. Closes gap
+ * @notice Mints the initial full-range V4 LP position in the PEG/WETH pool. Closes gap
  *         #2 in `docs/GAP_AUDIT.md` — without seed liquidity the first swap (and the
- *         genesis-pool stakers cashing out into MONEY-WETH) would fail with no depth.
+ *         genesis-pool stakers cashing out into PEG-WETH) would fail with no depth.
  *
- *         Mechanically: pulls `MONEY_AMOUNT` + `WETH_AMOUNT` from the operator's wallet,
+ *         Mechanically: pulls `PEG_AMOUNT` + `WETH_AMOUNT` from the operator's wallet,
  *         approves Permit2 + Permit2-to-PositionManager, then calls
  *         `positionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)` at the
  *         **wrapper's exact tick range** (full range, `minUsableTick(60)` to
@@ -36,16 +36,16 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
  *         zero/burn address) to make the liquidity protocol-owned forever.
  *
  *         Where the assets come from (per `docs/tomb-skill/references/HOW_IT_WORKED.md`):
- *           - **MONEY**: from the 9,000-MONEY airdrop wallet allocation. The operator
+ *           - **PEG**: from the 9,000-PEG airdrop wallet allocation. The operator
  *             transfers however much they want to seed into the operator wallet first.
  *           - **WETH**: from team funds. Deposit ETH to the OP-stack predeploy at
  *             the configured wrapped-ETH contract to mint WETH 1:1.
  *
  *         Required env vars:
- *           DEPLOYER_PRIVATE_KEY — operator signing the tx. Holds MONEY + WETH.
- *           MONEY address is resolved from the selected manifest deployment.
+ *           DEPLOYER_PRIVATE_KEY — operator signing the tx. Holds PEG + WETH.
+ *           PEG address is resolved from the selected manifest deployment.
  *           HOOK address is resolved from the selected manifest deployment.
- *           MONEY_AMOUNT         — wei of MONEY to deposit (e.g., 3000 ether).
+ *           PEG_AMOUNT         — wei of PEG to deposit (e.g., 3000 ether).
  *           WETH_AMOUNT          — wei of WETH to deposit (e.g., 1 ether).
  */
 contract SeedLiquidity is NetworkConfig {
@@ -53,10 +53,10 @@ contract SeedLiquidity is NetworkConfig {
 
     struct Inputs {
         address operator;
-        address money;
+        address peg;
         address weth;
         address hook;
-        uint256 moneyAmount;
+        uint256 pegAmount;
         uint256 wethAmount;
     }
 
@@ -65,10 +65,10 @@ contract SeedLiquidity is NetworkConfig {
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         Inputs memory i = Inputs({
             operator: vm.addr(pk),
-            money: _deployment("money"),
+            peg: _deployment("peg"),
             weth: _infrastructure("weth"),
             hook: _deployment("hook"),
-            moneyAmount: vm.envUint("MONEY_AMOUNT"),
+            pegAmount: vm.envUint("PEG_AMOUNT"),
             wethAmount: vm.envUint("WETH_AMOUNT")
         });
 
@@ -96,9 +96,9 @@ contract SeedLiquidity is NetworkConfig {
     function _buildPoolKey(
         Inputs memory i
     ) internal pure returns (PoolKey memory) {
-        (Currency c0, Currency c1) = i.money < i.weth
-            ? (Currency.wrap(i.money), Currency.wrap(i.weth))
-            : (Currency.wrap(i.weth), Currency.wrap(i.money));
+        (Currency c0, Currency c1) = i.peg < i.weth
+            ? (Currency.wrap(i.peg), Currency.wrap(i.weth))
+            : (Currency.wrap(i.weth), Currency.wrap(i.peg));
         return PoolKey({
             currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(i.hook)
         });
@@ -113,7 +113,7 @@ contract SeedLiquidity is NetworkConfig {
         require(sqrtPriceX96 != 0, "SeedLiquidity: pool not initialized");
 
         (uint256 amount0Max, uint256 amount1Max) =
-            i.money < i.weth ? (i.moneyAmount, i.wethAmount) : (i.wethAmount, i.moneyAmount);
+            i.peg < i.weth ? (i.pegAmount, i.wethAmount) : (i.wethAmount, i.pegAmount);
 
         liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
@@ -131,9 +131,9 @@ contract SeedLiquidity is NetworkConfig {
         IAllowanceTransfer permit2 = IAllowanceTransfer(_infrastructure("permit2"));
         IPositionManager positionManager = IPositionManager(_infrastructure("positionManager"));
 
-        IERC20(i.money).approve(address(permit2), type(uint256).max);
+        IERC20(i.peg).approve(address(permit2), type(uint256).max);
         IERC20(i.weth).approve(address(permit2), type(uint256).max);
-        permit2.approve(i.money, address(positionManager), type(uint160).max, type(uint48).max);
+        permit2.approve(i.peg, address(positionManager), type(uint160).max, type(uint48).max);
         permit2.approve(i.weth, address(positionManager), type(uint160).max, type(uint48).max);
     }
 
@@ -146,7 +146,7 @@ contract SeedLiquidity is NetworkConfig {
         tokenId = positionManager.nextTokenId();
 
         (uint256 amount0Max, uint256 amount1Max) =
-            i.money < i.weth ? (i.moneyAmount, i.wethAmount) : (i.wethAmount, i.moneyAmount);
+            i.peg < i.weth ? (i.pegAmount, i.wethAmount) : (i.wethAmount, i.pegAmount);
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
         bytes[] memory params = new bytes[](2);
@@ -173,10 +173,10 @@ contract SeedLiquidity is NetworkConfig {
     ) internal pure {
         console2.log("=== SeedLiquidity ===");
         console2.log("operator: ", i.operator);
-        console2.log("money:    ", i.money);
+        console2.log("peg:    ", i.peg);
         console2.log("weth:     ", i.weth);
         console2.log("hook:     ", i.hook);
-        console2.log("MONEY in: ", i.moneyAmount);
+        console2.log("PEG in: ", i.pegAmount);
         console2.log("WETH in:  ", i.wethAmount);
         console2.log("liquidity:", uint256(liquidity));
     }

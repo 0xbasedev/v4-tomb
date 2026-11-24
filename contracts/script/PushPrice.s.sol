@@ -18,31 +18,31 @@ import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 
 /**
  * @title PushPrice
- * @notice One-shot V4 swap on MONEY/WETH pool, bypassing UniversalRouter.
+ * @notice One-shot V4 swap on PEG/WETH pool, bypassing UniversalRouter.
  *         Deploys a fresh PoolSwapTest helper, approves it for the input
  *         token, swaps. Use for testnet experiments — to push price below peg
  *         (activates bond acquire) or above premium (activates bond redeem).
  *
  *         Required env vars:
  *           DEPLOYER_PRIVATE_KEY — signer; must hold input token + ETH for gas.
- *           MONEY address is resolved from the selected manifest deployment.
+ *           PEG address is resolved from the selected manifest deployment.
  *           HOOK address is resolved from the selected manifest deployment.
  *           AMOUNT_IN            — wei of input (e.g. 50000000000000000 = 0.05).
- *           DIRECTION            — "sell-money" or "buy-money".
+ *           DIRECTION            — "sell-peg" or "buy-peg".
  *
  *         Example:
- *           export MONEY=0xb650... HOOK=0x8FF8...
- *           export AMOUNT_IN=50000000000000000 DIRECTION=sell-money
+ *           export PEG=0xb650... HOOK=0x8FF8...
+ *           export AMOUNT_IN=50000000000000000 DIRECTION=sell-peg
  *           forge script script/PushPrice.s.sol --rpc-url "$RPC_URL" --broadcast --slow
  */
 contract PushPrice is NetworkConfig {
     struct Inputs {
         uint256 pk;
         address signer;
-        address money;
+        address peg;
         address hook;
         uint256 amountIn;
-        bool sellMoney;
+        bool sellPeg;
     }
 
     function run() external {
@@ -50,7 +50,7 @@ contract PushPrice is NetworkConfig {
         Inputs memory i = _readInputs();
         PoolKey memory poolKey = _buildPoolKey(i);
         bool zeroForOne = _computeDirection(i);
-        address tokenIn = i.sellMoney ? i.money : _infrastructure("weth");
+        address tokenIn = i.sellPeg ? i.peg : _infrastructure("weth");
 
         _logHeader(i, zeroForOne, tokenIn);
         _doSwap(i, poolKey, zeroForOne, tokenIn);
@@ -60,14 +60,14 @@ contract PushPrice is NetworkConfig {
     function _readInputs() internal view returns (Inputs memory i) {
         i.pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         i.signer = vm.addr(i.pk);
-        i.money = _deployment("money");
+        i.peg = _deployment("peg");
         i.hook = _deployment("hook");
         i.amountIn = vm.envUint("AMOUNT_IN");
 
         string memory direction = vm.envString("DIRECTION");
-        i.sellMoney = keccak256(bytes(direction)) == keccak256(bytes("sell-money"));
-        if (!i.sellMoney && keccak256(bytes(direction)) != keccak256(bytes("buy-money"))) {
-            revert("DIRECTION must be 'sell-money' or 'buy-money'");
+        i.sellPeg = keccak256(bytes(direction)) == keccak256(bytes("sell-peg"));
+        if (!i.sellPeg && keccak256(bytes(direction)) != keccak256(bytes("buy-peg"))) {
+            revert("DIRECTION must be 'sell-peg' or 'buy-peg'");
         }
     }
 
@@ -75,9 +75,8 @@ contract PushPrice is NetworkConfig {
         Inputs memory i
     ) internal view returns (PoolKey memory) {
         address weth = _infrastructure("weth");
-        (Currency c0, Currency c1) = i.money < weth
-            ? (Currency.wrap(i.money), Currency.wrap(weth))
-            : (Currency.wrap(weth), Currency.wrap(i.money));
+        (Currency c0, Currency c1) =
+            i.peg < weth ? (Currency.wrap(i.peg), Currency.wrap(weth)) : (Currency.wrap(weth), Currency.wrap(i.peg));
         return PoolKey({
             currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(i.hook)
         });
@@ -86,10 +85,10 @@ contract PushPrice is NetworkConfig {
     function _computeDirection(
         Inputs memory i
     ) internal view returns (bool zeroForOne) {
-        // WETH sorts as currency0 (0x4200... < 0xb650...). Selling MONEY
-        // (currency1 -> currency0) means zeroForOne = false. Buying MONEY = true.
-        bool wethIsToken0 = _infrastructure("weth") < i.money;
-        return wethIsToken0 ? !i.sellMoney : i.sellMoney;
+        // WETH sorts as currency0 (0x4200... < 0xb650...). Selling PEG
+        // (currency1 -> currency0) means zeroForOne = false. Buying PEG = true.
+        bool wethIsToken0 = _infrastructure("weth") < i.peg;
+        return wethIsToken0 ? !i.sellPeg : i.sellPeg;
     }
 
     function _doSwap(

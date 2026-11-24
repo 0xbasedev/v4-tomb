@@ -11,41 +11,41 @@ import {
   useApproveAndCall,
   useBondMarket,
   useDeployment,
-  useMoneyMarket,
+  usePegMarket,
   useTokenSupplies,
 } from "@/lib/hooks";
 import { treasuryAbi } from "@/lib/abis";
 import { formatToken, formatPrice } from "@/lib/format";
 
 /**
- * Trust Notes — the bond office.
+ * Bonds — the bond office.
  *
  * Layout (centered axis):
- *   1. Heading — Roman III, "Trust Notes" title, formal voice
+ *   1. Heading — Roman III, "Bonds" title, formal voice
  *   2. MarketStateBanner — formal pronouncement of current bond market state
- *      ("Notes Are Issued" / "Notes Are Redeemed" / "The Trust is Steady" /
- *      "No Notes Are Active")
+ *      ("Bonds Are Issued" / "Bonds Are Redeemed" / "The Trust is Steady" /
+ *      "No Bonds Are Active")
  *   3. Tabs — Acquire | Present (for Redemption)
  *   4. Active BondForm
- *      - Acquire: burn MONEY, receive TRUSTNOTE at issuance discount
- *      - Present: burn TRUSTNOTE, receive MONEY at maturity premium
- *   5. Your Trust Notes position (2 tiles: held, MONEY equivalent)
+ *      - Acquire: burn LEVEL, receive BOND at issuance discount
+ *      - Present: burn BOND, receive LEVEL at maturity premium
+ *   5. Your Bonds position (2 tiles: held, LEVEL equivalent)
  *   6. Market state stats (4 tiles)
  *   7. Schedule explanation panel
  *
- * Note on "current state": initial state is "closed" because the protocol hasn't
- * had a contraction yet. Sprint B reads `treasury.getMoneyPrice()` against
- * `moneyPriceOne` / `moneyPriceCeiling` / `premiumThreshold` to compute the
+ * Bond on "current state": initial state is "closed" because the protocol hasn't
+ * had a contraction yet. Sprint B reads `treasury.getPegPrice()` against
+ * `pegPriceOne` / `pegPriceCeiling` / `premiumThreshold` to compute the
  * actual market state.
  */
 
 type Tab = "acquire" | "present";
 
-export function TrustNotes() {
+export function Bonds() {
   const [tab, setTab] = useState<Tab>("acquire");
 
   const deployment = useDeployment();
-  const market = useMoneyMarket();
+  const market = usePegMarket();
   const bonds = useBondMarket();
   const supplies = useTokenSupplies();
   const action = useApproveAndCall();
@@ -97,18 +97,18 @@ export function TrustNotes() {
   const premiumRate =
     bonds.premiumRate > 0n ? Number(formatUnits(bonds.premiumRate, 18)) : 1.0;
 
-  const moneyInWallet = formatToken(bonds.moneyInWallet, 4);
-  const notesInWallet = formatToken(bonds.trustNotesInWallet, 4);
-  const noteSupply = formatToken(supplies.trustNoteSupply, 0);
+  const pegInWallet = formatToken(bonds.pegInWallet, 4);
+  const bondsHeld = formatToken(bonds.bondsInWallet, 4);
+  const bondSupply = formatToken(supplies.bondSupply, 0);
   const treasuryReserve = formatToken(market.seigniorageSaved, 0);
 
-  // Debt ratio: TRUSTNOTE.totalSupply / MONEY.totalSupply, percent-formatted.
-  const moneyTotal = supplies.moneySupply ?? 0n;
-  const noteTotal = supplies.trustNoteSupply ?? 0n;
+  // Debt ratio: BOND.totalSupply / LEVEL.totalSupply, percent-formatted.
+  const pegTotal = supplies.pegSupply ?? 0n;
+  const bondTotal = supplies.bondSupply ?? 0n;
   const debtRatio =
-    moneyTotal === 0n
+    pegTotal === 0n
       ? "—"
-      : `${(Number((noteTotal * 10000n) / moneyTotal) / 100).toFixed(2)}%`;
+      : `${(Number((bondTotal * 10000n) / pegTotal) / 100).toFixed(2)}%`;
 
   const acquireDisabled = marketState !== "acquisition";
   const presentDisabled = marketState !== "redemption" && marketState !== "at-rest";
@@ -127,14 +127,14 @@ export function TrustNotes() {
           >
             III
           </div>
-          <h1 className="gold-text font-display italic text-section">Trust Notes</h1>
+          <h1 className="gold-text font-display italic text-section">Bonds</h1>
           <RuleTrio className="mb-6 mt-8" />
           <p
             className="mx-auto max-w-2xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
             style={{ letterSpacing: "0.04em" }}
           >
-            When the Trust falters, burn MONEY for Notes at a discount. When the Trust
-            recovers above one and one-tenth, present the Notes for a premium.
+            When the Trust falters, burn LEVEL for Bonds at a discount. When the Trust
+            recovers above one and one-tenth, present the Bonds for a premium.
           </p>
         </div>
       </section>
@@ -165,22 +165,22 @@ export function TrustNotes() {
         <div className="mx-auto max-w-2xl">
           {tab === "acquire" ? (
             <BondForm
-              inputLabel="Burn MONEY"
-              inputAsset="MONEY"
-              maxAvailable={moneyInWallet}
-              outputAsset="TRUSTNOTE"
+              inputLabel="Burn LEVEL"
+              inputAsset="LEVEL"
+              maxAvailable={pegInWallet}
+              outputAsset="BOND"
               rate={discountRate}
               rateLabel="Issuance Discount"
-              cta={action.isInFlight ? "Awaiting…" : "Issue Note Against MONEY"}
+              cta={action.isInFlight ? "Awaiting…" : "Issue Bond Against LEVEL"}
               disabled={acquireDisabled || action.isInFlight || !deployment}
               disabledReason={
                 marketState === "redemption"
-                  ? "The Trust trades above peg. Notes are not issued — they are redeemed."
+                  ? "The Trust trades above peg. Bonds are not issued — they are redeemed."
                   : marketState === "at-rest"
-                    ? "The Trust trades within the band. No Notes are issued here."
+                    ? "The Trust trades within the band. No Bonds are issued here."
                     : "The Trust has not yet entered a contraction."
               }
-              helper="Your MONEY is permanently destroyed. The Note holds a claim against future MONEY at premium. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your MONEY (only gas is spent). Retry if so."
+              helper="Your LEVEL is permanently destroyed. The Bond holds a claim against future LEVEL at premium. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your LEVEL (only gas is spent). Retry if so."
               onSubmit={async (s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
@@ -194,8 +194,8 @@ export function TrustNotes() {
                     : market.price;
                 action.submit({
                   amount,
-                  currentAllowance: bonds.moneyAllowance,
-                  token: deployment.money,
+                  currentAllowance: bonds.pegAllowance,
+                  token: deployment.peg,
                   spender: deployment.treasury,
                   call: {
                     address: deployment.treasury,
@@ -203,29 +203,29 @@ export function TrustNotes() {
                     functionName: "buyBonds",
                     args: [amount, freshPrice],
                   },
-                  label: "Acquire Trust Notes",
+                  label: "Acquire Bonds",
                   onSuccess: refetchAll,
                 });
               }}
             />
           ) : (
             <BondForm
-              inputLabel="Present TRUSTNOTE"
-              inputAsset="TRUSTNOTE"
-              maxAvailable={notesInWallet}
-              outputAsset="MONEY"
+              inputLabel="Present BOND"
+              inputAsset="BOND"
+              maxAvailable={bondsHeld}
+              outputAsset="LEVEL"
               rate={premiumRate}
               rateLabel="Maturity Premium"
-              cta={action.isInFlight ? "Awaiting…" : "Present Note · Claim MONEY"}
+              cta={action.isInFlight ? "Awaiting…" : "Present Bond · Claim LEVEL"}
               disabled={presentDisabled || action.isInFlight || !deployment}
               disabledReason={
                 marketState === "acquisition"
-                  ? "The Trust trades below peg. Notes are issued, not redeemed."
+                  ? "The Trust trades below peg. Bonds are issued, not redeemed."
                   : marketState === "at-rest"
-                    ? "The Trust must trade above one and one-tenth for premium. Below that, redemption is one-to-one and the Treasury must hold sufficient MONEY."
-                    : "The Treasury holds no MONEY reserve to redeem against."
+                    ? "The Trust must trade above one and one-tenth for premium. Below that, redemption is one-to-one and the Treasury must hold sufficient LEVEL."
+                    : "The Treasury holds no LEVEL reserve to redeem against."
               }
-              helper="MONEY is drawn from the Treasury's reserve, accumulated during prior expansion epochs. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your Notes (only gas is spent). Retry if so."
+              helper="LEVEL is drawn from the Treasury's reserve, accumulated during prior expansion epochs. The Treasury requires an exact price match — if the oracle updates between your read and your call, the transaction reverts and you keep your Bonds (only gas is spent). Retry if so."
               onSubmit={async (s) => {
                 if (!deployment) return;
                 const amount = parseAmount(s);
@@ -237,8 +237,8 @@ export function TrustNotes() {
                     : market.price;
                 action.submit({
                   amount,
-                  currentAllowance: bonds.trustNoteAllowance,
-                  token: deployment.trustNote,
+                  currentAllowance: bonds.bondAllowance,
+                  token: deployment.bond,
                   spender: deployment.treasury,
                   call: {
                     address: deployment.treasury,
@@ -246,7 +246,7 @@ export function TrustNotes() {
                     functionName: "redeemBonds",
                     args: [amount, freshPrice],
                   },
-                  label: "Present Trust Notes",
+                  label: "Present Bonds",
                   onSuccess: refetchAll,
                 });
               }}
@@ -263,14 +263,14 @@ export function TrustNotes() {
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <StatTile
-              label="Trust Notes · Held"
-              value={notesInWallet}
-              hint="$TRUSTNOTE · Awaiting Redemption"
+              label="Bonds · Held"
+              value={bondsHeld}
+              hint="$BOND · Awaiting Redemption"
             />
             <StatTile
-              label="MONEY · in Wallet"
-              value={moneyInWallet}
-              hint="$MONEY · Available to Burn"
+              label="LEVEL · in Wallet"
+              value={pegInWallet}
+              hint="$LEVEL · Available to Burn"
             />
           </div>
         </div>
@@ -283,13 +283,13 @@ export function TrustNotes() {
             The State of The Bond Market
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            <StatTile label="Notes Outstanding" value={noteSupply} hint="$TRUSTNOTE · Total" />
+            <StatTile label="Bonds Outstanding" value={bondSupply} hint="$BOND · Total" />
             <StatTile
               label="Treasury Reserve"
               value={treasuryReserve}
-              hint="$MONEY · Held for Redemption"
+              hint="$LEVEL · Held for Redemption"
             />
-            <StatTile label="Debt Ratio" value={debtRatio} hint="Notes / Circulating MONEY" />
+            <StatTile label="Debt Ratio" value={debtRatio} hint="Bonds / Circulating LEVEL" />
             <StatTile label="Debt Ceiling" value="35.00%" hint="Maximum Permitted" />
           </div>
         </div>
@@ -304,24 +304,24 @@ export function TrustNotes() {
               className="mb-2 font-display text-2xl italic text-deco-ivory md:text-3xl"
               style={{ letterSpacing: "0.06em" }}
             >
-              The Issuance and Redemption of Notes
+              The Issuance and Redemption of Bonds
             </h2>
             <div className="mx-auto mb-6 h-[2px] w-12 bg-deco-gold" aria-hidden />
             <div className="grid grid-cols-1 gap-6 text-left md:grid-cols-2">
               <div className="border-l border-deco-gold/40 pl-5">
                 <div className="label-deco mb-2 text-deco-gold">Issuance</div>
                 <p className="font-body text-sm italic text-deco-ivory-soft">
-                  Open only when MONEY trades below one Ether. Each epoch permits at most
-                  three per cent of circulating supply to be burned. Outstanding Notes
+                  Open only when LEVEL trades below one Ether. Each epoch permits at most
+                  three per cent of circulating supply to be burned. Outstanding Bonds
                   may not exceed thirty-five per cent of the supply.
                 </p>
               </div>
               <div className="border-l border-deco-gold/40 pl-5">
                 <div className="label-deco mb-2 text-deco-gold">Redemption</div>
                 <p className="font-body text-sm italic text-deco-ivory-soft">
-                  Open only when MONEY trades above one and one-hundredth Ether. The
-                  premium kicks in at one and one-tenth — below that threshold the Note
-                  redeems one-to-one. The Treasury must hold sufficient MONEY reserve.
+                  Open only when LEVEL trades above one and one-hundredth Ether. The
+                  premium kicks in at one and one-tenth — below that threshold the Bond
+                  redeems one-to-one. The Treasury must hold sufficient LEVEL reserve.
                 </p>
               </div>
             </div>

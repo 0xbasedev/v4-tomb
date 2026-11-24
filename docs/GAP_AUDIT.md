@@ -1,10 +1,10 @@
 # Gap audit — 2026-05-22
 
-End-to-end user-flow audit done after Base Sepolia deploy surfaced a critical missing piece (V4 LP token bridge). This document is the record of every cross-contract assumption gap found by walking through the user flow from "user has cbETH in their wallet" to "user claims MONEY rewards."
+End-to-end user-flow audit done after Base Sepolia deploy surfaced a critical missing piece (V4 LP token bridge). This document is the record of every cross-contract assumption gap found by walking through the user flow from "user has cbETH in their wallet" to "user claims LEVEL rewards."
 
 Sprints not yet started (14+) close most of these. The point of this doc is to make every gap explicit BEFORE more code ships, instead of discovering them after deploy.
 
-For severity, "Critical" = blocks mainnet launch on a chain that holds real user money. "Important" = should fix before audit handoff. "Polish" = track in `SECURITY.md` / `SPRINTS.md`.
+For severity, "Critical" = blocks mainnet launch on a chain that holds real user peg. "Important" = should fix before audit handoff. "Polish" = track in `SECURITY.md` / `SPRINTS.md`.
 
 ## Critical
 
@@ -19,23 +19,23 @@ For severity, "Critical" = blocks mainnet launch on a chain that holds real user
 - ERC-20 freely transferable (so it's stakeable in MasterChef pools)
 - 15 mock-based unit tests + 4 real-V4 Base-fork integration tests
 
-The deploy script now deploys the wrapper bound to the full-range MONEY/WETH pool, and registers it as a 100-weight stake entry in both Main and Share reward pools. End-to-end Sepolia dry-run completes cleanly (32M gas estimate).
+The deploy script now deploys the wrapper bound to the full-range LEVEL/WETH pool, and registers it as a 100-weight stake entry in both Main and Share reward pools. End-to-end Sepolia dry-run completes cleanly (32M gas estimate).
 
 **GenesisRewardPool was never blocked on the wrapper** — it accepts outside ERC-20 tokens (WETH, USDC) directly as the mini-ICO stake.
 
 ### 2. Initial V4 pool liquidity is zero — ✅ CLOSED 2026-05-22
-The V4 MONEY/WETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k MONEY allocation + team-owned WETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn MONEY have a place to swap it.
+The V4 LEVEL/WETH pool initializes with `sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0)` but no actual liquidity. First swap would fail. Team seeds initial LP from the airdrop wallet's 9k LEVEL allocation + team-owned WETH **simultaneously with the genesis pool opening**, so that genesis stakers who earn LEVEL have a place to swap it.
 
-**Closed by Sprint 17** (`script/SeedLiquidity.s.sol` + `test/integration/BaseForkSeedLiquidity.t.sol`). The script pulls MONEY + WETH from the operator's wallet via Permit2, computes liquidity via `LiquidityAmounts.getLiquidityForAmounts`, mints a full-range V4 position via `PositionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)`. NFT lands in operator's wallet. The position's tick range matches `V4PositionWrapper`'s exact bounds so the operator can later wrap it (and stake the shares in `MainRewardPool` for protocol-owned LP rewards, or transfer it to a burn address for permanent liquidity).
+**Closed by Sprint 17** (`script/SeedLiquidity.s.sol` + `test/integration/BaseForkSeedLiquidity.t.sol`). The script pulls LEVEL + WETH from the operator's wallet via Permit2, computes liquidity via `LiquidityAmounts.getLiquidityForAmounts`, mints a full-range V4 position via `PositionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR)`. NFT lands in operator's wallet. The position's tick range matches `V4PositionWrapper`'s exact bounds so the operator can later wrap it (and stake the shares in `MainRewardPool` for protocol-owned LP rewards, or transfer it to a burn address for permanent liquidity).
 
 3 fork tests verify: seeds an empty pool, the resulting NFT is wrappable, pool depth is established at tick 0 (no price drift on parity-equal deposit).
 
 ### 3. PegDefenseHook is materially weaker than Tomb's TaxOffice on fund flow — ✅ CLOSED 2026-05-22
 Tomb's `TaxOffice` did two things during contraction:
-1. Burned MONEY directly (reducing supply, aggressive peg defense).
+1. Burned LEVEL directly (reducing supply, aggressive peg defense).
 2. Routed tax revenue to a collector wallet that could feed Treasury reserves.
 
-Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it with `beforeSwapReturnDelta` to take a slice of MONEY swap input and either burn (below `burnThreshold = 1.10e18`) or route to Treasury (at or above).
+Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it with `beforeSwapReturnDelta` to take a slice of LEVEL swap input and either burn (below `burnThreshold = 1.10e18`) or route to Treasury (at or above).
 
 **Closed by:**
 - Design doc: `docs/HOOK_TAX_DESIGN.md` (commit `8befc42`)
@@ -45,7 +45,7 @@ Our `PegDefenseHook` originally only set a dynamic LP fee. Sprint 4b extended it
 - Fuzz invariants: 4 new tests (commit `b6d31cd` / pending)
 
 ### 4. Deployer is the operator of everything pre-Timelock — ✅ CLOSED 2026-05-22
-After the Sepolia deploy, the deployer EOA was `operator` / `trustees` of: Treasury, Boardroom, OldMoney, Estate, TrustNote, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool.
+After the Sepolia deploy, the deployer EOA was `operator` / `trustees` of: Treasury, Boardroom, PegToken, ShareToken, BondToken, Oracle, PegDefenseHook, GenesisRewardPool, MainRewardPool, ShareRewardPool.
 
 **Closed by Sprint 14.** `DeployTimelock.s.sol` + `RotateGovernanceQueue.s.sol` + `RotateGovernanceExecute.s.sol` walk the deployer through transferring every admin role to a Compound-style Timelock with a 24h delay (configurable). 6 integration tests in `test/integration/GovernanceRotation.t.sol` verify the ceremony works end-to-end. Final state: deployer EOA has no admin power; Timelock controls everything via queue/execute. See `docs/GOVERNANCE.md` for the full ceremony.
 
@@ -76,11 +76,11 @@ Should be automated as `script/OpenPools.s.sol` (one script that does all three 
 ### 16. Boardroom-empty bricks expansion
 **Found:** 2026-05-22 during the post-launch user-flow re-walk.
 
-When `Treasury.allocateSeigniorage()` enters the expansion branch (price > ceiling), it calls `_sendToBoardroom` → `Boardroom.allocateSeigniorage(amount)`. Boardroom requires `totalSupply() > 0` (matches Tomb). **If no ESTATE has been staked yet, this reverts — and since `checkEpoch`'s postfix runs AFTER the body, the epoch never advances.** Treasury is bricked until someone stakes.
+When `Treasury.allocateSeigniorage()` enters the expansion branch (price > ceiling), it calls `_sendToBoardroom` → `Boardroom.allocateSeigniorage(amount)`. Boardroom requires `totalSupply() > 0` (matches Tomb). **If no SQUARE has been staked yet, this reverts — and since `checkEpoch`'s postfix runs AFTER the body, the epoch never advances.** Treasury is bricked until someone stakes.
 
-At launch the only ESTATE in circulation is 1 unit on the deployer (constructor seed) + slow vesting drips to community/dev funds. The 59.5k ESTATE in `ShareRewardPool` is locked and only emits to stakers of that pool's stake tokens, which require the LP wrapper. So the brick window is real.
+At launch the only SQUARE in circulation is 1 unit on the deployer (constructor seed) + slow vesting drips to community/dev funds. The 59.5k SQUARE in `ShareRewardPool` is locked and only emits to stakers of that pool's stake tokens, which require the LP wrapper. So the brick window is real.
 
-**Status:** Operational fix — the launch ceremony must include staking at least 1 wei of ESTATE into the Boardroom from the deployer. Tomb handled this the same way (not a contract change, a ceremony step). Closed by `script/OpenLaunch.s.sol`.
+**Status:** Operational fix — the launch ceremony must include staking at least 1 wei of SQUARE into the Boardroom from the deployer. Tomb handled this the same way (not a contract change, a ceremony step). Closed by `script/OpenLaunch.s.sol`.
 
 ## Polish (tracked in `SECURITY.md`)
 
@@ -103,7 +103,7 @@ At launch the only ESTATE in circulation is 1 unit on the deployer (constructor 
 | `epochStart = vestingStart` default sequencing | ✓ |
 | `Addresses.hasCbeth()` returns false on testnet → MockCbeth path used | ✓ |
 | Hook permission bits encoded in deployed address (`0x...1080`) | ✓ |
-| All token decimals are 18 (cbETH, MONEY, ESTATE, TRUSTNOTE) — no USDC-6-decimal trap | ✓ |
+| All token decimals are 18 (cbETH, LEVEL, SQUARE, BOND) — no USDC-6-decimal trap | ✓ |
 | `LPFeeLibrary.DYNAMIC_FEE_FLAG` set on pool init so dynamic-fee override actually applies | ✓ |
 | Treasury `excludedFromTotalSupply` includes the reward pool addresses post-Sprint-13c | ✓ |
 

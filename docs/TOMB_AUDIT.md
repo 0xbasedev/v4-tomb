@@ -20,8 +20,8 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 
 | Variable | Tomb (SKILL) | Tomb (HOW_IT_WORKED) | Our value | Status |
 |---|---|---|---|---|
-| `tombPriceOne` / `moneyPriceOne` | `1e18` | — | `1e18` | ✓ MATCH |
-| `tombPriceCeiling` / `moneyPriceCeiling` | `1.01e18` | — | `moneyPriceOne * 101 / 100` = `1.01e18` | ✓ MATCH |
+| `tombPriceOne` / `pegPriceOne` | `1e18` | — | `1e18` | ✓ MATCH |
+| `tombPriceCeiling` / `pegPriceCeiling` | `1.01e18` | — | `pegPriceOne * 101 / 100` = `1.01e18` | ✓ MATCH |
 | Supply tiers (9 entries) | `0, 500K, 1M, 1.5M, 2M, 5M, 10M, 20M, 50M` ether | — | Exactly same | ✓ MATCH |
 | Max expansion tiers (9 entries) | `4.50%, 4.00%, 3.50%, 3.00%, 2.50%, 2.00%, 1.50%, 1.25%, 1.00%` | — | `450, 400, 350, 300, 250, 200, 150, 125, 100` (basis-points-of-percent) | ✓ MATCH |
 | `maxSupplyExpansionPercent` | (not stated) | — | `400` initial cap | ❓ verify — likely operator-set later |
@@ -39,9 +39,9 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 
 | Step | Tomb | Ours | Status |
 |---|---|---|---|
-| 1. `oracle.update()` | ✓ | `_updateMoneyPrice()` calls it | ✓ MATCH |
+| 1. `oracle.update()` | ✓ | `_updatePegPrice()` calls it | ✓ MATCH |
 | 2. Read `previousEpochPrice` | ✓ | ✓ | ✓ MATCH |
-| 3. Calculate circulating supply | ✓ | `getMoneyCirculatingSupply() - seigniorageSaved` | ✓ MATCH |
+| 3. Calculate circulating supply | ✓ | `getPegCirculatingSupply() - seigniorageSaved` | ✓ MATCH |
 | 4. **`_sendToBondTreasury(supply * bondSupplyExpansionPercent / 10000)`** | ✓ Tomb does this every epoch | **MISSING** | ❌ Part of BUG #3 |
 | 5. Bootstrap branch (epoch < bootstrap): `_sendToBoardroom(supply * bootstrapPct / 10000)` | ✓ | ✓ but bootstrapEpochs=0 so branch is dead | ❌ Part of BUG #1 |
 | 6. Expansion branch (price > ceiling): tier-capped mint + debt-phase split | ✓ | ✓ correct math + `_sendToBoardroom` | ✓ MATCH |
@@ -56,7 +56,7 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 | Check `tombPrice < tombPriceOne` | ✓ | ✓ | ✓ MATCH |
 | Check `_tombAmount <= epochSupplyContractionLeft` | ✓ | ✓ | ✓ MATCH |
 | Check `newBondSupply <= circulatingSupply * maxDebtRatioPercent / 10000` | ✓ | ✓ but uses 4500 not 3500 | Inherits BUG #2 |
-| Burn user MONEY, mint user TRUSTNOTE | ✓ | ✓ | ✓ MATCH |
+| Burn user LEVEL, mint user BOND | ✓ | ✓ | ✓ MATCH |
 | Decrement `epochSupplyContractionLeft` | ✓ | ✓ | ✓ MATCH |
 
 ### `redeemBonds()` flow
@@ -66,20 +66,20 @@ Each finding cross-references `docs/GAP_AUDIT.md` where applicable.
 | Check `tombPrice == targetPrice` | ✓ | ✓ | ✓ MATCH |
 | Check `tombPrice > tombPriceCeiling` | ✓ | ✓ | ✓ MATCH |
 | Treasury has enough TOMB | ✓ | ✓ | ✓ MATCH |
-| Burn user TRUSTNOTE, transfer MONEY | ✓ | ✓ | ✓ MATCH |
+| Burn user BOND, transfer LEVEL | ✓ | ✓ | ✓ MATCH |
 | Decrement `seigniorageSaved` | ✓ | ✓ via `Math.min` | ✓ MATCH |
 
 ### `checkOperator` modifier
 
 Tomb requires Treasury is operator of: TOMB, TBOND, TSHARE, Masonry.
-Ours requires Treasury is operator of: MONEY, TRUSTNOTE, ESTATE, Boardroom.
+Ours requires Treasury is operator of: LEVEL, BOND, SQUARE, Boardroom.
 ✓ MATCH.
 
 ### `_sendToBoardroom` (= Tomb's `_sendToMasonry`)
 
 | Step | Tomb | Ours | Status |
 |---|---|---|---|
-| Mint amount to Treasury self | ✓ | ✓ via `IBasisAsset(money).mint(address(this), amount)` | ✓ MATCH |
+| Mint amount to Treasury self | ✓ | ✓ via `IBasisAsset(peg).mint(address(this), amount)` | ✓ MATCH |
 | DAO fund cut | ✓ | ✓ via `daoFundSharedPercent` | ✓ MATCH |
 | Dev fund cut | ✓ | ✓ via `devFundSharedPercent` | ✓ MATCH |
 | Remainder to Boardroom | ✓ | ✓ via `forceApprove` + `boardroom.allocateSeigniorage()` | ✓ MATCH |
@@ -92,7 +92,7 @@ Ours requires Treasury is operator of: MONEY, TRUSTNOTE, ESTATE, Boardroom.
 
 **What it does:** With `bootstrapEpochs = 0`, the bootstrap branch in `allocateSeigniorage` is dead code. The protocol immediately enters the expansion/contraction logic, requiring TWAP-driven price action to mint anything to the Boardroom.
 
-**Tomb behavior:** Bootstrap of 12 (or 28, depending on version) epochs gives early Boardroom stakers guaranteed 4.5%-5% APY on their first interaction with the protocol — buys them in regardless of where MONEY trades vs peg. **This is load-bearing for getting ESTATE staked in Boardroom early**, which is required for the Treasury to function at all (gap #16, Boardroom-empty bricks expansion).
+**Tomb behavior:** Bootstrap of 12 (or 28, depending on version) epochs gives early Boardroom stakers guaranteed 4.5%-5% APY on their first interaction with the protocol — buys them in regardless of where LEVEL trades vs peg. **This is load-bearing for getting SQUARE staked in Boardroom early**, which is required for the Treasury to function at all (gap #16, Boardroom-empty bricks expansion).
 
 **Decision needed:**
 - **A.** Set `bootstrapEpochs = 28` and `bootstrapSupplyExpansionPercent = 450` (Tomb-faithful per `HOW_IT_WORKED.md`). Recommended.
@@ -101,7 +101,7 @@ Ours requires Treasury is operator of: MONEY, TRUSTNOTE, ESTATE, Boardroom.
 
 #### BUG #2 — `maxDebtRatioPercent = 4500` (45%) vs Tomb's 3500 (35%)
 
-**What it does:** Allows more TRUSTNOTE to be issued during contraction (up to 45% of MONEY circulating supply vs Tomb's 35%).
+**What it does:** Allows more BOND to be issued during contraction (up to 45% of LEVEL circulating supply vs Tomb's 35%).
 
 **Risk:** A higher debt cap means the Treasury has to refill more before bondholders can redeem at peg. During sustained contraction, this means bondholders wait longer / risk Treasury insolvency. Tomb already had issues with this in 2022 bear market.
 
@@ -111,7 +111,7 @@ Ours requires Treasury is operator of: MONEY, TRUSTNOTE, ESTATE, Boardroom.
 
 #### BUG #3 — `bondSupplyExpansionPercent` / POL bondTreasury MISSING
 
-**What it does:** Tomb mints `5% of circulating supply` to a separate `bondTreasury` address each epoch in `_sendToBondTreasury`. This funds **Protocol-Owned Liquidity** bonds — a parallel bond mechanism distinct from the contraction-bond TRUSTNOTE flow. (Reference: `docs/tomb-skill/references/Treasury.sol.md`, `_sendToBondTreasury(amount)`.)
+**What it does:** Tomb mints `5% of circulating supply` to a separate `bondTreasury` address each epoch in `_sendToBondTreasury`. This funds **Protocol-Owned Liquidity** bonds — a parallel bond mechanism distinct from the contraction-bond BOND flow. (Reference: `docs/tomb-skill/references/Treasury.sol.md`, `_sendToBondTreasury(amount)`.)
 
 **Our state:** We don't implement this at all. The `Genesis` struct doesn't have a `bondTreasury` field, `_sendToBondTreasury` doesn't exist, no field for `bondSupplyExpansionPercent`.
 
@@ -149,7 +149,7 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 
 ---
 
-## $MONEY (was TOMB) — ✓ CLEAN
+## $LEVEL (was TOMB) — ✓ CLEAN
 
 - `mint(recipient, amount) returns (bool)` trustees-only ✓ MATCH Tomb signature
 - `burnFrom(account, amount)` trustees-only ✓ MATCH (Tomb's stricter restriction over OZ default)
@@ -160,7 +160,7 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 - ⊕ ADDITIVE: `ERC20Permit` (EIP-2612), themed `Coined` event, custom errors, Ownable2Step
 - ⚠️ DEVIATION: transfer-tax mechanism moved to V4 hook (gap #3) — documented
 
-## $ESTATE (was TSHARE) — ✓ CLEAN
+## $SQUARE (was TSHARE) — ✓ CLEAN
 
 - Hard cap 70k = 59.5k + 5.5k + 5k ✓ MATCH
 - VESTING_DURATION = 365 days ✓ MATCH
@@ -169,9 +169,9 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 - Constructor mints 1 unit to deployer ✓ MATCH
 - `setTreasuryFund` / `setDevFund` gated to `devFund` ✓ MATCH (Tomb quirk preserved)
 - ⊕ ADDITIVE: ERC20Permit, custom errors, Ownable2Step
-- ❓ NOTE: SKILL.md mentions BShare has public `mint(recipient, amount)` onlyOperator; the actual bomb-contracts BShare source uses pre-funded distributeReward and does NOT expose public mint(). Our Estate matches the actual source, not the SKILL claim. Likely a SKILL error.
+- ❓ NOTE: SKILL.md mentions BShare has public `mint(recipient, amount)` onlyOperator; the actual bomb-contracts BShare source uses pre-funded distributeReward and does NOT expose public mint(). Our ShareToken matches the actual source, not the SKILL claim. Likely a SKILL error.
 
-## $TRUSTNOTE (was TBOND) — ✓ CLEAN
+## $BOND (was TBOND) — ✓ CLEAN
 
 - ERC20Burnable + Trustees ✓ MATCH
 - No hard cap ✓ MATCH
@@ -196,7 +196,7 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 - `TOTAL_REWARDS = 11_000 ether` ✓ MATCH
 - `RUNNING_TIME = 1 days` ✓ MATCH
 - Accepts arbitrary outside ERC-20 stake tokens via operator `.add()` ✓ MATCH (Tomb-faithful mini-ICO)
-- `governanceRecoverUnsupported` protects MONEY + every staked LP for 90 days post-end ✓ MATCH
+- `governanceRecoverUnsupported` protects LEVEL + every staked LP for 90 days post-end ✓ MATCH
 - Per-pool reward debt accounting ✓ MATCH (MasterChef pattern)
 
 ## MainRewardPool — ✓ CLEAN
@@ -213,11 +213,11 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
   - Pool 0: TOMB-FTM LP → 35,700 TSHARE (60%)
   - Pool 1: TSHARE-FTM LP → 23,800 TSHARE (40%)
 
-  Our `ShareRewardPool` mechanically supports multiple pools (operator can call `.add()` for each LP token), but to be Tomb-faithful we'd need to launch a SECOND V4 pool (ESTATE/WETH) and a SECOND LP wrapper for it. Without that, Tomb's incentive to maintain ESTATE/native liquidity is missing — ESTATE has no AMM market.
+  Our `ShareRewardPool` mechanically supports multiple pools (operator can call `.add()` for each LP token), but to be Tomb-faithful we'd need to launch a SECOND V4 pool (SQUARE/WETH) and a SECOND LP wrapper for it. Without that, Tomb's incentive to maintain SQUARE/native liquidity is missing — SQUARE has no AMM market.
 
-  **Decision: how do we want ESTATE to trade?**
-  - **A.** Build the second V4 pool (ESTATE/WETH) + second LP wrapper. Full Tomb-fidelity. Adds work to Sprint 16. Recommended for a long-term protocol.
-  - **B.** Ship with one pool (MONEY/WETH LP only, weight 100%). ESTATE has no AMM market — trades only via direct transfer or off-chain OTC. Severely limits price discovery. Don't recommend.
+  **Decision: how do we want SQUARE to trade?**
+  - **A.** Build the second V4 pool (SQUARE/WETH) + second LP wrapper. Full Tomb-fidelity. Adds work to Sprint 16. Recommended for a long-term protocol.
+  - **B.** Ship with one pool (LEVEL/WETH LP only, weight 100%). SQUARE has no AMM market — trades only via direct transfer or off-chain OTC. Severely limits price discovery. Don't recommend.
   - **C.** Defer — open with one pool, add second pool by operator action later. Acceptable middle ground; just don't forget.
 
 ## Timelock — ✓ CLEAN
@@ -245,11 +245,11 @@ This is a strategic call. POL bonds (à la Olympus) accumulate protocol-controll
 Our `PegDefenseHook`:
 - Only applies on V4 pool swaps (not all transfers — narrower scope)
 - Returns a dynamic LP fee — higher cost discourages selling
-- **No MONEY burned. No revenue to Treasury.** All proceeds go to LPs.
+- **No LEVEL burned. No revenue to Treasury.** All proceeds go to LPs.
 
 **Decision needed (gap #3):**
 - **A.** Accept the softening, document in `HOOKS.md`, ship.
-- **B.** Build Sprint 4b — extend the hook with `beforeSwapReturnDelta` to take a slice of swap input as MONEY, burn it (matches Tomb's burn-during-deep-contraction), or route to Treasury (matches Tomb's tax-collector flow). **Recommended** for production safety; restores Tomb's strongest peg-defense lever.
+- **B.** Build Sprint 4b — extend the hook with `beforeSwapReturnDelta` to take a slice of swap input as LEVEL, burn it (matches Tomb's burn-during-deep-contraction), or route to Treasury (matches Tomb's tax-collector flow). **Recommended** for production safety; restores Tomb's strongest peg-defense lever.
 
 ---
 
@@ -257,11 +257,11 @@ Our `PegDefenseHook`:
 
 ## Final consolidated decisions matrix
 
-Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Boardroom`, `src/core/Distributor`, `src/tokens/OldMoney`, `src/tokens/Estate`, `src/tokens/TrustNote`, `src/oracle/Oracle`, `src/governance/Timelock`, `src/hooks/PegDefenseHook`, `src/distribution/GenesisRewardPool`, `src/distribution/MainRewardPool`, `src/distribution/ShareRewardPool`).
+Audit complete across all 12 contracts (`src/core/Treasury`, `src/core/Boardroom`, `src/core/Distributor`, `src/tokens/PegToken`, `src/tokens/ShareToken`, `src/tokens/BondToken`, `src/oracle/Oracle`, `src/governance/Timelock`, `src/hooks/PegDefenseHook`, `src/distribution/GenesisRewardPool`, `src/distribution/MainRewardPool`, `src/distribution/ShareRewardPool`).
 
 ### 7 contracts found CLEAN
 
-OldMoney, Estate, TrustNote, Oracle, GenesisRewardPool, MainRewardPool, Timelock, Distributor, Boardroom — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
+PegToken, ShareToken, BondToken, Oracle, GenesisRewardPool, MainRewardPool, Timelock, Distributor, Boardroom — all match Tomb's documented behavior in every place we checked. Additive modernizations (Permit, custom errors, Ownable2Step) preserve Tomb behavior.
 
 ### Decisions (signed off 2026-05-22)
 
@@ -271,7 +271,7 @@ OldMoney, Estate, TrustNote, Oracle, GenesisRewardPool, MainRewardPool, Timelock
 | BUG #2 | Treasury: `maxDebtRatioPercent = 4500` | MEDIUM | **FIXED** — set to 3500 per Tomb | ✅ done (commit pending) |
 | BUG #3 | Treasury: POL `bondTreasury` mechanism MISSING | MEDIUM | **DEFERRED** — documented as v1 deliberate omission; core peg mechanics function without it; future Treasury upgrade may add | ✅ documented in Treasury.sol NatSpec |
 | Gap #3 | PegDefenseHook doesn't burn/route value | HIGH | **BUILD SPRINT 4B** — `beforeSwapReturnDelta` tax routing | ⏳ pending implementation |
-| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when ESTATE/WETH V4 pool + wrapper exists | ⏳ pending |
+| Gap #17 | ShareRewardPool single-pool vs Tomb's two-pool | MEDIUM | **DEFER** — operator adds second pool later when SQUARE/WETH V4 pool + wrapper exists | ⏳ pending |
 | Peg | cbETH → WETH | Decided | **DONE** — commit `c1fd029` | ✅ done |
 
 ### What's NOT a decision (just execution)
@@ -289,7 +289,7 @@ If user picks the recommendations above:
 1. **Code-change sprint** (1 turn): Treasury edits for BUG #1 + BUG #2. Document BUG #3 deviation in NatSpec + GAP_AUDIT. Run full suite.
 2. **WETH peg migration** (1-2 turns): Addresses.sol rename, MockCbeth deletion, Deploy.s.sol updates, fork test updates, doc updates.
 3. **Sprint 4b** (multi-turn, 3-4): PegDefenseHook tax routing with `beforeSwapReturnDelta`. Design doc first (Bunni V2 source read for returnDelta pattern reference), then contract + tests + fork tests + invariants.
-4. **Sprint 16** (multi-turn, 4-5): LiquidityVault for MONEY/WETH V4 LP → ERC-20 wrapper.
+4. **Sprint 16** (multi-turn, 4-5): LiquidityVault for LEVEL/WETH V4 LP → ERC-20 wrapper.
 5. **Redeploy Base Sepolia** (1 turn): Run updated Deploy + OpenLaunch scripts.
 6. **Pre-mainnet gates**: Coverage report, audit invariants 10k/200, professional audit, mainnet.
 

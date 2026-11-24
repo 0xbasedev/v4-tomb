@@ -8,15 +8,15 @@ import { useDeployment } from "./useDeployment";
  * Composite Boardroom (The Club) state read.
  *
  * Returns:
- *   totalStaked       — Boardroom.totalSupply (all members' ESTATE)
+ *   totalStaked       — Boardroom.totalSupply (all members' SQUARE)
  *   yourStake         — Boardroom.balanceOf(you)
- *   earned            — claimable MONEY for you
+ *   earned            — claimable LEVEL for you
  *   canWithdraw       — false until withdrawLockupEpochs since last stake
  *   canClaimReward    — false until rewardLockupEpochs since last stake
  *   epochTimerStart   — epoch at last stake (used to compute remaining lockup)
  *   withdrawLockupEpochs / rewardLockupEpochs — protocol parameters
- *   estateInWallet    — ESTATE.balanceOf(you), for the stake input's MAX
- *   estateAllowance   — ESTATE → Boardroom allowance, for the approve gate (T9)
+ *   shareInWallet    — SQUARE.balanceOf(you), for the stake input's MAX
+ *   shareAllowance   — SQUARE → Boardroom allowance, for the approve gate (T9)
  *
  * Anonymous browsing (no wallet) returns zero/false for the user-specific
  * fields but still surfaces the protocol parameters.
@@ -39,9 +39,9 @@ export function useBoardroom() {
           { address: deployment.boardroom, abi: boardroomAbi, functionName: "members", args: [user] },
           { address: deployment.boardroom, abi: boardroomAbi, functionName: "withdrawLockupEpochs" },
           { address: deployment.boardroom, abi: boardroomAbi, functionName: "rewardLockupEpochs" },
-          { address: deployment.estate, abi: erc20Abi, functionName: "balanceOf", args: [user] },
+          { address: deployment.share, abi: erc20Abi, functionName: "balanceOf", args: [user] },
           {
-            address: deployment.estate,
+            address: deployment.share,
             abi: erc20Abi,
             functionName: "allowance",
             args: [user, deployment.boardroom],
@@ -60,8 +60,8 @@ export function useBoardroom() {
   const epochTimerStart = member?.[2]; // members returns [lastSnapshotIndex, rewardEarned, epochTimerStart]
   const withdrawLockupEpochs = data?.[6];
   const rewardLockupEpochs = data?.[7];
-  const estateInWallet = data?.[8];
-  const estateAllowance = data?.[9];
+  const shareInWallet = data?.[8];
+  const shareAllowance = data?.[9];
 
   return {
     totalStaked,
@@ -72,8 +72,8 @@ export function useBoardroom() {
     epochTimerStart,
     withdrawLockupEpochs,
     rewardLockupEpochs,
-    estateInWallet,
-    estateAllowance,
+    shareInWallet,
+    shareAllowance,
     isLoading,
     isError,
     refetch,

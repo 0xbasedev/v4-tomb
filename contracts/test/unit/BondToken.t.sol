@@ -2,19 +2,19 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {TrustNote} from "../../src/tokens/TrustNote.sol";
+import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract TrustNoteTest is BaseTest {
-    TrustNote internal bond;
+contract BondTokenTest is BaseTest {
+    BondToken internal bond;
 
     function setUp() public override {
         super.setUp();
         vm.prank(owner);
-        bond = new TrustNote();
+        bond = new BondToken();
         vm.prank(owner);
         bond.transferTrustees(trustees);
     }
@@ -24,14 +24,14 @@ contract TrustNoteTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(bond.name(), "Trust Note");
-        assertEq(bond.symbol(), "TRUSTNOTE");
+        assertEq(bond.name(), "Bond");
+        assertEq(bond.symbol(), "BOND");
         assertEq(bond.decimals(), 18);
     }
 
     function test_Constructor_NoInitialSupply() public {
         vm.prank(alice);
-        TrustNote fresh = new TrustNote();
+        BondToken fresh = new BondToken();
         assertEq(fresh.totalSupply(), 0);
         assertEq(fresh.balanceOf(alice), 0);
         assertEq(fresh.owner(), alice);

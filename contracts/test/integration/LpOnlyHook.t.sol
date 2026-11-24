@@ -30,7 +30,7 @@ contract LpOnlyHookTest is HookPoolFixture {
     LpOnlyHook internal lpHook;
     PoolKey internal pairKey;
 
-    function _moneyIsCurrency0() internal pure override returns (bool) {
+    function _pegIsCurrency0() internal pure override returns (bool) {
         return true;
     }
 
@@ -43,7 +43,7 @@ contract LpOnlyHookTest is HookPoolFixture {
         address at = address(LpOnlyHookPermissions.FLAGS | (uint160(0xF00D) << 144));
         deployCodeTo(
             "LpOnlyHook.sol:LpOnlyHook",
-            abi.encode(IPoolManager(address(manager)), address(money), address(share), address(this)),
+            abi.encode(IPoolManager(address(manager)), address(peg), address(share), address(this)),
             at
         );
         lpHook = LpOnlyHook(at);
@@ -62,9 +62,9 @@ contract LpOnlyHookTest is HookPoolFixture {
     function _pairKey(
         int24 spacing
     ) internal view returns (PoolKey memory) {
-        (Currency c0, Currency c1) = address(money) < address(share)
-            ? (Currency.wrap(address(money)), Currency.wrap(address(share)))
-            : (Currency.wrap(address(share)), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < address(share)
+            ? (Currency.wrap(address(peg)), Currency.wrap(address(share)))
+            : (Currency.wrap(address(share)), Currency.wrap(address(peg)));
         return PoolKey({currency0: c0, currency1: c1, fee: 0, tickSpacing: spacing, hooks: IHooks(address(lpHook))});
     }
 
@@ -118,9 +118,9 @@ contract LpOnlyHookTest is HookPoolFixture {
     }
 
     function test_RejectsAPoolOfOtherTokens() public {
-        (Currency c0, Currency c1) = address(money) < address(weth)
-            ? (Currency.wrap(address(money)), Currency.wrap(address(weth)))
-            : (Currency.wrap(address(weth)), Currency.wrap(address(money)));
+        (Currency c0, Currency c1) = address(peg) < address(weth)
+            ? (Currency.wrap(address(peg)), Currency.wrap(address(weth)))
+            : (Currency.wrap(address(weth)), Currency.wrap(address(peg)));
         PoolKey memory wrong =
             PoolKey({currency0: c0, currency1: c1, fee: 0, tickSpacing: 60, hooks: IHooks(address(lpHook))});
         vm.expectRevert();
@@ -165,7 +165,7 @@ contract LpOnlyHookTest is HookPoolFixture {
         SwapParams[] memory swaps = new SwapParams[](1);
         keys[0] = pairKey;
         swaps[0] = _params(true, -1 ether);
-        money.approve(address(batchRouter), type(uint256).max);
+        peg.approve(address(batchRouter), type(uint256).max);
         vm.expectRevert();
         batchRouter.swapBatch(keys, swaps);
     }
@@ -179,14 +179,14 @@ contract LpOnlyHookTest is HookPoolFixture {
         _modify(address(this), 10_000 ether);
         (uint160 priceBefore,,,) = IPoolManager(address(manager)).getSlot0(pairKey.toId());
 
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 pegBefore = peg.balanceOf(alice);
         uint256 shareBefore = share.balanceOf(alice);
 
         _modify(alice, 500 ether);
-        uint256 moneyIn = moneyBefore - money.balanceOf(alice);
+        uint256 pegIn = pegBefore - peg.balanceOf(alice);
         uint256 shareIn = shareBefore - share.balanceOf(alice);
-        assertGt(moneyIn, 0);
-        assertApproxEqAbs(moneyIn, shareIn, 2, "deposit is at the fixed opening ratio");
+        assertGt(pegIn, 0);
+        assertApproxEqAbs(pegIn, shareIn, 2, "deposit is at the fixed opening ratio");
 
         // Other people come and go in between; with no trading it changes nothing.
         _modify(bob, 2000 ether);
@@ -194,7 +194,7 @@ contract LpOnlyHookTest is HookPoolFixture {
         _modify(bob, -2000 ether);
 
         _modify(alice, -500 ether);
-        assertApproxEqAbs(money.balanceOf(alice), moneyBefore, 2, "all MONEY returned (rounding only)");
+        assertApproxEqAbs(peg.balanceOf(alice), pegBefore, 2, "all PEG returned (rounding only)");
         assertApproxEqAbs(share.balanceOf(alice), shareBefore, 2, "all SHARE returned (rounding only)");
 
         (uint160 priceAfter,,,) = IPoolManager(address(manager)).getSlot0(pairKey.toId());

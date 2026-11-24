@@ -2,7 +2,7 @@ export const infrastructureKeys = [
   'weth', 'poolManager', 'positionManager', 'permit2', 'universalRouter', 'create2Deployer',
 ];
 export const deploymentKeys = [
-  'money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
+  'peg', 'share', 'bond', 'treasury', 'boardroom', 'oracle', 'hook', 'shareBuybackHook', 'lpWrapper',
   'pairLpHook', 'pairLpWrapper',
   'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'timelock', 'miniSwapRouter',
   ...infrastructureKeys.filter((key) => key !== 'create2Deployer'),
@@ -62,12 +62,12 @@ export function parseNetworks(document) {
     if (deployment.shareBuybackHook.toLowerCase() === deployment.hook.toLowerCase()) {
       fail('hook and shareBuybackHook must differ');
     }
-    // The MONEY/ESTATE staking pool must sit behind the swap-blocking hook: beforeInitialize + beforeSwap.
+    // The PEG/SHARE staking pool must sit behind the swap-blocking hook: beforeInitialize + beforeSwap.
     if ((BigInt(deployment.pairLpHook) & 0x3fffn) !== 0x2080n) fail('pairLpHook permission bits must be 0x2080');
     if (deployment.pairLpWrapper.toLowerCase() === deployment.lpWrapper.toLowerCase()) {
       fail('lpWrapper and pairLpWrapper must differ');
     }
-    if (deployment.money.toLowerCase() === deployment.weth.toLowerCase()) fail('MONEY and WETH must differ');
+    if (deployment.peg.toLowerCase() === deployment.weth.toLowerCase()) fail('PEG and WETH must differ');
   }
   return document.networks;
 }
@@ -79,8 +79,8 @@ export function transactionUrl(networks, chainId, hash) {
 }
 
 /** PoolManager orders currencies by address, independently of symbol or chain. */
-export function pegReserves(money, weth, amount0, amount1) {
-  return BigInt(weth) < BigInt(money)
-    ? { money: amount1, weth: amount0 }
-    : { money: amount0, weth: amount1 };
+export function pegReserves(peg, weth, amount0, amount1) {
+  return BigInt(weth) < BigInt(peg)
+    ? { peg: amount1, weth: amount0 }
+    : { peg: amount0, weth: amount1 };
 }

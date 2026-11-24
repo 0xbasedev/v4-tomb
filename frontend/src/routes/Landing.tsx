@@ -13,7 +13,7 @@ import { Sunburst } from "@/components/Sunburst";
  *   1. Minimal nav — brand mark + ConnectButton
  *   2. Hero — sunburst behind metallic OLD MONEY title, rule trios above and below,
  *      formal subhead, dual CTA. Stats panel (six tiles) directly below.
- *   3. "The Three Estates" — three pillar cards equal in weight, framed-within-framed
+ *   3. "The Three SQUARE" — three pillar cards equal in weight, framed-within-framed
  *   4. "The Mechanism" — three formal step panels explaining the protocol
  *   5. Footer — closing rule trio and house signature
  *
@@ -90,17 +90,17 @@ export function Landing() {
             The Ledger · The Protocol at a Glance
           </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <StatTile label="MONEY · Price" value="1.0000" hint="ETH · TWAP" />
+            <StatTile label="LEVEL · Price" value="1.0000" hint="ETH · TWAP" />
             <StatTile label="Peg" value="100.00%" hint="Within The Band" />
-            <StatTile label="Supply" value="160,001" hint="MONEY in Circulation" />
-            <StatTile label="Treasury Reserve" value="0" hint="MONEY · Held" />
+            <StatTile label="Supply" value="160,001" hint="LEVEL in Circulation" />
+            <StatTile label="Treasury Reserve" value="0" hint="LEVEL · Held" />
             <StatTile label="Next Epoch" value="06:00:00" hint="HH : MM : SS" />
             <StatTile label="Bond Rate" value="—" hint="No Issuance Active" />
           </div>
         </div>
       </section>
 
-      {/* ===== The Three Estates ===== */}
+      {/* ===== The Three SQUARE ===== */}
       <section className="relative px-6 py-24 md:px-12 md:py-32">
         <div className="mx-auto max-w-4xl">
           <div className="label-deco mb-3 text-deco-gold-dark">
@@ -109,7 +109,7 @@ export function Landing() {
           <h2
             className="gold-text mb-4 font-display italic text-section"
           >
-            The Three Estates
+            The Three SQUARE
           </h2>
           <p
             className="mx-auto max-w-xl font-headline text-lg italic text-deco-ivory-soft md:text-xl"
@@ -123,23 +123,23 @@ export function Landing() {
             <PillarCard
               numeral="I"
               title="The Club"
-              blurb="Stake $ESTATE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
+              blurb="Stake $SQUARE within the Boardroom. Each expansion epoch, seigniorage flows pro-rata to the Members. Six-epoch withdrawal. Three-epoch reward lockup."
               cta="Take a Seat"
               to="/club"
             />
             <PillarCard
               numeral="II"
               title="The Vault"
-              blurb="Provide MONEY-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand MONEY across nine days."
+              blurb="Provide LEVEL-WETH liquidity to the V4 pool. Wrap the position. Stake the certificate. One hundred forty thousand LEVEL across nine days."
               cta="Open The Vault"
               to="/vault"
             />
             <PillarCard
               numeral="III"
-              title="Trust Notes"
-              blurb="When MONEY falls below peg, redeem it for Trust Notes at a discount. When the Trust recovers above one and one-tenth, redeem for a premium."
-              cta="View The Notes"
-              to="/notes"
+              title="Bonds"
+              blurb="When LEVEL falls below peg, redeem it for Bonds at a discount. When the Trust recovers above one and one-tenth, redeem for a premium."
+              cta="View The Bonds"
+              to="/bonds"
             />
           </div>
         </div>
@@ -170,7 +170,7 @@ export function Landing() {
               </h3>
               <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
               <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                Stake your Ether in the Genesis Pool for twenty-four hours and receive $MONEY.
+                Stake your Ether in the Genesis Pool for twenty-four hours and receive $LEVEL.
                 Or purchase upon the V4 pool. Or provide liquidity and earn.
               </p>
             </div>
@@ -184,7 +184,7 @@ export function Landing() {
               </h3>
               <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
               <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
-                Acquire $ESTATE. Stake at The Club. When the Trust expands above peg,
+                Acquire $SQUARE. Stake at The Club. When the Trust expands above peg,
                 seigniorage is distributed to The Members. Patience is rewarded.
               </p>
             </div>
@@ -199,7 +199,7 @@ export function Landing() {
               <div className="mx-auto mb-5 h-[1px] w-12 bg-deco-gold" aria-hidden />
               <p className="mx-auto max-w-xs font-body text-base text-deco-ivory-soft">
                 When the Trust falters below peg, the Hook burns supply on every sale.
-                Trust Notes contract circulation further. The peg is restored.
+                Bonds contract circulation further. The peg is restored.
               </p>
             </div>
           </div>

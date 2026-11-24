@@ -25,7 +25,7 @@ import {IPriceSource} from "../interfaces/IPriceSource.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 import {Trustees} from "../governance/Trustees.sol";
 
-/// @dev Minimal interface used to invoke the public `burn(uint256)` on $MONEY (OldMoney).
+/// @dev Minimal interface used to invoke the public `burn(uint256)` on $PEG (PegToken).
 ///      Defined inline so this hook doesn't take a hard import dependency on the token.
 interface IBurnable {
     function burn(
@@ -44,7 +44,7 @@ library PegDefenseHookPermissions {
 
 /**
  * @title PegDefenseHook
- * @notice V4 hook attached to the MONEY/WETH pool. Three jobs:
+ * @notice V4 hook attached to the PEG/WETH pool. Three jobs:
  *
  *           1. **Observation recording** — integrates tick * time across swaps, exposing
  *              `getCurrentTickCumulative()` via the IPriceSource interface so our Oracle
@@ -60,7 +60,7 @@ library PegDefenseHookPermissions {
  *              (contraction): high fee, discourages selling. Deep below peg: even higher.
  *
  *           3. **Fire Tax — sell tax keyed to the TWAP, with burn-during-contraction** —
- *              sells of MONEY pay a MONEY-denominated tax. The schedule steps DOWN as the
+ *              sells of PEG pay a PEG-denominated tax. The schedule steps DOWN as the
  *              peg strengthens, and can never exceed `MAX_TAX_BPS` (12%):
  *
  *                  TWAP <  1.12   → 12%
@@ -78,10 +78,10 @@ library PegDefenseHookPermissions {
  *              `autoCalculateTax` is off by default; Trustees flips it on post-launch.
  *
  *              Both swap modes charge the same effective rate `r` on the seller's gross
- *              MONEY outlay `G`:
- *                - exact-input  (MONEY is the specified token): assessed in `beforeSwap`,
+ *              PEG outlay `G`:
+ *                - exact-input  (PEG is the specified token): assessed in `beforeSwap`,
  *                  `tax = G * r`, and the pool swaps `G - tax`.
- *                - exact-output (MONEY is the unspecified token): the MONEY the pool needs
+ *                - exact-output (PEG is the unspecified token): the PEG the pool needs
  *                  (`N`) is only known after the swap, so it is assessed in `afterSwap` as
  *                  `tax = N * r / (1 - r)`, which makes `tax / (N + tax) == r`.
  *
@@ -89,8 +89,8 @@ library PegDefenseHookPermissions {
  *         TaxOffice + tax tiers + transferFrom override are entirely replaced by this hook.
  *         Tomb taxed all transfers symmetrically; we tax only sells through the V4 pool
  *         (the economic intent was always sell-side — Tomb's symmetry was a side-effect of
- *         intercepting transferFrom). Wallet-to-wallet MONEY transfers see no friction, and
- *         MONEY traded in any OTHER pool is outside this hook's reach by design.
+ *         intercepting transferFrom). Wallet-to-wallet PEG transfers see no friction, and
+ *         PEG traded in any OTHER pool is outside this hook's reach by design.
  *
  *         Hook permissions — low-14-bit pattern = 0x10CC (see `PERMISSION_FLAGS`):
  *           AFTER_INITIALIZE      = 0x1000
@@ -124,12 +124,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     // Immutables / pool binding
     // ------------------------------------------------------------------
 
-    /// @notice The MONEY token. The hook expects to be installed on a pool where one side
-    ///         is MONEY and the other is the paired peg asset (WETH on Base).
-    address public immutable money;
+    /// @notice The PEG token. The hook expects to be installed on a pool where one side
+    ///         is PEG and the other is the paired peg asset (WETH on Base).
+    address public immutable peg;
 
-    /// @notice True if MONEY sorts as currency0 in the pool key. Derived in afterInitialize.
-    bool public moneyIsCurrency0;
+    /// @notice True if PEG sorts as currency0 in the pool key. Derived in afterInitialize.
+    bool public pegIsCurrency0;
 
     /// @notice Set in afterInitialize. Used to read the live pool state and to validate
     ///         subsequent hook calls.
@@ -171,7 +171,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ///         after the protocol is stable).
     bool public autoCalculateTax;
 
-    /// @notice Price thresholds (1e18-scaled WETH per MONEY) defining the tax tiers.
+    /// @notice Price thresholds (1e18-scaled WETH per PEG) defining the tax tiers.
     ///         Walked high → low; the first one the tax price reaches sets the rate.
     uint256[] public taxTiersTwaps;
 
@@ -193,7 +193,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     /// @notice Lifetime tax accounting. At all times:
     ///           totalTaxAssessed == totalTaxBurned + totalTaxRouted
     ///                               + pendingTaxBurn + pendingTaxRoute
-    ///         and the hook's ERC-6909 MONEY claims on the PoolManager cover the two
+    ///         and the hook's ERC-6909 PEG claims on the PoolManager cover the two
     ///         pending amounts in full.
     uint256 public totalTaxAssessed;
     uint256 public totalTaxBurned;
@@ -204,7 +204,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     uint256 public burnThreshold = 1.1e18;
 
     /// @notice Source of the TWAP the tax tier and burn threshold are read against.
-    ///         `consult(money, 1e18)` must return WETH per MONEY, 1e18-scaled. While unset,
+    ///         `consult(peg, 1e18)` must return WETH per PEG, 1e18-scaled. While unset,
     ///         or while it reports zero (no completed epoch yet) or reverts, the pool's
     ///         pre-swap spot price is used instead.
     IOracle public taxOracle;
@@ -224,7 +224,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     mapping(address => bool) public excludedAddresses;
 
     /// @notice Tax owed to the burn that could not be pulled out of the PoolManager at swap
-    ///         time. Held as ERC-6909 MONEY claims on the PoolManager until
+    ///         time. Held as ERC-6909 PEG claims on the PoolManager until
     ///         `settleDeferredTax` redeems them. See `_collectTax`.
     uint256 public pendingTaxBurn;
 
@@ -235,7 +235,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     // Events
     // ------------------------------------------------------------------
 
-    event Bound(PoolId indexed poolId, bool moneyIsCurrency0, int24 initialTick);
+    event Bound(PoolId indexed poolId, bool pegIsCurrency0, int24 initialTick);
     event Observed(int56 tickCumulative, int24 lastTick, uint32 timestamp);
     event PegTickSet(int24 previous, int24 next);
     event BandTicksSet(int24 previous, int24 next);
@@ -261,7 +261,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
     error AlreadyBound();
     error UnknownPool();
-    error PoolMissingMoney();
+    error PoolMissingPeg();
     error FeeTooHigh();
     error BandTicksMustBePositive();
 
@@ -277,10 +277,10 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
     constructor(
         IPoolManager _poolManager,
-        address _money,
+        address _peg,
         address _initialTrustees
     ) BaseV4Hook(_poolManager) {
-        money = _money;
+        peg = _peg;
 
         // Override the Trustees() base-constructor's msg.sender assignment. Required for
         // CREATE2-via-broadcast deploys (e.g., `new Hook{salt:}(...)` inside
@@ -313,8 +313,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
             afterSwap: true, // records the post-swap tick; taxes exact-output sells
             beforeDonate: false,
             afterDonate: false,
-            beforeSwapReturnDelta: true, // exact-input sell tax (MONEY is the specified token)
-            afterSwapReturnDelta: true, // exact-output sell tax (MONEY is the unspecified token)
+            beforeSwapReturnDelta: true, // exact-input sell tax (PEG is the specified token)
+            afterSwapReturnDelta: true, // exact-output sell tax (PEG is the unspecified token)
             afterAddLiquidityReturnDelta: false,
             afterRemoveLiquidityReturnDelta: false
         });
@@ -327,17 +327,17 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         int24 tick
     ) external override onlyPoolManager returns (bytes4) {
         if (bound) revert AlreadyBound();
-        if (Currency.unwrap(key.currency0) != money && Currency.unwrap(key.currency1) != money) {
-            revert PoolMissingMoney();
+        if (Currency.unwrap(key.currency0) != peg && Currency.unwrap(key.currency1) != peg) {
+            revert PoolMissingPeg();
         }
 
-        moneyIsCurrency0 = Currency.unwrap(key.currency0) == money;
+        pegIsCurrency0 = Currency.unwrap(key.currency0) == peg;
         poolId = key.toId();
         lastTick = tick;
         lastObservationTimestamp = uint32(block.timestamp);
         bound = true;
 
-        emit Bound(poolId, moneyIsCurrency0, tick);
+        emit Bound(poolId, pegIsCurrency0, tick);
         return IHooks.afterInitialize.selector;
     }
 
@@ -368,7 +368,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
         // ------------------------------------------------------------------
         // Sell tax — exact-input leg. Exact-output sells are assessed in afterSwap, once
-        // the MONEY amount is known. `amountSpecified` is MONEY only when it is negative.
+        // the PEG amount is known. `amountSpecified` is PEG only when it is negative.
         // ------------------------------------------------------------------
         if (params.amountSpecified >= 0 || !_isTaxedSell(sender, params.zeroForOne)) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
@@ -417,17 +417,17 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         if (rate == 0) return (IHooks.afterSwap.selector, 0);
         uint256 price = _taxPrice(preSwapTick);
 
-        // The pool's MONEY leg is negative from the swapper's side: they owe it.
-        int128 moneyDelta = moneyIsCurrency0 ? delta.amount0() : delta.amount1();
-        if (moneyDelta >= 0) return (IHooks.afterSwap.selector, 0);
-        uint256 netIn = uint256(uint128(-moneyDelta));
+        // The pool's PEG leg is negative from the swapper's side: they owe it.
+        int128 pegDelta = pegIsCurrency0 ? delta.amount0() : delta.amount1();
+        if (pegDelta >= 0) return (IHooks.afterSwap.selector, 0);
+        uint256 netIn = uint256(uint128(-pegDelta));
 
         // Rounded up so the effective rate never falls below the tier rate.
         uint256 taxAmount = FullMath.mulDivRoundingUp(netIn, rate, BPS - rate);
 
         _collectTax(taxAmount, price);
 
-        // Positive unspecified delta: the swapper owes `taxAmount` more MONEY on top of
+        // Positive unspecified delta: the swapper owes `taxAmount` more PEG on top of
         // what the pool took. Routers enforce this against the caller's max-input bound.
         return (IHooks.afterSwap.selector, taxAmount.toInt128());
     }
@@ -438,14 +438,14 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
 
     /// @notice Redeem tax that was parked as PoolManager claims (see `_collectTax`) and
     ///         burn / route it. Permissionless: it only ever moves value to the burn or to
-    ///         the Treasury. Settles as much as the PoolManager's MONEY reserves allow,
+    ///         the Treasury. Settles as much as the PoolManager's PEG reserves allow,
     ///         burn first, and never reverts for lack of reserves — a call that can settle
     ///         nothing is a no-op, so it is safe to retry on any schedule.
-    /// @return burned MONEY burned by this call.
-    /// @return routed MONEY sent to the Treasury by this call.
+    /// @return burned PEG burned by this call.
+    /// @return routed PEG sent to the Treasury by this call.
     function settleDeferredTax() external returns (uint256 burned, uint256 routed) {
         if (pendingTaxBurn + pendingTaxRoute == 0) return (0, 0);
-        if (IERC20(money).balanceOf(address(poolManager)) == 0) return (0, 0);
+        if (IERC20(peg).balanceOf(address(poolManager)) == 0) return (0, 0);
         return abi.decode(poolManager.unlock(""), (uint256, uint256));
     }
 
@@ -453,7 +453,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     function unlockCallback(
         bytes calldata /* data */
     ) external onlyPoolManager returns (bytes memory) {
-        uint256 available = IERC20(money).balanceOf(address(poolManager));
+        uint256 available = IERC20(peg).balanceOf(address(poolManager));
         uint256 fromBurn = pendingTaxBurn < available ? pendingTaxBurn : available;
         available -= fromBurn;
         uint256 fromRoute = pendingTaxRoute < available ? pendingTaxRoute : available;
@@ -470,12 +470,12 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         totalTaxBurned += toBurn;
         totalTaxRouted += toRoute;
 
-        Currency moneyCurrency = Currency.wrap(money);
-        poolManager.burn(address(this), CurrencyLibrary.toId(moneyCurrency), total);
-        poolManager.take(moneyCurrency, address(this), total);
+        Currency pegCurrency = Currency.wrap(peg);
+        poolManager.burn(address(this), CurrencyLibrary.toId(pegCurrency), total);
+        poolManager.take(pegCurrency, address(this), total);
 
-        if (toBurn > 0) IBurnable(money).burn(toBurn);
-        if (toRoute > 0) IERC20(money).safeTransfer(dest, toRoute);
+        if (toBurn > 0) IBurnable(peg).burn(toBurn);
+        if (toRoute > 0) IERC20(peg).safeTransfer(dest, toRoute);
         emit DeferredTaxSettled(toBurn, toRoute);
         return abi.encode(toBurn, toRoute);
     }
@@ -483,7 +483,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     /// @notice Everything a keeper or monitor needs about deferred tax in one call.
     /// @return pendingBurn   Tax owed to the burn, not yet redeemed.
     /// @return pendingRoute  Tax owed to the Treasury, not yet redeemed.
-    /// @return claimsHeld    ERC-6909 MONEY claims the hook holds on the PoolManager.
+    /// @return claimsHeld    ERC-6909 PEG claims the hook holds on the PoolManager.
     ///                       Must be >= pendingBurn + pendingRoute; less means a deficit.
     /// @return settleableNow How much `settleDeferredTax` could redeem right now.
     function deferredTaxStatus()
@@ -493,8 +493,8 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     {
         pendingBurn = pendingTaxBurn;
         pendingRoute = pendingTaxRoute;
-        claimsHeld = poolManager.balanceOf(address(this), CurrencyLibrary.toId(Currency.wrap(money)));
-        uint256 reserves = IERC20(money).balanceOf(address(poolManager));
+        claimsHeld = poolManager.balanceOf(address(this), CurrencyLibrary.toId(Currency.wrap(peg)));
+        uint256 reserves = IERC20(peg).balanceOf(address(poolManager));
         uint256 owed = pendingBurn + pendingRoute;
         settleableNow = owed < reserves ? owed : reserves;
     }
@@ -636,7 +636,7 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         return taxTiersRates.length;
     }
 
-    /// @notice Compute the 1e18-scaled MONEY/WETH price at a given tick.
+    /// @notice Compute the 1e18-scaled PEG/WETH price at a given tick.
     function priceFromTick(
         int24 tick
     ) external view returns (uint256) {
@@ -650,13 +650,13 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         return _taxRateForPrice(price);
     }
 
-    /// @notice The price (1e18-scaled WETH per MONEY) the sell tax is assessed against right
+    /// @notice The price (1e18-scaled WETH per PEG) the sell tax is assessed against right
     ///         now: the oracle TWAP when available, otherwise the pool's resting spot price.
     function currentTaxPrice() public view returns (uint256) {
         return _taxPrice(lastTick);
     }
 
-    /// @notice The sell-tax rate (bps) a MONEY sell would pay right now, ignoring the
+    /// @notice The sell-tax rate (bps) a PEG sell would pay right now, ignoring the
     ///         `autoCalculateTax` switch and sender exclusions. Includes any ratchet step
     ///         the next swap would apply.
     function currentTaxRate() external view returns (uint256 rate) {
@@ -743,27 +743,27 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     ) internal view returns (uint256) {
         IOracle oracle = taxOracle;
         if (address(oracle) != address(0)) {
-            try oracle.consult(money, 1e18) returns (uint144 twap) {
+            try oracle.consult(peg, 1e18) returns (uint144 twap) {
                 if (twap > 0) return twap;
             } catch {}
         }
         return _priceFromTick(spotTick);
     }
 
-    /// @dev True when a swap in direction `zeroForOne` by `sender` is a MONEY sell that the
+    /// @dev True when a swap in direction `zeroForOne` by `sender` is a PEG sell that the
     ///      tax applies to.
     function _isTaxedSell(
         address sender,
         bool zeroForOne
     ) internal view returns (bool) {
-        return autoCalculateTax && moneyIsCurrency0 == zeroForOne && !excludedAddresses[sender];
+        return autoCalculateTax && pegIsCurrency0 == zeroForOne && !excludedAddresses[sender];
     }
 
-    /// @dev Claim `taxAmount` MONEY from the PoolManager and burn / route it. The caller
+    /// @dev Claim `taxAmount` PEG from the PoolManager and burn / route it. The caller
     ///      must report the same amount to the PoolManager as a positive hook delta.
     ///
     ///      Hook callbacks run BEFORE the router settles the swapper's input, so an
-    ///      immediate `take` is paid out of MONEY the PoolManager already holds. Normally
+    ///      immediate `take` is paid out of PEG the PoolManager already holds. Normally
     ///      that is ample. When it is not — the pool is almost entirely WETH because price
     ///      sits above its liquidity range — a `take` would revert and block exactly the
     ///      sells that pull price back to peg. In that case the tax is taken as ERC-6909
@@ -773,29 +773,29 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
         uint256 taxAmount,
         uint256 price
     ) internal {
-        Currency moneyCurrency = Currency.wrap(money);
+        Currency pegCurrency = Currency.wrap(peg);
         bool toBurn = price < burnThreshold || treasury == address(0);
         totalTaxAssessed += taxAmount;
 
-        if (IERC20(money).balanceOf(address(poolManager)) < taxAmount) {
+        if (IERC20(peg).balanceOf(address(poolManager)) < taxAmount) {
             if (toBurn) pendingTaxBurn += taxAmount;
             else pendingTaxRoute += taxAmount;
-            poolManager.mint(address(this), CurrencyLibrary.toId(moneyCurrency), taxAmount);
+            poolManager.mint(address(this), CurrencyLibrary.toId(pegCurrency), taxAmount);
             emit TaxDeferred(taxAmount, toBurn, price);
             return;
         }
 
-        poolManager.take(moneyCurrency, address(this), taxAmount);
+        poolManager.take(pegCurrency, address(this), taxAmount);
         if (toBurn) {
             // Below-threshold burn is the load-bearing deflationary lever during
             // contraction. An unset Treasury also burns: Trustees should set one before
             // flipping autoCalculateTax on.
             totalTaxBurned += taxAmount;
-            IBurnable(money).burn(taxAmount);
+            IBurnable(peg).burn(taxAmount);
             emit TaxBurned(taxAmount, price);
         } else {
             totalTaxRouted += taxAmount;
-            IERC20(money).safeTransfer(treasury, taxAmount);
+            IERC20(peg).safeTransfer(treasury, taxAmount);
             emit TaxRouted(treasury, taxAmount, price);
         }
     }
@@ -816,26 +816,26 @@ contract PegDefenseHook is BaseV4Hook, Trustees, IPriceSource, IUnlockCallback {
     function _feeForTick(
         int24 currentTick
     ) internal view returns (uint24) {
-        int24 delta = moneyIsCurrency0 ? currentTick - pegTick : pegTick - currentTick;
+        int24 delta = pegIsCurrency0 ? currentTick - pegTick : pegTick - currentTick;
         if (delta >= bandTicks) return expansionFee;
         if (delta > -bandTicks) return baseFee;
         if (delta > -2 * bandTicks) return contractionFee;
         return deepContractionFee;
     }
 
-    /// @dev Convert a tick to a 1e18-scaled MONEY/WETH price. Uses two FullMath.mulDiv
+    /// @dev Convert a tick to a 1e18-scaled PEG/WETH price. Uses two FullMath.mulDiv
     ///      steps to avoid a 512-bit-product overflow at high-tick magnitudes.
     function _priceFromTick(
         int24 tick
     ) internal view returns (uint256 price) {
         uint160 sqrtP = TickMath.getSqrtPriceAtTick(tick);
-        if (moneyIsCurrency0) {
-            // MONEY is currency0 → price (1e18 scaled) = sqrtP^2 / 2^192 * 1e18.
+        if (pegIsCurrency0) {
+            // PEG is currency0 → price (1e18 scaled) = sqrtP^2 / 2^192 * 1e18.
             // Two mulDiv passes: first divides by 2^96, second multiplies by 1e18/2^96.
             uint256 stage = FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), 1 << 96);
             price = FullMath.mulDiv(stage, 1e18, 1 << 96);
         } else {
-            // MONEY is currency1 → price = 2^192 / sqrtP^2 * 1e18.
+            // PEG is currency1 → price = 2^192 / sqrtP^2 * 1e18.
             uint256 stage = FullMath.mulDiv(1 << 96, 1e18, uint256(sqrtP));
             price = FullMath.mulDiv(stage, 1 << 96, uint256(sqrtP));
         }

@@ -60,14 +60,14 @@ for (const [description, change] of [
   ['numeric block precision risk', (d) => { d.networks[0].deployment.deployBlock = 42; }],
   ['negative deployment block', (d) => { d.networks[0].deployment.deployBlock = '-1'; }],
   ['inconsistent manager', (d) => { d.networks[0].deployment.poolManager = d.networks[0].deployment.weth; }],
-  ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.money; }],
+  ['wrong hook flags', (d) => { d.networks[0].deployment.hook = d.networks[0].deployment.peg; }],
   ['missing share buyback hook', (d) => { delete d.networks[0].deployment.shareBuybackHook; }],
-  ['wrong share buyback hook flags', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.money; }],
+  ['wrong share buyback hook flags', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.peg; }],
   ['missing pair LP hook', (d) => { delete d.networks[0].deployment.pairLpHook; }],
   ['pair LP pool behind a hook that allows swaps', (d) => { d.networks[0].deployment.pairLpHook = d.networks[0].deployment.hook; }],
   ['one wrapper listed twice', (d) => { d.networks[0].deployment.pairLpWrapper = d.networks[0].deployment.lpWrapper; }],
   ['one hook listed twice', (d) => { d.networks[0].deployment.shareBuybackHook = d.networks[0].deployment.hook; }],
-  ['identical peg and MONEY', (d) => { d.networks[0].deployment.money = d.networks[0].deployment.weth; }],
+  ['identical peg and PEG', (d) => { d.networks[0].deployment.peg = d.networks[0].deployment.weth; }],
 ]) {
   test(`rejects ${description}`, () => {
     const value = clone(currentFixture);
@@ -94,17 +94,17 @@ test('explorer URLs use the originating chain and omit missing explorers', () =>
 test('pool reserves map correctly for both address orderings and checksum case', () => {
   const low = `0x${'0'.repeat(36)}aAaA`;
   const high = `0x${'f'.repeat(40)}`;
-  assert.deepEqual(pegReserves(low, high, 11n, 22n), { money: 11n, weth: 22n });
-  assert.deepEqual(pegReserves(high, low, 11n, 22n), { money: 22n, weth: 11n });
+  assert.deepEqual(pegReserves(low, high, 11n, 22n), { peg: 11n, weth: 22n });
+  assert.deepEqual(pegReserves(high, low, 11n, 22n), { peg: 22n, weth: 11n });
 });
 
 function publication() {
   const document = clone(currentFixture);
   const deployment = document.networks[0].deployment;
   const artifact = { ...deployment, chainId: 84532 };
-  const names = ['OldMoney', 'Estate', 'TrustNote', 'Treasury', 'Boardroom', 'Oracle',
+  const names = ['PegToken', 'ShareToken', 'BondToken', 'Treasury', 'Boardroom', 'Oracle',
     'V4PositionWrapper', 'GenesisRewardPool', 'MainRewardPool', 'ShareRewardPool', 'MiniSwapRouter', 'Timelock'];
-  const keys = ['money', 'estate', 'trustNote', 'treasury', 'boardroom', 'oracle', 'lpWrapper',
+  const keys = ['peg', 'share', 'bond', 'treasury', 'boardroom', 'oracle', 'lpWrapper',
     'genesisRewardPool', 'mainRewardPool', 'shareRewardPool', 'miniSwapRouter', 'timelock'];
   const broadcast = { chain: 84532, transactions: names.map((contractName, index) => ({
     contractName, transactionType: 'CREATE', hash: `0x${(index + 1).toString(16).padStart(64, '0')}`,
@@ -135,7 +135,7 @@ for (const [description, change, expected] of [
   ['RPC chain mismatch', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_chainId' ? '0x1' : rpc(m, a); }, /RPC chain mismatch/],
   ['reverted transaction', (p) => { const rpc = p.rpc; p.rpc = async (m, a) => m === 'eth_getTransactionReceipt' ? { ...await rpc(m, a), status: '0x0' } : rpc(m, a); }, /successful mined/],
   ['pending transaction', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_getTransactionReceipt' ? null : rpc(m, a); }, /successful mined/],
-  ['artifact from another simulation', (p) => { p.artifact.money = p.artifact.estate; }, /creation receipt/],
+  ['artifact from another simulation', (p) => { p.artifact.peg = p.artifact.share; }, /creation receipt/],
   ['missing deployed code', (p) => { const rpc = p.rpc; p.rpc = (m, a) => m === 'eth_getCode' ? '0x' : rpc(m, a); }, /No deployed code/],
 ]) {
   test(`publication rejects ${description}`, async () => {

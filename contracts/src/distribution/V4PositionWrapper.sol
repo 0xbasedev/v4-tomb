@@ -19,11 +19,11 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
  *         reward pools, which expect ERC-20 LP tokens. Sprint 16 of the Old Money build.
  *
  * @dev    Each wrapper instance is bound to ONE specific `(poolId, tickLower, tickUpper)`
- *         tuple. To support multiple LP "pairs" (e.g., MONEY/WETH full-range AND
- *         ESTATE/WETH full-range) deploy multiple wrappers.
+ *         tuple. To support multiple LP "pairs" (e.g., PEG/WETH full-range AND
+ *         SHARE/WETH full-range) deploy multiple wrappers.
  *
  *         End-user flow:
- *           1. Acquire MONEY + WETH and use the standard V4 PositionManager flow (via
+ *           1. Acquire PEG + WETH and use the standard V4 PositionManager flow (via
  *              Uniswap UI or a router) to mint a position NFT at this wrapper's exact
  *              `(poolId, tickLower, tickUpper)`.
  *           2. `IERC721(positionManager).approve(wrapper, tokenId)` then

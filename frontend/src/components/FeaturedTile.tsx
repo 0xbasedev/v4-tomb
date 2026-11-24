@@ -1,6 +1,6 @@
 /**
  * FeaturedTile — the larger / spotlighted variant of StatTile. Used for the
- * Dashboard's headline metric (MONEY price · peg). Wider, larger value, optional
+ * Dashboard's headline metric (LEVEL price · peg). Wider, larger value, optional
  * sparkline area, gold-rimmed.
  *
  * Single-column variant — span 2 columns in a 3-col grid by default.

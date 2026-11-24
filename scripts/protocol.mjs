@@ -29,7 +29,7 @@ export async function publishDeployment(document, artifact, broadcast, index, rp
     throw new Error('All broadcast transactions must have successful mined receipts');
   }
   const names = {
-    OldMoney: 'money', Estate: 'estate', TrustNote: 'trustNote', Treasury: 'treasury',
+    PegToken: 'peg', ShareToken: 'share', BondToken: 'bond', Treasury: 'treasury',
     Boardroom: 'boardroom', Oracle: 'oracle', V4PositionWrapper: 'lpWrapper',
     GenesisRewardPool: 'genesisRewardPool', MainRewardPool: 'mainRewardPool',
     ShareRewardPool: 'shareRewardPool', MiniSwapRouter: 'miniSwapRouter', Timelock: 'timelock',

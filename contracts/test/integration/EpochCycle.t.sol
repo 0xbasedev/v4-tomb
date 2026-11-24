@@ -4,9 +4,9 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 import {MockOracle} from "../utils/MockOracle.sol";
 
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {TrustNote} from "../../src/tokens/TrustNote.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
@@ -27,9 +27,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *         each contract lives in test/unit/.
  */
 contract EpochCycleTest is BaseTest {
-    OldMoney internal money;
-    Estate internal estate;
-    TrustNote internal trustnote;
+    PegToken internal peg;
+    ShareToken internal share;
+    BondToken internal bond;
     Treasury internal treasury;
     Boardroom internal boardroom;
     MockOracle internal oracle;
@@ -57,12 +57,12 @@ contract EpochCycleTest is BaseTest {
 
         // 1. Deploy tokens — owner becomes initial trustees on each.
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        peg = new PegToken();
+        share = new ShareToken(startTime, communityFund, devFund);
+        bond = new BondToken();
         vm.stopPrank();
 
-        // 2. Mock oracle at parity (1 MONEY = 1 WETH).
+        // 2. Mock oracle at parity (1 PEG = 1 WETH).
         oracle = new MockOracle(1e18);
 
         // 3. Deploy core contracts.
@@ -71,25 +71,19 @@ contract EpochCycleTest is BaseTest {
         boardroom = new Boardroom();
 
         // 4. Initialize boardroom + treasury. owner becomes operator on both.
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         address[] memory excluded = new address[](3);
         excluded[0] = genesisPool;
         excluded[1] = mainPool;
         excluded[2] = airdropWallet;
         treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            startTime,
-            excluded
+            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
         );
 
         // 5. One-shot genesis distributions BEFORE the operator handoff (owner is still trustees).
-        money.distributeReward(genesisPool, mainPool, airdropWallet); // 11k + 140k + 9k
-        estate.distributeReward(farmingPool); // 59.5k
+        peg.distributeReward(genesisPool, mainPool, airdropWallet); // 11k + 140k + 9k
+        share.distributeReward(farmingPool); // 59.5k
 
         // Override bootstrap to 0 epochs so tests exercise post-bootstrap expansion /
         // contraction mechanics directly. Bootstrap-specific behavior is tested separately.
@@ -98,29 +92,29 @@ contract EpochCycleTest is BaseTest {
         treasury.setBootstrap(0, 100);
 
         // 6. Hand off mint/burn authority on every token + boardroom to Treasury.
-        money.transferTrustees(address(treasury));
-        estate.transferTrustees(address(treasury));
-        trustnote.transferTrustees(address(treasury));
+        peg.transferTrustees(address(treasury));
+        share.transferTrustees(address(treasury));
+        bond.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
         vm.stopPrank();
 
-        // 7. Distribute some ESTATE from the farming pool to test stakers.
+        // 7. Distribute some SHARE from the farming pool to test stakers.
         vm.startPrank(farmingPool);
-        estate.transfer(alice, 1000 ether);
-        estate.transfer(bob, 3000 ether);
-        estate.transfer(carol, 6000 ether);
+        share.transfer(alice, 1000 ether);
+        share.transfer(bob, 3000 ether);
+        share.transfer(carol, 6000 ether);
         vm.stopPrank();
 
-        // 8. Drip MONEY out of mainPool into circulation. In production this happens via
-        //    the LP reward pool emitting MONEY over time; we shortcut it so the
+        // 8. Drip PEG out of mainPool into circulation. In production this happens via
+        //    the LP reward pool emitting PEG over time; we shortcut it so the
         //    circulating supply is non-trivial. Excluded addresses (genesisPool,
         //    mainPool, airdropWallet) are subtracted from circulating in the contraction
         //    headroom calculation; without this step circulating == 0 and bonds can't
         //    be sold.
         vm.startPrank(mainPool);
-        money.transfer(alice, 10_000 ether);
-        money.transfer(bob, 10_000 ether);
-        money.transfer(carol, 10_000 ether);
+        peg.transfer(alice, 10_000 ether);
+        peg.transfer(bob, 10_000 ether);
+        peg.transfer(carol, 10_000 ether);
         vm.stopPrank();
 
         // 9. Warp past startTime so checkCondition modifiers pass.
@@ -142,12 +136,12 @@ contract EpochCycleTest is BaseTest {
         vm.roll(block.number + 1);
         treasury.allocateSeigniorage();
 
-        // Treasury minted MONEY and routed it to boardroom (no daoFund/devFund set yet).
+        // Treasury minted PEG and routed it to boardroom (no daoFund/devFund set yet).
         // At 1.05e18 with supply ~160k (genesis), the mse cap (4%) bites:
         //   percentage = min(0.05, 0.04) * 1e18 = 0.04e18
-        //   savedForBoardroom = supply * 0.04 ≈ 160k * 0.04 = 6.4k MONEY
-        // Pre-distribution MONEY in boardroom was 0; after, it's the seigniorage.
-        assertGt(money.balanceOf(address(boardroom)), 0);
+        //   savedForBoardroom = supply * 0.04 ≈ 160k * 0.04 = 6.4k PEG
+        // Pre-distribution PEG in boardroom was 0; after, it's the seigniorage.
+        assertGt(peg.balanceOf(address(boardroom)), 0);
         assertEq(treasury.epoch(), 1);
 
         // Each staker has accrued reward proportional to their stake.
@@ -180,11 +174,11 @@ contract EpochCycleTest is BaseTest {
             treasury.allocateSeigniorage();
         }
 
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 pegBefore = peg.balanceOf(alice);
         vm.prank(alice);
         boardroom.claimReward();
-        uint256 moneyAfter = money.balanceOf(alice);
-        assertGt(moneyAfter, moneyBefore);
+        uint256 pegAfter = peg.balanceOf(alice);
+        assertGt(pegAfter, pegBefore);
     }
 
     // =================================================================
@@ -205,19 +199,19 @@ contract EpochCycleTest is BaseTest {
         uint256 contractionLeft = treasury.epochSupplyContractionLeft();
         assertGt(contractionLeft, 0);
 
-        // Alice already has 10k MONEY from setUp; approve treasury for the bond burn.
+        // Alice already has 10k PEG from setUp; approve treasury for the bond burn.
         vm.prank(alice);
-        money.approve(address(treasury), 100 ether);
+        peg.approve(address(treasury), 100 ether);
 
-        uint256 priceNow = treasury.getMoneyPrice();
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 priceNow = treasury.getPegPrice();
+        uint256 pegBefore = peg.balanceOf(alice);
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(100 ether, priceNow);
 
-        // Default discountPercent is 0 → rate == moneyPriceOne → 1:1 swap.
-        assertEq(money.balanceOf(alice), moneyBefore - 100 ether);
-        assertEq(trustnote.balanceOf(alice), 100 ether);
+        // Default discountPercent is 0 → rate == pegPriceOne → 1:1 swap.
+        assertEq(peg.balanceOf(alice), pegBefore - 100 ether);
+        assertEq(bond.balanceOf(alice), 100 ether);
         // Contraction headroom decreased.
         assertEq(treasury.epochSupplyContractionLeft(), contractionLeft - 100 ether);
     }
@@ -229,9 +223,9 @@ contract EpochCycleTest is BaseTest {
         // Still above peg.
         oracle.setPrice(1.05e18);
         vm.prank(mainPool);
-        money.transfer(alice, 100 ether);
+        peg.transfer(alice, 100 ether);
         vm.prank(alice);
-        money.approve(address(treasury), 100 ether);
+        peg.approve(address(treasury), 100 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);
@@ -250,9 +244,9 @@ contract EpochCycleTest is BaseTest {
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
 
-        uint256 price = treasury.getMoneyPrice();
+        uint256 price = treasury.getPegPrice();
         uint256 rate = treasury.getBondDiscountRate();
-        // Tomb math: rate = moneyPriceOne + (moneyPriceOne * 1e18 / price - moneyPriceOne)
+        // Tomb math: rate = pegPriceOne + (pegPriceOne * 1e18 / price - pegPriceOne)
         //                   * discountPercent / 10000
         // At price 0.9e18, discountPercent 5000:
         //   bondAmount = 1.111e18; discountAmount = 0.111e18 * 0.5 = 0.0555e18
@@ -260,16 +254,16 @@ contract EpochCycleTest is BaseTest {
         assertApproxEqRel(rate, 1.0555e18, 0.001e18);
 
         vm.prank(mainPool);
-        money.transfer(alice, 100 ether);
+        peg.transfer(alice, 100 ether);
         vm.prank(alice);
-        money.approve(address(treasury), 100 ether);
+        peg.approve(address(treasury), 100 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(100 ether, price);
 
         // bondAmount = 100 * rate / 1e18 ≈ 105.55
-        assertApproxEqRel(trustnote.balanceOf(alice), 105.55 ether, 0.001e18);
+        assertApproxEqRel(bond.balanceOf(alice), 105.55 ether, 0.001e18);
     }
 
     // =================================================================
@@ -279,47 +273,47 @@ contract EpochCycleTest is BaseTest {
     function test_Recovery_BondholderRedeemsAtPremium() public {
         _stakeAll();
 
-        // 1. Initial expansion to seed Treasury MONEY reserves via seigniorageSaved.
+        // 1. Initial expansion to seed Treasury PEG reserves via seigniorageSaved.
         _allocateAtPrice(1.05e18);
 
         // 2. Contraction: alice buys bonds.
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
-        // Alice already has 10k MONEY from setUp.
+        // Alice already has 10k PEG from setUp.
         vm.prank(alice);
-        money.approve(address(treasury), 50 ether);
-        uint256 contractionPrice = treasury.getMoneyPrice();
+        peg.approve(address(treasury), 50 ether);
+        uint256 contractionPrice = treasury.getPegPrice();
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(50 ether, contractionPrice);
-        assertEq(trustnote.balanceOf(alice), 50 ether);
+        assertEq(bond.balanceOf(alice), 50 ether);
 
         // 3. Force a few more contraction epochs so seigniorageSaved < bondSupply
         //    (depletes the bond depletion floor), then snap above ceiling for
-        //    a "recovery expansion" where the treasury saves MONEY to pay debt.
+        //    a "recovery expansion" where the treasury saves PEG to pay debt.
         oracle.setPrice(1.15e18); // above premium threshold (1.10e18)
         _allocateAtPrice(1.15e18);
         _allocateAtPrice(1.15e18);
         _allocateAtPrice(1.15e18);
 
-        // At this point Treasury MONEY > 0 and price > ceiling. Alice can redeem.
-        uint256 reserve = money.balanceOf(address(treasury));
+        // At this point Treasury PEG > 0 and price > ceiling. Alice can redeem.
+        uint256 reserve = peg.balanceOf(address(treasury));
         assertGt(reserve, 0);
 
-        uint256 priceNow = treasury.getMoneyPrice();
+        uint256 priceNow = treasury.getPegPrice();
         uint256 premiumRate = treasury.getBondPremiumRate();
         assertGt(premiumRate, 1e18); // premium kicks in above 1.10e18
 
         vm.prank(alice);
-        trustnote.approve(address(treasury), 50 ether);
-        uint256 moneyBefore = money.balanceOf(alice);
+        bond.approve(address(treasury), 50 ether);
+        uint256 pegBefore = peg.balanceOf(alice);
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.redeemBonds(50 ether, priceNow);
 
-        // Alice burned all 50 TRUSTNOTE; got MONEY = 50 * premiumRate / 1e18.
-        assertEq(trustnote.balanceOf(alice), 0);
-        assertApproxEqRel(money.balanceOf(alice) - moneyBefore, 50 ether * premiumRate / 1e18, 0.001e18);
+        // Alice burned all 50 BOND; got PEG = 50 * premiumRate / 1e18.
+        assertEq(bond.balanceOf(alice), 0);
+        assertApproxEqRel(peg.balanceOf(alice) - pegBefore, 50 ether * premiumRate / 1e18, 0.001e18);
     }
 
     function test_Recovery_RedeemBondsRejectsBelowCeiling() public {
@@ -328,10 +322,10 @@ contract EpochCycleTest is BaseTest {
 
         oracle.setPrice(0.9e18);
         _allocateAtPrice(0.9e18);
-        // Alice already has MONEY from setUp.
+        // Alice already has PEG from setUp.
         vm.prank(alice);
-        money.approve(address(treasury), 10 ether);
-        uint256 contractionPrice = treasury.getMoneyPrice();
+        peg.approve(address(treasury), 10 ether);
+        uint256 contractionPrice = treasury.getPegPrice();
         vm.roll(block.number + 1);
         vm.prank(alice);
         treasury.buyBonds(10 ether, contractionPrice);
@@ -339,7 +333,7 @@ contract EpochCycleTest is BaseTest {
         // Drift sideways but still below ceiling.
         oracle.setPrice(1.0e18);
         vm.prank(alice);
-        trustnote.approve(address(treasury), 10 ether);
+        bond.approve(address(treasury), 10 ether);
         vm.roll(block.number + 1);
         vm.prank(alice);
         vm.expectRevert(Treasury.PriceNotEligible.selector);
@@ -386,9 +380,9 @@ contract EpochCycleTest is BaseTest {
         _allocateAtPrice(0.9e18);
 
         vm.prank(mainPool);
-        money.transfer(alice, 10 ether);
+        peg.transfer(alice, 10 ether);
         vm.prank(alice);
-        money.approve(address(treasury), 10 ether);
+        peg.approve(address(treasury), 10 ether);
 
         vm.roll(block.number + 1);
         vm.prank(alice);
@@ -413,7 +407,7 @@ contract EpochCycleTest is BaseTest {
     ) internal {
         vm.roll(block.number + 1);
         vm.prank(who);
-        estate.approve(address(boardroom), amount);
+        share.approve(address(boardroom), amount);
         vm.roll(block.number + 1);
         vm.prank(who);
         boardroom.stake(amount);

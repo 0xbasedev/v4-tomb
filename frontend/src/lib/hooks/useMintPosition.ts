@@ -15,12 +15,12 @@ const ERC721_TRANSFER = parseAbiItem(
 );
 
 /**
- * Mint a MONEY-WETH V4 LP position via PositionManager.modifyLiquidities.
+ * Mint a LEVEL-WETH V4 LP position via PositionManager.modifyLiquidities.
  *
  * Full chain on a cold cache is FIVE wallet pops:
- *   1. MONEY.approve(permit2, max)
+ *   1. LEVEL.approve(permit2, max)
  *   2. WETH.approve(permit2, max)
- *   3. permit2.approve(MONEY, positionManager, max, exp)
+ *   3. permit2.approve(LEVEL, positionManager, max, exp)
  *   4. permit2.approve(WETH, positionManager, max, exp)
  *   5. positionManager.modifyLiquidities(MINT_POSITION + SETTLE_PAIR, deadline)
  *

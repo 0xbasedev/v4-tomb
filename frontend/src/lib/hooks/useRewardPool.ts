@@ -2,17 +2,17 @@ import { useAccount, useReadContracts } from "wagmi";
 import type { Address } from "viem";
 import { zeroAddress } from "viem";
 
-import { erc20Abi, moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
+import { erc20Abi, pegRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
 import { useDeployment } from "./useDeployment";
 
-type RewardKind = "money" | "share";
+type RewardKind = "peg" | "share";
 
 interface UseRewardPoolArgs {
   /** Which reward pool — Genesis, Main, or Share. Caller resolves the address. */
   pool: Address | undefined;
   /** Which PID within the pool. Most pools have one PID; Genesis can have many. */
   pid: number;
-  /** Whether this pool emits MONEY (Genesis, Main) or ESTATE (Share). */
+  /** Whether this pool emits LEVEL (Genesis, Main) or SQUARE (Share). */
   reward: RewardKind;
 }
 
@@ -20,13 +20,13 @@ interface UseRewardPoolArgs {
  * Per-PID state for one reward pool. Reads:
  *   poolInfo(pid)          → token, allocPoint, lastRewardTime, accPerShare, isStarted
  *   userInfo(pid, user)    → amount, rewardDebt
- *   pendingMoney/Share     → claimable for this user
+ *   pendingPeg/Share     → claimable for this user
  *   totalAllocPoint        → for displaying alloc weight as %
  *   poolStartTime
  *   ERC20.balanceOf(user) on the stake token
  *   ERC20.allowance(user, pool) on the stake token
  *
- * Notes:
+ * Bonds:
  *   - We can't read `poolInfo.length` without a custom view, so the caller must
  *     already know the PIDs they want. The Vault page hardcodes PID lists; later
  *     versions can probe via multicall with allowFailure to count.
@@ -38,8 +38,8 @@ export function useRewardPool({ pool, pid, reward }: UseRewardPoolArgs) {
   const { address } = useAccount();
   const user = address ?? zeroAddress;
 
-  const abi = reward === "money" ? moneyRewardPoolAbi : shareRewardPoolAbi;
-  const pendingName = reward === "money" ? "pendingMoney" : "pendingShare";
+  const abi = reward === "peg" ? pegRewardPoolAbi : shareRewardPoolAbi;
+  const pendingName = reward === "peg" ? "pendingPeg" : "pendingShare";
 
   const enabled = deployment !== null && pool !== undefined;
   const pidArg = BigInt(pid);
@@ -53,9 +53,9 @@ export function useRewardPool({ pool, pid, reward }: UseRewardPoolArgs) {
             { address: pool, abi, functionName: "userInfo", args: [pidArg, user] },
             {
               address: pool,
-              abi: abi as typeof moneyRewardPoolAbi & typeof shareRewardPoolAbi,
-              // pendingMoney for MONEY pools, pendingShare for share pools
-              functionName: pendingName as "pendingMoney",
+              abi: abi as typeof pegRewardPoolAbi & typeof shareRewardPoolAbi,
+              // pendingPeg for LEVEL pools, pendingShare for share pools
+              functionName: pendingName as "pendingPeg",
               args: [pidArg, user],
             },
             { address: pool, abi, functionName: "totalAllocPoint" },

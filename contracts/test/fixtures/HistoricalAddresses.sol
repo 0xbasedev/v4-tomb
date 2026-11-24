@@ -10,7 +10,7 @@ pragma solidity 0.8.26;
  *           the predeploy slot 0x4200...0006; canonical 0xC02a... on Ethereum mainnet;
  *           etc.)
  *
- *         Old Money pegs $MONEY 1:1 to WETH (1 MONEY = 1 ETH at parity). WETH is
+ *         Old Money pegs $PEG 1:1 to WETH (1 PEG = 1 ETH at parity). WETH is
  *         available on every supported chain — no mock needed on testnets, which
  *         is a deliberate improvement over the prior cbETH peg (cbETH was Coinbase-
  *         issued only on mainnet chains, forcing a `MockCbeth` shim on testnets).

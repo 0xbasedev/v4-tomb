@@ -10,13 +10,13 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Trustees} from "../governance/Trustees.sol";
 
 /**
- * @title OldMoney
- * @notice $MONEY — the algorithmic stable side of the Old Money trust. Pegged to 1 WETH TWAP on Base.
+ * @title PegToken
+ * @notice $PEG — the algorithmic stable side of the Old Money trust. Pegged to 1 WETH TWAP on Base.
  * @dev    Direct port of Tomb Finance's BOMB token (Bomb.sol in bombmoney/bomb-contracts),
  *         with one deliberate omission: the in-contract tax mechanism (TaxOffice / TaxOracle /
  *         taxTiers / `_transferWithTax` override of `transferFrom`) is REMOVED. Peg defense and
  *         contraction taxation are handled by a Uniswap V4 hook (PegDefenseHook) attached to the
- *         MONEY/WETH pool. The V4 hook taxes pool swaps only, not wallet-to-wallet transfers —
+ *         PEG/WETH pool. The V4 hook taxes pool swaps only, not wallet-to-wallet transfers —
  *         this is a behavior change vs Tomb and the explicit point of the V4 integration.
  *
  *         Non-logic-changing modernizations from Tomb's original:
@@ -28,22 +28,22 @@ import {Trustees} from "../governance/Trustees.sol";
  *             behavior changed.
  *
  *         Genesis distribution (matches Tomb's BOMB exact numbers):
- *           - 11,000 MONEY → genesis pool (24h zero-LP boot)
- *           - 140,000 MONEY → main reward pool (days 2-5)
- *           - 9,000 MONEY → airdrop wallet
- *           Constructor additionally mints 1 MONEY to the initial owner for initial LP setup
+ *           - 11,000 PEG → genesis pool (24h zero-LP boot)
+ *           - 140,000 PEG → main reward pool (days 2-5)
+ *           - 9,000 PEG → airdrop wallet
+ *           Constructor additionally mints 1 PEG to the initial owner for initial LP setup
  *           (matches Tomb's deploy-time seed mint).
  *
  *         Trustees ( = Tomb's operator) has unilateral mint and burnFrom authority. Wallet-level
  *         self-burn (`burn`) is public.
  */
-contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
+contract PegToken is ERC20Burnable, ERC20Permit, Trustees {
     using SafeERC20 for IERC20;
 
     /// @notice Initial mint to the genesis pool (24h zero-LP boot).
     uint256 public constant INITIAL_GENESIS_POOL_DISTRIBUTION = 11_000 ether;
 
-    /// @notice Initial mint to the main MONEY-WETH LP reward pool (days 2-5).
+    /// @notice Initial mint to the main PEG-WETH LP reward pool (days 2-5).
     uint256 public constant INITIAL_MAIN_POOL_DISTRIBUTION = 140_000 ether;
 
     /// @notice Initial mint to the airdrop wallet.
@@ -64,7 +64,7 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
     error AlreadyDistributed();
     error ZeroAddress();
 
-    constructor() ERC20("Old Money", "MONEY") ERC20Permit("Old Money") Trustees() {
+    constructor() ERC20("LEVEL", "LEVEL") ERC20Permit("LEVEL") Trustees() {
         // Tomb-faithful: mint 1 unit to the deployer for initial pool setup / sanity check.
         _mint(msg.sender, 1 ether);
     }
@@ -73,7 +73,7 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
     // Trustees-only supply control (matches Tomb's onlyOperator surface)
     // ---------------------------------------------------------------------
 
-    /// @notice Mint MONEY. Returns true if the recipient's balance actually increased.
+    /// @notice Mint PEG. Returns true if the recipient's balance actually increased.
     /// @dev Tomb signature: `mint(address recipient_, uint256 amount_) returns (bool)`.
     function mint(
         address recipient,
@@ -85,7 +85,7 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
         return balanceOf(recipient) > balanceBefore;
     }
 
-    /// @notice Burn MONEY from an arbitrary account (subject to the standard ERC20 allowance check).
+    /// @notice Burn PEG from an arbitrary account (subject to the standard ERC20 allowance check).
     /// @dev Trustees-only. Tomb's `BBond.burnFrom` and `Bomb.burnFrom` both gate this to operator;
     ///      the standard `ERC20Burnable.burnFrom` is open to any approved spender. Restricting
     ///      preserves the property that only the protocol mechanism can call `burnFrom`.
@@ -96,7 +96,7 @@ contract OldMoney is ERC20Burnable, ERC20Permit, Trustees {
         super.burnFrom(account, amount);
     }
 
-    /// @notice Burn MONEY from the caller's own balance. Public — anyone can opt out by burning.
+    /// @notice Burn PEG from the caller's own balance. Public — anyone can opt out by burning.
     /// @dev Override preserves Tomb's explicit public restatement of the inherited symbol.
     function burn(
         uint256 amount

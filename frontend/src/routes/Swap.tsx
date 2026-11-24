@@ -17,36 +17,36 @@ import { formatToken, formatTokenAuto } from "@/lib/format";
 
 /** LPFeeLibrary.DYNAMIC_FEE_FLAG — the V4 fee value used for hook-controlled pools. */
 const DYNAMIC_FEE_FLAG = 0x800000;
-const MONEY_WETH_TICK_SPACING = 60;
+const LEVEL_WETH_TICK_SPACING = 60;
 
 /**
  * The Exchange — V4 swap with PegDefenseHook tax surface.
  *
  * Two pools available (both anchored to WETH):
- *   I.  MONEY-WETH — peg pool, PegDefenseHook attached, 0.30% base fee +
- *       dynamic tax (0–30%) when MONEY trades below par
- *   II. ESTATE-WETH — share pool, no hook, plain 0.30% fee
+ *   I.  LEVEL-WETH — peg pool, PegDefenseHook attached, 0.30% base fee +
+ *       dynamic tax (0–30%) when LEVEL trades below par
+ *   II. SQUARE-WETH — share pool, no hook, plain 0.30% fee
  *
  * Layout:
  *   1. Heading — Roman IV, "The Exchange" title
- *   2. Pool tabs — MONEY/WETH | ESTATE/WETH
+ *   2. Pool tabs — LEVEL/WETH | SQUARE/WETH
  *   3. SwapCard — directional input → output with flip button + quote rows.
- *      Tax tier badge shows current schedule entry when MONEY-out (sells)
+ *      Tax tier badge shows current schedule entry when LEVEL-out (sells)
  *      below peg.
  *   4. Pool state — 4 tiles (Spot, Liquidity, 24h Volume, Hook State)
- *   5. TaxScheduleTable — visible only when MONEY-WETH selected; highlights
+ *   5. TaxScheduleTable — visible only when LEVEL-WETH selected; highlights
  *      active tier from current price
  *   6. The Mechanism — explanatory panel
  */
 
-type PoolId = "money-weth" | "estate-weth";
+type PoolId = "peg-weth" | "share-weth";
 
 interface PoolView {
   id: PoolId;
   numeral: "I" | "II";
   base: string;
   quote: string;
-  /** Current spot price (quote per 1 base, e.g. 1 MONEY = 0.97 WETH). */
+  /** Current spot price (quote per 1 base, e.g. 1 LEVEL = 0.97 WETH). */
   spotPrice: number;
   /** Pool liquidity in WETH-equivalent terms (placeholder). */
   liquidity: string;
@@ -59,10 +59,10 @@ interface PoolView {
 }
 
 const POOLS: Record<PoolId, PoolView> = {
-  "money-weth": {
-    id: "money-weth",
+  "peg-weth": {
+    id: "peg-weth",
     numeral: "I",
-    base: "MONEY",
+    base: "LEVEL",
     quote: "WETH",
     spotPrice: 1.0,
     liquidity: "0",
@@ -70,10 +70,10 @@ const POOLS: Record<PoolId, PoolView> = {
     hookState: "Active · Above Peg",
     baseFeeBps: 30,
   },
-  "estate-weth": {
-    id: "estate-weth",
+  "share-weth": {
+    id: "share-weth",
     numeral: "II",
-    base: "ESTATE",
+    base: "SQUARE",
     quote: "WETH",
     spotPrice: 0.001,
     liquidity: "0",
@@ -84,7 +84,7 @@ const POOLS: Record<PoolId, PoolView> = {
 };
 
 export function Swap() {
-  const [activeId, setActiveId] = useState<PoolId>("money-weth");
+  const [activeId, setActiveId] = useState<PoolId>("peg-weth");
   // Direction: when true, base → quote (sell). When false, quote → base (buy).
   const [sellingBase, setSellingBase] = useState(true);
 
@@ -95,51 +95,51 @@ export function Swap() {
   const swap = useSwap();
   const toast = useToast();
 
-  // Read MONEY + WETH balances so the SwapCard's MAX has something to fill
+  // Read LEVEL + WETH balances so the SwapCard's MAX has something to fill
   // and the disabled state can gate on actual funds.
   const balances = useReadContracts({
     allowFailure: false,
     contracts:
       deployment && address
         ? [
-            { address: deployment.money, abi: erc20Abi, functionName: "balanceOf", args: [address] },
+            { address: deployment.peg, abi: erc20Abi, functionName: "balanceOf", args: [address] },
             { address: deployment.weth, abi: erc20Abi, functionName: "balanceOf", args: [address] },
           ]
         : [],
     query: { enabled: !!deployment && !!address, refetchInterval: 15_000 },
   });
-  const moneyBal = balances.data?.[0] ?? 0n;
+  const pegBal = balances.data?.[0] ?? 0n;
   const wethBal = balances.data?.[1] ?? 0n;
 
   // Pool depth — read from V4 PoolManager state via extsload. This gives
   // OUR pool's reserves exactly, not all V4 pools on the chain.
-  // PoolKey for MONEY-WETH; computed live from deployment addresses.
-  const moneyWethPoolKey = deployment
+  // PoolKey for LEVEL-WETH; computed live from deployment addresses.
+  const pegWethPoolKey = deployment
     ? (() => {
         const wethIsToken0 =
-          (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
+          (deployment.weth as string).toLowerCase() < (deployment.peg as string).toLowerCase();
         return {
-          currency0: wethIsToken0 ? deployment.weth : deployment.money,
-          currency1: wethIsToken0 ? deployment.money : deployment.weth,
+          currency0: wethIsToken0 ? deployment.weth : deployment.peg,
+          currency1: wethIsToken0 ? deployment.peg : deployment.weth,
           fee: DYNAMIC_FEE_FLAG,
-          tickSpacing: MONEY_WETH_TICK_SPACING,
+          tickSpacing: LEVEL_WETH_TICK_SPACING,
           hooks: deployment.hook,
         };
       })()
     : null;
-  const reserves = usePoolReserves(moneyWethPoolKey);
+  const reserves = usePoolReserves(pegWethPoolKey);
   const orderedReserves = deployment
-    ? pegReserves(deployment.money, deployment.weth, reserves.amount0, reserves.amount1)
-    : { weth: 0n, money: 0n };
+    ? pegReserves(deployment.peg, deployment.weth, reserves.amount0, reserves.amount1)
+    : { weth: 0n, peg: 0n };
   const poolWeth = orderedReserves.weth;
-  const poolMoney = orderedReserves.money;
+  const poolPeg = orderedReserves.peg;
 
-  // For MONEY-WETH the spot price comes from the hook's lastTick. ESTATE-WETH
+  // For LEVEL-WETH the spot price comes from the hook's lastTick. SQUARE-WETH
   // is not bound to any of our hooks, so for now we keep its spot at the
   // hardcoded placeholder — a future turn ships a generic V4 PoolManager
   // getSlot0 reader for non-hooked pools.
   const liveSpot =
-    activeId === "money-weth" && liveHook.bound && liveHook.price > 0n
+    activeId === "peg-weth" && liveHook.bound && liveHook.price > 0n
       ? Number(formatUnits(liveHook.price, 18))
       : poolMeta.spotPrice;
 
@@ -148,19 +148,19 @@ export function Swap() {
   const rate = sellingBase ? liveSpot : 1 / liveSpot;
 
   // Active-direction tokenIn balance — drives the MAX button and the
-  // disabled state. Only MONEY-WETH is wired; ESTATE-WETH tokenIn is
-  // currently ESTATE which we don't read here (the panel is disabled
-  // for ESTATE-WETH anyway).
+  // disabled state. Only LEVEL-WETH is wired; SQUARE-WETH tokenIn is
+  // currently SQUARE which we don't read here (the panel is disabled
+  // for SQUARE-WETH anyway).
   const tokenInBalance =
-    activeId === "money-weth" ? (sellingBase ? moneyBal : wethBal) : 0n;
+    activeId === "peg-weth" ? (sellingBase ? pegBal : wethBal) : 0n;
   const maxInDisplay = formatToken(tokenInBalance, 6);
 
-  // Tax tier: only meaningful on MONEY-WETH, when selling MONEY, and when the
+  // Tax tier: only meaningful on LEVEL-WETH, when selling LEVEL, and when the
   // hook actually has autoCalculateTax enabled. The schedule itself still
   // renders below — it's informational regardless of the on/off state.
   // The rate comes from the hook itself: it taxes against the oracle TWAP, so
   // re-deriving a tier from the spot price here would quote the wrong amount.
-  const taxActive = activeId === "money-weth" && sellingBase && liveHook.taxOn;
+  const taxActive = activeId === "peg-weth" && sellingBase && liveHook.taxOn;
   const tier = taxActive
     ? { label: tierLabel(liveHook.taxRateBps), bps: liveHook.taxRateBps }
     : { label: "No Tax", bps: 0 };
@@ -168,7 +168,7 @@ export function Swap() {
     liveHook.taxPrice > 0n ? Number(formatUnits(liveHook.taxPrice, 18)) : liveSpot;
 
   const hookStateLabel =
-    activeId !== "money-weth"
+    activeId !== "peg-weth"
       ? "—"
       : !liveHook.bound
         ? "Awaiting Pool Init"
@@ -176,13 +176,13 @@ export function Swap() {
           ? `Tax Active · ${tier.label}`
           : "Tax Disabled";
 
-  // Compose the V4 swap pipeline. MONEY-WETH only — ESTATE-WETH isn't a deployed pool yet.
+  // Compose the V4 swap pipeline. LEVEL-WETH only — SQUARE-WETH isn't a deployed pool yet.
   function handleSwapSubmit(amountStr: string, slippageBps: number) {
-    if (activeId !== "money-weth") {
+    if (activeId !== "peg-weth") {
       toast.push({
         variant: "info",
         title: "Pool not yet live",
-        message: "ESTATE-WETH is not deployed. Trade MONEY-WETH on the I tab instead.",
+        message: "SQUARE-WETH is not deployed. Trade LEVEL-WETH on the I tab instead.",
         durationMs: 6_000,
       });
       return;
@@ -206,15 +206,15 @@ export function Swap() {
     if (amountIn <= 0n) return;
 
     // V4 sorts currencies by address on every chain.
-    const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.money as string).toLowerCase();
-    const currency0: Address = wethIsToken0 ? deployment.weth : deployment.money;
-    const currency1: Address = wethIsToken0 ? deployment.money : deployment.weth;
+    const wethIsToken0 = (deployment.weth as string).toLowerCase() < (deployment.peg as string).toLowerCase();
+    const currency0: Address = wethIsToken0 ? deployment.weth : deployment.peg;
+    const currency1: Address = wethIsToken0 ? deployment.peg : deployment.weth;
 
     // zeroForOne: are we swapping currency0 → currency1?
-    // sellingBase = true → selling MONEY → we want MONEY -> WETH.
-    //   If MONEY is currency1, then currency1 -> currency0, so zeroForOne = false.
-    const sellingMoney = sellingBase;
-    const zeroForOne = wethIsToken0 ? !sellingMoney : sellingMoney;
+    // sellingBase = true → selling LEVEL → we want LEVEL -> WETH.
+    //   If LEVEL is currency1, then currency1 -> currency0, so zeroForOne = false.
+    const sellingPeg = sellingBase;
+    const zeroForOne = wethIsToken0 ? !sellingPeg : sellingPeg;
 
     const tokenIn: Address = zeroForOne ? currency0 : currency1;
 
@@ -237,7 +237,7 @@ export function Swap() {
         currency0,
         currency1,
         fee: DYNAMIC_FEE_FLAG,
-        tickSpacing: MONEY_WETH_TICK_SPACING,
+        tickSpacing: LEVEL_WETH_TICK_SPACING,
         hooks: deployment.hook,
       },
       zeroForOne,
@@ -283,11 +283,11 @@ export function Swap() {
           active={activeId}
           onChange={(id) => setActiveId(id as PoolId)}
           items={[
-            { id: "money-weth", numeral: "I", label: "MONEY · WETH", sublabel: "Peg Pool" },
+            { id: "peg-weth", numeral: "I", label: "LEVEL · WETH", sublabel: "Peg Pool" },
             {
-              id: "estate-weth",
+              id: "share-weth",
               numeral: "II",
-              label: "ESTATE · WETH",
+              label: "SQUARE · WETH",
               sublabel: "Share Pool",
             },
           ]}
@@ -308,12 +308,12 @@ export function Swap() {
           onSubmit={handleSwapSubmit}
           disabled={
             swap.isInFlight ||
-            activeId !== "money-weth" ||
-            (activeId === "money-weth" && tokenInBalance === 0n)
+            activeId !== "peg-weth" ||
+            (activeId === "peg-weth" && tokenInBalance === 0n)
           }
           disabledReason={
-            activeId !== "money-weth"
-              ? "ESTATE-WETH pool is not yet deployed."
+            activeId !== "peg-weth"
+              ? "SQUARE-WETH pool is not yet deployed."
               : swap.isInFlight
                 ? "Swap in flight…"
                 : tokenInBalance === 0n
@@ -336,26 +336,26 @@ export function Swap() {
               hint={`WETH per 1 ${poolMeta.base}`}
             />
             <StatTile
-              label="Pool · MONEY"
-              value={activeId === "money-weth" ? formatTokenAuto(poolMoney) : "—"}
-              hint="$MONEY held by V4 PoolManager"
+              label="Pool · LEVEL"
+              value={activeId === "peg-weth" ? formatTokenAuto(poolPeg) : "—"}
+              hint="$LEVEL held by V4 PoolManager"
             />
             <StatTile
               label="Pool · WETH"
-              value={activeId === "money-weth" ? formatTokenAuto(poolWeth) : "—"}
+              value={activeId === "peg-weth" ? formatTokenAuto(poolWeth) : "—"}
               hint="$WETH held by V4 PoolManager"
             />
             <StatTile
               label="Hook State"
               value={hookStateLabel}
-              hint={activeId === "money-weth" ? "PegDefenseHook" : "No Hook Attached"}
+              hint={activeId === "peg-weth" ? "PegDefenseHook" : "No Hook Attached"}
             />
           </div>
         </div>
       </section>
 
-      {/* ===== Tax Schedule (MONEY-WETH only) ===== */}
-      {activeId === "money-weth" && (
+      {/* ===== Tax Schedule (LEVEL-WETH only) ===== */}
+      {activeId === "peg-weth" && (
         <section className="px-6 pb-14 md:px-12 md:pb-16">
           <div className="mx-auto max-w-3xl">
             <TaxScheduleTable activePriceEth={taxPriceEth} />
@@ -386,7 +386,7 @@ export function Swap() {
               <div className="border-l border-deco-gold/40 pl-5">
                 <div className="label-deco mb-2 text-deco-gold">Peg Defense</div>
                 <p className="font-body text-sm italic text-deco-ivory-soft">
-                  When MONEY trades below par, the Hook intercepts each outgoing sale
+                  When LEVEL trades below par, the Hook intercepts each outgoing sale
                   and levies the schedule's tax. During contraction, the proceeds are
                   burned outright; otherwise they accrue to The Treasury.
                 </p>

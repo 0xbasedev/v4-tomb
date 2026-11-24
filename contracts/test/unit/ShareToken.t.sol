@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {BaseTest} from "../utils/BaseTest.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -20,8 +20,8 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract EstateTest is BaseTest {
-    Estate internal estate;
+contract ShareTokenTest is BaseTest {
+    ShareToken internal share;
 
     address internal communityFund = makeAddr("communityFund");
     address internal devFund = makeAddr("devFund");
@@ -42,11 +42,11 @@ contract EstateTest is BaseTest {
         vestingStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        estate = new Estate(vestingStart, communityFund, devFund);
+        share = new ShareToken(vestingStart, communityFund, devFund);
 
         // Rotate trustees from `owner` (the deployer default) to the dedicated `trustees` actor.
         vm.prank(owner);
-        estate.transferTrustees(trustees);
+        share.transferTrustees(trustees);
     }
 
     // ---------------------------------------------------------------------
@@ -54,54 +54,54 @@ contract EstateTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Metadata() public view {
-        assertEq(estate.name(), "Estate");
-        assertEq(estate.symbol(), "ESTATE");
-        assertEq(estate.decimals(), 18);
+        assertEq(share.name(), "SQUARE");
+        assertEq(share.symbol(), "SQUARE");
+        assertEq(share.decimals(), 18);
     }
 
     function test_Constants() public view {
-        assertEq(estate.FARMING_POOL_REWARD_ALLOCATION(), 59_500 ether);
-        assertEq(estate.COMMUNITY_FUND_POOL_ALLOCATION(), 5500 ether);
-        assertEq(estate.DEV_FUND_POOL_ALLOCATION(), 5000 ether);
-        assertEq(estate.VESTING_DURATION(), 365 days);
+        assertEq(share.FARMING_POOL_REWARD_ALLOCATION(), 59_500 ether);
+        assertEq(share.COMMUNITY_FUND_POOL_ALLOCATION(), 5500 ether);
+        assertEq(share.DEV_FUND_POOL_ALLOCATION(), 5000 ether);
+        assertEq(share.VESTING_DURATION(), 365 days);
     }
 
     function test_ConstantsSumToTombMaxSupply() public view {
         // Tomb canonical: 70,000 TSHARE max supply (59,500 + 5,500 + 5,000).
         assertEq(
-            estate.FARMING_POOL_REWARD_ALLOCATION() + estate.COMMUNITY_FUND_POOL_ALLOCATION()
-                + estate.DEV_FUND_POOL_ALLOCATION(),
+            share.FARMING_POOL_REWARD_ALLOCATION() + share.COMMUNITY_FUND_POOL_ALLOCATION()
+                + share.DEV_FUND_POOL_ALLOCATION(),
             70_000 ether
         );
     }
 
     function test_Constructor_InitialState() public view {
         // 1 ether minted to the deployer.
-        assertEq(estate.balanceOf(owner), 1 ether);
-        assertEq(estate.totalSupply(), 1 ether);
+        assertEq(share.balanceOf(owner), 1 ether);
+        assertEq(share.totalSupply(), 1 ether);
 
-        assertEq(estate.startTime(), vestingStart);
-        assertEq(estate.endTime(), vestingStart + 365 days);
-        assertEq(estate.communityFund(), communityFund);
-        assertEq(estate.devFund(), devFund);
-        assertEq(estate.communityFundLastClaimed(), vestingStart);
-        assertEq(estate.devFundLastClaimed(), vestingStart);
+        assertEq(share.startTime(), vestingStart);
+        assertEq(share.endTime(), vestingStart + 365 days);
+        assertEq(share.communityFund(), communityFund);
+        assertEq(share.devFund(), devFund);
+        assertEq(share.communityFundLastClaimed(), vestingStart);
+        assertEq(share.devFundLastClaimed(), vestingStart);
 
         // Vesting rates are alloc / duration.
-        assertEq(estate.communityFundRewardRate(), uint256(5500 ether) / 365 days);
-        assertEq(estate.devFundRewardRate(), uint256(5000 ether) / 365 days);
+        assertEq(share.communityFundRewardRate(), uint256(5500 ether) / 365 days);
+        assertEq(share.devFundRewardRate(), uint256(5000 ether) / 365 days);
     }
 
     function test_Constructor_RejectsZeroCommunityFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, address(0), devFund);
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        new ShareToken(vestingStart, address(0), devFund);
     }
 
     function test_Constructor_RejectsZeroDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        new Estate(vestingStart, communityFund, address(0));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        new ShareToken(vestingStart, communityFund, address(0));
     }
 
     // ---------------------------------------------------------------------
@@ -110,46 +110,46 @@ contract EstateTest is BaseTest {
 
     function test_SetTreasuryFund_OnlyDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.NotDevFund.selector);
-        estate.setTreasuryFund(alice);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
+        share.setTreasuryFund(alice);
 
         vm.prank(stranger);
-        vm.expectRevert(Estate.NotDevFund.selector);
-        estate.setTreasuryFund(alice);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
+        share.setTreasuryFund(alice);
     }
 
     function test_SetTreasuryFund_RejectsZero() public {
         vm.prank(devFund);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.setTreasuryFund(address(0));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        share.setTreasuryFund(address(0));
     }
 
     function test_SetTreasuryFund_Rotates() public {
         vm.expectEmit(true, true, true, true);
         emit CommunityFundUpdated(communityFund, alice);
         vm.prank(devFund);
-        estate.setTreasuryFund(alice);
-        assertEq(estate.communityFund(), alice);
+        share.setTreasuryFund(alice);
+        assertEq(share.communityFund(), alice);
     }
 
     function test_SetDevFund_OnlyDevFund() public {
         vm.prank(owner);
-        vm.expectRevert(Estate.NotDevFund.selector);
-        estate.setDevFund(alice);
+        vm.expectRevert(ShareToken.NotDevFund.selector);
+        share.setDevFund(alice);
     }
 
     function test_SetDevFund_RejectsZero() public {
         vm.prank(devFund);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.setDevFund(address(0));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        share.setDevFund(address(0));
     }
 
     function test_SetDevFund_Rotates() public {
         vm.expectEmit(true, true, true, true);
         emit DevFundUpdated(devFund, alice);
         vm.prank(devFund);
-        estate.setDevFund(alice);
-        assertEq(estate.devFund(), alice);
+        share.setDevFund(alice);
+        assertEq(share.devFund(), alice);
     }
 
     // ---------------------------------------------------------------------
@@ -159,31 +159,31 @@ contract EstateTest is BaseTest {
     function test_Vesting_NothingClaimableBeforeStart() public view {
         // We're currently before vestingStart.
         assertLt(block.timestamp, vestingStart);
-        assertEq(estate.unclaimedTreasuryFund(), 0);
-        assertEq(estate.unclaimedDevFund(), 0);
+        assertEq(share.unclaimedTreasuryFund(), 0);
+        assertEq(share.unclaimedDevFund(), 0);
     }
 
     function test_Vesting_HalfwayThrough() public {
         // Jump to vestingStart + 6 months.
         vm.warp(vestingStart + 182.5 days);
 
-        uint256 communityRate = estate.communityFundRewardRate();
-        uint256 devRate = estate.devFundRewardRate();
+        uint256 communityRate = share.communityFundRewardRate();
+        uint256 devRate = share.devFundRewardRate();
         uint256 expectedCommunity = uint256(182.5 days) * communityRate;
         uint256 expectedDev = uint256(182.5 days) * devRate;
 
-        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
-        assertEq(estate.unclaimedDevFund(), expectedDev);
+        assertEq(share.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(share.unclaimedDevFund(), expectedDev);
     }
 
     function test_Vesting_FullyClaimableAtEnd() public {
         vm.warp(vestingStart + 365 days);
 
-        uint256 expectedCommunity = uint256(365 days) * estate.communityFundRewardRate();
-        uint256 expectedDev = uint256(365 days) * estate.devFundRewardRate();
+        uint256 expectedCommunity = uint256(365 days) * share.communityFundRewardRate();
+        uint256 expectedDev = uint256(365 days) * share.devFundRewardRate();
 
-        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
-        assertEq(estate.unclaimedDevFund(), expectedDev);
+        assertEq(share.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(share.unclaimedDevFund(), expectedDev);
 
         // Tomb integer-division rounding leaves a tiny residual under the nominal alloc.
         // The residual is < VESTING_DURATION (in wei).
@@ -197,45 +197,45 @@ contract EstateTest is BaseTest {
         // Way past the end. Should still cap at endTime worth of accrual.
         vm.warp(vestingStart + 365 days + 100 days);
 
-        uint256 expectedCommunity = uint256(365 days) * estate.communityFundRewardRate();
-        uint256 expectedDev = uint256(365 days) * estate.devFundRewardRate();
+        uint256 expectedCommunity = uint256(365 days) * share.communityFundRewardRate();
+        uint256 expectedDev = uint256(365 days) * share.devFundRewardRate();
 
-        assertEq(estate.unclaimedTreasuryFund(), expectedCommunity);
-        assertEq(estate.unclaimedDevFund(), expectedDev);
+        assertEq(share.unclaimedTreasuryFund(), expectedCommunity);
+        assertEq(share.unclaimedDevFund(), expectedDev);
     }
 
     function test_ClaimRewards_MintsAndUpdatesTimestamps() public {
         vm.warp(vestingStart + 100 days);
 
-        uint256 expectedCommunity = uint256(100 days) * estate.communityFundRewardRate();
-        uint256 expectedDev = uint256(100 days) * estate.devFundRewardRate();
+        uint256 expectedCommunity = uint256(100 days) * share.communityFundRewardRate();
+        uint256 expectedDev = uint256(100 days) * share.devFundRewardRate();
 
-        estate.claimRewards();
+        share.claimRewards();
 
-        assertEq(estate.balanceOf(communityFund), expectedCommunity);
-        assertEq(estate.balanceOf(devFund), expectedDev);
-        assertEq(estate.communityFundLastClaimed(), block.timestamp);
-        assertEq(estate.devFundLastClaimed(), block.timestamp);
+        assertEq(share.balanceOf(communityFund), expectedCommunity);
+        assertEq(share.balanceOf(devFund), expectedDev);
+        assertEq(share.communityFundLastClaimed(), block.timestamp);
+        assertEq(share.devFundLastClaimed(), block.timestamp);
     }
 
     function test_ClaimRewards_TwiceIsIdempotentWithoutTimeAdvance() public {
         vm.warp(vestingStart + 50 days);
-        estate.claimRewards();
-        uint256 balanceAfterFirst = estate.balanceOf(communityFund);
+        share.claimRewards();
+        uint256 balanceAfterFirst = share.balanceOf(communityFund);
 
         // No time advance — second claim must be a no-op.
-        estate.claimRewards();
-        assertEq(estate.balanceOf(communityFund), balanceAfterFirst);
+        share.claimRewards();
+        assertEq(share.balanceOf(communityFund), balanceAfterFirst);
     }
 
     function test_ClaimRewards_AnyoneCanCall() public {
         vm.warp(vestingStart + 30 days);
         vm.prank(stranger);
-        estate.claimRewards();
+        share.claimRewards();
         // Funds went to the configured recipients, not the caller.
-        assertGt(estate.balanceOf(communityFund), 0);
-        assertGt(estate.balanceOf(devFund), 0);
-        assertEq(estate.balanceOf(stranger), 0);
+        assertGt(share.balanceOf(communityFund), 0);
+        assertGt(share.balanceOf(devFund), 0);
+        assertEq(share.balanceOf(stranger), 0);
     }
 
     // ---------------------------------------------------------------------
@@ -245,32 +245,32 @@ contract EstateTest is BaseTest {
     function test_DistributeReward_OnlyTrustees() public {
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        estate.distributeReward(farmingFund);
+        share.distributeReward(farmingFund);
     }
 
     function test_DistributeReward_RejectsZero() public {
         vm.prank(trustees);
-        vm.expectRevert(Estate.ZeroAddress.selector);
-        estate.distributeReward(address(0));
+        vm.expectRevert(ShareToken.ZeroAddress.selector);
+        share.distributeReward(address(0));
     }
 
     function test_DistributeReward_MintsFarmingAllocation() public {
         vm.expectEmit(true, true, true, true);
         emit RewardPoolDistributed(farmingFund);
         vm.prank(trustees);
-        estate.distributeReward(farmingFund);
+        share.distributeReward(farmingFund);
 
-        assertEq(estate.balanceOf(farmingFund), estate.FARMING_POOL_REWARD_ALLOCATION());
-        assertTrue(estate.rewardPoolDistributed());
+        assertEq(share.balanceOf(farmingFund), share.FARMING_POOL_REWARD_ALLOCATION());
+        assertTrue(share.rewardPoolDistributed());
     }
 
     function test_DistributeReward_OneShot() public {
         vm.prank(trustees);
-        estate.distributeReward(farmingFund);
+        share.distributeReward(farmingFund);
 
         vm.prank(trustees);
-        vm.expectRevert(Estate.AlreadyDistributed.selector);
-        estate.distributeReward(farmingFund);
+        vm.expectRevert(ShareToken.AlreadyDistributed.selector);
+        share.distributeReward(farmingFund);
     }
 
     // ---------------------------------------------------------------------
@@ -279,10 +279,10 @@ contract EstateTest is BaseTest {
 
     function test_Burn_HolderCanBurnOwnBalance() public {
         vm.prank(owner);
-        estate.transfer(alice, 1 ether);
+        share.transfer(alice, 1 ether);
         vm.prank(alice);
-        estate.burn(1 ether);
-        assertEq(estate.balanceOf(alice), 0);
+        share.burn(1 ether);
+        assertEq(share.balanceOf(alice), 0);
     }
 
     // ---------------------------------------------------------------------
@@ -291,14 +291,14 @@ contract EstateTest is BaseTest {
 
     function test_GovernanceRecoverUnsupported_OnlyTrustees() public {
         MockERC20 stuck = new MockERC20();
-        stuck.mint(address(estate), 100 ether);
+        stuck.mint(address(share), 100 ether);
 
         vm.prank(stranger);
         vm.expectRevert(Trustees.NotTrustees.selector);
-        estate.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
+        share.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
 
         vm.prank(trustees);
-        estate.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
+        share.governanceRecoverUnsupported(IERC20(address(stuck)), 100 ether, alice);
         assertEq(stuck.balanceOf(alice), 100 ether);
     }
 
@@ -308,9 +308,9 @@ contract EstateTest is BaseTest {
 
     function test_OwnershipTransfer_TwoStep() public {
         vm.prank(owner);
-        estate.transferOwnership(alice);
+        share.transferOwnership(alice);
         vm.prank(alice);
-        estate.acceptOwnership();
-        assertEq(estate.owner(), alice);
+        share.acceptOwnership();
+        assertEq(share.owner(), alice);
     }
 }

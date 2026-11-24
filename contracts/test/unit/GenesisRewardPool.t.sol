@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {BaseTest} from "../utils/BaseTest.sol";
 
 import {GenesisRewardPool} from "../../src/distribution/GenesisRewardPool.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -26,7 +26,7 @@ contract MockLp is ERC20 {
 
 contract GenesisRewardPoolTest is BaseTest {
     GenesisRewardPool internal pool;
-    OldMoney internal money;
+    PegToken internal peg;
     MockLp internal lp;
     MockLp internal lp2;
 
@@ -38,21 +38,21 @@ contract GenesisRewardPoolTest is BaseTest {
         poolStart = block.timestamp + 1 hours;
 
         vm.prank(owner);
-        money = new OldMoney();
+        peg = new PegToken();
 
         vm.prank(owner);
-        pool = new GenesisRewardPool(address(money), poolStart);
+        pool = new GenesisRewardPool(address(peg), poolStart);
 
         lp = new MockLp("LP token", "LP");
         lp2 = new MockLp("LP token 2", "LP2");
 
-        // Treasury would normally pre-fund the pool via MONEY.distributeReward.
-        // In this test, owner is the trustees on MONEY (set in OldMoney constructor
+        // Treasury would normally pre-fund the pool via PEG.distributeReward.
+        // In this test, owner is the trustees on PEG (set in PegToken constructor
         // since owner deployed it). owner mints the pool's full reward allocation.
         // Extract the constant first — otherwise pool.TOTAL_REWARDS() consumes the prank.
         uint256 rewards = pool.TOTAL_REWARDS();
         vm.prank(owner);
-        money.mint(address(pool), rewards);
+        peg.mint(address(pool), rewards);
     }
 
     // ---------------------------------------------------------------------
@@ -60,19 +60,19 @@ contract GenesisRewardPoolTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Constructor_StoresParams() public view {
-        assertEq(address(pool.money()), address(money));
+        assertEq(address(pool.peg()), address(peg));
         assertEq(pool.poolStartTime(), poolStart);
         assertEq(pool.poolEndTime(), poolStart + 1 days);
         assertEq(pool.operator(), owner);
         assertEq(pool.TOTAL_REWARDS(), 11_000 ether);
         assertEq(pool.RUNNING_TIME(), 1 days);
         // 11000e18 / 86400 ≈ 0.1273e18.
-        assertApproxEqAbs(pool.MONEY_PER_SECOND(), uint256(11_000 ether) / 1 days, 0);
+        assertApproxEqAbs(pool.PEG_PER_SECOND(), uint256(11_000 ether) / 1 days, 0);
     }
 
     function test_Constructor_RejectsPastStart() public {
         vm.expectRevert(GenesisRewardPool.StartTimeInPast.selector);
-        new GenesisRewardPool(address(money), block.timestamp - 1);
+        new GenesisRewardPool(address(peg), block.timestamp - 1);
     }
 
     // ---------------------------------------------------------------------
@@ -127,27 +127,27 @@ contract GenesisRewardPoolTest is BaseTest {
     // Reward accrual
     // ---------------------------------------------------------------------
 
-    function test_PendingMoney_ZeroBeforeStart() public {
+    function test_PendingPeg_ZeroBeforeStart() public {
         vm.prank(owner);
         pool.add(100, IERC20(address(lp)), false, 0);
         _stake(alice, 0, 100 ether);
         // Before poolStart: no rewards.
-        assertEq(pool.pendingMoney(0, alice), 0);
+        assertEq(pool.pendingPeg(0, alice), 0);
     }
 
-    function test_PendingMoney_AccruesAtRate() public {
+    function test_PendingPeg_AccruesAtRate() public {
         vm.prank(owner);
         pool.add(100, IERC20(address(lp)), false, 0);
         _stake(alice, 0, 100 ether);
 
         // Jump to halfway through the pool window.
         vm.warp(poolStart + 12 hours);
-        uint256 expected = 12 hours * pool.MONEY_PER_SECOND();
+        uint256 expected = 12 hours * pool.PEG_PER_SECOND();
         // Alice is the sole staker → she gets the full emission.
-        assertApproxEqAbs(pool.pendingMoney(0, alice), expected, 1);
+        assertApproxEqAbs(pool.pendingPeg(0, alice), expected, 1);
     }
 
-    function test_PendingMoney_SplitProRata() public {
+    function test_PendingPeg_SplitProRata() public {
         vm.prank(owner);
         pool.add(100, IERC20(address(lp)), false, 0);
         _stake(alice, 0, 100 ether);
@@ -155,24 +155,24 @@ contract GenesisRewardPoolTest is BaseTest {
 
         vm.warp(poolStart + 12 hours);
         // alice has 25% of total stake, bob has 75%.
-        uint256 totalAtTime = 12 hours * pool.MONEY_PER_SECOND();
-        assertApproxEqRel(pool.pendingMoney(0, alice), totalAtTime / 4, 0.001e18);
-        assertApproxEqRel(pool.pendingMoney(0, bob), totalAtTime * 3 / 4, 0.001e18);
+        uint256 totalAtTime = 12 hours * pool.PEG_PER_SECOND();
+        assertApproxEqRel(pool.pendingPeg(0, alice), totalAtTime / 4, 0.001e18);
+        assertApproxEqRel(pool.pendingPeg(0, bob), totalAtTime * 3 / 4, 0.001e18);
     }
 
-    function test_PendingMoney_CapsAtPoolEnd() public {
+    function test_PendingPeg_CapsAtPoolEnd() public {
         vm.prank(owner);
         pool.add(100, IERC20(address(lp)), false, 0);
         _stake(alice, 0, 100 ether);
 
         // Past poolEnd by 1 day.
         vm.warp(poolStart + 2 days);
-        uint256 expected = pool.RUNNING_TIME() * pool.MONEY_PER_SECOND();
-        assertApproxEqAbs(pool.pendingMoney(0, alice), expected, 1);
+        uint256 expected = pool.RUNNING_TIME() * pool.PEG_PER_SECOND();
+        assertApproxEqAbs(pool.pendingPeg(0, alice), expected, 1);
 
         // Even further past — same total.
         vm.warp(poolStart + 30 days);
-        assertApproxEqAbs(pool.pendingMoney(0, alice), expected, 1);
+        assertApproxEqAbs(pool.pendingPeg(0, alice), expected, 1);
     }
 
     // ---------------------------------------------------------------------
@@ -194,16 +194,16 @@ contract GenesisRewardPoolTest is BaseTest {
         _stake(alice, 0, 100 ether);
 
         vm.warp(poolStart + 6 hours);
-        uint256 expectedReward = 6 hours * pool.MONEY_PER_SECOND();
+        uint256 expectedReward = 6 hours * pool.PEG_PER_SECOND();
 
         uint256 lpBefore = lp.balanceOf(alice);
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 pegBefore = peg.balanceOf(alice);
 
         vm.prank(alice);
         pool.withdraw(0, 40 ether);
 
         assertEq(lp.balanceOf(alice), lpBefore + 40 ether);
-        assertApproxEqAbs(money.balanceOf(alice) - moneyBefore, expectedReward, 1);
+        assertApproxEqAbs(peg.balanceOf(alice) - pegBefore, expectedReward, 1);
     }
 
     function test_EmergencyWithdraw_ReturnsLpDropsRewards() public {
@@ -212,14 +212,14 @@ contract GenesisRewardPoolTest is BaseTest {
         _stake(alice, 0, 100 ether);
 
         vm.warp(poolStart + 6 hours);
-        uint256 moneyBefore = money.balanceOf(alice);
+        uint256 pegBefore = peg.balanceOf(alice);
 
         vm.prank(alice);
         pool.emergencyWithdraw(0);
 
         assertEq(lp.balanceOf(alice), 100 ether);
         // Rewards forfeited.
-        assertEq(money.balanceOf(alice), moneyBefore);
+        assertEq(peg.balanceOf(alice), pegBefore);
         // Stake cleared.
         (uint256 amount, uint256 rewardDebt) = pool.userInfo(0, alice);
         assertEq(amount, 0);
@@ -240,10 +240,10 @@ contract GenesisRewardPoolTest is BaseTest {
         _stake(bob, 1, 100 ether); // pool 1
 
         vm.warp(poolStart + 12 hours);
-        uint256 totalAtTime = 12 hours * pool.MONEY_PER_SECOND();
+        uint256 totalAtTime = 12 hours * pool.PEG_PER_SECOND();
         // alice's pool has alloc 100/400 = 25%, bob's pool 300/400 = 75%.
-        assertApproxEqRel(pool.pendingMoney(0, alice), totalAtTime / 4, 0.001e18);
-        assertApproxEqRel(pool.pendingMoney(1, bob), totalAtTime * 3 / 4, 0.001e18);
+        assertApproxEqRel(pool.pendingPeg(0, alice), totalAtTime / 4, 0.001e18);
+        assertApproxEqRel(pool.pendingPeg(1, bob), totalAtTime * 3 / 4, 0.001e18);
     }
 
     // ---------------------------------------------------------------------
@@ -253,13 +253,13 @@ contract GenesisRewardPoolTest is BaseTest {
     function test_GovernanceRecover_OnlyOperator() public {
         vm.prank(stranger);
         vm.expectRevert(GenesisRewardPool.NotOperator.selector);
-        pool.governanceRecoverUnsupported(IERC20(address(money)), 1, alice);
+        pool.governanceRecoverUnsupported(IERC20(address(peg)), 1, alice);
     }
 
     function test_GovernanceRecover_ProtectsCoreInsideWindow() public {
         vm.prank(owner);
         vm.expectRevert(GenesisRewardPool.ProtectedToken.selector);
-        pool.governanceRecoverUnsupported(IERC20(address(money)), 1, alice);
+        pool.governanceRecoverUnsupported(IERC20(address(peg)), 1, alice);
     }
 
     function test_GovernanceRecover_ProtectsStakedLpInsideWindow() public {
@@ -282,10 +282,10 @@ contract GenesisRewardPoolTest is BaseTest {
 
     function test_GovernanceRecover_AllowsCoreTokenAfterWindow() public {
         vm.warp(poolStart + 1 days + 90 days + 1);
-        uint256 dust = money.balanceOf(address(pool));
+        uint256 dust = peg.balanceOf(address(pool));
         vm.prank(owner);
-        pool.governanceRecoverUnsupported(IERC20(address(money)), dust, alice);
-        assertEq(money.balanceOf(alice), dust);
+        pool.governanceRecoverUnsupported(IERC20(address(peg)), dust, alice);
+        assertEq(peg.balanceOf(alice), dust);
     }
 
     // ---------------------------------------------------------------------

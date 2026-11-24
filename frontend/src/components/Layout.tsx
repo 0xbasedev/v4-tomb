@@ -17,7 +17,7 @@ const NAV_ITEMS: { label: string; to: string }[] = [
   { label: "The Ledger", to: "/dashboard" },
   { label: "The Club", to: "/club" },
   { label: "The Vault", to: "/vault" },
-  { label: "Trust Notes", to: "/notes" },
+  { label: "Bonds", to: "/bonds" },
   { label: "Exchange", to: "/swap" },
   { label: "Docs", to: "/docs" },
 ];

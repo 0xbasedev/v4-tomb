@@ -13,7 +13,7 @@ import { UnwindPanel } from "@/components/UnwindPanel";
 import { WrapPanel } from "@/components/WrapPanel";
 
 import { useApproveAndCall, useDeployment, useRewardPool, useTokenStatus } from "@/lib/hooks";
-import { erc20Abi, moneyRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
+import { erc20Abi, pegRewardPoolAbi, shareRewardPoolAbi } from "@/lib/abis";
 import { formatToken } from "@/lib/format";
 
 /**
@@ -26,7 +26,7 @@ import { formatToken } from "@/lib/format";
  *
  * Each pool's PID 0 represents the primary stake token:
  *   Genesis pid 0 — operator-set (likely WETH or USDC at launch)
- *   Main    pid 0 — V4PositionWrapper (MONEY-WETH LP ERC-20 cert)
+ *   Main    pid 0 — V4PositionWrapper (LEVEL-WETH LP ERC-20 cert)
  *   Share   pid 0 — V4PositionWrapper (same)
  *
  * Total allocation (rewards distributed over the window) stays as protocol
@@ -43,7 +43,7 @@ interface PoolMeta {
   subtitle: string;
   gloss: string;
   totalAllocation: string;
-  rewardAsset: "MONEY" | "ESTATE";
+  rewardAsset: "LEVEL" | "SQUARE";
   defaultStakeLabel: string;
 }
 
@@ -53,30 +53,30 @@ const META: Record<PoolId, PoolMeta> = {
     formalName: "The Genesis Window",
     subtitle: "Twenty-Four Hours · Founders Only",
     gloss:
-      "Deposit your $WETH, $USDC, or other outside assets for twenty-four hours. Receive $MONEY pro-rata. The bootstrap of The Trust.",
+      "Deposit your $WETH, $USDC, or other outside assets for twenty-four hours. Receive $LEVEL pro-rata. The bootstrap of The Trust.",
     totalAllocation: "11,000",
-    rewardAsset: "MONEY",
+    rewardAsset: "LEVEL",
     defaultStakeLabel: "Operator-Set Stake Token",
   },
   main: {
     numeral: "II",
     formalName: "The Main Pool",
-    subtitle: "Nine Days · The MONEY-WETH Liquidity Provider",
+    subtitle: "Nine Days · The LEVEL-WETH Liquidity Provider",
     gloss:
-      "Provide MONEY-WETH liquidity on Uniswap V4. Wrap the position into an ERC-20 certificate. Stake the certificate here.",
+      "Provide LEVEL-WETH liquidity on Uniswap V4. Wrap the position into an ERC-20 certificate. Stake the certificate here.",
     totalAllocation: "140,000",
-    rewardAsset: "MONEY",
-    defaultStakeLabel: "OM · MONEY-WETH LP",
+    rewardAsset: "LEVEL",
+    defaultStakeLabel: "OM · LEVEL-WETH LP",
   },
   share: {
     numeral: "III",
     formalName: "The Share Distribution",
-    subtitle: "Three Hundred Seventy Days · ESTATE Issuance",
+    subtitle: "Three Hundred Seventy Days · SQUARE Issuance",
     gloss:
-      "The long emission. Fifty-nine thousand five hundred $ESTATE distributed to LP stakers across three hundred seventy days.",
+      "The long emission. Fifty-nine thousand five hundred $SQUARE distributed to LP stakers across three hundred seventy days.",
     totalAllocation: "59,500",
-    rewardAsset: "ESTATE",
-    defaultStakeLabel: "OM · MONEY-WETH LP",
+    rewardAsset: "SQUARE",
+    defaultStakeLabel: "OM · LEVEL-WETH LP",
   },
 };
 
@@ -107,7 +107,7 @@ export function TheVault() {
         ? deployment?.mainRewardPool
         : deployment?.shareRewardPool;
 
-  const reward = meta.rewardAsset === "MONEY" ? "money" : "share";
+  const reward = meta.rewardAsset === "LEVEL" ? "peg" : "share";
   const pid0 = useRewardPool({ pool: poolAddress, pid: 0, reward });
 
   // Wallet balance + allowance for the stake token (pid 0). When the pool has
@@ -162,7 +162,7 @@ export function TheVault() {
   const pendingDisplay = formatToken(pid0.pending, 4);
   const walletDisplay = formatToken(tokenStatus.balance, 4);
 
-  const poolAbi = reward === "money" ? moneyRewardPoolAbi : shareRewardPoolAbi;
+  const poolAbi = reward === "peg" ? pegRewardPoolAbi : shareRewardPoolAbi;
   const refetchAll = () => {
     pid0.refetch();
     tokenStatus.refetch();

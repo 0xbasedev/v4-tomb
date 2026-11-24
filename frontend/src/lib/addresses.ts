@@ -1,28 +1,28 @@
 import type { Address } from "viem";
 import { networks } from "./networks";
 
-export interface OldMoneyDeployment {
-  /** $MONEY token (peg target: 1 MONEY = 1 WETH). */
-  money: Address;
-  /** $ESTATE share token. */
-  estate: Address;
-  /** $TRUSTNOTE bond token. */
-  trustNote: Address;
+export interface PegTokenDeployment {
+  /** $LEVEL token (peg target: 1 LEVEL = 1 WETH). */
+  peg: Address;
+  /** $SQUARE share token. */
+  share: Address;
+  /** $BOND bond token. */
+  bond: Address;
   /** Treasury — seigniorage engine, bond office. */
   treasury: Address;
-  /** Boardroom — ESTATE staking, MONEY rewards. */
+  /** Boardroom — SQUARE staking, LEVEL rewards. */
   boardroom: Address;
   /** TWAP oracle. */
   oracle: Address;
   /** PegDefenseHook — V4 hook with the TWAP-keyed sell tax. */
   hook: Address;
-  /** ShareBuybackHook — taxes ESTATE sells in WETH, buys MONEY with it and burns it. */
+  /** ShareBuybackHook — taxes SQUARE sells in WETH, buys LEVEL with it and burns it. */
   shareBuybackHook: Address;
-  /** V4PositionWrapper — wraps the MONEY/WETH LP NFT into an ERC-20. */
+  /** V4PositionWrapper — wraps the LEVEL/WETH LP NFT into an ERC-20. */
   lpWrapper: Address;
-  /** LpOnlyHook — makes the MONEY/ESTATE pool untradeable (liquidity only). */
+  /** LpOnlyHook — makes the LEVEL/SQUARE pool untradeable (liquidity only). */
   pairLpHook: Address;
-  /** V4PositionWrapper for the MONEY/ESTATE LP NFT. */
+  /** V4PositionWrapper for the LEVEL/SQUARE LP NFT. */
   pairLpWrapper: Address;
   /** Genesis reward pool (24h window, accepts outside ERC-20s). */
   genesisRewardPool: Address;
@@ -53,12 +53,12 @@ export interface OldMoneyDeployment {
 }
 
 // Stable objects prevent polling effects from restarting on every render.
-const deployments = new Map<number, OldMoneyDeployment | null>(networks.map((network) => [
+const deployments = new Map<number, PegTokenDeployment | null>(networks.map((network) => [
   network.id,
   network.deployment ? { ...network.deployment, deployBlock: BigInt(network.deployment.deployBlock) } : null,
 ]));
 
 /** A missing deployment disables all protocol interactions. */
-export function getDeployment(chainId: number): OldMoneyDeployment | null {
+export function getDeployment(chainId: number): PegTokenDeployment | null {
   return deployments.get(chainId) ?? null;
 }

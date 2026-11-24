@@ -6,9 +6,9 @@ import {MockOracle} from "../utils/MockOracle.sol";
 
 import {Treasury} from "../../src/core/Treasury.sol";
 import {Boardroom} from "../../src/core/Boardroom.sol";
-import {OldMoney} from "../../src/tokens/OldMoney.sol";
-import {Estate} from "../../src/tokens/Estate.sol";
-import {TrustNote} from "../../src/tokens/TrustNote.sol";
+import {PegToken} from "../../src/tokens/PegToken.sol";
+import {ShareToken} from "../../src/tokens/ShareToken.sol";
+import {BondToken} from "../../src/tokens/BondToken.sol";
 import {Trustees} from "../../src/governance/Trustees.sol";
 import {ITreasury} from "../../src/interfaces/ITreasury.sol";
 
@@ -17,9 +17,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract TreasuryTest is BaseTest {
     Treasury internal treasury;
     Boardroom internal boardroom;
-    OldMoney internal money;
-    Estate internal estate;
-    TrustNote internal trustnote;
+    PegToken internal peg;
+    ShareToken internal share;
+    BondToken internal bond;
     MockOracle internal oracle;
 
     address internal communityFund = makeAddr("communityFund");
@@ -39,9 +39,9 @@ contract TreasuryTest is BaseTest {
 
         // 1. Deploy tokens (deployer = owner becomes trustees on each).
         vm.startPrank(owner);
-        money = new OldMoney();
-        estate = new Estate(startTime, communityFund, devFund);
-        trustnote = new TrustNote();
+        peg = new PegToken();
+        share = new ShareToken(startTime, communityFund, devFund);
+        bond = new BondToken();
         vm.stopPrank();
 
         // 2. Deploy oracle (mocked) — initialize at parity.
@@ -53,24 +53,18 @@ contract TreasuryTest is BaseTest {
         boardroom = new Boardroom();
 
         // 4. Initialize Boardroom (owner becomes operator).
-        boardroom.initialize(IERC20(address(money)), IERC20(address(estate)), ITreasury(address(treasury)));
+        boardroom.initialize(IERC20(address(peg)), IERC20(address(share)), ITreasury(address(treasury)));
 
         // 5. Initialize Treasury (owner becomes operator).
         address[] memory excluded = new address[](0);
         treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            startTime,
-            excluded
+            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
         );
 
         // 6. Transfer mint authority on every token + boardroom to the Treasury.
-        money.transferTrustees(address(treasury));
-        estate.transferTrustees(address(treasury));
-        trustnote.transferTrustees(address(treasury));
+        peg.transferTrustees(address(treasury));
+        share.transferTrustees(address(treasury));
+        bond.transferTrustees(address(treasury));
         boardroom.setOperator(address(treasury));
         vm.stopPrank();
     }
@@ -80,9 +74,9 @@ contract TreasuryTest is BaseTest {
     // ---------------------------------------------------------------------
 
     function test_Initialize_StoresAddresses() public view {
-        assertEq(treasury.money(), address(money));
-        assertEq(treasury.trustnote(), address(trustnote));
-        assertEq(treasury.estate(), address(estate));
+        assertEq(treasury.peg(), address(peg));
+        assertEq(treasury.bond(), address(bond));
+        assertEq(treasury.share(), address(share));
         assertEq(treasury.oracle(), address(oracle));
         assertEq(treasury.boardroom(), address(boardroom));
         assertEq(treasury.startTime(), startTime);
@@ -91,8 +85,8 @@ contract TreasuryTest is BaseTest {
     }
 
     function test_Initialize_SetsPegToWethParity() public view {
-        assertEq(treasury.moneyPriceOne(), 1e18); // 1 MONEY = 1 WETH
-        assertEq(treasury.moneyPriceCeiling(), 1.01e18);
+        assertEq(treasury.pegPriceOne(), 1e18); // 1 PEG = 1 WETH
+        assertEq(treasury.pegPriceCeiling(), 1.01e18);
     }
 
     function test_Initialize_SetsTombSupplyTiers() public view {
@@ -119,13 +113,7 @@ contract TreasuryTest is BaseTest {
         vm.prank(owner);
         vm.expectRevert(Treasury.AlreadyInitialized.selector);
         treasury.initialize(
-            address(money),
-            address(trustnote),
-            address(estate),
-            address(oracle),
-            address(boardroom),
-            startTime,
-            excluded
+            address(peg), address(bond), address(share), address(oracle), address(boardroom), startTime, excluded
         );
     }
 
@@ -133,9 +121,9 @@ contract TreasuryTest is BaseTest {
         // All four operator handoffs done in setUp(). The treasury can read its own
         // status via the public storage views; checkOperator is implicitly exercised
         // by any function call that uses it (covered below).
-        assertEq(money.operator(), address(treasury));
-        assertEq(estate.operator(), address(treasury));
-        assertEq(trustnote.operator(), address(treasury));
+        assertEq(peg.operator(), address(treasury));
+        assertEq(share.operator(), address(treasury));
+        assertEq(bond.operator(), address(treasury));
         assertEq(boardroom.operator(), address(treasury));
     }
 
@@ -143,17 +131,17 @@ contract TreasuryTest is BaseTest {
     // Pricing views
     // ---------------------------------------------------------------------
 
-    function test_GetMoneyPrice_PassesThroughOracle() public {
+    function test_GetPegPrice_PassesThroughOracle() public {
         oracle.setPrice(1.05e18);
-        assertEq(treasury.getMoneyPrice(), 1.05e18);
+        assertEq(treasury.getPegPrice(), 1.05e18);
 
         oracle.setPrice(0.9e18);
-        assertEq(treasury.getMoneyPrice(), 0.9e18);
+        assertEq(treasury.getPegPrice(), 0.9e18);
     }
 
     function test_GetBondDiscountRate_ZeroWhenAtPeg() public {
         oracle.setPrice(1e18);
-        // discountPercent default 0 → rate = moneyPriceOne (no discount)
+        // discountPercent default 0 → rate = pegPriceOne (no discount)
         assertEq(treasury.getBondDiscountRate(), 1e18);
     }
 
@@ -163,10 +151,10 @@ contract TreasuryTest is BaseTest {
         treasury.setDiscountPercent(1000);
         oracle.setPrice(0.9e18);
 
-        // Tomb math: bondAmount = moneyPriceOne * 1e18 / price = 1e18 * 1e18 / 9e17 = 1.111e18
-        //             discountAmount = (bondAmount - moneyPriceOne) * discountPercent / 10000
+        // Tomb math: bondAmount = pegPriceOne * 1e18 / price = 1e18 * 1e18 / 9e17 = 1.111e18
+        //             discountAmount = (bondAmount - pegPriceOne) * discountPercent / 10000
         //                             = (1.111e18 - 1e18) * 1000 / 10000 = 0.0111e18
-        //             rate = moneyPriceOne + discountAmount ≈ 1.0111e18
+        //             rate = pegPriceOne + discountAmount ≈ 1.0111e18
         assertApproxEqRel(treasury.getBondDiscountRate(), 1.0111e18, 0.001e18);
     }
 
@@ -199,19 +187,19 @@ contract TreasuryTest is BaseTest {
         assertEq(treasury.operator(), alice);
     }
 
-    function test_SetMoneyPriceCeiling_BoundsChecked() public {
-        // Must be in [moneyPriceOne, 1.20 * moneyPriceOne].
+    function test_SetPegPriceCeiling_BoundsChecked() public {
+        // Must be in [pegPriceOne, 1.20 * pegPriceOne].
         vm.prank(owner);
         vm.expectRevert(Treasury.CeilingOutOfRange.selector);
-        treasury.setMoneyPriceCeiling(0.99e18);
+        treasury.setPegPriceCeiling(0.99e18);
 
         vm.prank(owner);
         vm.expectRevert(Treasury.CeilingOutOfRange.selector);
-        treasury.setMoneyPriceCeiling(1.21e18);
+        treasury.setPegPriceCeiling(1.21e18);
 
         vm.prank(owner);
-        treasury.setMoneyPriceCeiling(1.05e18);
-        assertEq(treasury.moneyPriceCeiling(), 1.05e18);
+        treasury.setPegPriceCeiling(1.05e18);
+        assertEq(treasury.pegPriceCeiling(), 1.05e18);
     }
 
     function test_SetDiscountPercent_Caps() public {
@@ -260,15 +248,15 @@ contract TreasuryTest is BaseTest {
     function test_GovernanceRecoverUnsupported_BlocksCoreTokens() public {
         vm.prank(owner);
         vm.expectRevert(Treasury.ProtectedToken.selector);
-        treasury.governanceRecoverUnsupported(IERC20(address(money)), 1, alice);
+        treasury.governanceRecoverUnsupported(IERC20(address(peg)), 1, alice);
 
         vm.prank(owner);
         vm.expectRevert(Treasury.ProtectedToken.selector);
-        treasury.governanceRecoverUnsupported(IERC20(address(trustnote)), 1, alice);
+        treasury.governanceRecoverUnsupported(IERC20(address(bond)), 1, alice);
 
         vm.prank(owner);
         vm.expectRevert(Treasury.ProtectedToken.selector);
-        treasury.governanceRecoverUnsupported(IERC20(address(estate)), 1, alice);
+        treasury.governanceRecoverUnsupported(IERC20(address(share)), 1, alice);
     }
 
     // ---------------------------------------------------------------------

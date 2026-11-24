@@ -5,9 +5,9 @@ import {NetworkConfig} from "./NetworkConfig.s.sol";
 
 import {console2} from "forge-std/Script.sol";
 
-import {OldMoney} from "../src/tokens/OldMoney.sol";
-import {Estate} from "../src/tokens/Estate.sol";
-import {TrustNote} from "../src/tokens/TrustNote.sol";
+import {PegToken} from "../src/tokens/PegToken.sol";
+import {ShareToken} from "../src/tokens/ShareToken.sol";
+import {BondToken} from "../src/tokens/BondToken.sol";
 import {Treasury} from "../src/core/Treasury.sol";
 import {Timelock} from "../src/governance/Timelock.sol";
 import {GenesisRewardPool} from "../src/distribution/GenesisRewardPool.sol";
@@ -41,9 +41,9 @@ import {ShareBuybackHook} from "../src/hooks/ShareBuybackHook.sol";
  *         Required env vars (every address comes from the prior deploy logs / DEPLOYED.md):
  *           DEPLOYER_PRIVATE_KEY
  *           TIMELOCK address is resolved from the selected manifest deployment.
- *           MONEY address is resolved from the selected manifest deployment.
- *           ESTATE address is resolved from the selected manifest deployment.
- *           TRUSTNOTE address is resolved from the selected manifest deployment.
+ *           PEG address is resolved from the selected manifest deployment.
+ *           SHARE address is resolved from the selected manifest deployment.
+ *           BOND address is resolved from the selected manifest deployment.
  *           HOOK address is resolved from the selected manifest deployment.
  *           TREASURY address is resolved from the selected manifest deployment.
  *           GENESIS_REWARD_POOL address is resolved from the selected manifest deployment.
@@ -61,9 +61,9 @@ contract RotateGovernanceQueue is NetworkConfig {
         uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
         Timelock timelock = Timelock(payable(_deployment("timelock")));
-        OldMoney money = OldMoney(_deployment("money"));
-        Estate estate = Estate(_deployment("estate"));
-        TrustNote trustnote = TrustNote(_deployment("trustNote"));
+        PegToken peg = PegToken(_deployment("peg"));
+        ShareToken share = ShareToken(_deployment("share"));
+        BondToken bond = BondToken(_deployment("bond"));
         PegDefenseHook hook = PegDefenseHook(_deployment("hook"));
         ShareBuybackHook shareHook = ShareBuybackHook(_deployment("shareBuybackHook"));
         Treasury treasury = Treasury(_deployment("treasury"));
@@ -81,12 +81,12 @@ contract RotateGovernanceQueue is NetworkConfig {
         vm.startBroadcast(pk);
 
         // Stage 2a: Ownable2Step transferOwnership (sets pendingOwner).
-        money.transferOwnership(address(timelock));
-        estate.transferOwnership(address(timelock));
-        trustnote.transferOwnership(address(timelock));
+        peg.transferOwnership(address(timelock));
+        share.transferOwnership(address(timelock));
+        bond.transferOwnership(address(timelock));
         hook.transferOwnership(address(timelock));
         shareHook.transferOwnership(address(timelock));
-        console2.log("transferred Ownable2Step ownership of money/estate/trustnote/hook to Timelock");
+        console2.log("transferred Ownable2Step ownership of peg/share/bond/hook to Timelock");
 
         // Stage 2b: PegDefenseHook trustees (one-step). After this the deployer can no
         // longer tune tax tiers — Timelock controls.
@@ -103,12 +103,12 @@ contract RotateGovernanceQueue is NetworkConfig {
         console2.log("rotated Treasury + Genesis/Main/Share reward pool operators -> Timelock");
 
         // Stage 2d: queue acceptOwnership for each Ownable2Step contract via Timelock.
-        timelock.queueTransaction(address(money), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.queueTransaction(address(estate), 0, "acceptOwnership()", bytes(""), eta);
-        timelock.queueTransaction(address(trustnote), 0, "acceptOwnership()", bytes(""), eta);
+        timelock.queueTransaction(address(peg), 0, "acceptOwnership()", bytes(""), eta);
+        timelock.queueTransaction(address(share), 0, "acceptOwnership()", bytes(""), eta);
+        timelock.queueTransaction(address(bond), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(hook), 0, "acceptOwnership()", bytes(""), eta);
         timelock.queueTransaction(address(shareHook), 0, "acceptOwnership()", bytes(""), eta);
-        console2.log("queued acceptOwnership for money/estate/trustnote/hook with eta", eta);
+        console2.log("queued acceptOwnership for peg/share/bond/hook with eta", eta);
 
         vm.stopBroadcast();
 
