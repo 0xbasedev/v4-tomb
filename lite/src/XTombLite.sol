@@ -156,6 +156,7 @@ contract XTombLiteMasonry {
     uint256 public constant PEG_CEILING_EXCLUSIVE = 1.01e18;
     uint256 public constant MAX_EXPANSION_BPS = 200;
     uint256 private constant PRECISION = 1e27;
+    uint256 public constant MAX_SUPPLY_EXCLUSIONS = 32;
 
     uint256 public immutable deploymentChainId;
     ILiteERC20 public immutable xtomb;
@@ -173,6 +174,8 @@ contract XTombLiteMasonry {
     uint256 public totalStaked;
     uint256 public accRewardPerShare;
     uint256 private entered;
+    address[] public supplyExclusions;
+    mapping(address => bool) public isSupplyExcluded;
 
     struct Tranche { uint128 amount; uint64 unlockAt; }
     mapping(address => Tranche[]) private tranches;
@@ -209,7 +212,8 @@ contract XTombLiteMasonry {
         uint256 expectedChainId_,
         address peg_, address share_, address lp_, address feeToken_,
         address twap_, address stableUsdOracle_, address nativeUsdOracle_,
-        address treasury_, address arbitrage_, address governance_, uint256 genesisStart_
+        address treasury_, address arbitrage_, address governance_, uint256 genesisStart_,
+        address[] memory supplyExclusions_
     ) {
         if (expectedChainId_ == 0 || block.chainid != expectedChainId_) revert WrongChain();
         if (peg_.code.length == 0 || share_.code.length == 0 || lp_.code.length == 0 ||
@@ -238,14 +242,40 @@ contract XTombLiteMasonry {
         arbitrage = arbitrage_;
         governance = governance_;
         nextEpochAt = genesisStart_ + EPOCH_DURATION;
+        if (supplyExclusions_.length == 0 || supplyExclusions_.length > MAX_SUPPLY_EXCLUSIONS) revert InvalidConfig();
+        address canonicalPool = XLiteToken(peg_).canonicalPool();
+        for (uint256 i; i < supplyExclusions_.length; ++i) {
+            address account = supplyExclusions_[i];
+            if (account == address(0) || account == address(this) || account == lp_ ||
+                account == canonicalPool || account == peg_ || account == share_ ||
+                account == feeToken_ || isSupplyExcluded[account]) revert InvalidConfig();
+            isSupplyExcluded[account] = true;
+            supplyExclusions.push(account);
+        }
+        if (!isSupplyExcluded[treasury_]) revert InvalidConfig();
     }
 
     function setFeeRecipients(address treasury_, address arbitrage_) external {
         if (msg.sender != governance) revert Unauthorized();
-        if (treasury_ == address(0) || arbitrage_ == address(0)) revert InvalidConfig();
+        if (!isSupplyExcluded[treasury_] || arbitrage_ == address(0)) revert InvalidConfig();
         treasury = treasury_;
         arbitrage = arbitrage_;
         emit FeeRecipientsUpdated(treasury_, arbitrage_);
+    }
+
+    /// @notice Minted peg supply less actual balances of fixed, configured noncirculating accounts.
+    /// @dev Never exclude user-owned LP reserves or Masonry rewards. No nominal/unminted allocations.
+    function circulatingSupply() public view returns (uint256 supply) {
+        supply = xtomb.totalSupply();
+        address canonicalPool = XLiteToken(address(xtomb)).canonicalPool();
+        if (isSupplyExcluded[canonicalPool]) revert InvalidConfig();
+        for (uint256 i; i < supplyExclusions.length; ++i) {
+            supply -= xtomb.balanceOf(supplyExclusions[i]);
+        }
+    }
+
+    function supplyExclusionCount() external view returns (uint256) {
+        return supplyExclusions.length;
     }
 
     function trancheCount(address account) external view returns (uint256) {
@@ -320,19 +350,19 @@ contract XTombLiteMasonry {
 
     /// @notice Permissionless real-$25 fee, dynamically converted by a fresh quote/USD reference.
     function advanceEpochStable() external lock {
-        (uint256 price, uint256 amount) = _checkAdvance();
+        _checkAdvance();
         (uint256 stablePrice,) = _validated(stableUsdPrice);
         uint256 requiredUnits = _ceilDiv(25e18 * feeTokenUnit, stablePrice);
         uint256 treasuryBefore = feeToken.balanceOf(treasury);
         _take(address(feeToken), msg.sender, treasury, requiredUnits);
         if (feeToken.balanceOf(treasury) - treasuryBefore < requiredUnits) revert TransferFailure();
-        _advance(msg.sender, price, amount);
+        _advance(msg.sender);
     }
 
     /// @notice Optional native payment; disabled if native/USD oracle address is zero.
     function advanceEpochNative() external payable lock {
         if (address(nativeUsdPrice) == address(0)) revert InvalidConfig();
-        (uint256 price, uint256 amount) = _checkAdvance();
+        _checkAdvance();
         (uint256 nativePrice,) = _validated(nativeUsdPrice);
         uint256 requiredWei = _ceilDiv(25e36, nativePrice);
         if (msg.value < requiredWei) revert InvalidConfig();
@@ -342,7 +372,7 @@ contract XTombLiteMasonry {
             (ok,) = payable(msg.sender).call{value: msg.value - requiredWei}("");
             if (!ok) revert TransferFailure();
         }
-        _advance(msg.sender, price, amount);
+        _advance(msg.sender);
     }
 
     function _checkAdvance() internal view returns (uint256 price, uint256 amount) {
@@ -350,11 +380,16 @@ contract XTombLiteMasonry {
         if (totalStaked == 0) revert NotReady();
         (price,) = _validated(pegTwap);
         if (price <= PEG_CEILING_EXCLUSIVE) revert PegNotVerified();
-        amount = xtomb.totalSupply() * MAX_EXPANSION_BPS / 10_000;
+        uint256 supply = circulatingSupply();
+        // Exact floor without overflowing the intermediate multiplication.
+        amount = (supply / 10_000) * MAX_EXPANSION_BPS +
+            (supply % 10_000) * MAX_EXPANSION_BPS / 10_000;
         if (amount == 0) revert NotReady();
     }
 
-    function _advance(address payer, uint256 price, uint256 amount) internal {
+    function _advance(address payer) internal {
+        // Payment can invoke external callbacks; recheck the gate and supply before minting.
+        (uint256 price, uint256 amount) = _checkAdvance();
         nextEpochAt = block.timestamp + EPOCH_DURATION; // Explicitly no catch-up epochs.
         accRewardPerShare += amount * PRECISION / totalStaked;
         xtomb.mint(address(this), amount);

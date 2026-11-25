@@ -25,6 +25,7 @@
     "bondsEnabled": false,
     "epochSeconds": 21600,
     "maximumEpochExpansionBps": 200,
+    "epochExpansionSupplyBasis": "circulating",
     "mintRequiresStrictlyAboveUsdE18": "1010000000000000000",
     "fireTaxHardCapBps": 1200,
     "fireTaxRecoverySeconds": 25200,
@@ -48,6 +49,7 @@
     "team": null,
     "developer": null,
     "saleEscrow": null,
+    "pegSupplyExclusions": [],
     "shareAllocations": {
       "farmLevelLp": null,
       "farmShareLp": null,

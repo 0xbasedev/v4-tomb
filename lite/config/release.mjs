@@ -60,6 +60,7 @@ export function validateLiteRelease(input, { strict = true, now = Math.floor(Dat
     bondsEnabled: false,
     epochSeconds: 21600,
     maximumEpochExpansionBps: 200,
+    epochExpansionSupplyBasis: "circulating",
     mintRequiresStrictlyAboveUsdE18: "1010000000000000000",
     fireTaxHardCapBps: 1200,
     fireTaxRecoverySeconds: 25200,
@@ -83,6 +84,19 @@ export function validateLiteRelease(input, { strict = true, now = Math.floor(Dat
   if (strict && launch.distributionApproved !== true) throw new Error("xSHARE distribution not approved");
   for (const field of ["deployer", "treasury", "arbitrage", "team", "developer", "saleEscrow"]) {
     address(launch[field], `launch.${field}`, !strict);
+  }
+  const exclusions = launch.pegSupplyExclusions;
+  if (!Array.isArray(exclusions) || exclusions.length > 32 || (strict && !exclusions.length)) {
+    throw new Error("launch.pegSupplyExclusions: expected 1-32 reserve addresses");
+  }
+  const seen = new Set();
+  for (const item of exclusions) {
+    const key = address(item, "launch.pegSupplyExclusions").toLowerCase();
+    if (seen.has(key)) throw new Error("duplicate peg supply exclusion");
+    seen.add(key);
+  }
+  if (strict && (!seen.has(launch.deployer.toLowerCase()) || !seen.has(launch.treasury.toLowerCase()))) {
+    throw new Error("peg supply exclusions must include launch inventory and treasury reserves");
   }
   const allocations = object(launch.shareAllocations, "launch.shareAllocations");
   let total = 0n;
@@ -121,6 +135,7 @@ export function exportPublicEnv(plan, opts) {
     LEVEL_LAUNCH_SUPPLY_APPROVED: "1",
     DEPLOYER_ADDRESS: l.deployer,
     TREASURY_ADDRESS: l.treasury,
+    PEG_SUPPLY_EXCLUSIONS: l.pegSupplyExclusions.join(","),
     ARBITRAGE_ADDRESS: l.arbitrage,
     TEAM_ADDRESS: l.team,
     DEVELOPER_ADDRESS: l.developer,

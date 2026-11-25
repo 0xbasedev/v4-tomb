@@ -16,6 +16,7 @@ function plan() {
   x.launch.team = "0x0000000000000000000000000000000000000006";
   x.launch.developer = "0x0000000000000000000000000000000000000007";
   x.launch.saleEscrow = "0x0000000000000000000000000000000000000008";
+  x.launch.pegSupplyExclusions = [x.launch.deployer, x.launch.treasury];
   x.launch.genesisStart = "1000000";
   x.launch.farmStart = String(1000000 + 604800);
   x.launch.levelLaunchSupplyWei = "10000000000000000000000";
@@ -46,6 +47,7 @@ test("reconciled 333333 xSHARE release validates", () => {
   const env = exportPublicEnv(plan(), { now: 0 });
   assert.equal(env.EXPECTED_CHAIN_ID, 668801);
   assert.equal(env.SHARE_FARM_LEVEL_LP, "128200");
+  assert.equal(env.PEG_SUPPLY_EXCLUSIONS, plan().launch.pegSupplyExclusions.join(","));
   assert.equal(env.NATIVE_USD_FEED, "0x0000000000000000000000000000000000000000");
   assert.equal("DEPLOYER_PRIVATE_KEY" in env, false);
 });
@@ -92,4 +94,18 @@ test("farm runway cannot begin before seven-day Genesis ends", () => {
   const x = plan();
   x.launch.farmStart = "1000001";
   assert.throws(() => validateLiteRelease(x, { now: 0 }), /clock/);
+});
+
+test("reserve exclusions must be explicit, unique and include launch inventory and treasury", () => {
+  for (const change of [
+    x => { x.launch.pegSupplyExclusions = []; },
+    x => { x.launch.pegSupplyExclusions = [x.launch.deployer]; },
+    x => { x.launch.pegSupplyExclusions.push(x.launch.treasury); },
+    x => { x.launch.pegSupplyExclusions.push("0x" + "0".repeat(40)); },
+    x => { x.mechanics.epochExpansionSupplyBasis = "total"; }
+  ]) {
+    const x = plan();
+    change(x);
+    assert.throws(() => validateLiteRelease(x, { now: 0 }));
+  }
 });

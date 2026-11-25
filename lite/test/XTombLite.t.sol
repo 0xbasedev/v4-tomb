@@ -136,14 +136,17 @@ contract XTombLiteTest {
         feed = new MockFeed();
         pegPrice = new MockPrice();
         stablePrice = new LiteChainlinkUsdSource(address(feed), 30 minutes);
-        peg.mint(TREASURY, 1000e18);
+        peg.mint(TREASURY, 250e18);
+        peg.mint(address(this), 150e18); // Unreleased launch inventory.
+        peg.mint(address(pegStable), 500e18); // Liquid DEX reserves count.
+        peg.mint(address(lp), 100e18); // User-owned Masonry LP reserves count.
         stable.mint(ALICE, 1000e6);
         lp.mintLp(ALICE, 100e18);
         genesis = block.timestamp + 1;
         masonry = new XTombLiteMasonry(
             block.chainid, address(peg), address(share), address(lp), address(stable),
             address(pegPrice), address(stablePrice), address(0),
-            TREASURY, ARBITRAGE, address(this), genesis
+            TREASURY, ARBITRAGE, address(this), genesis, _exclusions()
         );
         peg.finalizeMinter(address(masonry));
         vm.prank(ALICE);
@@ -152,6 +155,12 @@ contract XTombLiteTest {
         stable.approve(address(masonry), type(uint256).max);
         vm.prank(ALICE);
         masonry.deposit(100e18);
+    }
+
+    function _exclusions() internal view returns (address[] memory accounts) {
+        accounts = new address[](2);
+        accounts[0] = TREASURY;
+        accounts[1] = address(this);
     }
 
     function _eligible(uint256 price) internal {
@@ -177,7 +186,7 @@ contract XTombLiteTest {
         _eligible(1.02e18);
         vm.prank(ALICE);
         masonry.advanceEpochStable();
-        require(peg.totalSupply() == 1020e18, "not 2 percent");
+        require(peg.totalSupply() == 1012e18, "not 2 percent of circulation");
         require(stable.balanceOf(TREASURY) == 25e6, "wrong fee");
         require(masonry.nextEpochAt() == block.timestamp + 6 hours, "no catchup broken");
         vm.prank(ALICE);
@@ -185,7 +194,56 @@ contract XTombLiteTest {
         require(!ok, "duplicate epoch");
         vm.prank(ALICE);
         masonry.claim();
-        require(peg.balanceOf(ALICE) == 20e18, "LP reward not distributed");
+        require(peg.balanceOf(ALICE) == 12e18, "LP reward not distributed");
+    }
+
+    function testCirculationTracksReleasedReservesAndUnclaimedRewards() public {
+        require(masonry.circulatingSupply() == 600e18, "initial circulation");
+        _eligible(1.02e18);
+        vm.prank(ALICE);
+        masonry.advanceEpochStable();
+        require(masonry.circulatingSupply() == 612e18, "unclaimed rewards excluded");
+        peg.transfer(ALICE, 50e18);
+        require(masonry.circulatingSupply() == 662e18, "released reserve excluded");
+        vm.warp(masonry.nextEpochAt());
+        feed.set(1e8);
+        pegPrice.set(1.02e18);
+        vm.prank(ALICE);
+        masonry.advanceEpochStable();
+        require(peg.totalSupply() == 1025.24e18, "second expansion wrong");
+    }
+
+    function testZeroCirculationRejectsBeforeFee() public {
+        vm.prank(address(pegStable));
+        peg.transfer(TREASURY, 500e18);
+        vm.prank(address(lp));
+        peg.transfer(TREASURY, 100e18);
+        require(masonry.circulatingSupply() == 0, "nonzero circulation");
+        _eligible(1.02e18);
+        vm.prank(ALICE);
+        (bool ok,) = address(masonry).call(abi.encodeCall(masonry.advanceEpochStable, ()));
+        require(!ok && stable.balanceOf(TREASURY) == 0, "zero circulation charged fee");
+    }
+
+    function testInvalidSupplyExclusionsRejected() public {
+        address[] memory accounts = _exclusions();
+        accounts[1] = TREASURY;
+        _assertInvalidExclusions(accounts);
+        accounts[1] = address(lp);
+        _assertInvalidExclusions(accounts);
+        accounts[1] = address(0);
+        _assertInvalidExclusions(accounts);
+        accounts[0] = address(this);
+        accounts[1] = ALICE;
+        _assertInvalidExclusions(accounts);
+    }
+
+    function _assertInvalidExclusions(address[] memory accounts) internal {
+        try new XTombLiteMasonry(
+            block.chainid, address(peg), address(share), address(lp), address(stable),
+            address(pegPrice), address(stablePrice), address(0),
+            TREASURY, ARBITRAGE, address(this), genesis, accounts
+        ) returns (XTombLiteMasonry) { revert("invalid exclusions accepted"); } catch {}
     }
 
     function testDepeggedStableRequiresMoreThan25Tokens() public {
@@ -204,7 +262,7 @@ contract XTombLiteTest {
         masonry.exitNow(0, 100e18);
         require(lp.balanceOf(ALICE) == 50e18, "user LP");
         require(lp.balanceOf(TREASURY) == 50e18, "treasury LP");
-        require(peg.balanceOf(ARBITRAGE) == 20e18, "forfeited reward");
+        require(peg.balanceOf(ARBITRAGE) == 12e18, "forfeited reward");
         require(masonry.totalStaked() == 0, "stake remains");
     }
 
@@ -221,7 +279,7 @@ contract XTombLiteTest {
         try new XTombLiteMasonry(
             block.chainid + 1, address(peg), address(share), address(lp), address(stable),
             address(pegPrice), address(stablePrice), address(0),
-            TREASURY, ARBITRAGE, address(this), genesis
+            TREASURY, ARBITRAGE, address(this), genesis, _exclusions()
         ) returns (XTombLiteMasonry) {
             revert("wrong chain accepted");
         } catch {}
