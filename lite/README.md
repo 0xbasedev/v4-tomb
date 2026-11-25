@@ -32,7 +32,7 @@ The production-oriented components have replaced the original LONGYU-only mock p
 - Zero-bypass tax on unofficial V2 pools; independent smart-contract security audit.
 - Robust quote-market depth history through every intermediate tick/reserve state; the V2 TWAP checks endpoints and cannot prove every price move was an authenticated swap.
 - Genesis seven-day reward vaults, NFT tiers, Fast Track escrow, keeper-driven compounding, Harvest All/Compound All, Treasury POL and buyback/Arbitrage execution.
-- A circulating-supply exclusion list (current 2% upper bound is based on `xtomb.totalSupply()`, so this must be adjusted for excluded reserves if the release has them).
+- Independent review of the circulating-supply exclusion policy and actual reserve custody before production.
 - Chain-specific production deployment verification, LP initialization, safe bridge assumption, audited approved xSHARE allocation, published live deployment receipts/addresses, audited frontend transaction simulations, external audits.
 
 **Do not present this branch as a fully launched protocol or solicit public deposits.**
@@ -101,3 +101,7 @@ LONGYU Testnet chain ID `668801` and known public V2 factory/router are in the t
 This is an experimental chain. There is no known independent audit or guarantee of bridge security. Zero production capital is authorized.
 
 Source network documentation: [LONGYU/LongyuL2](https://github.com/Longyu-L2/LongyuL2). Existing mature V4 Masonry integration remains on `merge`, whose [integration status](../docs/MASONRY_V4_IMPLEMENTATION_STATUS.md) describes its own remaining release gates.
+
+## Circulating supply and expansion
+
+The 2% ceiling uses `circulatingSupply()`: minted xTOMB supply minus current balances of a fixed, deployment-configured list of dedicated reserve accounts (1–32 distinct addresses). Set `launch.pegSupplyExclusions` in the release JSON; the exporter passes it as `PEG_SUPPLY_EXCLUSIONS`. Include the initial deployer inventory and Treasury reserve wallets, plus any actual xTOMB vesting/escrow or permanently inaccessible addresses as appropriate. Do not include user wallets, liquidity pools, adapters or the Masonry reward vault. Unminted allocations and already-burned supply are not subtracted. Only the token balance at each excluded address is deducted; released tokens automatically enter circulation. Keep reserve custody separate from public/user funds. The fixed list cannot be edited by governance; Treasury recipient rotation requires a prelisted reserve address. Review the full address list before deployment; arbitrary off-protocol pools or mixed-custody accounts cannot be identified automatically. The existing deployment must be redeployed if it uses the old constructor. Both stable and native fee paths recheck supply and the strict TWAP gate after payment, immediately before minting.

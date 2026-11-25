@@ -11,6 +11,7 @@ import {LiteLinearVesting} from "../src/LiteLinearVesting.sol";
 
 interface VmOmni {
     function envAddress(string calldata key) external returns (address);
+    function envAddress(string calldata key, string calldata delimiter) external returns (address[] memory);
     function envUint(string calldata key) external returns (uint256);
     function startBroadcast(address sender) external;
     function stopBroadcast() external;
@@ -39,6 +40,7 @@ contract DeployOmnichainLite {
         address team;
         address developer;
         address saleEscrow;
+        address[] supplyExclusions;
         address factory;
         address router;
         address stable;
@@ -73,6 +75,7 @@ contract DeployOmnichainLite {
         c.team = vm.envAddress("TEAM_ADDRESS");
         c.developer = vm.envAddress("DEVELOPER_ADDRESS");
         c.saleEscrow = vm.envAddress("SALE_ESCROW_ADDRESS");
+        c.supplyExclusions = vm.envAddress("PEG_SUPPLY_EXCLUSIONS", ",");
         c.factory = vm.envAddress("V2_FACTORY");
         c.router = vm.envAddress("V2_ROUTER");
         c.stable = vm.envAddress("USD_STABLE");
@@ -109,6 +112,18 @@ contract DeployOmnichainLite {
             c.initialPegSupply == 0 ||
             IV2RouterOmni(c.router).factory() != c.factory
         ) revert ConfigRejected();
+
+        if (c.supplyExclusions.length == 0 || c.supplyExclusions.length > 32) revert ConfigRejected();
+        bool hasDeployer;
+        bool hasTreasury;
+        for (uint256 i; i < c.supplyExclusions.length; ++i) {
+            address a = c.supplyExclusions[i];
+            if (a == address(0)) revert ConfigRejected();
+            if (a == c.deployer) hasDeployer = true;
+            if (a == c.treasury) hasTreasury = true;
+            for (uint256 k; k < i; ++k) if (c.supplyExclusions[k] == a) revert ConfigRejected();
+        }
+        if (!hasDeployer || !hasTreasury) revert ConfigRejected();
 
         uint256 sum = c.farmPegAllocation + c.farmShareAllocation +
             c.saleAllocation + c.deployerAllocation;
@@ -172,10 +187,15 @@ contract DeployOmnichainLite {
         peg.configureTax(ps, address(pegTax), c.treasury, address(pegAdd));
         share.configureTax(ss, address(shareTax), c.treasury, address(shareAdd));
 
+        for (uint256 i; i < c.supplyExclusions.length; ++i) {
+            address a = c.supplyExclusions[i];
+            if (a == ps || a == ss || a == xp || a == address(pegAdd) ||
+                a == address(shareAdd) || a == address(masonryAdd)) revert ConfigRejected();
+        }
         XTombLiteMasonry masonry = new XTombLiteMasonry(
             block.chainid, address(peg), address(share), xp, c.stable,
             address(twap), address(stableUsd), nativeSource,
-            c.treasury, c.arbitrage, c.deployer, c.genesisStart
+            c.treasury, c.arbitrage, c.deployer, c.genesisStart, c.supplyExclusions
         );
         peg.finalizeMinter(address(masonry));
         // xSHARE is fully minted and has no ongoing emissions mint authority.
